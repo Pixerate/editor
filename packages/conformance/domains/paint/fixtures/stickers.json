@@ -6,9 +6,6 @@
     "width": 48,
     "height": 32
   },
-  "skip": {
-    "swift": "Stickers are not ported yet (#545)."
-  },
   "steps": [
     {
       "tool": "find_stickers",

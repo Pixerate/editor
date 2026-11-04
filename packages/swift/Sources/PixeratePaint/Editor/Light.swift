@@ -241,6 +241,13 @@ extension PaintDocumentState {
         light = out
     }
 
+    /// The document's stickers without these layers.
+    func removingStickers(_ ids: [String]) {
+        guard var t = stickers, ids.contains(where: { t.has($0) }) else { return }
+        for id in ids { _ = t.delete(id) }
+        stickers = t
+    }
+
     /// The document's light without these layers.
     func removingLight(_ ids: [String]) {
         guard var l = light, ids.contains(where: { l.has($0) }) else { return }

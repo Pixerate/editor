@@ -1,0 +1,638 @@
+import Foundation
+import PixerateCore
+import PixerateRaster
+
+/**
+ * Stickers (`stickers/editor.ts`, `stickers/helpers.ts`, `paint-editor/stickers.ts`): the
+ * editor's own sticker library (nine procedural stamps with outlines and thumbnails), stickers as
+ * editable objects on a sticker layer (drawn whole from their list, picked by shape), and the
+ * sticker spray of sticker brushes. Pixels match the TS core.
+ *
+ * Only the editor's stickers (`editor:<stamp>`) are drawn; host sticker libraries
+ * (`setStickersProvider`, art loaded from SVG or PNG) are not ported.
+ */
+
+// MARK: - The editor's sticker library
+
+private let BOX = 100.0
+private let GRID = 128
+private let SHAPE_SEED = 7
+public let EDITOR_STICKERS_ID = "editor"
+public let DEFAULT_STICKER_PAGE = 24
+public let MAX_STICKER_PAGE = 100
+
+private struct StampMeta { let name, category: String; let tags: [String]; let colour, description: String }
+private let META: [String: StampMeta] = [
+    "dot": StampMeta(name: "Dot", category: "shapes", tags: ["circle", "round", "spot"], colour: "#2563eb", description: "A round dot."),
+    "star": StampMeta(name: "Star", category: "shapes", tags: ["five-pointed", "favourite", "rating"], colour: "#f59e0b", description: "A five-pointed star, one point up."),
+    "heart": StampMeta(name: "Heart", category: "shapes", tags: ["love", "like"], colour: "#e11d48", description: "A heart."),
+    "leaf": StampMeta(name: "Leaf", category: "nature", tags: ["plant", "green"], colour: "#16a34a", description: "A pointed leaf with a midrib."),
+    "flower": StampMeta(name: "Flower", category: "nature", tags: ["petals", "blossom"], colour: "#db2777", description: "A five-petal flower."),
+    "confetti": StampMeta(name: "Confetti", category: "party", tags: ["celebration", "rectangle"], colour: "#7c3aed", description: "A small strip of confetti."),
+    "splat": StampMeta(name: "Splat", category: "party", tags: ["paint", "splash", "blob"], colour: "#0891b2", description: "A paint splat with drops."),
+    "sparkle": StampMeta(name: "Sparkle", category: "party", tags: ["twinkle", "shine", "glint"], colour: "#eab308", description: "A four-pointed twinkle."),
+    "ring": StampMeta(name: "Ring", category: "shapes", tags: ["circle", "outline", "hoop"], colour: "#0f766e", description: "A ring."),
+]
+
+/// What went wrong with a sticker (`StickerError`).
+public struct StickerError: Error, LocalizedError {
+    public let code: String
+    public let message: String
+    public init(_ code: String, _ message: String) {
+        self.code = code
+        self.message = message
+    }
+    public var errorDescription: String? { message }
+}
+
+/// A stamp's outline as SVG path data in its 100 × 100 box (marching squares, then simplified; `stampOutline`).
+public func stampOutline(_ kind: String) -> String {
+    let n = GRID
+    var f = [Float](repeating: 0, count: (n + 1) * (n + 1))
+    for j in 0...n { for i in 0...n { f[j * (n + 1) + i] = Float(stampCoverage(kind, (Double(i) / Double(n)) * 2 - 1, (Double(j) / Double(n)) * 2 - 1, SHAPE_SEED) - 0.5) } }
+    func at(_ i: Int, _ j: Int) -> Double { Double(f[j * (n + 1) + i]) }
+    var points: [String: (Double, Double)] = [:]
+    func point(_ key: String, _ i0: Int, _ j0: Int, _ i1: Int, _ j1: Int) -> String {
+        if points[key] == nil {
+            let a = at(i0, j0), b = at(i1, j1)
+            let t = a / (a - b)
+            points[key] = (((Double(i0) + Double(i1 - i0) * t) / Double(n)) * BOX, ((Double(j0) + Double(j1 - j0) * t) / Double(n)) * BOX)
+        }
+        return key
+    }
+    var next = OrderedMap<String, String>()
+    for j in 0..<n {
+        for i in 0..<n {
+            let tl = at(i, j) > 0 ? 1 : 0, tr = at(i + 1, j) > 0 ? 1 : 0, br = at(i + 1, j + 1) > 0 ? 1 : 0, bl = at(i, j + 1) > 0 ? 1 : 0
+            let code = (tl << 3) | (tr << 2) | (br << 1) | bl
+            if code == 0 || code == 15 { continue }
+            func top() -> String { point("h\(i),\(j)", i, j, i + 1, j) }
+            func right() -> String { point("v\(i + 1),\(j)", i + 1, j, i + 1, j + 1) }
+            func bottom() -> String { point("h\(i),\(j + 1)", i, j + 1, i + 1, j + 1) }
+            func left() -> String { point("v\(i),\(j)", i, j, i, j + 1) }
+            func seg(_ a: String, _ b: String) { next.set(a, b) }
+            let centre = at(i, j) + at(i + 1, j) + at(i + 1, j + 1) + at(i, j + 1) > 0
+            switch code {
+            case 1: seg(left(), bottom())
+            case 2: seg(bottom(), right())
+            case 3: seg(left(), right())
+            case 4: seg(right(), top())
+            case 5: if centre { seg(left(), top()); seg(right(), bottom()) } else { seg(left(), bottom()); seg(right(), top()) }
+            case 6: seg(bottom(), top())
+            case 7: seg(left(), top())
+            case 8: seg(top(), left())
+            case 9: seg(top(), bottom())
+            case 10: if centre { seg(top(), right()); seg(bottom(), left()) } else { seg(top(), left()); seg(bottom(), right()) }
+            case 11: seg(top(), right())
+            case 12: seg(right(), left())
+            case 13: seg(right(), bottom())
+            case 14: seg(bottom(), left())
+            default: break
+            }
+        }
+    }
+    var loops: [[(Double, Double)]] = []
+    var seen = Set<String>()
+    for start in next.keys {
+        if seen.contains(start) { continue }
+        var loop: [(Double, Double)] = []
+        var k: String? = start
+        while let key = k, !seen.contains(key) {
+            seen.insert(key)
+            loop.append(points[key]!)
+            k = next.get(key)
+        }
+        if loop.count >= 3 { loops.append(simplifyLoop(loop, 0.12)) }
+    }
+    func fmt(_ v: Double) -> String { jsText(JS.round(v * 100) / 100) }
+    return loops.map { l in "M" + l.map { "\(fmt($0.0)) \(fmt($0.1))" }.joined(separator: "L") + "Z" }.joined()
+}
+
+/// Ramer–Douglas–Peucker on a closed loop (`simplify`).
+private func simplifyLoop(_ loop: [(Double, Double)], _ eps: Double) -> [(Double, Double)] {
+    if loop.count < 8 { return loop }
+    var keep = [Bool](repeating: false, count: loop.count)
+    func rdp(_ a: Int, _ b: Int) {
+        let (ax, ay) = loop[a], (bx, by) = loop[b]
+        let h = JS.hypot(bx - ax, by - ay)
+        let len = h != 0 ? h : 1e-9
+        var worst = -1
+        var far = 0.0
+        if a + 1 < b {
+            for i in (a + 1)..<b {
+                let d = abs((bx - ax) * (ay - loop[i].1) - (ax - loop[i].0) * (by - ay)) / len
+                if d > far {
+                    far = d
+                    worst = i
+                }
+            }
+        }
+        if worst != -1 && far > eps {
+            keep[worst] = true
+            rdp(a, worst)
+            rdp(worst, b)
+        }
+    }
+    let mid = loop.count / 2
+    keep[0] = true
+    keep[mid] = true
+    rdp(0, mid)
+    rdp(mid, loop.count - 1)
+    keep[loop.count - 1] = true
+    return loop.enumerated().filter { keep[$0.offset] }.map(\.element)
+}
+
+/// A stamp as `size × size` RGBA in `colour` (`stampPixels`).
+public func stampPixels(_ kind: String, _ size: Int, _ colour: String) -> [UInt8] {
+    var out = [UInt8](repeating: 0, count: size * size * 4)
+    let n = Int(colour.dropFirst(), radix: 16) ?? 0
+    let ss = size <= 128 ? 3 : 2
+    for y in 0..<size {
+        for x in 0..<size {
+            var c = 0.0
+            for sy in 0..<ss { for sx in 0..<ss { c += stampCoverage(kind, ((Double(x) + (Double(sx) + 0.5) / Double(ss)) / Double(size)) * 2 - 1, ((Double(y) + (Double(sy) + 0.5) / Double(ss)) / Double(size)) * 2 - 1, SHAPE_SEED) } }
+            let a = JS.round((c / Double(ss * ss)) * 255)
+            if a == 0 { continue }
+            let i = (y * size + x) * 4
+            out[i] = UInt8((n >> 16) & 255)
+            out[i + 1] = UInt8((n >> 8) & 255)
+            out[i + 2] = UInt8(n & 255)
+            out[i + 3] = JS.u8c(a)
+        }
+    }
+    return out
+}
+
+/**
+ * The editor's own sticker library (`editorStickers`): the nine stamps, with their outline
+ * (`silhouette`), dominant colour and a 48 px thumbnail.
+ */
+public final class EditorStickers: @unchecked Sendable {
+    public let id = EDITOR_STICKERS_ID
+    public let name = "Editor stickers"
+    private var outlines: [String: String] = [:]
+    private var thumbs: [String: String] = [:]
+    public init() {}
+
+    private func outline(_ k: String) -> String {
+        if let o = outlines[k] { return o }
+        let o = stampOutline(k)
+        outlines[k] = o
+        return o
+    }
+
+    /// A sticker's summary: id, name, category, tags, description, size, thumbnail, formats, licence, tintable.
+    public func summary(_ k: String) -> JSONObject {
+        let m = META[k]!
+        if thumbs[k] == nil { thumbs[k] = pngDataUrl(48, 48, stampPixels(k, 48, m.colour)) }
+        return [
+            "id": .string(k), "name": .string(m.name), "category": .string(m.category), "tags": .array(m.tags.map { .string($0) }), "description": .string(m.description),
+            "width": .number(BOX), "height": .number(BOX), "thumbnail": .string(thumbs[k]!), "formats": ["svg", "png"],
+            "licence": ["spdx": "MIT", "name": "MIT", "commercial": true], "tintable": true,
+        ]
+    }
+
+    /// A page of stickers matching the options and query (`stickerPage`).
+    public func page(query: String = "", category: String? = nil, tags: [String]? = nil, commercial: Bool = false, limit: Int? = nil, after: String? = nil) throws -> (items: [JSONObject], total: Int, next: String?) {
+        if let limit, !(limit >= 1 && limit <= MAX_STICKER_PAGE) { throw StickerError("invalid_argument", "limit must be a whole number from 1 to \(MAX_STICKER_PAGE), got \(limit).") }
+        if let after, after.range(of: "^\\d+$", options: .regularExpression) == nil { throw StickerError("invalid_argument", "after \"\(after)\" is not a cursor from this provider; pass the next value of the previous page.") }
+        func words(_ s: String) -> [String] { s.lowercased().components(separatedBy: CharacterSet.letters.union(.decimalDigits).inverted).filter { !$0.isEmpty } }
+        let q = words(query)
+        let tagsL = (tags ?? []).map { $0.lowercased() }
+        let matches = STAMP_KINDS.filter { k in
+            let m = META[k]!
+            if let category, m.category != category { return false }
+            if !tagsL.isEmpty && !tagsL.allSatisfy({ t in m.tags.contains { $0.lowercased() == t } }) { return false }
+            _ = commercial
+            if q.isEmpty { return true }
+            let text = Set(words(([m.name, m.category, m.description] + m.tags).joined(separator: " ")))
+            return q.allSatisfy { w in text.contains { $0.hasPrefix(w) } }
+        }
+        let start = after.flatMap { Int($0) } ?? 0
+        let lim = limit ?? DEFAULT_STICKER_PAGE
+        let page = Array(matches.dropFirst(start).prefix(lim)).map(summary)
+        return (page, matches.count, start + lim < matches.count ? String(start + lim) : nil)
+    }
+
+    /// Everything about one stamp, or nil: the summary, its outline and colour.
+    public func describe(_ id: String) -> JSONObject? {
+        guard STAMP_KINDS.contains(id) else { return nil }
+        var o = summary(id)
+        o["silhouette"] = .string(outline(id))
+        o["colours"] = [.string(META[id]!.colour)]
+        return o
+    }
+
+    /// The categories with how many stickers each holds.
+    public func categories() -> [JSONValue] {
+        var cats: [String] = []
+        for k in STAMP_KINDS where !cats.contains(META[k]!.category) { cats.append(META[k]!.category) }
+        return cats.map { c in ["id": .string(c), "name": .string(c.prefix(1).uppercased() + c.dropFirst()), "count": .number(Double(STAMP_KINDS.filter { META[$0]!.category == c }.count))] }
+    }
+}
+
+/// Refs closest to `wanted` by edit distance (ties alphabetical; `closestStickerRefs`).
+func closestStickerRefs(_ wanted: String, _ candidates: [String], _ n: Int = 3) -> [String] {
+    let w = Array(wanted.lowercased().utf16)
+    func dist(_ b: [UInt16]) -> Int {
+        var d = Array(0...b.count)
+        for i in 1...Swift.max(1, w.count) where !w.isEmpty {
+            var prev = d[0]
+            d[0] = i
+            for j in stride(from: 1, through: b.count, by: 1) {
+                let tmp = d[j]
+                d[j] = Swift.min(d[j] + 1, d[j - 1] + 1, prev + (w[i - 1] == b[j - 1] ? 0 : 1))
+                prev = tmp
+            }
+        }
+        return w.isEmpty ? b.count : d[b.count]
+    }
+    return candidates.map { ($0, dist(Array($0.lowercased().utf16))) }.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 < $1.0 }.prefix(n).map(\.0)
+}
+
+/// Parses a ref strictly (`parseStickerRef` in `stickers/helpers.ts`), throwing what is wrong.
+func parseStickerRefStrict(_ ref: String) throws -> (provider: String, id: String) {
+    if ref.isEmpty { throw StickerError("invalid_argument", "A sticker ref is a \"provider:id\" string, e.g. \"editor:star\" (find_stickers lists them).") }
+    guard let i = ref.firstIndex(of: ":") else {
+        if STAMP_KINDS.contains(ref) { return (EDITOR_STICKERS_ID, ref) }
+        throw StickerError("invalid_argument", "\"\(ref)\" is not a sticker ref; refs are \"provider:id\" (e.g. \"editor:\(STAMP_KINDS[1])\"); find_stickers lists them.")
+    }
+    if i == ref.startIndex || ref.index(after: i) == ref.endIndex { throw StickerError("invalid_argument", "\"\(ref)\" is not a sticker ref; refs are \"provider:id\".") }
+    return (String(ref[..<i]), String(ref[ref.index(after: i)...]))
+}
+
+// MARK: - Stickers on a layer
+
+/// A placed sticker: an object on a sticker layer (`Sticker`).
+public struct Sticker: Equatable, Sendable {
+    public var id: String
+    public var ref: String
+    /// The editor stamp, for editor stickers.
+    public var stamp: String?
+    /// Centre in document pixels.
+    public var x: Double
+    public var y: Double
+    /// Diameter in pixels.
+    public var size: Double
+    /// Degrees clockwise.
+    public var rotation: Double
+    public var color: String
+    public var opacity: Double
+    public var seed: Int
+
+    public var json: JSONObject {
+        var o: JSONObject = ["id": .string(id), "ref": .string(ref)]
+        if let stamp { o["stamp"] = .string(stamp) }
+        o["x"] = .number(x); o["y"] = .number(y); o["size"] = .number(size); o["rotation"] = .number(rotation)
+        o["color"] = .string(color); o["opacity"] = .number(opacity); o["seed"] = .number(Double(seed))
+        return o
+    }
+}
+
+private func hexRgb(_ hex: String) -> [Double] {
+    let n = Int(hex.dropFirst().prefix(6), radix: 16) ?? 0
+    return [Double((n >> 16) & 255) / 255, Double((n >> 8) & 255) / 255, Double(n & 255) / 255]
+}
+
+/// The pixel rectangle a sticker can touch (`stickerRect`).
+public func stickerRect(_ s: Sticker) -> RasterRect {
+    let r = s.size / 2 + 1
+    let x0 = Int(JS.floor(s.x - r)), y0 = Int(JS.floor(s.y - r))
+    return RasterRect(x: x0, y: y0, width: Int(JS.ceil(s.x + r)) - x0, height: Int(JS.ceil(s.y + r)) - y0)
+}
+
+/// The editor stamp a sticker draws, or nil for another library's sticker (`stickerStamp`).
+func stickerStamp(_ s: Sticker) -> String? {
+    if !s.ref.isEmpty { return editorStampOf(s.ref) }
+    return s.stamp.flatMap { STAMP_KINDS.contains($0) ? $0 : nil }
+}
+
+/// Draws one sticker into a medium; returns the rectangle it touched (`drawSticker`).
+@discardableResult
+func drawSticker(_ medium: TileMedium, _ s: Sticker) -> RasterRect {
+    let rect = stickerRect(s)
+    guard let kind = stickerStamp(s) else { return rect }
+    let n = rect.width * rect.height
+    var cov = [Float](repeating: 0, count: n)
+    var field = [Float](repeating: 0, count: n * 3)
+    let rad = s.size / 2
+    let a = (s.rotation * Double.pi) / 180
+    let ca = JS.cos(a), sa = JS.sin(a)
+    let rgb = hexRgb(s.color)
+    var p = 0
+    for yy in 0..<rect.height {
+        for xx in 0..<rect.width {
+            defer { p += 1 }
+            let px = rect.x + xx
+            let dx = Double(px) + 0.5 - s.x
+            let dy = Double(rect.y + yy) + 0.5 - s.y
+            let u = (dx * ca + dy * sa) / rad
+            let v = (-dx * sa + dy * ca) / rad
+            if u < -1.05 || u > 1.05 || v < -1.05 || v > 1.05 { continue }
+            var c = 0.0
+            for k in 0..<4 { c += stampCoverage(kind, u + (Double(k & 1) - 0.5) / rad / 2, v + (Double(k >> 1) - 0.5) / rad / 2, s.seed) }
+            c /= 4
+            if c <= 0 { continue }
+            cov[p] = Float(c)
+            let shade = 1 + 0.12 * (-(u + v) / 2) + 0.06 * (PixerateRandom.hash2(px, rect.y + yy, s.seed) - 0.5)
+            for k in 0..<3 { field[p * 3 + k] = Float(Swift.min(1, Swift.max(0, rgb[k] * shade))) }
+        }
+    }
+    medium.deposit(rect, cov, s.opacity, rgb, nil, field)
+    return rect
+}
+
+private func signedPow(_ v: Double, _ e: Double) -> Double { JS.pow(v, e) }
+private func srgbToLinearSigned(_ v: Double) -> Double {
+    let sign: Double = v > 0 ? 1 : v < 0 ? -1 : 0
+    let a = abs(v)
+    return sign * (a <= 0.04045 ? a / 12.92 : signedPow((a + 0.055) / 1.055, 2.4))
+}
+private func linearToSrgbSigned(_ v: Double) -> Double {
+    let sign: Double = v > 0 ? 1 : v < 0 ? -1 : 0
+    let a = abs(v)
+    return sign * (a <= 0.0031308 ? 12.92 * a : 1.055 * signedPow(a, 1 / 2.4) - 0.055)
+}
+
+/// A colour moved a little in OKLCH lightness and hue, kept in gamut (`jitterColor`).
+func jitterColor(_ hex: String, _ amount: Double, _ seed: Int, _ i: Int) -> String {
+    let c = hexRgb(hex)
+    let lr = srgbToLinearSigned(c[0]), lg = srgbToLinearSigned(c[1]), lb = srgbToLinearSigned(c[2])
+    let l_ = JS.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb)
+    let m_ = JS.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb)
+    let s_ = JS.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb)
+    let L = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_
+    let A = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_
+    let B = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_
+    let chroma = JS.hypot(A, B)
+    var hue = 0.0
+    if chroma >= 1e-6 {
+        hue = (JS.atan2(B, A) * 180) / Double.pi
+        if hue < 0 { hue += 360 }
+        if hue >= 360 { hue -= 360 }
+    }
+    let l = Swift.min(1, Swift.max(0, L + (PixerateRandom.rand01(seed, i, 61) - 0.5) * amount * 0.3))
+    let h = hue + (PixerateRandom.rand01(seed, i, 63) - 0.5) * amount * 80
+    func at(_ ch: Double) -> [Double] {
+        let rad = (h * Double.pi) / 180
+        let a = ch * JS.cos(rad), b = ch * JS.sin(rad)
+        let l3 = JS.pow(l + 0.3963377774 * a + 0.2158037573 * b, 3)
+        let m3 = JS.pow(l - 0.1055613458 * a - 0.0638541728 * b, 3)
+        let s3 = JS.pow(l - 0.0894841775 * a - 1.291485548 * b, 3)
+        return [
+            linearToSrgbSigned(4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3),
+            linearToSrgbSigned(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3),
+            linearToSrgbSigned(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3),
+        ]
+    }
+    func inGamut(_ o: [Double]) -> Bool { o.allSatisfy { $0 >= -1e-4 && $0 <= 1 + 1e-4 } }
+    var out = at(chroma)
+    if !inGamut(out) {
+        var lo = 0.0, hi = chroma
+        for _ in 0..<12 {
+            let mid = (lo + hi) / 2
+            if inGamut(at(mid)) { lo = mid } else { hi = mid }
+        }
+        out = at(lo)
+    }
+    return "#" + out.map { String(Int(JS.round(Swift.min(1, Swift.max(0, $0)) * 255)), radix: 16).leftPad(2) }.joined()
+}
+
+/// A sticker layer's pixels drawn from its stickers (`stickerSurface`); with `dirty`, only those tiles are redrawn over `base`.
+func stickerSurface(_ stickers: [Sticker], base: TiledSurface? = nil, dirty: [RasterRect]? = nil) -> TiledSurface {
+    final class Target: PaintTileTarget {
+        var live: [TileKey: ByteTile] = [:]
+        var order: [TileKey] = []
+        let only: Set<TileKey>?
+        init(_ only: Set<TileKey>?) { self.only = only }
+        let offset = LayerOffset(x: 0, y: 0)
+        let lockTransparency = false
+        let selection: PaintSelection? = nil
+        func readTile(_ tx: Int, _ ty: Int) -> ByteTile? { live[tileKey(tx, ty)] }
+        func writeTile(_ tx: Int, _ ty: Int) -> ByteTile {
+            let k = tileKey(tx, ty)
+            if let only, !only.contains(k) { return ByteTile([UInt8](repeating: 0, count: TILE * TILE * 4)) }
+            if let t = live[k] { return t }
+            let t = ByteTile([UInt8](repeating: 0, count: TILE * TILE * 4))
+            live[k] = t
+            order.append(k)
+            return t
+        }
+    }
+    let only: Set<TileKey>? = base != nil && dirty != nil ? Set(dirty!.flatMap { tilesInRect($0).map { tileKey($0.tx, $0.ty) } }) : nil
+    let target = Target(only)
+    let medium = TileMedium(target, blend: nil)
+    for s in stickers where only == nil || tilesInRect(stickerRect(s)).contains(where: { only!.contains(tileKey($0.tx, $0.ty)) }) { drawSticker(medium, s) }
+    var tiles = OrderedMap<TileKey, Tile>()
+    if let only, let base { for (k, t) in base.tiles where !only.contains(k) { tiles.set(k, t) } }
+    for k in target.order { if let t = finishTile(target.live[k]!.data, 4, 0) { tiles.set(k, t) } }
+    return TiledSurface(channels: 4, tiles: tiles, defaultValue: 0)
+}
+
+/// The top-most sticker under a point, by its stamp's shape (`stickerAt`).
+func stickerAt(_ stickers: [Sticker], _ x: Double, _ y: Double) -> Sticker? {
+    for s in stickers.reversed() {
+        let rad = s.size / 2
+        let a = (s.rotation * Double.pi) / 180
+        let dx = x - s.x, dy = y - s.y
+        let u = (dx * JS.cos(a) + dy * JS.sin(a)) / rad
+        let v = (-dx * JS.sin(a) + dy * JS.cos(a)) / rad
+        if abs(u) > 1.05 || abs(v) > 1.05 { continue }
+        if s.size < 16 { return s }
+        guard let kind = stickerStamp(s) else { return s }
+        if stampCoverage(kind, u, v, s.seed) > 0.25 { return s }
+    }
+    return nil
+}
+
+/// A checked partial sticker (`normalizeStickerUpdate`); throws what is wrong.
+func normalizeStickerUpdate(_ u: JSONObject) throws -> JSONObject {
+    var out = JSONObject()
+    if u["ref"] != nil && u["stamp"] != nil { throw PaintEditorError("Give ref or stamp, not both (stamp is the older name for an editor stamp).") }
+    if let st = u["stamp"] {
+        guard let s = st.stringValue, STAMP_KINDS.contains(s) else { throw PaintEditorError("stamp \(st.stringified()) is not a stamp; use \(STAMP_KINDS.joined(separator: ", ")), or ref for any sticker (find_stickers).") }
+        out["ref"] = .string("editor:\(s)")
+        out["stamp"] = .string(s)
+    }
+    if let r = u["ref"] {
+        let p: (provider: String, id: String)
+        do { p = try parseStickerRefStrict(r.stringValue ?? "") } catch let e as StickerError { throw PaintEditorError(e.message) }
+        let ref = "\(p.provider):\(p.id)"
+        out["ref"] = .string(ref)
+        out["stamp"] = editorStampOf(ref).map { .string($0) } ?? .null
+    }
+    for k in ["x", "y"] {
+        if let v = u[k] {
+            guard let n = v.numberValue, n.isFinite else { throw PaintEditorError("\(k) must be a number of pixels.") }
+            out[k] = .number(n)
+        }
+    }
+    if let v = u["size"] {
+        guard let n = v.numberValue, n >= 2 && n <= 2048 else { throw PaintEditorError("size \(v.stringified()) is out of range; use 2..2048 px.") }
+        out["size"] = .number(n)
+    }
+    if let v = u["rotation"] {
+        guard let n = v.numberValue, n.isFinite else { throw PaintEditorError("rotation must be degrees.") }
+        out["rotation"] = .number(n)
+    }
+    if let v = u["color"] {
+        guard let s = v.stringValue, s.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil else { throw PaintEditorError("color \(v.stringified()) must be #rrggbb.") }
+        out["color"] = .string(s.lowercased())
+    }
+    if let v = u["opacity"] {
+        guard let n = v.numberValue, n >= 0 && n <= 1 else { throw PaintEditorError("opacity \(v.stringified()) is out of range; use 0..1.") }
+        out["opacity"] = .number(n)
+    }
+    return out
+}
+
+extension Sticker {
+    /// A sticker as saved (`json`), or nil when it is not one.
+    init?(json: JSONValue) {
+        guard let o = json.objectValue, let id = o["id"]?.stringValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue else { return nil }
+        self.init(id: id, ref: o["ref"]?.stringValue ?? o["stamp"]?.stringValue.map { "editor:\($0)" } ?? "", stamp: o["stamp"]?.stringValue, x: x, y: y, size: o["size"]?.numberValue ?? 48, rotation: o["rotation"]?.numberValue ?? 0, color: o["color"]?.stringValue ?? "#000000", opacity: o["opacity"]?.numberValue ?? 1, seed: Int(o["seed"]?.numberValue ?? 0))
+    }
+
+    /// The sticker with a checked update applied (`stamp: null` clears the stamp).
+    func applying(_ u: JSONObject) -> Sticker {
+        var s = self
+        if let r = u["ref"]?.stringValue { s.ref = r }
+        if let st = u["stamp"] { s.stamp = st.stringValue }
+        if let v = u["x"]?.numberValue { s.x = v }
+        if let v = u["y"]?.numberValue { s.y = v }
+        if let v = u["size"]?.numberValue { s.size = v }
+        if let v = u["rotation"]?.numberValue { s.rotation = v }
+        if let v = u["color"]?.stringValue { s.color = v }
+        if let v = u["opacity"]?.numberValue { s.opacity = v }
+        return s
+    }
+}
+
+// MARK: - Sticker spray
+
+/// The stickers a sticker brush sprays along a stroke (`StickerSpray`).
+final class StickerSpray {
+    var dabCount = 0
+    private(set) var stickers: [Sticker] = []
+    private(set) var skipped: [String] = []
+    private let brush: PaintBrush
+    private let color: String
+    private let seed: Int
+    private let paint: PaintGradientSource?
+    private let effect: EffectPaintPixels?
+    private let smoother: PenSmoother
+    private let walkers: [PenDabWalker]
+    private let copies: [StrokeCopy]
+    private let medium: TileMedium
+    private var lastRaw: PenPoint?
+    private var lastFed: PenPoint?
+    private var nextNumber: Int
+    private var sampler: PaintGradientSampler?
+    private let stamps: [String]
+    private let density, sizeJitter, rotationJitter, scatter, colorJitter: Double
+
+    init(brush: PaintBrush, target: PaintTileTarget, color: String, seed: Int, copies: [StrokeCopy], nextId: Int, paint: PaintGradientSource?, effect: EffectPaintPixels?) {
+        self.brush = brush
+        self.color = color
+        self.seed = seed
+        self.paint = paint
+        self.effect = effect
+        let st = brush.sticker
+        stamps = (st["stamps"]?.arrayValue ?? []).compactMap(\.stringValue)
+        density = st["density"]?.numberValue ?? 0.4
+        sizeJitter = st["sizeJitter"]?.numberValue ?? 0
+        rotationJitter = st["rotationJitter"]?.numberValue ?? 0
+        scatter = st["scatter"]?.numberValue ?? 0
+        colorJitter = st["colorJitter"]?.numberValue ?? 0
+        smoother = PenSmoother(brush.tip.smoothing, brush.pressureSmoothing)
+        self.copies = copies.isEmpty ? [IDENTITY_COPY] : copies
+        // One walked dab per sticker: spacing from the density.
+        var walk = brush
+        walk.tip.spacing = Swift.max(0.05, 1 / Swift.max(0.05, density * 4))
+        walk.dynamics.scatter = 0
+        walk.dynamics.sizeJitter = 0
+        walk.dynamics.angleJitter = 0
+        walkers = self.copies.enumerated().map { i, c in PenDabWalker(walk, Int(Int32(truncatingIfNeeded: seed + i * 7919)), c.linear) }
+        medium = TileMedium(target, blend: nil)
+        nextNumber = nextId
+    }
+
+    func push(_ points: [PenPoint]) -> [RasterRect] {
+        var rects: [RasterRect] = []
+        for raw in points {
+            lastRaw = raw
+            let p = smoother.push(raw)
+            lastFed = p
+            for (i, c) in copies.enumerated() {
+                var dabs: [PenDab] = []
+                walkers[i].push(c.map(p), &dabs)
+                for d in dabs { drop(d, &rects) }
+            }
+        }
+        return rects
+    }
+
+    func finish() -> [RasterRect] {
+        var rects: [RasterRect] = []
+        for (i, c) in copies.enumerated() {
+            var dabs: [PenDab] = []
+            if let raw = lastRaw, let fed = lastFed, raw.x != fed.x || raw.y != fed.y {
+                var q = raw
+                q.pressure = fed.pressure
+                walkers[i].push(c.map(q), &dabs)
+            }
+            walkers[i].finish(&dabs)
+            for d in dabs { drop(d, &rects) }
+        }
+        return rects
+    }
+
+    private func drop(_ d: PenDab, _ rects: inout [RasterRect]) {
+        let i = nextNumber
+        let r = d.dab.radius
+        let size = r * 2 * (1 - sizeJitter * 0.7 * PixerateRandom.rand01(seed, i, 51))
+        let off = scatter * r * 2
+        let a = PixerateRandom.rand01(seed, i, 53) * Double.pi * 2
+        let dist = PixerateRandom.rand01(seed, i, 55) * off
+        let base = colorAt(d, JS.cos(a) * dist, JS.sin(a) * dist)
+        if !(base.alpha > 0) {
+            nextNumber += 1
+            return
+        }
+        let pick = Int(JS.floor(PixerateRandom.rand01(seed, i, 57) * Double(stamps.count)))
+        let ref = pick < stamps.count ? stamps[pick] : "editor:dot"
+        let stamp = editorStampOf(ref)
+        if stamp == nil {
+            if !skipped.contains(ref) { skipped.append(ref) }
+            nextNumber += 1
+            return
+        }
+        let sticker = Sticker(
+            id: "st\(nextNumber)", ref: ref, stamp: stamp,
+            x: JS.round((d.dab.x + JS.cos(a) * dist) * 100) / 100, y: JS.round((d.dab.y + JS.sin(a) * dist) * 100) / 100,
+            size: Swift.max(2, JS.round(size * 10) / 10),
+            rotation: JS.round(((-d.dab.angle * 180) / Double.pi + (PixerateRandom.rand01(seed, i, 59) * 2 - 1) * 180 * rotationJitter) * 10) / 10,
+            color: colorJitter > 0 ? jitterColor(base.color, colorJitter, seed, i) : base.color,
+            opacity: JS.round(Swift.min(1, d.dab.opacity * brush.tip.opacity * base.alpha) * 1000) / 1000,
+            seed: Int(JS.floor(PixerateRandom.rand01(seed, i, 65) * 1e9))
+        )
+        nextNumber += 1
+        stickers.append(sticker)
+        rects.append(drawSticker(medium, sticker))
+        dabCount += 1
+    }
+
+    private func colorAt(_ d: PenDab, _ dx: Double, _ dy: Double) -> (color: String, alpha: Double) {
+        func hex(_ rgb: [Double]) -> String { "#" + rgb.map { String(Int(JS.round(Swift.min(1, Swift.max(0, $0)) * 255)), radix: 16).leftPad(2) }.joined() }
+        if let effect {
+            let e = sampleEffectAt(effect, d.dab.x + dx, d.dab.y + dy, EffectDabPlace(d))
+            return (hex(e.rgb), e.alpha)
+        }
+        guard let g = paint else { return (color, 1) }
+        if sampler == nil { sampler = PaintGradientSampler(g, seed: seed) }
+        let s = g.map.by == "across-tip"
+            ? sampler!.sample(((dx * JS.sin(d.direction) + dy * JS.cos(d.direction)) / Swift.max(0.5, d.dab.radius) + 1) / 2)
+            : sampler!.dab(d.params)
+        return (hex(s.rgb), s.alpha)
+    }
+}

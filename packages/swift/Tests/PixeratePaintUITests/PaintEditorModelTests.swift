@@ -321,9 +321,9 @@ final class PaintEditorModelTests: XCTestCase {
             XCTAssertEqual(controls.map(\.key), row.controls.map(\.key), row.kind)
             XCTAssertEqual(controls.map { $0.json["label"]?.stringValue }, row.controls.map(\.label), row.kind)
         }
-        // Brushes the engine can't paint (wet, thick, stickers) are left out of the picker; particle and bristle brushes are in it.
+        // Brushes the engine can't paint (wet, thick) are left out of the picker; particle, bristle and sticker brushes are in it.
         XCTAssertFalse(model.brushes.isEmpty)
-        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "particle", "bristle"].contains($0.engine) && $0.stamp == nil })
+        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "particle", "bristle", "sticker"].contains($0.engine) && $0.stamp == nil })
         XCTAssertTrue(model.brushes.contains { $0.engine == "particle" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "bristle" })
         XCTAssertLessThan(model.brushes.count, model.controller.brushes.count)

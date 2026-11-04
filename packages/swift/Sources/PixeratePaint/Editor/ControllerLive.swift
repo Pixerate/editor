@@ -59,6 +59,7 @@ extension PaintEditorController {
     public func convertToLiveStrokes(_ layerId: String?) throws -> PaintLayerInfo {
         let l = try paintTarget(layerId, "convert")
         if doc.liveStrokes?.get(l.id) != nil { return describeLayer(l) }
+        if doc.stickers?.get(l.id)?.isEmpty == false { throw PaintEditorError("Layer \"\(l.name)\" is a sticker layer; add a stroke layer instead (add_layer {type: \"strokes\"}).") }
         if contentBounds(l.pixelSurface) != nil { throw PaintEditorError("Layer \"\(l.name)\" already has paint, which isn't kept as strokes; convert an empty layer or add a stroke layer (add_layer {type: \"strokes\"}).") }
         commit("Convert to stroke layer", doc.with { d in
             var live = d.liveStrokes ?? OrderedMap()

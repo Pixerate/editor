@@ -176,6 +176,7 @@ extension PaintEditorController {
     /// A pixel layer that takes effect pixels: unlocked, visible, not a stroke layer.
     private func effectTarget(_ layerId: String?, _ what: String) throws -> PaintLayer {
         let l = try paintTarget(layerId, what)
+        if doc.stickers?.get(l.id)?.isEmpty == false { throw PaintEditorError("Layer \"\(l.name)\" is a sticker layer; \(what) another layer (add_layer).") }
         if doc.liveStrokes?.get(l.id) != nil { throw PaintEditorError("Layer \"\(l.name)\" is a stroke layer (its pixels are drawn from its strokes); \(what) another layer (add_layer), or rasterize it first (rasterize_stroke_layer).") }
         return l
     }

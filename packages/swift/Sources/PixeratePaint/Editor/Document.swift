@@ -65,6 +65,8 @@ public final class PaintDocumentState {
     public var effectLayers: OrderedMap<String, PaintEffectSource>?
     /// Effect paper: a provider generator drawn over the paper, under the paint.
     public var paperEffect: PaintPaperEffect?
+    /// Sticker layers: each layer's stickers, bottom first (its pixels are drawn from them).
+    public var stickers: OrderedMap<String, [Sticker]>?
 
     public init(canvas: PaintCanvas, paper: PaperSettings, layers: [PaintLayer], activeLayerId: String?, strokes: [RecordedStroke]) {
         self.canvas = canvas
@@ -83,6 +85,7 @@ public final class PaintDocumentState {
         d.origin = origin
         d.effectLayers = effectLayers
         d.paperEffect = paperEffect
+        d.stickers = stickers
         change(d)
         return d
     }

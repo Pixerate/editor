@@ -229,6 +229,8 @@ public final class PaintEditorController {
     var liveStroke: PaintLiveStroke?
     /// The compositor the canvas view draws with: its per-tile cache makes redraws touch only changed tiles.
     lazy var viewCompositor = createPaintCompositor()
+    /// The editor's own sticker library (find_stickers, describe_sticker).
+    let editorStickerLibrary = EditorStickers()
     /// The registered effects provider (`setEffectsProvider`), or nil.
     public internal(set) var effectsProvider: EffectProvider? { didSet { emit() } }
     /// Effect paint strokes paint with (`setEffectPaint`), and one still rendering.
@@ -391,6 +393,31 @@ public final class PaintEditorController {
                 for (id, list) in live { out.set(id, list.map { varyStroke($0, m) }) }
                 o.liveStrokes = out
             }
+            func moveStickers(_ list: [Sticker]) -> [Sticker] { list.map { var s = $0; s.x = JS.round((s.x + Double(dx)) * 100) / 100; s.y = JS.round((s.y + Double(dy)) * 100) / 100; return s } }
+            func moveStroke(_ s: RecordedStroke) -> RecordedStroke {
+                var moved = varyStroke(s, m)
+                if let st = s.stencils { moved.stencils = st.map { translateStencil($0, Double(dx), Double(dy)) } }
+                return moved
+            }
+            if let st = d.stickers {
+                var out = OrderedMap<String, [Sticker]>()
+                for (id, list) in st { out.set(id, moveStickers(list)) }
+                o.stickers = out
+            }
+            // Replays repeat the events: their stickers and stroke layers' strokes move too.
+            if let events = d.paintEvents {
+                o.paintEvents = events.map { e in
+                    var e = e
+                    if e.kind == "stickers", let list = e.data?["stickers"]?.arrayValue {
+                        e.data!["stickers"] = .array(moveStickers(list.compactMap(Sticker.init(json:))).map { .object($0.json) })
+                    } else if e.kind == "live-strokes", let strokes = e.strokes {
+                        let moved = strokes.map(moveStroke)
+                        e.strokes = moved
+                        e.data!["strokes"] = .array(moved.map(recordedStrokeJSON))
+                    }
+                    return e
+                }
+            }
         }
     }
 
@@ -550,6 +577,7 @@ public final class PaintEditorController {
             d.layers = layers
             d.activeLayerId = active
             d.removingLight(Array(removed))
+            d.removingStickers(Array(removed))
             if var live = d.liveStrokes {
                 for k in removed { _ = live.delete(k) }
                 d.liveStrokes = live
@@ -561,9 +589,11 @@ public final class PaintEditorController {
     public func duplicateLayer(_ id: String) throws -> PaintLayerInfo {
         guard let loc = findLayer(doc.layers, id) else { throw PaintEditorError("Unknown layer \"\(id)\". Call list_layers for the ids.") }
         var live = doc.liveStrokes
+        var stickers = doc.stickers
         var lightCopies: [(String, TiledSurface)] = []
         func copy(_ l: PaintLayer) -> PaintLayer {
             let nid = newPaintLayerId()
+            if let list = stickers?.get(l.id) { stickers!.set(nid, list) }
             if let lit = doc.light?.get(l.id) { lightCopies.append((nid, lit)) }
             if let spill = lightSpills[l.id] { lightSpills[nid] = spill }
             if let list = live?.get(l.id) {
@@ -585,6 +615,7 @@ public final class PaintEditorController {
             d.activeLayerId = dup.id
             if lightCopies.count > 0 { var l = d.light ?? OrderedMap(); for (k, v) in lightCopies { l.set(k, v) }; d.light = l }
             if live != nil { d.liveStrokes = live }
+            if stickers != nil { d.stickers = stickers }
         })
         return describeLayer(dup)
     }
@@ -630,6 +661,7 @@ public final class PaintEditorController {
             d.layers = layers
             d.activeLayerId = below.id
             d.removingLight([upper.id, below.id])
+            d.removingStickers([upper.id, below.id])
             if let mergedLight { var l = d.light ?? OrderedMap(); l.set(below.id, mergedLight); d.light = l }
             if var live = d.liveStrokes {
                 _ = live.delete(upper.id)
@@ -647,6 +679,7 @@ public final class PaintEditorController {
         commit("Clear layer", withPaintEvent(doc.with { d in
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(emptySurface(4)) }
             d.removingLight([l.id])
+            d.removingStickers([l.id])
             if var live = d.liveStrokes, live.get(l.id) != nil {
                 live.set(l.id, [])
                 d.liveStrokes = live
@@ -661,6 +694,7 @@ public final class PaintEditorController {
      */
     public func fillLayer(layerId: String? = nil, color colorIn: String? = nil, opacity opacityIn: Double? = nil, grain grainIn: Double? = nil, pressure pressureIn: Double? = nil, blend blendIn: String? = nil) throws -> JSONObject {
         let target = try paintTarget(layerId, "fill")
+        if doc.stickers?.get(target.id)?.isEmpty == false { throw PaintEditorError("Layer \"\(target.name)\" is a sticker layer; fill another layer (add_layer).") }
         if doc.liveStrokes?.get(target.id) != nil { throw PaintEditorError("Layer \"\(target.name)\" is a stroke layer (its pixels are drawn from its strokes); fill another layer (add_layer), or rasterize it first (rasterize_stroke_layer).") }
         let l = target
         let color = try colorIn.map { try parseColor(.string($0)) } ?? self.color
@@ -937,6 +971,8 @@ public final class PaintEditorController {
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
         let brush = try strokeBrush(i)
         let effect = try strokeEffect(i, brush)
+        if brush.light.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).") }
+        if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         if d.liveStrokes?.get(layer.id) != nil, let e = effect?.source, e.live {
             // Each live source needs a renderer every frame.
             let sources = liveEffects(d).sources
@@ -944,15 +980,24 @@ public final class PaintEditorController {
                 throw PaintEditorError("The painting already plays \(MAX_LIVE_EFFECT_SOURCES) live effects, the most it can; paint with one of them, or set_effect_paint with live false to bake this one.")
             }
         }
-        if brush.light.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).") }
-        if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
+        let stickerLayer = d.stickers?.get(layer.id)?.isEmpty == false
+        if brush.engine == "sticker" {
+            if !stickerLayer && contentBounds(layer.pixelSurface) != nil { throw PaintEditorError("Layer \"\(layer.name)\" already has paint; spray stickers onto an empty layer (add_layer) so they stay editable.") }
+        } else if stickerLayer {
+            throw PaintEditorError("Layer \"\(layer.name)\" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).")
+        }
         var color = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
         if i.color == nil, let start = i.start, let t = guides.tracing, t.visible, t.sampleColors { color = try sampleTracingColor(start.x, start.y) ?? color }
         let perspective = guides.perspective
         let snapper = i.snapToPerspective == true && perspective.enabled && perspective.snap ? PerspectiveSnapper(perspective) : nil
         let useStencils = i.stencils != false
         let stencilSnapper = useStencils && guides.stencils.contains(where: { $0.enabled && $0.mode == "guide" }) ? StencilSnapper(guides.stencils) : nil
-        let selection = i.maskStencils.map { stencilSelection($0) } ?? (useStencils ? stencilSelection() : nil)
+        // Stickers are objects drawn whole, so a mask would only clip them until the next edit.
+        if brush.engine == "sticker" && i.maskStencils == nil && useStencils && stencilSelection() != nil {
+            let masks = guides.stencils.filter { $0.enabled && $0.mode == "mask" }.map(\.id)
+            throw PaintEditorError("Stickers can't be clipped by mask stencils (\(masks.joined(separator: ", "))): they are objects drawn whole. Hide them (update_stencil enabled false) to spray stickers, or erase stickers you don't want (remove_stickers).")
+        }
+        let selection = brush.engine == "sticker" ? nil : i.maskStencils.map { stencilSelection($0) } ?? (useStencils ? stencilSelection() : nil)
         var inputFilter: ((PenPoint) -> PenPoint)? = nil
         if snapper != nil || stencilSnapper != nil {
             inputFilter = { p in
@@ -976,6 +1021,7 @@ public final class PaintEditorController {
         )
         var withLight = initValues
         withLight.effect = effect
+        if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
         if brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
         let session = try PaintStrokeSession(withLight)
         session.maskStencils = i.maskStencils
@@ -1015,6 +1061,11 @@ public final class PaintEditorController {
                 o.layers = mapLayer(d.layers, session.layerId) { $0.withSurface(surface) }
                 o.strokes = d.strokes + [stroke]
                 o.settingLight(session.layerId, session.lightChannel)
+                if let sprayed = session.sprayedStickers {
+                    var t = o.stickers ?? OrderedMap()
+                    t.set(session.layerId, (t.get(session.layerId) ?? []) + sprayed)
+                    o.stickers = t
+                }
                 if var live = o.liveStrokes, let list = live.get(stroke.layerId) {
                     live.set(stroke.layerId, list + [stroke])
                     o.liveStrokes = live
@@ -1152,6 +1203,7 @@ public final class PaintEditorController {
             if !ext.isEmpty { out["liveStrokes"] = .object(ext) }
         }
         for (k, v) in providerEffectsJSON(d) { out[k] = v }
+        for (k, v) in stickersJSON(d) { out[k] = v }
         let (layers, assets) = serializeLayers(d.layers)
         out["layers"] = .array(layers)
         out["assets"] = .object(assets)

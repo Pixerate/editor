@@ -42,6 +42,8 @@ struct StrokeSessionInit {
     var light: TiledSurface? = nil
     /// Effect paint: the effect (recorded with the stroke) and its rendered pixels.
     var effect: (source: PaintEffectPaint, pixels: EffectPaintPixels)? = nil
+    /// Sticker brushes: the number of the first sticker id (`st<n>`) the spray makes.
+    var stickerNextId: Int? = nil
 }
 
 public struct PaintStrokeResult {
@@ -80,6 +82,7 @@ final class PaintStrokeSession: PaintTileTarget {
     private var touchedSet: Set<TileKey> = []
     private let dry: CoverageStroke?
     private var wet: PaintDabStroke?
+    private var spray: StickerSpray?
     private let apply: StrokeApply
     private var bounds: RasterRect?
     private var closed = false
@@ -98,6 +101,9 @@ final class PaintStrokeSession: PaintTileTarget {
     /// The tiles shown while the stroke is painted (`currentSurface`), and the keys changed since.
     private var shown: OrderedMap<TileKey, Tile>?
     private var stale: [TileKey] = []
+
+    /// Sticker brushes: the stickers the stroke sprayed, or nil.
+    var sprayedStickers: [Sticker]? { spray.flatMap { $0.stickers.isEmpty ? nil : $0.stickers } }
 
     /// Light paint: the layer's light channel after the stroke, or nil when the stroke has no twin.
     var lightChannel: TiledSurface? { lightTwin?.surfaceAfter.map(shadowToLight) }
@@ -129,6 +135,11 @@ final class PaintStrokeSession: PaintTileTarget {
         apply = StrokeApply(mode: brush.engine == "eraser" ? .erase : .paint, color: i.color, background: i.background, opacity: brush.tip.opacity, blend: brush.tip.blend, lockTransparency: i.lockTransparency, selection: i.selection, offset: i.offset)
         let copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
         if brush.stamp != nil { throw UnportedBrushError(message: "The \(brush.name) brush has a stamp tip, which the Swift paint editor does not draw yet.") }
+        if brush.engine == "sticker" {
+            dry = nil
+            spray = StickerSpray(brush: brush, target: self, color: i.colorHex, seed: i.seed, copies: copies, nextId: i.stickerNextId ?? 1, paint: i.paint, effect: i.effect?.pixels)
+            return
+        }
         let dabByDab = brush.engine == "mixer" || brush.engine == "blender" || brush.engine == "smudge" || usesPaintExchange(brush, i.paint != nil)
         if dabByDab {
             dry = nil
@@ -184,7 +195,7 @@ final class PaintStrokeSession: PaintTileTarget {
         let filtered = initValues.inputFilter.map { pts.map($0) } ?? pts
         points += filtered
         lightTwin?.push(filtered)
-        let rects = dry != nil ? dry!.push(filtered) : wet!.push(filtered)
+        let rects = dry != nil ? dry!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
         update(rects)
         markStale(rects)
     }
@@ -246,7 +257,7 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Ends the stroke and returns what changed.
     func end() throws -> PaintStrokeResult {
         if closed { throw PaintEditorError("This stroke has already ended.") }
-        update(dry != nil ? dry!.finish() : wet!.finish())
+        update(dry != nil ? dry!.finish() : spray != nil ? spray!.finish() : wet!.finish())
         closed = true
         if let twin = lightTwin, twin.open { _ = try twin.end() }
         let ch = base.channels
@@ -259,7 +270,7 @@ final class PaintStrokeSession: PaintTileTarget {
             if !sameTile(prev, tile) { changed = true }
         }
         surfaceAfter = changed ? TiledSurface(channels: ch, tiles: tiles, defaultValue: base.defaultValue) : nil
-        let dabs = dry?.dabCount ?? wet!.dabCount
+        let dabs = dry?.dabCount ?? spray?.dabCount ?? wet!.dabCount
         var r = PaintStrokeResult(layerId: layerId, bounds: changed ? bounds : nil, dabs: dabs, strokeId: nil)
         if let carried = wet?.load { r.mixerLoad = initValues.brush.behavior.dirty ? carried : cleanMixer(carried) }
         result = r

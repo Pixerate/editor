@@ -179,6 +179,14 @@ extension PaintEditorController {
                         try await target.prepareEffectPaints(list.compactMap(\.effect))
                         try target.replaceLiveStrokes(e.layerId, list)
                     }
+                case "stickers":
+                    let list = (d["stickers"]?.arrayValue ?? []).compactMap(Sticker.init(json:)).map { x -> Sticker in
+                        if s == 1 { return x }
+                        var y = x
+                        y.x *= s; y.y *= s; y.size *= s
+                        return y
+                    }
+                    try target.replaceStickers(e.layerId, list)
                 default:
                     continue
                 }
