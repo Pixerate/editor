@@ -62,7 +62,7 @@ public final class MixingPad {
             affineCopies: [], copies: [IDENTITY_COPY],
             mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, rgb.map { Double($0) / 255 }), secondary: nil, selection: nil, paint: nil
         ))
-        session.push(points)
+        try session.push(points)
         let res = try session.end()
         if let s = session.surfaceAfter {
             surface = s

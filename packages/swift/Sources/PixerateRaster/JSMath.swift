@@ -95,6 +95,29 @@ public enum JS {
         return ((a / m) * (a / m) + (b / m) * (b / m)).squareRoot() * m
     }
 
+    /// `Math.hypot(a, b, c)`: V8's builtin normalises by the largest and sums the squares with Kahan summation.
+    public static func hypot(_ x: Double, _ y: Double, _ z: Double) -> Double {
+        let v = [Swift.abs(x), Swift.abs(y), Swift.abs(z)]
+        var m = 0.0
+        var nan = false
+        for a in v {
+            if a.isNaN { nan = true } else if a > m { m = a }
+        }
+        if m == .infinity { return .infinity }
+        if nan { return .nan }
+        if m == 0 { return 0 }
+        var sum = 0.0
+        var compensation = 0.0
+        for a in v {
+            let n = a / m
+            let summand = n * n - compensation
+            let preliminary = sum + summand
+            compensation = (preliminary - sum) - summand
+            sum = preliminary
+        }
+        return sum.squareRoot() * m
+    }
+
     /// `Math.pow` / `**`.
     @inline(__always) public static func pow(_ x: Double, _ y: Double) -> Double { Foundation.pow(x, y) }
 

@@ -4,9 +4,9 @@ import SwiftUI
 
 /**
  * The paint editor (`PaintEditor`): the toolbar, the brush panel on the left, the canvas, and
- * colour, paper, layers (with the stroke layer's strokes) and layer styles on the right. Wet,
- * thick and sticker media and provider effects are not ported yet, so their panels are not
- * shown. Agents drive the same editor through `model.registry`.
+ * colour, paper (with the light for thick paint), layers (with light spill and the stroke layer's
+ * strokes), layer styles and wet paint on the right. Wet paint keeps flowing: the view ticks the
+ * simulation every frame (`runWetClock`). Agents drive the same editor through `model.registry`.
  */
 public struct PaintEditorView: View {
     private let model: PaintEditorModel
@@ -55,8 +55,10 @@ public struct PaintEditorView: View {
                             case .paper: PaintPaperPanel(model: model)
                             case .layers:
                                 PaintLayersPanel(model: model)
+                                PaintLightSpillPanel(model: model)
                                 PaintStrokePanel(model: model)
                             case .effects: PaintEffectsPanel(model: model)
+                            case .wet: PaintWetPanel(model: model)
                             }
                         }
                         .padding(10)
@@ -66,5 +68,6 @@ public struct PaintEditorView: View {
             }
         }
         .controlSize(.small)
+        .task { await model.runWetClock() }
     }
 }

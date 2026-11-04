@@ -327,6 +327,95 @@ public struct PaintPaperPanel: View {
             }
             Toggle("Mirror tiling", isOn: Binding(get: { paper.tiling == "mirror" }, set: { on in model.attempt { _ = try model.controller.setPaper(["tiling": .string(on ? "mirror" : "repeat")]) } }))
             Button("New sheet") { model.newSheet() }
+            PaintLightPanel(model: model)
+        }
+    }
+}
+
+/// The light for thick paint and metallic paper (`PaintUITables.sliders.light`; not an undo step), and Flatten relief for the active layer.
+public struct PaintLightPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("Light (thick paint, metallic paper)")
+            ForEach(model.lightSliders, id: \.path) { c in
+                PaintSliderRow(label: c.label, value: model.lightingValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setLighting(c.path, $0) })
+            }
+            Button("Flatten relief") { model.flattenRelief() }
+        }
+    }
+}
+
+/// Light paint on the active layer: how far and how strongly its light spills, and Clear light (`PaintLayersPanel`'s light row).
+public struct PaintLightSpillPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        if let light = model.activeLight, light.hasLight {
+            VStack(alignment: .leading, spacing: 8) {
+                PanelHeading("Light paint")
+                PaintSliderRow(label: "Light spill radius", value: light.radius, range: 0...120, step: 1, unit: "px", onChange: { model.setLightSpill(radius: $0) })
+                PaintSliderRow(label: "Light spill strength", value: light.strength, range: 0...2, step: 0.05, onChange: { model.setLightSpill(strength: $0) })
+                Button("Clear light") { model.clearLight() }
+            }
+        }
+    }
+}
+
+// MARK: - Wet paint
+
+/**
+ * Wet media (`WetPanel`): whether paint is wet, Dry now, Pause / Resume, the water overlay,
+ * instant dry and Wet paper; the speed and canvas tilt (`sliders.wetSpeed`, `sliders.wetTilt`);
+ * the active layer's wet settings (`sliders.wet`) and flow map; and the engine (`wetGpu`: this port
+ * runs the CPU engine whichever is chosen).
+ */
+public struct PaintWetPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let wet = model.wet
+        let isWet = wet.isWet()
+        let layer = model.wetLayer
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                PanelHeading("Wet paint")
+                Spacer()
+                Text(isWet ? (wet.paused ? "Wet (paused)" : "Wet") : "Dry").font(.caption).foregroundStyle(isWet ? .blue : .secondary)
+                Text("step \(model.wetClock)").font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+            }
+            HStack(spacing: 4) {
+                Button("Dry now") { model.dryNow() }.disabled(wet.wetLayerIds().isEmpty)
+                Button(wet.paused ? "Resume" : "Pause") { model.toggleWetPaused() }
+                Button("Wet paper") { model.wetPaper() }.disabled(layer == nil)
+            }
+            Toggle("Show water", isOn: Binding(get: { wet.overlay }, set: { _ in model.toggleWaterOverlay() }))
+            Toggle("Instant dry", isOn: Binding(get: { wet.instantDry }, set: { _ in model.toggleInstantDry() })).help("Each wet stroke dries as soon as it ends")
+            let s = model.wetSpeedSlider
+            PaintSliderRow(label: s.label, value: wet.speed, range: s.min...s.max, step: s.step, onChange: { model.setWetSpeed($0) })
+            ForEach(model.wetTiltSliders, id: \.path) { c in
+                PaintSliderRow(label: c.label, value: model.tiltValue(c.path), range: c.min...c.max, step: c.step, onCommit: { model.setTilt(c.path, $0) })
+            }
+            if let layer {
+                PanelHeading("This layer")
+                ForEach(model.wetSliders, id: \.path) { c in
+                    PaintSliderRow(label: c.label, value: model.wetParam(c.path), range: c.min...c.max, step: c.step, onCommit: { model.setWetParam(c.path, $0) })
+                }
+                Picker("Flow map", selection: Binding(get: { layer.flow.kind }, set: { model.setFlowKind($0) })) {
+                    ForEach(WET_FLOW_LABELS, id: \.kind) { Text($0.label).tag($0.kind) }
+                }
+                if layer.flow.kind != "none" {
+                    PaintSliderRow(label: "Flow strength", value: layer.flow.strength, range: 0...1, step: 0.01, onCommit: { model.setFlowStrength($0) })
+                }
+            }
+            Picker("Engine", selection: Binding(get: { wet.gpuMode }, set: { model.setWetEngine($0) })) {
+                ForEach(model.wetGpuOptions, id: \.value) { Text($0.label).tag($0.value) }
+            }
+            Text(model.wetEngineSummary).font(.caption2).foregroundStyle(.secondary)
         }
     }
 }

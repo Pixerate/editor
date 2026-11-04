@@ -45,16 +45,15 @@ public func strokeSliderValue(_ brush: PaintBrush, _ path: String) -> Double {
     }
 }
 
-/**
- * The paper sliders (`PaintUITables.sliders.paper`) this port shows. Absorption, permeability and
- * roughness only change wet paint, and metallic and backlight paper are not drawn yet, so their
- * rows stay hidden until those are ported.
- */
-public let PAINT_PAPER_SLIDER_PATHS: Set<String> = ["depth", "scale", "shading", "dry.contrast"]
+/// The paper sliders (`PaintUITables.sliders.paper`) this port shows: all of them (wet media read absorption, permeability and roughness; metallic and backlit paper are drawn).
+public let PAINT_PAPER_SLIDER_PATHS: Set<String> = ["depth", "scale", "shading", "dry.contrast", "absorption", "permeability", "roughness", "metallic", "backlight"]
+
+/// Flow map kinds as the wet panel lists them (`WetPanel`'s labels).
+public let WET_FLOW_LABELS: [(kind: String, label: String)] = [("none", "None"), ("linear", "One way"), ("swirl", "Swirl"), ("radial", "Outwards"), ("turbulent", "Eddies")]
 
 /// The side panels of `PaintEditorView`.
 public enum PaintPanelTab: String, CaseIterable, Identifiable, Sendable {
-    case color, paper, layers, effects
+    case color, paper, layers, effects, wet
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -62,6 +61,7 @@ public enum PaintPanelTab: String, CaseIterable, Identifiable, Sendable {
         case .paper: return "Paper"
         case .layers: return "Layers"
         case .effects: return "Styles"
+        case .wet: return "Wet"
         }
     }
 }
@@ -303,6 +303,91 @@ public final class PaintEditorModel {
     /// Sets a paper slider (one undo step: call it when the drag ends).
     public func setPaperValue(_ path: String, _ value: Double) { attempt { _ = try controller.setPaper(patchPath(controller.doc.paper.json, path, .number(value))) } }
     public func newSheet() { attempt { _ = try controller.setPaper(["seed": .number(Double(controller.doc.paper.seed + 1))]) } }
+
+    // MARK: - Light (thick paint, metallic paper)
+
+    /// The light sliders (`PaintUITables.sliders.light`): direction, height and relief.
+    public var lightSliders: [PaintUISlidersLightItem] { tables.sliders.light }
+    public var lighting: PaintLighting { track(); return controller.lighting }
+    public func lightingValue(_ path: String) -> Double { readPath(lighting.json.objectValue ?? [:], path) }
+    /// Moves the light (not an undo step: thick paint and metallic paper are relit).
+    public func setLighting(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setLighting(azimuth: path == "azimuth" ? value : nil, elevation: path == "elevation" ? value : nil, relief: path == "relief" ? value : nil) }
+    }
+    /// Flattens the active layer's relief (one undo step).
+    public func flattenRelief() { attempt { _ = try controller.flattenRelief() } }
+
+    /// The active layer's light paint (`get_light`): whether it has any and its spill.
+    public var activeLight: (hasLight: Bool, radius: Double, strength: Double)? {
+        track()
+        guard let o = try? controller.lightOf(), let spill = o["spill"]?.objectValue else { return nil }
+        return (o["hasLight"] == .bool(true), spill["radius"]?.numberValue ?? 0, spill["strength"]?.numberValue ?? 0)
+    }
+    /// Sets the active layer's light spill (saved with the painting, not an undo step).
+    public func setLightSpill(radius: Double? = nil, strength: Double? = nil) { attempt { _ = try controller.setLightSpill(nil, radius: radius, strength: strength) } }
+    /// Takes the active layer's light away (one undo step).
+    public func clearLight() { attempt { _ = try controller.clearLight() } }
+
+    // MARK: - Wet media
+
+    /// The wet-paint sliders (`PaintUITables.sliders`): the layer's settings, the tilt and the speed.
+    public var wetSliders: [PaintUISlidersWetItem] { tables.sliders.wet }
+    public var wetTiltSliders: [PaintUISlidersWetTiltItem] { tables.sliders.wetTilt }
+    public var wetSpeedSlider: PaintUISlidersWetSpeed { tables.sliders.wetSpeed }
+    /// The engine choices (`PaintUITables.wetGpu`).
+    public var wetGpuOptions: [PaintUIWetGpuItem] { tables.wetGpu }
+    /// Wet media as the panel shows it (`getState().wet`).
+    public var wet: PaintWetLayers { track(); return controller.wet }
+    public var wetClock: Int { track(); return controller.wet.world?.clock ?? 0 }
+    /// The active layer's wet settings and state, or nil without an active pixel layer.
+    public var wetLayer: WetLayerInfo? { track(); return try? controller.wetLayerInfo() }
+    /// A wet setting of the active layer (`WetParams` key).
+    public func wetParam(_ path: String) -> Double { wetLayer?.params[path] ?? DEFAULT_WET_PARAMS[path] }
+    public func setWetParam(_ path: String, _ value: Double) { attempt { _ = try controller.setWetParams(nil, [path: .number(value)]) } }
+    public func setFlowKind(_ kind: String) { attempt { _ = try controller.setFlowMap(nil, ["kind": .string(kind)]) } }
+    public func setFlowStrength(_ value: Double) { attempt { _ = try controller.setFlowMap(nil, ["strength": .number(value)]) } }
+    public func tiltValue(_ path: String) -> Double { readPath(wet.tilt.json.objectValue ?? [:], path) }
+    public func setTilt(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setCanvasTilt(angle: path == "angle" ? value : nil, direction: path == "direction" ? value : nil) }
+    }
+    public func setWetSpeed(_ value: Double) { attempt { try controller.setWetSpeed(value) } }
+    public func toggleWetPaused() { controller.setWetPaused(!controller.wet.paused) }
+    public func toggleWaterOverlay() { controller.setWaterOverlay(!controller.wet.overlay) }
+    public func toggleInstantDry() { controller.setInstantDry(!controller.wet.instantDry) }
+    /// Dries every wet layer now (one undo step).
+    public func dryNow() { attempt { _ = try controller.dryPaint() } }
+    /// Wets the active layer's paper (one undo step).
+    public func wetPaper() { attempt { _ = try controller.wetPaper() } }
+    public func setWetEngine(_ gpu: String) { attempt { _ = try controller.setWetEngine(gpu: gpu, minTiles: nil) } }
+    /// What the engine is doing, in a sentence (`wetEngineSummary`).
+    public var wetEngineSummary: String {
+        let e = wet.engineInfo()
+        return e.reason ?? "CPU engine."
+    }
+
+    /**
+     * Lets wet paint flow with the clock (`tickWet`): call it every frame with the time in ms. It
+     * steps at the wet speed unless paused or dry; the canvas then redraws only the tiles whose wet
+     * paint changed. Returns the steps run.
+     */
+    @discardableResult
+    public func tick(now: Double) -> Int { controller.tickWet(now) }
+
+    /// Ticks the wet simulation about 60 times a second until the task is cancelled (the editor view runs it).
+    public func runWetClock() async {
+        while !Task.isCancelled {
+            tick(now: Date().timeIntervalSinceReferenceDate * 1000)
+            try? await Task.sleep(nanoseconds: 16_000_000)
+        }
+    }
+
+    /// The water overlay over the canvas (RGBA tiles, straight alpha), when it is shown.
+    public var waterOverlayTiles: [(tx: Int, ty: Int, data: [UInt8])] {
+        track()
+        guard controller.wet.overlay else { return [] }
+        let c = controller.doc.canvas
+        return controller.waterOverlayTiles(RasterRect(x: 0, y: 0, width: c.width, height: c.height))
+    }
 
     // MARK: - Layers
 

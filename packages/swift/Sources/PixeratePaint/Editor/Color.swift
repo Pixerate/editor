@@ -159,9 +159,10 @@ func paintExportHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
 
 extension PaintEditorController {
     /**
-     * The document as an 8-bit RGB PSD (`exportPsd`): every layer and group, the paper as a locked
-     * "Paper" pixel layer at the bottom, light paint as pixels (its spill as Linear Dodge (Add)
-     * layers) and the composite as the merged image. Pigment and painterly modes are written as
+     * The document as an 8-bit RGB PSD (`exportPsd`): every layer and group (wet paint dried, thick
+     * paint lit), the paper as a locked "Paper" pixel layer at the bottom, light paint as pixels
+     * (its spill as Linear Dodge (Add) layers), backlit paper's light as a "Backlight" layer at the
+     * top, and the composite as the merged image. Pigment and painterly modes are written as
      * their nearest standard mode, with a warning.
      */
     public func exportPsd() throws -> PsdExportResult {
@@ -185,7 +186,10 @@ extension PaintEditorController {
                 return next
             }
         }
-        let layers = toStandard(lightLayers(doc.layers))
+        // Thick paint lit, light paint glowing, and each layer's spill as a Linear Dodge (Add) layer above it.
+        let driedBase = driedLayers(doc.layers)
+        let backlight = backlightLayer(driedBase, baseIsCommitted: wet.wetLayerIds().isEmpty, liveThick: nil)
+        let layers = toStandard(lightLayers(litLayers(driedBase)) + (backlight.map { [$0] } ?? []))
         var result = try PixerateRaster.exportPsd(width: w, height: h, layers: [paperLayer] + layers, merged: merged, resolution: doc.canvas.dpi)
         for (mode, names) in changed {
             let label = BLEND_MODES.first { $0.id == mode }?.label ?? mode.rawValue
@@ -193,6 +197,9 @@ extension PaintEditorController {
             let list = names.map { "\"\($0)\"" }.joined(separator: ", ")
             let one = names.count == 1
             result.warnings.append("\(label) blending has no PSD equivalent; \(list) \(one ? "was" : "were") written as \(std), the nearest Photoshop mode, so \(one ? "it looks" : "they look") different in Photoshop (the merged image is exact).")
+        }
+        if backlight != nil {
+            result.warnings.append("Backlit paper is written as pixels: the light that comes through the paint is a \"Backlight\" Linear Dodge (Add) layer at the top. Opening the PSD again gives a plain pixel layer, not a backlight.")
         }
         if let light = doc.light, light.values.contains(where: { !$0.tiles.isEmpty }) {
             result.warnings.append("Light paint is written as pixels: each layer with its glow, and its spill as a \"‹layer› light\" Linear Dodge (Add) layer above it. Opening the PSD again gives plain pixel layers, not editable light.")

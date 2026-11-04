@@ -858,6 +858,23 @@ final class RasterVectorTests: XCTestCase {
     /// Inputs where the platform's libm and Node's `Math` disagree in the last bit: `JS` must give
     /// Node's answer (recorded with Node 25 / V8 14.1 on arm64, where V8's fdlibm is compiled with
     /// fused multiply-adds; x64 builds round some of these differently, so they are not in the TS vectors).
+    /// `Math.hypot` with three arguments sums with Kahan compensation (V8's builtin); values from Node.
+    func testThreeArgumentHypot() {
+        let cases: [(Double, Double, Double, UInt64)] = [
+            (0.3, -0.7, 1, 0x3ff41c97981dab71),
+            (0.001, 0.002, 1, 0x3ff000029f167a23),
+            (0.123456789, 0.987654321, 0.5, 0x3ff1d26796ac5262),
+            (-3.2, 4.1, 1, 0x40152f559ffc709d),
+            (0.0274, 0.0549, 1, 0x3ff007b3f82f7a5a),
+            (7, 24, 25, 0x4041ad7bc01366b8),
+            (0.45451511880935197, -0.45451511880935197, 1.6427876096865395, 0x3ffc399a606a4870),
+        ]
+        for (x, y, z, want) in cases { XCTAssertEqual(JS.hypot(x, y, z).bitPattern, want, "hypot(\(x), \(y), \(z))") }
+        XCTAssertEqual(JS.hypot(0, -0.0, 0), 0)
+        XCTAssertTrue(JS.hypot(.nan, 1, 2).isNaN)
+        XCTAssertEqual(JS.hypot(.nan, .infinity, 2), .infinity)
+    }
+
     func testV8MathOnArm64() {
         let cases: [(String, UInt64, UInt64, UInt64)] = [
             ("atan2", 0xbfd620b200000000, 0xbfcc4f63c0000000, 0xc0011e816f2c0628),

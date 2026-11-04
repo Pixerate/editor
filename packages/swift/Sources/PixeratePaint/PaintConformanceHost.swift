@@ -6,7 +6,7 @@ import PixerateCore
  * A fresh paint editor for replaying a conformance scenario (`domains/paint/fixtures`), as
  * `createPaintConformanceHost` in `paint-editor/contract.ts`: every paint tool provider this port
  * has in one registry that validates arguments, the saved document (the `pixerate.editor-document`
- * envelope) and the composited pixels. `setup` is the scenario's editor options (`width`,
+ * envelope) and the composited pixels. Wet paint runs with the GPU engine off, as in the TS host. `setup` is the scenario's editor options (`width`,
  * `height`, `dpi`, `paper`, `brushId`, `color`). Provider effects come from `FakeEffectProvider`,
  * as the TS host uses the fake provider.
  */
@@ -19,7 +19,9 @@ public final class PaintConformanceHost: ConformanceHost {
         controller = try PaintEditorController(
             width: setup["width"]?.numberValue, height: setup["height"]?.numberValue, dpi: setup["dpi"]?.numberValue,
             paper: paper?.objectValue, paperPreset: paper?.stringValue, brushId: setup["brushId"]?.stringValue,
-            color: setup["color"]?.stringValue, hand: setup["hand"]?.stringValue
+            color: setup["color"]?.stringValue, hand: setup["hand"]?.stringValue,
+            // The TypeScript wet kernel with the GPU off is the reference, as the TS host forces it.
+            wet: PaintWetOptions(gpu: "off")
         )
         controller.setEffectsProvider(FakeEffectProvider())
         _ = try registry.register(createPaintEditorToolProvider(controller))

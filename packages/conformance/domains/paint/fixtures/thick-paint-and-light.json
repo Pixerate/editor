@@ -6,9 +6,6 @@
     "width": 48,
     "height": 32
   },
-  "skip": {
-    "swift": "Thick paint (impasto relief, lighting, get_relief and flatten_relief), the light tools (get_light, set_light_spill, clear_light) and the wet glow-wash stroke the scenario paints are not ported yet (#545)."
-  },
   "steps": [
     {
       "tool": "set_lighting",

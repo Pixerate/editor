@@ -51,7 +51,12 @@ extension PaintEditorController {
             var init_ = i
             if let s = i.seed { init_.seed = s + k }
             init_.start = Point2(x: points[0].x, y: points[0].y)
-            let run = try runStroke(d, init_, points)
+            let run: (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush)
+            do { run = try runStroke(d, init_, points) } catch {
+                wetOp = nil
+                wet.driver = nil
+                throw error
+            }
             last = run
             d = run.doc
             bounds = unionRectOpt(bounds, run.result.bounds)
@@ -59,10 +64,11 @@ extension PaintEditorController {
             if let id = run.result.strokeId { strokeIds.append(id) }
         }
         if let run = last, let load = run.result.mixerLoad { keepLoad(run.brush, load) }
-        if d !== before { commit("\(last?.brush.name ?? "Brush") path stroke", d, before: before) }
+        if d !== before || wetOp != nil { commit("\(last?.brush.name ?? "Brush") path stroke", withWetEvents(d), before: before) } else { emit() }
         let layerId = last?.result.layerId ?? i.layerId ?? doc.activeLayerId ?? ""
         var out: JSONObject = ["layerId": .string(layerId), "bounds": rectJSON(bounds), "dabs": .number(Double(dabs)), "strokeIds": .array(strokeIds.map { .string($0) })]
         if let load = last?.result.mixerLoad { out["mixerLoad"] = loadResult(load) }
+        if let w = last?.result.wet { out["wet"] = .bool(w) }
         return out
     }
 

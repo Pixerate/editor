@@ -12,9 +12,8 @@ import PixerateRaster
  * - The brush, colour, Mixer Brush load, view and hand are editor state, not undo steps.
  * - Rendering goes through the shared compositor with the paper as its bottom layer.
  *
- * This port covers the dry engine: dab and eraser brushes, the Mixer Brush, blender, smudge, and
- * dab brushes that pick up paint or paint gradients. Wet media, thick paint, light, stickers,
- * particles, bristles, stamp tips and effects are refused with a message naming what is missing.
+ * Wet media run on the TS core's TypeScript kernel on this thread (`PaintWetLayers`); thick paint
+ * is lit at render time (`LitCache`). Stamp tips are refused with a message naming what is missing.
  */
 
 /// A refusal with a message that says what is wrong and how to fix it.
@@ -61,7 +60,7 @@ func viewMatrix(_ view: PaintView, _ canvas: PaintCanvas, _ vw: Double, _ vh: Do
 }
 
 /// The lighting of thick paint (`thick.ts`): kept for `get_canvas_info`.
-public struct PaintLighting: Equatable {
+public struct PaintLighting: Equatable, Sendable {
     public var azimuth = 315.0
     public var elevation = 40.0
     public var relief = 0.7
@@ -158,6 +157,8 @@ final class HistoryEntry {
     let before: PaintDocumentState
     var after: PaintDocumentState
     var guides: (before: PaintGuides, after: PaintGuides)?
+    /// Wet steps: the wet simulation before and after (`lost` once dropped for memory: undo then leaves the paint dry).
+    var wet: (before: WetSnapshot?, after: WetSnapshot?, lost: Bool)?
     init(label: String, before: PaintDocumentState, after: PaintDocumentState) {
         self.label = label
         self.before = before
@@ -243,6 +244,19 @@ public final class PaintEditorController {
     /// Live effect paint playback (`setEffectPlayback`) and the time the view shows.
     var effectPlayback: (playing: Bool?, fps: Int?) = (true, 30)
     var effectTime = 0.0
+    /// Wet media: the simulation, its settings and time.
+    public private(set) var wet: PaintWetLayers!
+    /// Set while an operation that changes wet paint runs: the simulation before it (for undo).
+    var wetOp: WetOperation?
+    /// Wet events (for replays) for the document being built.
+    var pendingWetEvents: [WetEvent] = []
+    /// The wet options this editor was made with (replay targets get the same).
+    var wetOptions = PaintWetOptions()
+    /// Backlit paper: the light through the paint as drawn, and through the committed painting (for the spill).
+    let backlightView = BacklightCache()
+    let backlightCommitted = BacklightCache()
+    /// Lit tiles of thick layers, per layer.
+    var litCaches: [String: LitCache] = [:]
 
     private final class LibraryCancellable {
         let c: Cancellable
@@ -250,7 +264,7 @@ public final class PaintEditorController {
         deinit { c.cancel() }
     }
 
-    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil) throws {
+    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions()) throws {
         self.historyLimit = Swift.max(1, historyLimit ?? 200)
         var paperRaw = paper ?? [:]
         if let presetId {
@@ -269,6 +283,25 @@ public final class PaintEditorController {
         guides = defaultGuides(doc.canvas)
         refreshBrushes()
         library = LibraryCancellable(self.brushLibrary.subscribe { [weak self] in self?.refreshBrushes() })
+        wet = PaintWetLayers(PaintWetHost(
+            canvas: { [unowned self] in doc.canvas },
+            paper: { [unowned self] in doc.paper },
+            layerSurface: { [unowned self] id in findLayer(doc.layers, id).flatMap { $0.layer.isPixel ? $0.layer.pixelSurface : nil } },
+            updateSurfaces: { [unowned self] surfaces, _ in
+                var layers = doc.layers
+                for (id, surface) in surfaces where findLayer(layers, id) != nil { layers = mapLayer(layers, id) { $0.withSurface(surface) } }
+                // Wet paint moving is not an undo step: keep the history's documents.
+                doc = doc.with { $0.layers = layers }
+            },
+            layerLight: { [unowned self] id in doc.light?.get(id) },
+            updateLights: { [unowned self] lights in
+                let d = doc
+                // Wet light moving is not an undo step either.
+                doc = d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } }
+            },
+            changed: { [unowned self] in emit() }
+        ), wetOptions)
+        self.wetOptions = wetOptions
     }
 
     // MARK: - History
@@ -284,18 +317,29 @@ public final class PaintEditorController {
             return
         }
         let entry = HistoryEntry(label: label, before: before ?? doc, after: next)
+        if let op = wetOp {
+            entry.wet = (op.before, wet.snapshot(), false)
+            wetOp = nil
+        }
         undoStack.append(entry)
         if undoStack.count > historyLimit { undoStack.removeFirst() }
         redoStack = []
         doc = next
+        trimWetHistory()
     }
 
     public func undo() -> String? {
         if liveStroke != nil { return nil }
         guard let e = undoStack.popLast() else { return nil }
         redoStack.append(e)
+        let paper = doc.paper
         doc = e.before
         if let g = e.guides { guides = g.before }
+        if let w = e.wet {
+            if paper != doc.paper { wet.paperChanged() }
+            try? wet.restore(w.lost ? nil : w.before)
+            if paper != doc.paper { wet.paperChanged() }
+        }
         return e.label
     }
 
@@ -303,8 +347,13 @@ public final class PaintEditorController {
         if liveStroke != nil { return nil }
         guard let e = redoStack.popLast() else { return nil }
         undoStack.append(e)
+        let paper = doc.paper
         doc = e.after
         if let g = e.guides { guides = g.after }
+        if let w = e.wet {
+            try? wet.restore(w.lost ? nil : w.after)
+            if paper != doc.paper { wet.paperChanged() }
+        }
         return e.label
     }
 
@@ -328,6 +377,10 @@ public final class PaintEditorController {
         let next = try createPaintDocument(width: Double(width ?? doc.canvas.width), height: Double(height ?? doc.canvas.height), dpi: dpi ?? doc.canvas.dpi, paper: try resolvePaper(paper) ?? currentPaper.json)
         guides.symmetry.center = Point2(x: Double(next.canvas.width) / 2, y: Double(next.canvas.height) / 2)
         guides.tracing = nil
+        if wet.world != nil {
+            beginWetOp()
+            wet.reset()
+        }
         commit("New canvas", next)
         return next
     }
@@ -336,7 +389,12 @@ public final class PaintEditorController {
     public func setCanvas(width: Int?, height: Int?, dpi: Double?) throws -> PaintCanvas {
         let canvas: PaintCanvas
         do { canvas = try normalizeCanvas(width: Double(width ?? doc.canvas.width), height: Double(height ?? doc.canvas.height), dpi: dpi ?? doc.canvas.dpi) } catch let e as PaintDocumentError { throw PaintEditorError(e.message) }
-        commit("Canvas size", doc.with { $0.canvas = canvas })
+        if wet.world != nil && (canvas.width != doc.canvas.width || canvas.height != doc.canvas.height) {
+            // The wet simulation is canvas-sized: the paint dries first.
+            dryLayersFirst(wet.wetLayerIds())
+            wet.reset()
+        }
+        commit("Canvas size", withWetEvents(doc.with { $0.canvas = canvas }))
         return canvas
     }
 
@@ -358,7 +416,38 @@ public final class PaintEditorController {
         if width > MAX_CANVAS_SIDE || height > MAX_CANVAS_SIDE {
             throw PaintEditorError("The canvas would be \(width)×\(height); the limit is \(MAX_CANVAS_SIDE) px per side. Extend by less (it is \(was.width)×\(was.height) now).")
         }
-        let next = shiftDocument(doc, l, t).with { $0.canvas = PaintCanvas(width: width, height: height, dpi: was.dpi) }
+        // Wet layers whose paint moves still wet (their pixels are in canvas space, like the simulation's).
+        var keptWet: [String] = []
+        if wet.world != nil {
+            if wet.canExtend(l, t) {
+                keptWet = wet.wetLayerIds()
+                if !keptWet.isEmpty { beginWetOp() }
+            } else {
+                // The wet simulation is canvas-sized: the paint dries first (one undo step with the change).
+                dryLayersFirst(wet.wetLayerIds())
+            }
+        }
+        var next = shiftDocument(withWetEvents(doc), l, t).with { $0.canvas = PaintCanvas(width: width, height: height, dpi: was.dpi) }
+        for id in keptWet {
+            if let layer = findLayer(next.layers, id)?.layer, layer.isPixel {
+                let moved = layer.withSurface(translateSurface(layer.pixelSurface, Double(layer.pixelOffset.x), Double(layer.pixelOffset.y)), offset: LayerOffset(x: 0, y: 0))
+                next = next.with { $0.layers = mapLayer(next.layers, id) { _ in moved } }
+            }
+        }
+        if wet.world != nil {
+            if !keptWet.isEmpty {
+                try wet.extend(width, height, l, t, next.paper)
+            } else {
+                // Keep each layer's wet settings (a flow map's centre moves with the paint).
+                let settings = wet.settings
+                wet.reset()
+                for (id, s) in settings {
+                    var n = s
+                    if let c = s.flow.center { n.flow.center = (c.x + Double(l), c.y + Double(t)) }
+                    wet.settings.set(id, n)
+                }
+            }
+        }
         // The new centre is (right − left, bottom − top) / 2 from the old one: pan by that on screen.
         let m = viewMatrix(view, was, 0, 0)
         let dx = Double(r - l) / 2, dy = Double(b - t) / 2
@@ -367,6 +456,8 @@ public final class PaintEditorController {
         let guidesBefore = guides
         if l != 0 || t != 0 { guides = shiftGuides(guides, l, t) }
         commit("Extend canvas", next)
+        // The wet layers show the moved simulation (the same picture), now the document is the new size.
+        if !keptWet.isEmpty { wet.syncDisplays() }
         if guides != guidesBefore { undoStack.last!.guides = (guidesBefore, guides) }
         let origin = next.origin ?? LayerOffset(x: 0, y: 0)
         return ["canvas": next.canvas.json, "rect": RasterRect(x: -l, y: -t, width: width, height: height).json, "origin": pointJSON(Double(origin.x), Double(origin.y))]
@@ -403,6 +494,22 @@ public final class PaintEditorController {
                 var out = OrderedMap<String, [Sticker]>()
                 for (id, list) in st { out.set(id, moveStickers(list)) }
                 o.stickers = out
+            }
+            if let events = d.wetEvents {
+                o.wetEvents = events.map { e in
+                    guard let data = e.data?.objectValue else { return e }
+                    var e = e
+                    func moved(_ r: JSONObject) -> JSONValue {
+                        var r = r
+                        if let x = r["x"]?.numberValue { r["x"] = .number(x + Double(dx)) }
+                        if let y = r["y"]?.numberValue { r["y"] = .number(y + Double(dy)) }
+                        return .object(r)
+                    }
+                    if e.kind == "dry", data["x"]?.numberValue != nil { e.data = moved(data) }
+                    else if e.kind == "wet-paper", let r = data["rect"]?.objectValue { var d2 = data; d2["rect"] = moved(r); e.data = .object(d2) }
+                    else if e.kind == "flow", let c = data["center"]?.objectValue { var d2 = data; d2["center"] = moved(c); e.data = .object(d2) }
+                    return e
+                }
             }
             // Replays repeat the events: their stickers and stroke layers' strokes move too.
             if let events = d.paintEvents {
@@ -450,7 +557,9 @@ public final class PaintEditorController {
         var paper = normalizePaper(rest, base)
         let changed = update.without("preset").keys.filter { $0 != "name" }
         if !changed.isEmpty && update["preset"] == nil { paper.preset = base.preset }
+        if wet.world != nil { beginWetOp() }
         commit("Paper", doc.with { $0.paper = paper })
+        wet.paperChanged()
         return paper
     }
 
@@ -569,6 +678,11 @@ public final class PaintEditorController {
     public func removeLayer(_ id: String) throws -> JSONObject {
         let l = try requireLayer(id)
         if isLayerLocked(l.locks, .all) { throw PaintEditorError("Layer \"\(l.name)\" is fully locked; unlock it before removing it.") }
+        let wetIds = wet.wetLayerIds().filter { $0 == id || (l.type == "group" && findLayer(l.children ?? [], $0) != nil) }
+        if !wetIds.isEmpty {
+            beginWetOp()
+            for x in wetIds { try? wet.world?.removeLane(x) }
+        }
         let layers = mapLayer(doc.layers, id) { _ in nil }
         var active = doc.activeLayerId
         if let a = active, findLayer(layers, a) == nil { active = flattenLayers(layers).filter(\.isPixel).last?.id }
@@ -578,6 +692,7 @@ public final class PaintEditorController {
             d.activeLayerId = active
             d.removingLight(Array(removed))
             d.removingStickers(Array(removed))
+            d.removingThick(Array(removed))
             if var live = d.liveStrokes {
                 for k in removed { _ = live.delete(k) }
                 d.liveStrokes = live
@@ -587,7 +702,12 @@ public final class PaintEditorController {
     }
 
     public func duplicateLayer(_ id: String) throws -> PaintLayerInfo {
+        if let pre = findLayer(doc.layers, id) {
+            func inside(_ l: PaintLayer) -> [String] { l.type == "group" ? (l.children ?? []).flatMap(inside) : [l.id] }
+            dryLayersFirst(inside(pre.layer))
+        }
         guard let loc = findLayer(doc.layers, id) else { throw PaintEditorError("Unknown layer \"\(id)\". Call list_layers for the ids.") }
+        var thick = doc.thick
         var live = doc.liveStrokes
         var stickers = doc.stickers
         var lightCopies: [(String, TiledSurface)] = []
@@ -595,6 +715,7 @@ public final class PaintEditorController {
             let nid = newPaintLayerId()
             if let list = stickers?.get(l.id) { stickers!.set(nid, list) }
             if let lit = doc.light?.get(l.id) { lightCopies.append((nid, lit)) }
+            if let ch = thick?.get(l.id) { thick!.set(nid, ch) }
             if let spill = lightSpills[l.id] { lightSpills[nid] = spill }
             if let list = live?.get(l.id) {
                 live!.set(nid, list.map { s in
@@ -610,13 +731,14 @@ public final class PaintEditorController {
         }
         let dup = copy(loc.layer).copy(name: "\(loc.layer.name) copy")
         let layers = insertLayer(doc.layers, dup, loc.parent?.id, loc.index + 1)
-        commit("Duplicate layer", doc.with { d in
+        commit("Duplicate layer", withWetEvents(doc.with { d in
             d.layers = layers
             d.activeLayerId = dup.id
+            if thick != nil { d.thick = thick }
             if lightCopies.count > 0 { var l = d.light ?? OrderedMap(); for (k, v) in lightCopies { l.set(k, v) }; d.light = l }
             if live != nil { d.liveStrokes = live }
             if stickers != nil { d.stickers = stickers }
-        })
+        }))
         return describeLayer(dup)
     }
 
@@ -639,6 +761,10 @@ public final class PaintEditorController {
 
     /// Merges a pixel layer into the pixel layer below it (keeping the lower one's settings).
     public func mergeDown(_ id: String) throws -> PaintLayerInfo {
+        if let pre = findLayer(doc.layers, id) {
+            let sib = pre.parent?.children ?? doc.layers
+            dryLayersFirst([id] + (pre.index > 0 ? [sib[pre.index - 1].id] : []))
+        }
         guard let loc = findLayer(doc.layers, id) else { throw PaintEditorError("Unknown layer \"\(id)\". Call list_layers for the ids.") }
         let siblings = loc.parent?.children ?? doc.layers
         let below = loc.index > 0 ? siblings[loc.index - 1] : nil
@@ -648,7 +774,9 @@ public final class PaintEditorController {
         var surface = emptySurface(4)
         if let rect = unionRectOpt(describeLayer(below).bounds, describeLayer(upper).bounds) {
             let base = RasterLayer(id: below.id, name: below.name, visible: true, opacity: 1, blend: .mode(.normal), clipped: false, mask: nil, locks: below.locks, effects: below.effects, edge: below.edge, content: below.content)
-            let top = upper.visible ? upper : upper.copy(opacity: 0)
+            // Thick paint on the upper layer merges as it is lit (its relief does not carry over).
+            let upperLit = litLayers([upper])[0]
+            let top = upper.visible ? upperLit : upperLit.copy(opacity: 0)
             let px = createPaintCompositor().composite([ViewLayer(base), ViewLayer(top)], rect, sources())
             surface = surfaceFromPixels(width: rect.width, height: rect.height, data: px, channels: 4, x: rect.x, y: rect.y)
         }
@@ -657,9 +785,10 @@ public final class PaintEditorController {
         let toDoc = { (t: TiledSurface?, l: PaintLayer) in t.map { translateSurface($0, Double(l.pixelOffset.x), Double(l.pixelOffset.y)) } }
         let lowerLight = doc.light?.get(below.id), upperLight = doc.light?.get(upper.id)
         let mergedLight = lowerLight != nil || upperLight != nil ? mergeLight(toDoc(lowerLight, below), upper.visible ? toDoc(upperLight, upper) : nil, translateSurface(upper.pixelSurface, Double(upper.pixelOffset.x), Double(upper.pixelOffset.y))) : nil
-        commit("Merge down", doc.with { d in
+        commit("Merge down", withWetEvents(doc.with { d in
             d.layers = layers
             d.activeLayerId = below.id
+            d.removingThick([upper.id])
             d.removingLight([upper.id, below.id])
             d.removingStickers([upper.id, below.id])
             if let mergedLight { var l = d.light ?? OrderedMap(); l.set(below.id, mergedLight); d.light = l }
@@ -668,16 +797,21 @@ public final class PaintEditorController {
                 _ = live.delete(below.id)
                 d.liveStrokes = live
             }
-        })
+        }))
         return describeLayer(merged)
     }
 
     /// Removes every pixel of a layer.
     public func clearLayer(_ layerId: String?) throws -> JSONObject {
         let l = try paintTarget(layerId, "clear")
+        if wet.wetLayerIds().contains(l.id) {
+            beginWetOp()
+            try? wet.world?.removeLane(l.id)
+        }
         let bounds = describeLayer(l).bounds
         commit("Clear layer", withPaintEvent(doc.with { d in
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(emptySurface(4)) }
+            d.removingThick([l.id])
             d.removingLight([l.id])
             d.removingStickers([l.id])
             if var live = d.liveStrokes, live.get(l.id) != nil {
@@ -696,7 +830,8 @@ public final class PaintEditorController {
         let target = try paintTarget(layerId, "fill")
         if doc.stickers?.get(target.id)?.isEmpty == false { throw PaintEditorError("Layer \"\(target.name)\" is a sticker layer; fill another layer (add_layer).") }
         if doc.liveStrokes?.get(target.id) != nil { throw PaintEditorError("Layer \"\(target.name)\" is a stroke layer (its pixels are drawn from its strokes); fill another layer (add_layer), or rasterize it first (rasterize_stroke_layer).") }
-        let l = target
+        dryLayersFirst([layerId ?? doc.activeLayerId ?? ""])
+        let l = try paintTarget(layerId, "fill")
         let color = try colorIn.map { try parseColor(.string($0)) } ?? self.color
         let opacity = opacityIn ?? 1
         if !(opacity >= 0 && opacity <= 1) { throw PaintEditorError("opacity \(jsText(opacity)) is out of range; use 0..1.") }
@@ -727,10 +862,10 @@ public final class PaintEditorController {
         let data: JSONObject = ["color": .string(color), "opacity": .number(opacity), "grain": .number(grainAmount), "pressure": .number(pressure), "blend": .string(blendName)]
         // A fill covers the paint, and its light with it.
         let lit = doc.light?.get(l.id)
-        commit("Fill layer", withPaintEvent(doc.with { d in
+        commit("Fill layer", withPaintEvent(withWetEvents(doc.with { d in
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(surface) }
             if let lit { d.settingLight(l.id, scaleLight(lit, 1 - opacity)) }
-        }, kind: "fill", layerId: l.id, data: data))
+        }), kind: "fill", layerId: l.id, data: data))
         return ["layerId": .string(l.id), "bounds": rect.json]
     }
 
@@ -965,7 +1100,7 @@ public final class PaintEditorController {
         }
         guard let id = i.layerId ?? d.activeLayerId else { throw PaintEditorError("There is no active layer to paint on; add one with add_layer.") }
         guard let loc = findLayer(d.layers, id) else { throw PaintEditorError("Unknown layer \"\(id)\". Call list_layers for the ids.") }
-        let layer = loc.layer
+        var layer = loc.layer
         if !layer.isPixel { throw PaintEditorError("Layer \"\(layer.name)\" is a group; paint on a pixel layer inside it.") }
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) to paint on it.") }
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
@@ -985,6 +1120,42 @@ public final class PaintEditorController {
             if !stickerLayer && contentBounds(layer.pixelSurface) != nil { throw PaintEditorError("Layer \"\(layer.name)\" already has paint; spray stickers onto an empty layer (add_layer) so they stay editable.") }
         } else if stickerLayer {
             throw PaintEditorError("Layer \"\(layer.name)\" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).")
+        }
+        var wetInit: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
+        if isWetBrush(brush) {
+            // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
+            if previewing { throw PaintEditorError("Wet paint can't be previewed; the \(brush.name) brush paints wet media. Suggest it with a dry brush.") }
+            if !wet.wetLayerIds().contains(layer.id) && wet.wetLayerIds().count >= MAX_WET_LANES {
+                throw PaintEditorError("At most \(MAX_WET_LANES) layers can hold wet paint at once; dry one first (dry_paint).")
+            }
+            if layer.pixelOffset.x != 0 || layer.pixelOffset.y != 0 {
+                // The wet simulation works in canvas space: move the pixels into it (same picture, not an undo step).
+                let moved = layer.withSurface(translateSurface(layer.pixelSurface, Double(layer.pixelOffset.x), Double(layer.pixelOffset.y)), offset: LayerOffset(x: 0, y: 0))
+                doc = doc.with { $0.layers = mapLayer(doc.layers, moved.id) { _ in moved } }
+                layer = moved
+            }
+            beginWetOp()
+            let world = try wet.ensureLane(layer.id, brush.wet.medium)
+            let id = layer.id
+            let wetColor = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
+            let c8 = hexToRgb8(wetColor)
+            let rgb = [Double(c8[0]) / 255, Double(c8[1]) / 255, Double(c8[2]) / 255]
+            let wetGradient = effect != nil ? nil : try strokeGradient(i, brush, wetColor)
+            let load = i.load ?? brushLoadForStroke(brush, mixerLoad, rgb)
+            let seedW = i.seed ?? Int(PixerateRandom.mix32(UInt32(truncatingIfNeeded: seedCounter &* 0x9E37_79B1)) & 0x7FFF_FFFF)
+            let copiesW = (i.copies ?? symmetryCopies(guides.symmetry)).filter { m in m.enumerated().contains { $0.element != IDENTITY_AFFINE[$0.offset] } }
+            let driver = WetStrokeDriver(WetStrokeInit(
+                world: world, laneId: id, brush: brush, color: rgb, load: load, grain: paperGrain(d.paper), paperDepth: d.paper.depth, paperColor: hexToRgb8(d.paper.color),
+                seed: seedW, copies: ([IDENTITY_AFFINE] + copiesW).map(affineCopy), mask: i.maskStencils.map { stencilSelection($0) } ?? (i.stencils != false ? stencilSelection() : nil),
+                paint: wetGradient, effect: effect?.pixels
+            ))
+            i.seed = seedW
+            i.load = load
+            wetInit = (driver, { (try? world.display(id).surface) ?? emptySurface(4) })
+        } else if wet.wetLayerIds().contains(layer.id) {
+            // A dry brush on wet paint: the paint dries first (in the same undo step).
+            dryLayersFirst([layer.id])
+            if let dried = findLayer(doc.layers, layer.id)?.layer { layer = dried }
         }
         var color = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
         if i.color == nil, let start = i.start, let t = guides.tracing, t.visible, t.sampleColors { color = try sampleTracingColor(start.x, start.y) ?? color }
@@ -1021,10 +1192,13 @@ public final class PaintEditorController {
         )
         var withLight = initValues
         withLight.effect = effect
+        withLight.wet = wetInit
+        if brush.engine == "impasto" { withLight.thick = d.thick?.get(layer.id) ?? emptyThickChannels() }
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
-        if brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
+        if wetInit == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
         let session = try PaintStrokeSession(withLight)
         session.maskStencils = i.maskStencils
+        if let w = wetInit { wet.driver = w.driver }
         return session
     }
 
@@ -1035,6 +1209,7 @@ public final class PaintEditorController {
         if !i.affineCopies.isEmpty { stroke.copies = i.affineCopies }
         if let e = i.effect { stroke.effect = e.source } else if let p = i.paint { stroke.paint = p }
         if i.mixerLoad.reservoir != nil || i.mixerLoad.pickup != nil { stroke.load = i.mixerLoad }
+        if let w = i.wet { stroke.steps = w.driver.steps }
         if i.selection != nil {
             let masks = (s.maskStencils ?? guides.stencils).filter { $0.enabled && $0.mode == "mask" }
             if !masks.isEmpty { stroke.stencils = masks }
@@ -1045,8 +1220,23 @@ public final class PaintEditorController {
     /// Runs a whole stroke against `d` without touching the editor; returns the new document.
     func runStroke(_ d: PaintDocumentState, _ i: PaintStrokeInit, _ points: [PenPoint]) throws -> (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush) {
         let session = try sessionFor(d, i)
-        session.push(points)
+        try session.push(points)
         return try endStroke(d, session)
+    }
+
+    /// After a wet stroke ends: no live driver; with instant dry the layer dries at once. Returns `out` with the dried pixels.
+    func finishWetStroke(_ out: PaintDocumentState, _ session: PaintStrokeSession, _ result: inout PaintStrokeResult, at: Int) -> PaintDocumentState {
+        wet.driver = nil
+        var out = out
+        if wet.instantDry && result.strokeId != nil {
+            _ = try? wet.dry(session.layerId)
+            logWet("dry", layerId: session.layerId, at: at)
+            if let dried = findLayer(doc.layers, session.layerId)?.layer {
+                out = out.with { $0.layers = mapLayer(out.layers, session.layerId) { $0.withSurface(dried.pixelSurface) } }
+            }
+        }
+        result.wet = wet.isWet(session.layerId)
+        return out
     }
 
     /// Ends a stroke session and returns `d` with its pixels and its recorded stroke.
@@ -1057,10 +1247,15 @@ public final class PaintEditorController {
             let stroke = record(session)
             result.strokeId = stroke.id
             paintedBounds[stroke.key] = .some(result.bounds)
+            let wetStroke = session.initValues.wet != nil
+            let thick = session.thickChannels()
+            // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
+            let wetLight = wetStroke && wet.world?.hasLane(session.layerId) == true ? try? wet.world!.lightDisplay(session.layerId) : nil
             out = d.with { o in
-                o.layers = mapLayer(d.layers, session.layerId) { $0.withSurface(surface) }
+                o.layers = mapLayer(d.layers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
                 o.strokes = d.strokes + [stroke]
-                o.settingLight(session.layerId, session.lightChannel)
+                o.settingLight(session.layerId, session.lightChannel ?? wetLight)
+                if let thick { var t = o.thick ?? OrderedMap(); t.set(session.layerId, thick); o.thick = t }
                 if let sprayed = session.sprayedStickers {
                     var t = o.stickers ?? OrderedMap()
                     t.set(session.layerId, (t.get(session.layerId) ?? []) + sprayed)
@@ -1072,6 +1267,7 @@ public final class PaintEditorController {
                 }
             }
         }
+        if session.initValues.wet != nil { out = finishWetStroke(out, session, &result, at: out.strokes.count) }
         return (out, result, session.initValues.brush)
     }
 
@@ -1082,9 +1278,14 @@ public final class PaintEditorController {
         let before = doc
         var i = i
         if i.start == nil { i.start = Point2(x: points[0].x, y: points[0].y) }
-        let run = try runStroke(doc, i, points)
+        let run: (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush)
+        do { run = try runStroke(doc, i, points) } catch {
+            wetOp = nil
+            wet.driver = nil
+            throw error
+        }
         if let load = run.result.mixerLoad { keepLoad(run.brush, load) }
-        if run.doc !== before { commit("\(run.brush.name) stroke", run.doc, before: before) }
+        if run.doc !== before || wetOp != nil { commit("\(run.brush.name) stroke", withWetEvents(run.doc), before: before) } else { emit() }
         return run.result
     }
 
@@ -1114,27 +1315,41 @@ public final class PaintEditorController {
 
     func sources() -> BasicRasterSources { BasicRasterSources(width: doc.canvas.width, height: doc.canvas.height) }
 
-    func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil) -> [ViewLayer] {
-        var layers = doc.layers
+    /// The layers with the live stroke's surface in place (a wet stroke's layer already shows the simulation).
+    func currentLayers() -> [PaintLayer] {
+        guard let live = liveStroke, live.open, !live.isWet else { return doc.layers }
+        return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.session.currentSurface()) }
+    }
+
+    /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
+    func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display") -> [ViewLayer] {
+        let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
+        let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in l.open ? l.session.thickChannels().map { (l.layerId, $0) } : nil }
+        var layers = lightLayers(litLayers(base, liveThick: live), liveThick: live)
+        // Backlit paper shines through everything: its light goes on top.
+        let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
+        if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
         if let layerIds {
-            layers = layerIds.compactMap { getLayer($0) }.map { $0.copy(visible: true) }
+            layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }
         }
-        if layerIds == nil, let live = liveStroke, live.open { layers = mapLayer(layers, live.layerId) { $0.withSurface(live.session.currentSurface()) } }
-        if layerIds == nil { layers = lightLayers(layers) }
-        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(doc.paper)]
+        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(doc.paper, light: lighting)]
         if paper != false, let p = doc.paperEffect { under.append(paperEffectNode(p)) }
         return under + layers.map(ViewLayer.init)
     }
 
     /// Light paint over the layers: glow in each layer's pixels, and its spill as a Linear Dodge (Add) layer directly above it.
-    func lightLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
-        guard let light = doc.light, !light.isEmpty else { return layers }
+    func lightLayers(_ layers: [PaintLayer], liveThick: (layerId: String, channels: ThickChannels)? = nil) -> [PaintLayer] {
+        let light = doc.light ?? OrderedMap()
+        var ids = light.keys
+        for id in doc.thick?.keys ?? [] where !ids.contains(id) { ids.append(id) }
+        if ids.isEmpty { return layers }
         var out = layers
-        for (id, lit) in light {
+        for id in ids {
             guard let l = findLayer(out, id)?.layer, l.isPixel else { continue }
-            let glowed = glowSurface(l.pixelSurface, lit)
+            let lit = light.get(id)
+            let glowed = glowSurface(l.pixelSurface, lit, liveThick?.layerId == id ? liveThick!.channels : doc.thick?.get(id))
             if glowed !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(glowed) } }
-            if let committed = findLayer(doc.layers, id)?.layer, committed.isPixel, let spill = computeSpill(committed.pixelSurface, lit, lightSpills[id] ?? DEFAULT_LIGHT_SPILL) {
+            if let lit, let committed = findLayer(doc.layers, id)?.layer, committed.isPixel, let spill = computeSpill(committed.pixelSurface, lit, lightSpills[id] ?? DEFAULT_LIGHT_SPILL) {
                 let node = RasterLayer(id: "\(id)::light", name: "\(l.name) light", visible: l.visible, opacity: l.opacity, blend: .mode(.linearDodge), content: .pixel(surface: spill, offset: l.pixelOffset, fillOpacity: nil))
                 out = insertAfter(out, id, node)
             }
@@ -1148,9 +1363,9 @@ public final class PaintEditorController {
     }
 
     /// The canvas as canvas-sized RGBA (paper included by default).
-    public func compositePixels(paper: Bool? = nil) -> (width: Int, height: Int, data: [UInt8]) {
+    public func compositePixels(paper: Bool? = nil, wet wetMode: String = "dried") -> (width: Int, height: Int, data: [UInt8]) {
         let w = doc.canvas.width, h = doc.canvas.height
-        let data = createPaintCompositor().composite(renderLayers(paper: paper), RasterRect(x: 0, y: 0, width: w, height: h), sources())
+        let data = createPaintCompositor().composite(renderLayers(paper: paper, wet: wetMode), RasterRect(x: 0, y: 0, width: w, height: h), sources())
         return (w, h, data)
     }
 
@@ -1190,11 +1405,15 @@ public final class PaintEditorController {
         out["guides"] = .object(guides.json)
         out["swatches"] = .array(swatches.map(\.json))
         if let pad = mixingPadJSON() { out["mixingPad"] = pad }
+        if let w = wetJSON() { out["wet"] = w }
+        if let events = d.wetEvents, !events.isEmpty { out["wetEvents"] = .array(events.map(\.json)) }
+        for (k, v) in thickJSON() { out[k] = v }
         if let events = d.paintEvents, !events.isEmpty { out["paintEvents"] = .array(events.map(\.json)) }
         if let o = d.origin, o.x != 0 || o.y != 0 { out["origin"] = pointJSON(Double(o.x), Double(o.y)) }
         if let light = d.light {
             var ext = JSONObject()
-            for (id, t) in light where findLayer(d.layers, id) != nil { if let saved = lightToJSON(t) { ext[id] = saved } }
+            // Wet light is saved dried where it is, as the paint is.
+            for (id, t) in light where findLayer(d.layers, id) != nil { if let saved = lightToJSON(wet.bakedLight(id) ?? t) { ext[id] = saved } }
             if !ext.isEmpty { out["light"] = .object(ext) }
         }
         if let live = d.liveStrokes {
@@ -1204,7 +1423,8 @@ public final class PaintEditorController {
         }
         for (k, v) in providerEffectsJSON(d) { out[k] = v }
         for (k, v) in stickersJSON(d) { out[k] = v }
-        let (layers, assets) = serializeLayers(d.layers)
+        // Wet paint is dried where it is on save (deterministically).
+        let (layers, assets) = serializeLayers(driedLayers(d.layers))
         out["layers"] = .array(layers)
         out["assets"] = .object(assets)
         return out

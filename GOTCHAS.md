@@ -3705,7 +3705,7 @@ All contributors and AI assistants should check this file before starting work a
 ### [swift] Light Paint Lives in a Twin Session, Not in the Layer
 - **Issue / Symptom**: Glowing dry brushes changed the layer's pixels, or their light was lost on undo.
 - **Root Cause**: The TS keeps light in a separate per-layer channel (`document.light`). Each stroke runs a light twin of the paint session that lays `light.amount` into that channel, and the compositor adds glow and spill as extra view layers.
-- **Solution / Workaround**: `PaintStrokeSession` owns an optional light twin committed with the stroke into `PaintDocumentState.light` (an `OrderedMap`, in layer order). `lightLayers` draws it when rendering. Wet, thick and particle light (#545) are not ported.
+- **Solution / Workaround**: `PaintStrokeSession` owns an optional light twin committed with the stroke into `PaintDocumentState.light` (an `OrderedMap`, in layer order). `lightLayers` draws it when rendering. Wet light has no twin: it is a mass channel of the wet simulation, shaded by `WetWorld.lightDisplay` and committed with the stroke; thick paint's rim and clarity come from the material channel (`glowSurface`).
 
 ### [swift] `ImageRenderer` Draws AppKit and UIKit Views as a Yellow "No" Placeholder
 - **Issue / Symptom**: An `ImageRenderer` snapshot of `PaintEditorView` or `PaintCanvasView` came out as a yellow square with a red no-entry sign, and the side panels came out empty.
@@ -3756,3 +3756,28 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After `extend_canvas` with `left` or `top`, a Swift time-lapse or high-res export put a sticker layer's stickers (and a stroke layer's strokes) back where they were before the canvas grew, and the saved `paintEvents` differed from the TS core's.
 - **Root Cause**: Replays repaint sticker and stroke layers from their `paintEvents` (`stickers`, `live-strokes`), not from the document's current lists. The TS `extendCanvas` moves the stickers and strokes inside those events (rounding sticker centres to hundredths); the Swift `shiftDocument` only moved the document's own lists.
 - **Solution / Workaround**: `shiftDocument` moves `stickers` and `live-strokes` event data (and the in-memory strokes of `PaintEvent`) with the same rounding as the TS core. Anything new that moves paint must move the events too; a replay after the move is the test.
+
+### [swift] The Wet Kernel's f32 Maths Is Swift `Float`, but Edits Mix in Doubles
+- **Issue / Symptom**: Porting the wet edits (dabs, water, drying, blending) as `Float` arithmetic, like the step, makes the wet state drift from the TS core by the last bit, which the simulation then grows over the following steps.
+- **Root Cause**: The TS kernel wraps every intermediate in `Math.fround`, and an f32 `+ − × ÷ √` computed in f64 and rounded once is exactly the f32 operation, so the step is plain `Float` arithmetic in the TS order. The edits are not: `f32[i] += W9[k] * dw` adds a double product (the lattice weights are doubles) and rounds once on store, and `Math.max` / `Math.min` keep JavaScript's signed zeros and NaN rules.
+- **Solution / Workaround**: `wetStepSlot` uses `Float` with `fmax` / `fmin` (JS semantics); the edits in `WetWorld` read the float, compute in `Double` and store `Float(...)` once, exactly where the TS writes a `Float32Array`. The film bake uses the TS core's own `dexp` / `dlog` tables, never `exp` or `pow`. Eight extra scenarios (strokes over time, two tiles, glazing and the wet tools, saving and replays, impasto, backlit and metallic paper, effect paint and PSD export, extending a wet canvas) matched the TS core result for result and pixel for pixel.
+
+### [swift] V8's Three-Argument `Math.hypot` Sums with Kahan Compensation
+- **Issue / Symptom**: Metallic paper and impasto lighting could be one level off where `Math.hypot(x, y, z)` was ported as `sqrt(x² + y² + z²)`.
+- **Root Cause**: V8's `Math.hypot` builtin divides by the largest argument and adds the squares with Kahan summation; with two arguments the compensation is always zero, so only the three-argument form differs.
+- **Solution / Workaround**: Use `JS.hypot(x, y, z)` (`PixerateRaster`), which does the same; `testThreeArgumentHypot` pins it against Node.
+
+### [swift] Wet Results Report the TS Kernel's Words, and the Conformance Host Must Turn the GPU Off
+- **Issue / Symptom**: Extra wet scenarios failed on `get_wet_paint` with `"gpu": "auto"` against a recorded `"off"`, and a Swift wording for the backend message would fail every wet scenario.
+- **Root Cause**: `createPaintConformanceHost` builds its editor with `wet: { kernel: 'typescript', threads: 0, gpu: 'off' }`; scenarios ignore `/engine` and `/backend` but compare `gpu` and `message` ("Wet paint runs in plain JavaScript until the WebAssembly kernel has loaded.").
+- **Solution / Workaround**: `PaintConformanceHost` passes `PaintWetOptions(gpu: "off")`, and `WetWorld.backend()` reports the TypeScript kernel on one thread with the TS message. If the TS core changes either, change the Swift side with it.
+
+### [swift] Wet Paint Changes the Document Without an Undo Step
+- **Issue / Symptom**: Committing a live wet stroke against the editor's current document gives it an undo step that goes back to the wet pixels painted so far, not to the layer before the stroke.
+- **Root Cause**: The wet layer's display is the layer's pixels: `PaintWetLayers.syncDisplays` writes them into `doc` as the paint flows (not an undo step), so `doc` at the end of a stroke already holds wet pixels. The TS controller keeps the document from when the stroke began for a wet stroke's undo step, and the wet simulation's snapshots in the history entry (`HistoryEntry.wet`).
+- **Solution / Workaround**: `PaintLiveStroke` keeps the document from `beginStroke` and commits a wet stroke against it; `beginWetOp` snapshots the world before any change to wet paint, and `commit` stores both snapshots. Cancel restores the snapshot and the layers.
+
+### [swift] Long Wet Runs Are Slow in Debug Builds
+- **Issue / Symptom**: An extra scenario with a few hundred wet steps over two tiles took minutes under `swift test`, where the TS core takes seconds.
+- **Root Cause**: `swift test` builds without optimisation, and each wet step visits all 65 536 cells of every live 256 px tile with a few hundred float operations each.
+- **Solution / Workaround**: Keep committed scenarios short (the recorded ones run in seconds). Probe long runs with `swift test -c release -Xswiftc -enable-testing --filter PaintScenarioProbeTests` (`-enable-testing` keeps `@testable import` working).
