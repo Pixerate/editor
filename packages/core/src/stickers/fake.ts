@@ -123,7 +123,7 @@ export function createFakeStickerProvider(options: FakeStickerProviderOptions = 
       return { ...summaryOf(s), silhouette: s.shape === 'badge' ? 'M60 6A54 54 0 1 1 59.9 6Z' : 'M10 10H110V110H10Z', colours: s.shape === 'badge' ? [s.colours[0]] : [...s.colours] };
     },
     collections: () => stickerCollections(summaries, COLLECTIONS),
-    listCollections: () => stickerCollections(summaries, COLLECTIONS),
+    listCollections: () => stickerCollections(summaries, COLLECTIONS), // the older name, kept for callers that use it
     categories: () => [...new Set(CATALOGUE.map((s) => s.category))].map((c) => ({ id: c, name: c, count: CATALOGUE.filter((s) => s.category === c).length })),
     async load(id, o: StickerLoadOptions = {}): Promise<StickerAsset> {
       if (options.loadDelayMs) await new Promise((r) => setTimeout(r, options.loadDelayMs));

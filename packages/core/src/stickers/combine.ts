@@ -26,7 +26,7 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
   const collectionOwner = (c: string): { p: StickerProvider; collection: string } => {
     const i = c.indexOf(':');
     const p = i > 0 ? byId.get(c.slice(0, i)) : undefined;
-    if (!p) throw new StickerError('invalid_argument', `No collection "${c}"; collections here are "provider:collection" (listCollections lists them).`);
+    if (!p) throw new StickerError('invalid_argument', `No collection "${c}"; collections here are "provider:collection" (collections() lists them).`);
     return { p, collection: p.namespaced ? c : c.slice(i + 1) };
   };
   const page = async (query: string | null, o: StickerSearchOptions = {}): Promise<StickerPage> => {
@@ -66,6 +66,11 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
     if (!next && items.length >= limit && i < providers.length) next = `${i}|`;
     return { items, total, ...(next ? { next } : {}) };
   };
+  const collections = async (): Promise<StickerCollection[]> => {
+    const out: StickerCollection[] = [];
+    for (const p of providers) for (const c of (await providerCollections(p)) ?? []) out.push({ ...c, id: collectionOf(p, c.id) });
+    return out;
+  };
   return {
     id: options.id ?? 'stickers',
     name: options.name ?? providers.map((p) => p.name).join(' + '),
@@ -102,15 +107,7 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
       }
       return [...counts.values()];
     },
-    async collections() {
-      const out: StickerCollection[] = [];
-      for (const p of providers) for (const c of (await providerCollections(p)) ?? []) out.push({ ...c, id: collectionOf(p, c.id) });
-      return out;
-    },
-    async listCollections() {
-      const out: StickerCollection[] = [];
-      for (const p of providers) for (const c of (await providerCollections(p)) ?? []) out.push({ ...c, id: collectionOf(p, c.id) });
-      return out;
-    },
+    collections,
+    listCollections: collections,
   };
 }

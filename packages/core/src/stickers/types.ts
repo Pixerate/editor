@@ -68,7 +68,7 @@ export interface StickerSummary {
    * picker or brush can pick the dark one for a dark background without calling `describe` first.
    */
   variants?: StickerVariant[];
-  /** The collection it belongs to (`listCollections`), when the provider groups its stickers. */
+  /** The collection it belongs to (`collections()`), when the provider groups its stickers. */
   collection?: string;
 }
 
@@ -96,7 +96,7 @@ export interface StickerPage {
 
 export interface StickerSearchOptions {
   category?: string;
-  /** Only stickers of this collection (`listCollections`). */
+  /** Only stickers of this collection (`collections()`). */
   collection?: string;
   /** Every tag must match. */
   tags?: string[];
@@ -145,7 +145,7 @@ export interface StickerProvider {
   categories?(): MaybePromise<Array<{ id: string; name: string; count: number }>>;
   /** Its collections with counts, when it groups its stickers. Ids stay unique across collections, so `load(id)` needs none. */
   collections?(): MaybePromise<StickerCollection[]>;
-  /** Alias for `collections()`. */
+  /** The older name for `collections()`, still read when a provider has no `collections()`. */
   listCollections?(): MaybePromise<StickerCollection[]>;
 }
 

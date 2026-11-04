@@ -90,7 +90,7 @@ describe('sticker contract: AI-generated art, light / dark variants and collecti
     expect(await issues(oneSticker({ aiGenerated: 'yes' as unknown as boolean }))).toContain('aiGenerated must be a boolean when present');
     expect(await issues(oneSticker({ variants: ['dark'] }))).toContain('variants must include light (every sticker has its light art)');
     expect(await issues(oneSticker({ variants: ['light', 'sepia' as 'dark'] }))).toContain('variants must list light and / or dark, each once');
-    expect(await issues(oneSticker({ collection: 'brand' }))).toContain('is in collection "brand" but the provider has no listCollections()');
+    expect(await issues(oneSticker({ collection: 'brand' }))).toContain('is in collection "brand" but the provider has no collections()');
     expect(await issues(oneSticker({ collection: 'brand' }, { listCollections: () => [{ id: 'brand', name: 'Brand', count: 2 }] }))).toContain('collection "brand" says count 2 but list({ collection }) has 1');
     expect(await issues(oneSticker({ collection: 'brand' }, { collections: () => [{ id: 'brand', name: 'Brand', count: 1 }] }))).toEqual([]);
     // A provider that ignores the variant: dark art for a sticker that has none is not refused.
@@ -117,6 +117,26 @@ describe('sticker contract: AI-generated art, light / dark variants and collecti
     expect((await c.describe('fake:fruit-pear'))?.collection).toBe('fake:kitchen');
     await expect(c.list({ collection: 'kitchen' })).rejects.toThrow(/No collection "kitchen"; collections here are "provider:collection"/);
     expect((await c.load('fake:fruit-pear', { variant: 'dark' })).kind).toBe('svg');
+  });
+
+  it('collections() and the older listCollections() are both read, collections() first', async () => {
+    const brand = [{ id: 'brand', name: 'Brand', count: 1 }];
+    const modern = oneSticker({ collection: 'brand' }, { collections: () => brand });
+    const legacy = { ...oneSticker({ collection: 'brand' }, { listCollections: () => brand }), id: 'old', name: 'Old' };
+    const both = oneSticker({ collection: 'brand' }, { collections: () => brand, listCollections: () => [] });
+    expect(await checkStickerProvider(both)).toEqual([]);
+    const c = combineStickerProviders([modern, legacy]);
+    expect((await c.collections!()).map((x) => x.id)).toEqual(['one:brand', 'old:brand']);
+    expect(await c.listCollections!()).toEqual(await c.collections!());
+    const { listCollections } = c;
+    expect((await listCollections!()).map((x) => x.id)).toEqual(['one:brand', 'old:brand']);
+    const b = new StickerBrowser(() => modern, 4);
+    await b.refresh();
+    expect(b.state.collections.map((x) => x.id)).toEqual(['brand']);
+    const r = new ToolRegistry();
+    r.register(createStickerToolProvider({ provider: () => modern }));
+    expect(ok(await r.callTool('find_stickers', { collection: 'brand' }))).toMatchObject({ total: 1, collections: brand });
+    expect(text(await r.callTool('find_stickers', { collection: 'other' }))).toBe('No collection "other" in "One"; collections: brand.');
   });
 
   it('the browser behind the pickers filters by collection and forgets one the provider lacks', async () => {
