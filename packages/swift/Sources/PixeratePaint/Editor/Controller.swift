@@ -210,6 +210,8 @@ public final class PaintEditorController {
     var grouping: (label: String, before: PaintDocumentState, changed: Bool)?
     /// Where each stroke object painted (by `RecordedStroke.key`), as learnt when it was painted or drawn.
     var paintedBounds: [Int: RasterRect?] = [:]
+    /// Each layer's light spill (missing: the default).
+    var lightSpills: [String: LightSpill] = [:]
     var previewing = false
     /// The mixing pad and the pads kept by name.
     let pad = MixingPad()
@@ -526,6 +528,7 @@ public final class PaintEditorController {
         commit("Remove layer", doc.with { d in
             d.layers = layers
             d.activeLayerId = active
+            d.removingLight(Array(removed))
             if var live = d.liveStrokes {
                 for k in removed { _ = live.delete(k) }
                 d.liveStrokes = live
@@ -537,8 +540,11 @@ public final class PaintEditorController {
     public func duplicateLayer(_ id: String) throws -> PaintLayerInfo {
         guard let loc = findLayer(doc.layers, id) else { throw PaintEditorError("Unknown layer \"\(id)\". Call list_layers for the ids.") }
         var live = doc.liveStrokes
+        var lightCopies: [(String, TiledSurface)] = []
         func copy(_ l: PaintLayer) -> PaintLayer {
             let nid = newPaintLayerId()
+            if let lit = doc.light?.get(l.id) { lightCopies.append((nid, lit)) }
+            if let spill = lightSpills[l.id] { lightSpills[nid] = spill }
             if let list = live?.get(l.id) {
                 live!.set(nid, list.map { s in
                     var s = s
@@ -556,6 +562,7 @@ public final class PaintEditorController {
         commit("Duplicate layer", doc.with { d in
             d.layers = layers
             d.activeLayerId = dup.id
+            if lightCopies.count > 0 { var l = d.light ?? OrderedMap(); for (k, v) in lightCopies { l.set(k, v) }; d.light = l }
             if live != nil { d.liveStrokes = live }
         })
         return describeLayer(dup)
@@ -595,9 +602,14 @@ public final class PaintEditorController {
         }
         let merged = below.withSurface(surface, offset: LayerOffset(x: 0, y: 0))
         let layers = mapLayer(mapLayer(doc.layers, upper.id) { _ in nil }, below.id) { _ in merged }
+        let toDoc = { (t: TiledSurface?, l: PaintLayer) in t.map { translateSurface($0, Double(l.pixelOffset.x), Double(l.pixelOffset.y)) } }
+        let lowerLight = doc.light?.get(below.id), upperLight = doc.light?.get(upper.id)
+        let mergedLight = lowerLight != nil || upperLight != nil ? mergeLight(toDoc(lowerLight, below), upper.visible ? toDoc(upperLight, upper) : nil, translateSurface(upper.pixelSurface, Double(upper.pixelOffset.x), Double(upper.pixelOffset.y))) : nil
         commit("Merge down", doc.with { d in
             d.layers = layers
             d.activeLayerId = below.id
+            d.removingLight([upper.id, below.id])
+            if let mergedLight { var l = d.light ?? OrderedMap(); l.set(below.id, mergedLight); d.light = l }
             if var live = d.liveStrokes {
                 _ = live.delete(upper.id)
                 _ = live.delete(below.id)
@@ -613,6 +625,7 @@ public final class PaintEditorController {
         let bounds = describeLayer(l).bounds
         commit("Clear layer", withPaintEvent(doc.with { d in
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(emptySurface(4)) }
+            d.removingLight([l.id])
             if var live = d.liveStrokes, live.get(l.id) != nil {
                 live.set(l.id, [])
                 d.liveStrokes = live
@@ -657,7 +670,12 @@ public final class PaintEditorController {
         let apply = StrokeApply(mode: .paint, color: rgbaOf(color), background: rgbaOf(doc.paper.color), opacity: opacity, blend: blend, lockTransparency: isLayerLocked(l.locks, .transparency), selection: nil, offset: l.pixelOffset)
         let surface = applyCoverage(l, coverage, rect, apply)
         let data: JSONObject = ["color": .string(color), "opacity": .number(opacity), "grain": .number(grainAmount), "pressure": .number(pressure), "blend": .string(blendName)]
-        commit("Fill layer", withPaintEvent(doc.with { $0.layers = mapLayer(doc.layers, l.id) { $0.withSurface(surface) } }, kind: "fill", layerId: l.id, data: data))
+        // A fill covers the paint, and its light with it.
+        let lit = doc.light?.get(l.id)
+        commit("Fill layer", withPaintEvent(doc.with { d in
+            d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(surface) }
+            if let lit { d.settingLight(l.id, scaleLight(lit, 1 - opacity)) }
+        }, kind: "fill", layerId: l.id, data: data))
         return ["layerId": .string(l.id), "bounds": rect.json]
     }
 
@@ -892,7 +910,7 @@ public final class PaintEditorController {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) to paint on it.") }
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
         let brush = try strokeBrush(i)
-        if brush.light.amount > 0 { throw UnportedBrushError(message: "The \(brush.name) brush lays light paint, which the Swift paint editor does not paint yet.") }
+        if brush.light.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).") }
         if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         var color = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
         if i.color == nil, let start = i.start, let t = guides.tracing, t.visible, t.sampleColors { color = try sampleTracingColor(start.x, start.y) ?? color }
@@ -922,7 +940,9 @@ public final class PaintEditorController {
             mixerLoad: i.load ?? brushLoadForStroke(brush, mixerLoad, [Double(rgba[0]) / 255, Double(rgba[1]) / 255, Double(rgba[2]) / 255]),
             secondary: rgbaOf(secondaryColor), selection: selection, inputFilter: inputFilter, paint: try strokeGradient(i, brush, color)
         )
-        let session = try PaintStrokeSession(initValues)
+        var withLight = initValues
+        if brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
+        let session = try PaintStrokeSession(withLight)
         session.maskStencils = i.maskStencils
         return session
     }
@@ -954,6 +974,7 @@ public final class PaintEditorController {
             out = d.with { o in
                 o.layers = mapLayer(d.layers, session.layerId) { $0.withSurface(surface) }
                 o.strokes = d.strokes + [stroke]
+                o.settingLight(session.layerId, session.lightChannel)
                 if var live = o.liveStrokes, let list = live.get(stroke.layerId) {
                     live.set(stroke.layerId, list + [stroke])
                     o.liveStrokes = live
@@ -1006,8 +1027,30 @@ public final class PaintEditorController {
         if let layerIds {
             layers = layerIds.compactMap { getLayer($0) }.map { $0.copy(visible: true) }
         }
+        if layerIds == nil { layers = lightLayers(layers) }
         let under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(doc.paper)]
         return under + layers.map(ViewLayer.init)
+    }
+
+    /// Light paint over the layers: glow in each layer's pixels, and its spill as a Linear Dodge (Add) layer directly above it.
+    func lightLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
+        guard let light = doc.light, !light.isEmpty else { return layers }
+        var out = layers
+        for (id, lit) in light {
+            guard let l = findLayer(out, id)?.layer, l.isPixel else { continue }
+            let glowed = glowSurface(l.pixelSurface, lit)
+            if glowed !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(glowed) } }
+            if let committed = findLayer(doc.layers, id)?.layer, committed.isPixel, let spill = computeSpill(committed.pixelSurface, lit, lightSpills[id] ?? DEFAULT_LIGHT_SPILL) {
+                let node = RasterLayer(id: "\(id)::light", name: "\(l.name) light", visible: l.visible, opacity: l.opacity, blend: .mode(.linearDodge), content: .pixel(surface: spill, offset: l.pixelOffset, fillOpacity: nil))
+                out = insertAfter(out, id, node)
+            }
+        }
+        return out
+    }
+
+    private func insertAfter(_ layers: [PaintLayer], _ id: String, _ node: PaintLayer) -> [PaintLayer] {
+        if let i = layers.firstIndex(where: { $0.id == id }) { var o = layers; o.insert(node, at: i + 1); return o }
+        return layers.map { l in l.children.map { l.withChildren(insertAfter($0, id, node)) } ?? l }
     }
 
     /// The canvas as canvas-sized RGBA (paper included by default).
@@ -1045,6 +1088,11 @@ public final class PaintEditorController {
         if let pad = mixingPadJSON() { out["mixingPad"] = pad }
         if let events = d.paintEvents, !events.isEmpty { out["paintEvents"] = .array(events.map(\.json)) }
         if let o = d.origin, o.x != 0 || o.y != 0 { out["origin"] = pointJSON(Double(o.x), Double(o.y)) }
+        if let light = d.light {
+            var ext = JSONObject()
+            for (id, t) in light where findLayer(d.layers, id) != nil { if let saved = lightToJSON(t) { ext[id] = saved } }
+            if !ext.isEmpty { out["light"] = .object(ext) }
+        }
         if let live = d.liveStrokes {
             var ext = JSONObject()
             for (id, list) in live where findLayer(d.layers, id) != nil { ext[id] = .array(list.map(strokeToJSON)) }

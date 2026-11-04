@@ -53,6 +53,8 @@ public final class PaintDocumentState {
     public var paintEvents: [PaintEvent]?
     /// Live stroke layers: each layer's strokes, bottom first (its pixels are drawn from them).
     public var liveStrokes: OrderedMap<String, [RecordedStroke]>?
+    /// Light paint: each layer's light channel (layers without light are missing).
+    public var light: OrderedMap<String, TiledSurface>?
     /// Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
     public var origin: LayerOffset?
 
@@ -69,6 +71,7 @@ public final class PaintDocumentState {
         let d = PaintDocumentState(canvas: canvas, paper: paper, layers: layers, activeLayerId: activeLayerId, strokes: strokes)
         d.paintEvents = paintEvents
         d.liveStrokes = liveStrokes
+        d.light = light
         d.origin = origin
         change(d)
         return d

@@ -38,6 +38,8 @@ struct StrokeSessionInit {
     var inputFilter: ((PenPoint) -> PenPoint)?
     /// Gradient paint (resolved: concrete colours), or nil for the one colour.
     var paint: PaintGradientSource?
+    /// Light paint: the layer's light channel before the stroke; a grey twin of the stroke paints it.
+    var light: TiledSurface? = nil
 }
 
 public struct PaintStrokeResult {
@@ -89,11 +91,35 @@ final class PaintStrokeSession: PaintTileTarget {
     var lockTransparency: Bool { initValues.lockTransparency }
     var selection: PaintSelection? { initValues.selection }
 
+    /// Light paint: the stroke's twin over the light channel.
+    private var lightTwin: PaintStrokeSession?
+
+    /// Light paint: the layer's light channel after the stroke, or nil when the stroke has no twin.
+    var lightChannel: TiledSurface? { lightTwin?.surfaceAfter.map(shadowToLight) }
+
     init(_ i: StrokeSessionInit) throws {
         initValues = i
         layerId = i.layerId
         base = i.surface
         let brush = i.brush
+        if let light = i.light {
+            // The twin paints the light as grey at the brush's light amount (see `light.ts`).
+            let grey = Int(JS.round(brush.light.amount * 255))
+            let g = Double(grey) / 255
+            let hex = "#" + String(repeating: String(grey, radix: 16).leftPad(2), count: 3)
+            var t = i
+            t.surface = lightToShadow(light)
+            t.lockTransparency = false
+            t.brush = lightTwinBrush(brush)
+            t.color = [grey, grey, grey, 255]
+            t.colorHex = hex
+            t.secondary = [grey, grey, grey, 255]
+            t.inputFilter = nil
+            t.mixerLoad = MixerLoad(reservoir: i.mixerLoad.reservoir != nil ? [g, g, g] : nil, amount: i.mixerLoad.amount, pickup: nil)
+            t.paint = i.paint.map { p in var q = p; q.stops = p.stops.map { var st = $0; st.color = hex; return st }; return q }
+            t.light = nil
+            lightTwin = try PaintStrokeSession(t)
+        }
         apply = StrokeApply(mode: brush.engine == "eraser" ? .erase : .paint, color: i.color, background: i.background, opacity: brush.tip.opacity, blend: brush.tip.blend, lockTransparency: i.lockTransparency, selection: i.selection, offset: i.offset)
         let copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
         if brush.stamp != nil { throw UnportedBrushError(message: "The \(brush.name) brush has a stamp tip, which the Swift paint editor does not draw yet.") }
@@ -145,6 +171,7 @@ final class PaintStrokeSession: PaintTileTarget {
         if closed || pts.isEmpty { return }
         let filtered = initValues.inputFilter.map { pts.map($0) } ?? pts
         points += filtered
+        lightTwin?.push(filtered)
         update(dry != nil ? dry!.push(filtered) : wet!.push(filtered))
     }
 
@@ -183,6 +210,7 @@ final class PaintStrokeSession: PaintTileTarget {
         if closed { throw PaintEditorError("This stroke has already ended.") }
         update(dry != nil ? dry!.finish() : wet!.finish())
         closed = true
+        if let twin = lightTwin, twin.open { _ = try twin.end() }
         let ch = base.channels
         var tiles = base.tiles
         var changed = false
