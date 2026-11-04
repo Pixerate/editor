@@ -136,6 +136,8 @@ export interface CanvasBrushPreset {
 	builtin?: boolean;
 	/** A saved brush's facets: set `brushSpec` to it with `brush` when picking it. */
 	spec?: CanvasBrushSpec;
+	/** The brush's solid default colour, or its light / dark pair: what picking it makes the stroke colour (`selectBrush`). */
+	defaultColor?: string | { light: string; dark: string };
 	/** The preset's own tip diameter in canvas units: a new brushed stroke's default size. */
 	size: number;
 }

@@ -101,6 +101,49 @@ describe('stamp tips', () => {
   });
 });
 
+describe('stamp tips and spray on brushes that pick paint up or use gradient paint', () => {
+  const GRADIENT = { type: 'gradient', stops: [{ offset: 0, color: '#dc2626' }, { offset: 1, color: '#2563eb' }], map: { by: 'distance', length: 120 } } as const;
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['picks paint up', { behaviour: { exchange: { pickup: 0.5, mix: 0.5 } } }],
+    ['uses gradient paint', { colour: { default: GRADIENT } }],
+  ];
+  it.each(cases)('a stamp tip still lays stamps when the brush %s', (_what, patch) => {
+    const paint = (shape: 'round' | 'stamp') => {
+      const c = editor();
+      c.fillLayer({ color: '#f5d76e', opacity: 1 });
+      c.setBrushFacets({ tip: { shape, size: 24, spacing: 0.6, ...(shape === 'stamp' ? { stamps: ['editor:star'] } : {}) }, ...patch }, 'ink-pen');
+      c.paintStroke({ points: line(12), color: '#111111', seed: 1 });
+      return c;
+    };
+    const round = paint('round');
+    const star = paint('stamp');
+    expect(star.getState().brush.stamp).toBe('editor:star');
+    expect(Buffer.from(star.compositePixels().data).equals(Buffer.from(round.compositePixels().data))).toBe(false);
+  });
+
+  it.each(cases)('the spray can lays droplets when the brush %s, the same on a replay', async (_what, patch) => {
+    const c = editor();
+    c.fillLayer({ color: '#bfdbfe', opacity: 1 });
+    c.setBrushFacets(patch, 'spray-can');
+    expect(c.getState().brush.spray).not.toBeNull();
+    const r = c.paintStroke({ points: line(), color: '#111111', seed: 4 });
+    expect(r.dabs).toBeGreaterThan(line().length * 10);
+    const pixels = Buffer.from(c.compositePixels().data);
+    const t = c.createReplayTarget(1);
+    await replayPainting(c.document, t);
+    expect(Buffer.from(t.compositePixels().data).equals(pixels)).toBe(true);
+    t.dispose();
+  });
+
+  it('drops scatter marks only where they cannot be laid: bristles, wet or thick paint, the Mixer Brush', () => {
+    const kept = resolveBrush({ id: 's', name: 'S', kind: 'mark', tip: { shape: 'round' }, marks: { kind: 'scatter' }, behaviour: { exchange: { pickup: 0.4 } } } as Brush);
+    expect(kept.spray).not.toBeNull();
+    const mixer = editor();
+    expect(() => mixer.setBrushFacets({ marks: { kind: 'scatter' } }, 'mixer-brush')).not.toThrow();
+    expect(mixer.getState().brush.spray).toBeNull();
+  });
+});
+
 describe('default colours', () => {
   it('resolves solid, rgba and light / dark colours to #rrggbb for the scheme', () => {
     expect(brushColourHex('#FFF200', 'light')).toBe('#fff200');

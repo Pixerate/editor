@@ -18,6 +18,8 @@ import {
 } from './freehand.js';
 import { listCanvasBrushes, loadCanvasBrushstrokeRenderer, resolveCanvasBrushSpec, validateCanvasBrush, type CanvasBrush, type CanvasBrushPaint } from './brushstroke.js';
 import type { BrushLibrary } from '../brushes/library.js';
+import { brushColourHex } from '../brushes/colour.js';
+import type { CanvasBrushPreset } from './brushTypes.js';
 
 /** A stroke drawn by code or an agent (`drawStroke`). */
 export interface DrawStrokeInput {
@@ -51,6 +53,8 @@ export interface CanvasDrawControllerOptions<TNode extends CanvasNode = CanvasNo
 	 * profile decides which). Share one with the paint editor so a brush saved there draws here.
 	 */
 	brushLibrary?: Pick<BrushLibrary, 'list' | 'get' | 'isBuiltin'>;
+	/** The host's colour scheme (default light): a brush's light / dark default colour resolves to its side. */
+	colorScheme?: 'light' | 'dark';
 	getNodes: () => TNode[];
 	setNodes: (nodes: TNode[]) => void;
 	history?: ArrangeHistoryTarget;
@@ -74,6 +78,7 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		...options.style
 	};
 	let activeStroke: FreehandStroke | null = null;
+	let colorScheme: 'light' | 'dark' = options.colorScheme === 'dark' ? 'dark' : 'light';
 	const erasedInDrag = new Map<string, { node: TNode; index: number }>();
 
 	let dragStartNodes: TNode[] | null = null;
@@ -221,6 +226,12 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		const tool = input.tool ?? 'pen';
 		if (tool !== 'pen' && tool !== 'highlighter') throw new Error(`Unknown tool '${String(tool)}': use 'pen' or 'highlighter'.`);
 		const style: FreehandStrokeStyle = { ...createDefaultStrokeStyle(tool), ...input.style };
+		// A brush with a default colour paints it when no colour is given (the ballpoint's blue).
+		if (input.style?.color === undefined && typeof style.brush === 'string') {
+			const preset = (await listCanvasBrushes(options.brushLibrary)).find((b) => b.id === style.brush);
+			const hex = preset?.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
+			if (hex) style.color = hex;
+		}
 		if (!(style.width > 0)) throw new Error('width must be a positive number of canvas units.');
 		const profiles = { pressure: input.pressure, tiltX: input.tiltX, tiltY: input.tiltY };
 		for (const [key, values] of Object.entries(profiles)) {
@@ -342,6 +353,30 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		nodeBounds,
 		/** The presets and saved brushes (of `brushLibrary`) a stroke can be brushed with (loads the paint engine). */
 		listBrushes: () => listCanvasBrushes(options.brushLibrary),
+		/**
+		 * A brush picker's choice: brushes the pen and highlighter with `id` (`null`: a plain vector
+		 * stroke) at the brush's own size, embedding a saved brush, and makes its default colour
+		 * (resolved for the colour scheme) the stroke colour unless `keepColour`. Throws for a brush
+		 * the canvas can't paint. Resolves with the brush chosen.
+		 */
+		async selectBrush(id: string | null, choice: { keepColour?: boolean } = {}): Promise<CanvasBrushPreset | null> {
+			if (id === null) {
+				setStyle({ brush: undefined, brushSize: undefined, brushSpec: undefined, paint: undefined });
+				return null;
+			}
+			const preset = (await listCanvasBrushes(options.brushLibrary)).find((b) => b.id === id);
+			if (!preset) {
+				await validateCanvasBrush(id);
+				throw new Error(`Brush '${id}' is not one the canvas can paint; listBrushes lists them.`);
+			}
+			const hex = !choice.keepColour && preset.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
+			setStyle({ brush: id, brushSize: preset.size, brushSpec: preset.spec, ...(hex ? { color: hex } : {}) });
+			return preset;
+		},
+		/** The host's colour scheme, for brushes' light / dark default colours. */
+		setColorScheme(scheme: 'light' | 'dark') {
+			colorScheme = scheme === 'dark' ? 'dark' : 'light';
+		},
 		/** The saved brush to embed for a brush id (undefined for presets and tip settings); for a brush picker. */
 		brushSpec: (brush: CanvasBrush) => resolveCanvasBrushSpec(brush, options.brushLibrary)
 	};

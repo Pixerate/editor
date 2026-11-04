@@ -189,9 +189,9 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
     }
   }
   if (brush.marks?.kind === 'scatter') {
-    // Spray droplets are dabs of a dry round or stamp tip: not bristles, wet or thick paint, or a brush that picks paint up.
+    // Spray droplets are dabs of a round or stamp tip (they may pick paint up): not bristles, wet or thick paint, or the Mixer Brush.
     const surface = brush.behaviour?.surface;
-    const why = brush.tip.shape === 'bristle' ? 'bristle tips lay their own marks' : surface === 'wet' || surface === 'thick' ? `${surface} paint is not sprayed` : brush.behaviour?.exchange ? 'a spray does not pick paint up' : null;
+    const why = brush.tip.shape === 'bristle' ? 'bristle tips lay their own marks' : surface === 'wet' || surface === 'thick' ? `${surface} paint is not sprayed` : brush.behaviour?.exchange?.reservoir ? 'the Mixer Brush is not sprayed' : null;
     if (why) {
       drop('marks', why);
       delete brush.marks;

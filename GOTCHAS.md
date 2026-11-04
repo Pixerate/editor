@@ -3561,12 +3561,14 @@ All contributors and AI assistants should check this file before starting work a
   - `colour.own` brushes paint their default at every stroke, resolved when the stroke starts. The stroke records the hex, so replays in another scheme stay exact.
   - Gradient defaults were already the brush's own paint. Effect defaults stay a suggestion.
   - The image editor's `setBrushPreset` takes the default as the foreground unless `keepColour`.
+  - Canvas: `selectBrush(id, { keepColour })` takes the default (`CanvasBrushPreset.defaultColor`) for the controller's `colorScheme`; `drawStroke` with a brush and no `style.color` paints in it, so agents get the ballpoint's blue without asking.
+  - Vector: `addBrushstroke` and `setBrushstroke` with another brush take its default unless `keepColour`; an explicit `color` always wins. Existing strokes keep their colour when the scheme changes.
 
-### [core/paint-editor] Stamp Tips and Spray Only Run in the Dry Dab Engine
+### [core/paint-editor] Stamp Tips and Spray Run in Both Dab Engines
 
 - **Issue / Symptom**: A stamp tip, or `marks: scatter`, painted round single dabs when the brush also picked paint up or used gradient paint.
-- **Root Cause**: Those brushes paint through `PaintDabStroke` (the exchange path), not `DryStroke`. Only `DryStroke` asks `stampSampler` for the tip and scatters droplets.
-- **Solution / Workaround**: The normaliser drops scatter marks on wet, thick, bristle and pick-up brushes. Stamp tips with pick-up or gradient paint still paint round, so keep them on dry brushes. Provider sticker art must be loaded (`prepareStickers`, which `set_brush` and `paint_stroke` call); until it is, the tip paints round. Canvas, vector and image profiles refuse stamp tips and scatter marks.
+- **Root Cause**: A dab brush paints through `DryStroke`, or through `PaintDabStroke` (the exchange path) when it picks paint up or takes gradient paint. At first only `DryStroke` asked `stampSampler` for the tip and scattered droplets.
+- **Solution / Workaround**: Both engines rasterise stamp tips (`rasterizeStampDab`) and expand dabs into droplets with the shared `sprayDroplets(dab, spray, seed)`. In the exchange path each droplet picks up and lays paint, so a dirty spray mixes droplet by droplet. Keep droplet generation in that one helper so the two engines can't drift. The normaliser still drops scatter marks on bristle, wet and thick brushes and on the Mixer Brush, which have engines of their own. Provider sticker art must be loaded first (`prepareStickers`, which `set_brush` and `paint_stroke` call); until it is, the tip paints round. Canvas, vector and image profiles refuse stamp tips and scatter marks.
 
 ### [core/brushes] Every Built-In Preset Needs a Flat Twin in `BUILTIN_BRUSHES`
 
