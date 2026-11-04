@@ -242,7 +242,7 @@ public final class PaintEditorController {
     /// Bumped whenever the paint changes, so a slow `setEffectPaint` can tell it was overtaken.
     var paintEpoch = 0
     /// Live effect paint playback (`setEffectPlayback`) and the time the view shows.
-    var effectPlayback: (playing: Bool?, fps: Int?) = (true, 30)
+    var effectPlayback: (playing: Bool, fps: Int) = (true, 30)
     var effectTime = 0.0
     /// Wet media: the simulation, its settings and time.
     public private(set) var wet: PaintWetLayers!

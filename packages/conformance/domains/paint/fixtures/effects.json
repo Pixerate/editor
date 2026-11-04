@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "effects",
-  "description": "Effects from an effect provider: searching, effect layers, effects on layers and paper, and effect paint.",
+  "description": "Effects from an effect provider: searching, effect layers, effects on layers and paper, and effect paint, including a high-resolution export of stroke-mapped effect paint.",
   "setup": {
     "width": 48,
     "height": 32
@@ -542,8 +542,116 @@
       "expect": {
         "result": {
           "animation": null,
+          "fps": 30,
           "playing": false,
           "time": 0
+        }
+      }
+    },
+    {
+      "tool": "set_effect_playback",
+      "arguments": {
+        "fps": 12
+      },
+      "expect": {
+        "result": {
+          "animation": null,
+          "fps": 12,
+          "playing": false,
+          "time": 0
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.gradient",
+        "map": {
+          "by": "stroke",
+          "length": 40
+        }
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "fake.gradient",
+            "map": {
+              "by": "stroke",
+              "length": 40,
+              "repeat": "repeat"
+            },
+            "provider": "fake",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "angle": 90,
+              "from": "#1e3a8a",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#f472b6"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.6
+          },
+          {
+            "x": 24,
+            "y": 14,
+            "pressure": 0.9
+          },
+          {
+            "x": 44,
+            "y": 26,
+            "pressure": 0.7
+          }
+        ],
+        "seed": 5
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 52,
+            "x": -2,
+            "y": 0
+          },
+          "dabs": 90,
+          "layerId": "@2",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/effects.18.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "dadadd2b8ad56a8e66f33d63bd7396ae50c8acb4cdc31e8a5cad1820b20915bf",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "export_high_res",
+      "arguments": {
+        "scale": 2,
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 2677,
+          "data": "<binary>",
+          "height": 64,
+          "mimeType": "image/png",
+          "width": 96
         }
       }
     },

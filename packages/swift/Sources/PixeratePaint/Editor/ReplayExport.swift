@@ -149,9 +149,10 @@ extension PaintEditorController {
     /// Repaints this painting into `target`, calling `onStroke` after each stroke (`replayPainting`).
     func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
         let source = doc
-        // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be).
-        try await target.prepareEffectPaints(source.strokes.compactMap(\.effect))
         let m: Affine = [s, 0, 0, s, 0, 0]
+        // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be),
+        // as the scaled strokes ask for it (scaling a stroke-mapped effect scales its map length).
+        try await target.prepareEffectPaints(source.strokes.map { s == 1 ? $0 : varyStroke($0, m) }.compactMap(\.effect))
         enum Item { case stroke(RecordedStroke), paint(PaintEvent), wet(WetEvent) }
         var items: [(item: Item, at: Double, order: Int)] = []
         var order = 0
