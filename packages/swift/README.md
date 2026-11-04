@@ -18,8 +18,20 @@ package works as a git dependency); its sources are here.
 | Target | What it holds | Imports |
 | :--- | :--- | :--- |
 | `PixerateCore` | The `pixerate.editor-document` envelope with step-by-step migrations and load reports (`persistence/migrate.ts`, `editorDocument.ts`); undo / redo with gestures, marks, batches, origins (`user` / `agent:<id>`) and commit events (`history/`); the seeded RNG, bit-exact with `paint/rand.ts`; JSON Schema validation with the same messages (`tools/schema.ts`); `ToolRegistry` with MCP-shaped results, middleware and the origin middleware (`tools/registry.ts`, `tools/origin.ts`); an order-preserving `JSONValue` whose `stringified()` matches `JSON.stringify` | Foundation only |
+| `PixerateContracts` | The files of `@pixerate/conformance` (`packages/conformance`), bundled as resources: each domain's contracts and recorded scenarios (`ConformanceContracts.url("domains/paint/tools.json")`) | Foundation only |
+| `PixeratePaint` | The paint editor. `PaintContracts` reads the paint contracts; `Generated/` holds what `scripts/gen-swift.mjs` writes from them: `PaintToolName`, an `…Arguments` struct per tool (`paintToolArguments(_:_:)` reads any of them by name), `PaintCommandID`, `PaintUITables` and `PaintContractVersions` | `PixerateCore`, `PixerateContracts` |
 
 UI targets (`PixeratePaintUI`, …) are the only ones that will import SwiftUI, AppKit or UIKit.
+
+## Generated code
+
+`scripts/gen-swift.mjs` (`pnpm gen:swift`) writes `Sources/<Target>/Generated/` from the contracts,
+so tool names, argument types, keyboard commands and UI tables cannot drift from the TypeScript
+core. Never edit those files. After a contract changes (`pnpm contracts`), run it and commit;
+`node scripts/gen-swift.mjs --check` and the core test `tests/swift-generated.test.ts` fail while
+they are out of date. Argument types follow the schema: strings with an `enum` become a nested
+enum, `integer` / `number` / `boolean` become `Int` / `Double` / `Bool`, arrays of those become
+arrays, and anything else stays a `JSONValue`. A required argument that may be `null` is optional.
 
 ## Developing
 
