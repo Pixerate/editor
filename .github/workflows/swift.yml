@@ -1,8 +1,8 @@
 name: Swift
 
 # The Swift editors (#533): build and test the package on macOS and in the iOS simulator, and check
-# the Swift generated from @pixerate/conformance is current. Runs when the Swift code, the
-# contracts or the scripts that write them change.
+# the Swift generated from @pixerate/conformance and @pixerate/markdown-conformance is current.
+# Runs when the Swift code, the contracts or the scripts that write them change.
 on:
   push:
     branches: [main]
@@ -11,7 +11,9 @@ on:
       - "apps/swift-demo/**"
       - "packages/swift/**"
       - "packages/conformance/**"
+      - "packages/markdown-conformance/**"
       - "scripts/gen-swift.mjs"
+      - "scripts/gen-swift-markdown.mjs"
       - "scripts/export-contracts.mjs"
       - "scripts/record-conformance.mjs"
       - ".github/workflows/swift.yml"
@@ -22,7 +24,9 @@ on:
       - "apps/swift-demo/**"
       - "packages/swift/**"
       - "packages/conformance/**"
+      - "packages/markdown-conformance/**"
       - "scripts/gen-swift.mjs"
+      - "scripts/gen-swift-markdown.mjs"
       - "scripts/export-contracts.mjs"
       - "scripts/record-conformance.mjs"
       - ".github/workflows/swift.yml"
@@ -47,7 +51,9 @@ jobs:
           node-version: 24
 
       - name: Check the generated Swift is current
-        run: node scripts/gen-swift.mjs --check
+        run: |
+          node scripts/gen-swift.mjs --check
+          node scripts/gen-swift-markdown.mjs --check
 
       - name: Toolchain
         run: |

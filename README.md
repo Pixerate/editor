@@ -202,11 +202,12 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Rich text</strong> (15)</summary>
+<summary><strong>Rich text</strong> (16)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
 | Floating Bubble Formatting Menu | Headless | Component | Component | Planned (#546) |
+| Markdown format commands and editing (`@pixerate/markdown-conformance`: the format-command manifest with labels, groups and shortcuts, and its editing corpus: toggles, links, blocks, code blocks, Return, Tab / Shift-Tab and Backspace) | `createFormatCommands`, `formatCommandsFor` | Via core (`formatCommandsFor`) | Via core (`formatCommandsFor`) | `FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools planned (#546) |
 | Rich Text Preset (Headings, Lists, Task Lists, Links) | ✅ | ✅ | ✅ | Planned (#546) |
 | Smilies (`:)` -> `🙂`) & Hex Highlighter | ✅ | ✅ | ✅ | Planned (#546) |
 | Heading Outline & Navigation Panel (`outline`) | Headless (`createOutlineStore`) | `<OutlinePanel />` & `useOutline` | `<OutlinePanel />` & `createOutline` | Planned (#546) |

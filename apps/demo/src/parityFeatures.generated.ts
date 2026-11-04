@@ -156,6 +156,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#546)"
       },
       {
+        "feature": "Markdown format commands and editing (`@pixerate/markdown-conformance`: the format-command manifest with labels, groups and shortcuts, and its editing corpus: toggles, links, blocks, code blocks, Return, Tab / Shift-Tab and Backspace)",
+        "core": "`createFormatCommands`, `formatCommandsFor`",
+        "react": "Via core (`formatCommandsFor`)",
+        "svelte": "Via core (`formatCommandsFor`)",
+        "swift": "`FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools planned (#546)"
+      },
+      {
         "feature": "Rich Text Preset (Headings, Lists, Task Lists, Links)",
         "core": "✅",
         "react": "✅",
