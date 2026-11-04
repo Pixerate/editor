@@ -1,0 +1,715 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "canvas-and-paper",
+  "description": "Canvas size, extending the canvas, a new canvas and paper settings.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "get_canvas_info",
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "blendModes": [
+            "normal",
+            "darken",
+            "multiply",
+            "color-burn",
+            "linear-burn",
+            "darker-color",
+            "lighten",
+            "screen",
+            "color-dodge",
+            "linear-dodge",
+            "lighter-color",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "vivid-light",
+            "linear-light",
+            "pin-light",
+            "hard-mix",
+            "difference",
+            "exclusion",
+            "subtract",
+            "divide",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
+            "pigment",
+            "watercolor",
+            "tint",
+            "highlight",
+            "shadow"
+          ],
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "brushId": "pencil-6b",
+          "color": "#1f2937",
+          "dpi": 300,
+          "hand": "right",
+          "height": 32,
+          "layerCount": 1,
+          "lighting": {
+            "azimuth": 315,
+            "elevation": 40,
+            "relief": 0.7
+          },
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "paper": {
+            "color": "#f7f3ea",
+            "depth": 0.5,
+            "name": "Cold pressed watercolour",
+            "preset": "cold-pressed"
+          },
+          "redo": null,
+          "secondaryColor": "#ffffff",
+          "strokes": 0,
+          "undo": null,
+          "view": {
+            "mirror": false,
+            "rotation": 0,
+            "zoom": 1
+          },
+          "wet": false,
+          "width": 48
+        }
+      }
+    },
+    {
+      "tool": "list_papers",
+      "expect": {
+        "result": {
+          "families": [
+            "watercolor",
+            "drawing",
+            "pastel",
+            "canvas",
+            "panel",
+            "smooth"
+          ],
+          "papers": [
+            {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "family": "watercolor",
+              "id": "cold-pressed",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "roughness": 0.6
+            },
+            {
+              "absorption": 0.55,
+              "color": "#f8f6ef",
+              "depth": 0.25,
+              "family": "watercolor",
+              "id": "hot-pressed",
+              "name": "Hot pressed watercolour",
+              "pattern": "hot-pressed",
+              "permeability": 0.4,
+              "roughness": 0.25
+            },
+            {
+              "absorption": 0.8,
+              "color": "#f5f0e4",
+              "depth": 0.75,
+              "family": "watercolor",
+              "id": "rough-watercolor",
+              "name": "Rough watercolour",
+              "pattern": "rough",
+              "permeability": 0.6,
+              "roughness": 0.85
+            },
+            {
+              "absorption": 0.4,
+              "color": "#fbfaf6",
+              "depth": 0.3,
+              "family": "drawing",
+              "id": "cartridge",
+              "name": "Cartridge",
+              "pattern": "vellum",
+              "permeability": 0.3,
+              "roughness": 0.35
+            },
+            {
+              "absorption": 0.45,
+              "color": "#f3ecdc",
+              "depth": 0.45,
+              "family": "drawing",
+              "id": "laid",
+              "name": "Laid paper",
+              "pattern": "laid",
+              "permeability": 0.35,
+              "roughness": 0.45
+            },
+            {
+              "absorption": 0.4,
+              "color": "#ede6d6",
+              "depth": 0.6,
+              "family": "drawing",
+              "id": "ingres",
+              "name": "Charcoal paper",
+              "pattern": "ingres",
+              "permeability": 0.3,
+              "roughness": 0.65
+            },
+            {
+              "absorption": 0.3,
+              "color": "#d8cfc0",
+              "depth": 0.7,
+              "family": "pastel",
+              "id": "sanded-pastel",
+              "name": "Sanded pastel paper",
+              "pattern": "sanded",
+              "permeability": 0.2,
+              "roughness": 0.9
+            },
+            {
+              "absorption": 0.3,
+              "color": "#9c978e",
+              "depth": 0.55,
+              "family": "pastel",
+              "id": "pastel-card",
+              "name": "Grey pastel card",
+              "pattern": "sanded",
+              "permeability": 0.2,
+              "roughness": 0.75
+            },
+            {
+              "absorption": 0.35,
+              "color": "#efe9dc",
+              "depth": 0.55,
+              "family": "canvas",
+              "id": "cotton-canvas",
+              "name": "Cotton canvas",
+              "pattern": "canvas",
+              "permeability": 0.25,
+              "roughness": 0.6
+            },
+            {
+              "absorption": 0.3,
+              "color": "#e9e2d2",
+              "depth": 0.45,
+              "family": "canvas",
+              "id": "fine-linen",
+              "name": "Fine linen",
+              "pattern": "linen",
+              "permeability": 0.25,
+              "roughness": 0.5
+            },
+            {
+              "absorption": 0.2,
+              "color": "#f6f4ef",
+              "depth": 0.35,
+              "family": "panel",
+              "id": "gesso",
+              "name": "Gesso panel",
+              "pattern": "gesso",
+              "permeability": 0.15,
+              "roughness": 0.4
+            },
+            {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "family": "smooth",
+              "id": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "roughness": 0.05
+            },
+            {
+              "absorption": 0.35,
+              "color": "#ffffff",
+              "depth": 0,
+              "family": "smooth",
+              "id": "stained-glass",
+              "name": "Stained glass (backlit)",
+              "pattern": "smooth",
+              "permeability": 0.25,
+              "roughness": 0.05
+            }
+          ],
+          "patterns": [
+            "smooth",
+            "cold-pressed",
+            "hot-pressed",
+            "rough",
+            "vellum",
+            "laid",
+            "ingres",
+            "sanded",
+            "canvas",
+            "linen",
+            "gesso"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_paper",
+      "expect": {
+        "result": {
+          "absorption": 0.7,
+          "color": "#f7f3ea",
+          "depth": 0.5,
+          "dry": {
+            "contrast": 1,
+            "invert": false
+          },
+          "family": "watercolor",
+          "name": "Cold pressed watercolour",
+          "pattern": "cold-pressed",
+          "permeability": 0.5,
+          "preset": "cold-pressed",
+          "roughness": 0.6,
+          "scale": 1,
+          "seed": 1,
+          "shading": 0.5,
+          "tiling": "mirror",
+          "wet": {
+            "contrast": 1,
+            "invert": false
+          }
+        }
+      }
+    },
+    {
+      "tool": "set_paper",
+      "arguments": {
+        "preset": "rough-watercolor",
+        "seed": 7
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "absorption": 0.8,
+          "color": "#f5f0e4",
+          "depth": 0.75,
+          "dry": {
+            "contrast": 1,
+            "invert": false
+          },
+          "family": "watercolor",
+          "name": "Rough watercolour",
+          "pattern": "rough",
+          "permeability": 0.6,
+          "preset": "rough-watercolor",
+          "roughness": 0.85,
+          "scale": 1,
+          "seed": 7,
+          "shading": 0.5,
+          "tiling": "mirror",
+          "wet": {
+            "contrast": 1,
+            "invert": false
+          }
+        },
+        "pixels": {
+          "file": "png/canvas-and-paper.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "7fd40648b29272241b8e39dd4fa348419e1f38d6da1bc979c1907fb2ced12a8c",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_paper",
+      "arguments": {
+        "color": "#e8dcc0",
+        "depth": 0.8,
+        "scale": 1.5,
+        "tiling": "repeat"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "absorption": 0.8,
+          "color": "#e8dcc0",
+          "depth": 0.8,
+          "dry": {
+            "contrast": 1,
+            "invert": false
+          },
+          "family": "watercolor",
+          "name": "Rough watercolour",
+          "pattern": "rough",
+          "permeability": 0.6,
+          "preset": "rough-watercolor",
+          "roughness": 0.85,
+          "scale": 1.5,
+          "seed": 7,
+          "shading": 0.5,
+          "tiling": "repeat",
+          "wet": {
+            "contrast": 1,
+            "invert": false
+          }
+        },
+        "pixels": {
+          "file": "png/canvas-and-paper.5.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ed94190b1bab2be565409d6e08bf436004f8c86363c8c2ef556f20eedd438826",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_paper",
+      "arguments": {
+        "preset": "no-such-paper"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown paper \"no-such-paper\". Call list_papers for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "set_canvas",
+      "arguments": {
+        "width": 40,
+        "height": 30
+      },
+      "expect": {
+        "result": {
+          "dpi": 300,
+          "height": 30,
+          "width": 40
+        }
+      }
+    },
+    {
+      "tool": "extend_canvas",
+      "arguments": {
+        "left": 4,
+        "top": 2,
+        "right": 4,
+        "bottom": 2
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "canvas": {
+            "dpi": 300,
+            "height": 34,
+            "width": 48
+          },
+          "origin": {
+            "x": -4,
+            "y": -2
+          },
+          "rect": {
+            "height": 34,
+            "width": 48,
+            "x": -4,
+            "y": -2
+          }
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {},
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 28,
+                  "y": 18
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 34,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 4,
+                  "y": 2
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "origin": {
+              "x": -4,
+              "y": -2
+            },
+            "paper": {
+              "absorption": 0.8,
+              "color": "#e8dcc0",
+              "depth": 0.8,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Rough watercolour",
+              "offset": {
+                "x": 4,
+                "y": 2
+              },
+              "pattern": "rough",
+              "permeability": 0.6,
+              "preset": "rough-watercolor",
+              "roughness": 0.85,
+              "scale": 1.5,
+              "seed": 7,
+              "shading": 0.5,
+              "tiling": "repeat",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    },
+    {
+      "tool": "new_canvas",
+      "arguments": {
+        "width": 32,
+        "height": 24,
+        "paper": "hot-pressed"
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "dpi": 300,
+          "height": 24,
+          "layerId": "@2",
+          "paper": "hot-pressed",
+          "width": 32
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {},
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 16,
+                  "y": 12
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 24,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "paper": {
+              "absorption": 0.55,
+              "color": "#f8f6ef",
+              "depth": 0.25,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Hot pressed watercolour",
+              "pattern": "hot-pressed",
+              "permeability": 0.4,
+              "preset": "hot-pressed",
+              "roughness": 0.25,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 32
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/canvas-and-paper.9.png",
+          "width": 32,
+          "height": 24,
+          "sha256": "df268d55203cd514245cbf0e87146c84c2c86c7af9a263f6718222a0e97fa884",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_canvas",
+      "arguments": {
+        "width": 0
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Must be >= 1.",
+                "path": "/width"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__set_canvas\"."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

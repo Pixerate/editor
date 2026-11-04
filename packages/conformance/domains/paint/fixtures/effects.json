@@ -1,0 +1,566 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "effects",
+  "description": "Effects from an effect provider: searching, effect layers, effects on layers and paper, and effect paint.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "query": "tint"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [
+            {
+              "category": "image",
+              "description": "Mixes the source towards a colour.",
+              "id": "fake.tint",
+              "kind": "shader",
+              "loop": false,
+              "name": "Tint",
+              "tags": [
+                "colour",
+                "wash"
+              ],
+              "transparent": false,
+              "uses": [
+                "filter"
+              ]
+            }
+          ],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [
+            {
+              "count": 1,
+              "tag": "colour"
+            },
+            {
+              "count": 1,
+              "tag": "wash"
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "use": "generator"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [
+            {
+              "category": "gradient",
+              "description": "A linear gradient between two colours that can turn over time.",
+              "duration": 4000,
+              "id": "fake.gradient",
+              "kind": "shader",
+              "loop": true,
+              "name": "Gradient",
+              "tags": [
+                "background"
+              ],
+              "transparent": false,
+              "uses": [
+                "generator"
+              ]
+            }
+          ],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [
+            {
+              "count": 1,
+              "tag": "background"
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "describe_effect",
+      "arguments": {
+        "effect": "fake.tint"
+      },
+      "expect": {
+        "result": {
+          "appliesHere": true,
+          "available": true,
+          "category": "image",
+          "controls": {
+            "additionalProperties": false,
+            "properties": {
+              "amount": {
+                "description": "How far to mix towards the colour, 0–1. Default 0.5.",
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "color": {
+                "description": "Tint colour as #rrggbb. Default #ff8800.",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "defaults": {
+            "amount": 0.5,
+            "color": "#ff8800"
+          },
+          "description": "Mixes the source towards a colour.",
+          "id": "fake.tint",
+          "inputs": [
+            {
+              "description": "The picture to tint.",
+              "kind": "image",
+              "name": "source",
+              "required": true
+            }
+          ],
+          "kind": "shader",
+          "loop": false,
+          "name": "Tint",
+          "presets": [
+            {
+              "name": "Sepia",
+              "values": {
+                "amount": 0.4,
+                "color": "#704214"
+              }
+            },
+            {
+              "name": "Cool",
+              "values": {
+                "amount": 0.25,
+                "color": "#2060ff"
+              }
+            }
+          ],
+          "tags": [
+            "colour",
+            "wash"
+          ],
+          "transparent": false,
+          "uses": [
+            "filter"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#336699"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "add_effect_layer",
+      "arguments": {
+        "effect": "fake.gradient",
+        "name": "Gradient",
+        "opacity": 0.5
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "effects": [
+            {
+              "effect": "fake.gradient",
+              "enabled": true,
+              "id": "effect",
+              "name": "Gradient",
+              "provider": "fake",
+              "role": "effect layer",
+              "values": {
+                "angle": 90,
+                "from": "#1e3a8a",
+                "opacity": 1,
+                "spin": 0,
+                "to": "#f472b6"
+              }
+            }
+          ],
+          "layer": {
+            "active": true,
+            "blend": "normal",
+            "bounds": {
+              "height": 32,
+              "width": 48,
+              "x": 0,
+              "y": 0
+            },
+            "clipped": false,
+            "depth": 0,
+            "id": "@2",
+            "locks": {},
+            "name": "Gradient",
+            "opacity": 0.5,
+            "parentId": null,
+            "type": "pixel",
+            "visible": true
+          }
+        },
+        "pixels": {
+          "file": "png/effects.5.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "25a6fd87052706a067be6dfa46e94993fbf9fb651ca0ded8f545227bd4fed84b",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "apply_effect",
+      "arguments": {
+        "target": "@2",
+        "effect": "fake.tint"
+      },
+      "expect": {
+        "result": {
+          "baked": true,
+          "effect": {
+            "effect": "fake.tint",
+            "enabled": true,
+            "id": "light",
+            "name": "Tint",
+            "opacity": 1,
+            "provider": "fake",
+            "role": "baked light",
+            "values": {
+              "amount": 0.5,
+              "color": "#ff8800"
+            }
+          },
+          "effects": [
+            {
+              "effect": "fake.gradient",
+              "enabled": true,
+              "id": "effect",
+              "name": "Gradient",
+              "provider": "fake",
+              "role": "effect layer",
+              "values": {
+                "angle": 90,
+                "from": "#1e3a8a",
+                "opacity": 1,
+                "spin": 0,
+                "to": "#f472b6"
+              }
+            }
+          ],
+          "target": "@2"
+        }
+      }
+    },
+    {
+      "tool": "list_applied_effects",
+      "expect": {
+        "result": {
+          "provider": {
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "targets": [
+            {
+              "effects": [
+                {
+                  "available": true,
+                  "effect": "fake.gradient",
+                  "enabled": true,
+                  "id": "effect",
+                  "name": "Gradient",
+                  "provider": "fake",
+                  "role": "effect layer",
+                  "values": {
+                    "angle": 90,
+                    "from": "#1e3a8a",
+                    "opacity": 1,
+                    "spin": 0,
+                    "to": "#f472b6"
+                  }
+                }
+              ],
+              "name": "Gradient",
+              "target": "@2"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_effect",
+      "arguments": {
+        "target": "@2",
+        "effect": "effect",
+        "values": {
+          "angle": 45
+        }
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "effect": {
+            "effect": "fake.gradient",
+            "enabled": true,
+            "id": "effect",
+            "name": "Gradient",
+            "provider": "fake",
+            "role": "effect layer",
+            "values": {
+              "angle": 45,
+              "from": "#1e3a8a",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#f472b6"
+            }
+          },
+          "effects": [
+            {
+              "effect": "fake.gradient",
+              "enabled": true,
+              "id": "effect",
+              "name": "Gradient",
+              "provider": "fake",
+              "role": "effect layer",
+              "values": {
+                "angle": 45,
+                "from": "#1e3a8a",
+                "opacity": 1,
+                "spin": 0,
+                "to": "#f472b6"
+              }
+            }
+          ],
+          "target": "@2"
+        },
+        "pixels": {
+          "file": "png/effects.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "edb1b845326ab6ef03952f9b591b171f19bec50b20f74dca0a15fe3a3276f278",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "remove_effect",
+      "arguments": {
+        "target": "@2",
+        "effect": "effect"
+      },
+      "expect": {
+        "result": {
+          "effect": {
+            "effect": "fake.gradient",
+            "enabled": true,
+            "id": "effect",
+            "name": "Gradient",
+            "provider": "fake",
+            "role": "effect layer",
+            "values": {
+              "angle": 45,
+              "from": "#1e3a8a",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#f472b6"
+            }
+          },
+          "effects": [],
+          "keptPixels": true,
+          "target": "@2"
+        }
+      }
+    },
+    {
+      "tool": "apply_effect",
+      "arguments": {
+        "target": "@1",
+        "effect": "fake.invert"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "baked": true,
+          "effect": {
+            "effect": "fake.invert",
+            "enabled": true,
+            "id": "light",
+            "name": "Invert",
+            "opacity": 1,
+            "provider": "fake",
+            "role": "baked light",
+            "values": {
+              "amount": 1
+            }
+          },
+          "effects": [],
+          "target": "@1"
+        },
+        "pixels": {
+          "file": "png/effects.10.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "4e7dcbd2458dbca03dda7e817253a588c0234c3515d92cbcbfc6798ba777dad8",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_paper_effect",
+      "arguments": {
+        "effect": "fake.gradient"
+      },
+      "expect": {
+        "result": {
+          "paperEffect": {
+            "blend": "multiply",
+            "effect": "fake.gradient",
+            "name": "Gradient",
+            "opacity": 1,
+            "provider": "fake",
+            "values": {
+              "angle": 90,
+              "from": "#1e3a8a",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#f472b6"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "set_paper_effect",
+      "arguments": {
+        "effect": null
+      },
+      "expect": {
+        "result": {
+          "paperEffect": null
+        }
+      }
+    },
+    {
+      "tool": "fill_layer_with_effect",
+      "arguments": {
+        "effect": "fake.gradient",
+        "layerId": "@1"
+      },
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "source": {
+            "effect": "fake.gradient",
+            "name": "Gradient",
+            "provider": "fake",
+            "values": {
+              "angle": 90,
+              "from": "#1e3a8a",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#f472b6"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.gradient"
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "fake.gradient",
+            "provider": "fake",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "angle": 90,
+              "from": "#1e3a8a",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#f472b6"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "set_effect_playback",
+      "arguments": {
+        "playing": false
+      },
+      "expect": {
+        "result": {
+          "animation": null,
+          "playing": false,
+          "time": 0
+        }
+      }
+    },
+    {
+      "tool": "describe_effect",
+      "arguments": {
+        "effect": "fake.nothing"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown effect \"fake.nothing\" in the fake provider. Call search_effects or list() for valid ids."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

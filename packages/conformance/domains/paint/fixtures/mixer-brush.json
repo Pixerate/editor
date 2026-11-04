@@ -1,0 +1,135 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "mixer-brush",
+  "description": "A mixer brush picks up, carries and is cleaned of paint.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#cc3333"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "get_mixer_brush",
+      "expect": {
+        "result": {
+          "amount": 0,
+          "pickup": null,
+          "reservoir": null
+        }
+      }
+    },
+    {
+      "tool": "load_mixer_brush",
+      "arguments": {
+        "color": "#3333cc"
+      },
+      "expect": {
+        "result": {
+          "amount": 1,
+          "pickup": null,
+          "reservoir": "#3333cc"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "brushId": "mixer-brush",
+        "seed": 41
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 50,
+            "width": 68,
+            "x": -10,
+            "y": -8
+          },
+          "dabs": 19,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 0.927,
+            "pickup": null,
+            "reservoir": "#1f2937"
+          },
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/mixer-brush.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "93df3b74fec52ab5dd84f0eb95c0a6cb5e34c8eb73f61a7d65b864a5233d0081",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_mixer_brush",
+      "expect": {
+        "result": {
+          "amount": 0.927,
+          "pickup": null,
+          "reservoir": "#1f2937"
+        }
+      }
+    },
+    {
+      "tool": "clean_mixer_brush",
+      "arguments": {
+        "emptyReservoir": true
+      },
+      "expect": {
+        "result": {
+          "amount": 0,
+          "pickup": null,
+          "reservoir": null
+        }
+      }
+    },
+    {
+      "tool": "get_mixer_brush",
+      "expect": {
+        "result": {
+          "amount": 0,
+          "pickup": null,
+          "reservoir": null
+        }
+      }
+    }
+  ]
+}

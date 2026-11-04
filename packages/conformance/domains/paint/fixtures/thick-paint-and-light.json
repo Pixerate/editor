@@ -1,0 +1,266 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "thick-paint-and-light",
+  "description": "Impasto relief lit by the light settings, and light paint with spill.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "set_lighting",
+      "arguments": {
+        "azimuth": 135,
+        "elevation": 40,
+        "relief": 0.8
+      },
+      "expect": {
+        "result": {
+          "azimuth": 135,
+          "elevation": 40,
+          "relief": 0.8
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "brushId": "impasto-brush",
+        "color": "#c08030",
+        "seed": 81
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 57,
+            "width": 75,
+            "x": -14,
+            "y": -12
+          },
+          "dabs": 25,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#c08030"
+          },
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/thick-paint-and-light.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "d3bb55bb89397a37c6974ed90ea173f898c9e1a1a022f5b54be894eb7afe23de",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_relief",
+      "expect": {
+        "result": {
+          "lighting": {
+            "azimuth": 135,
+            "elevation": 40,
+            "relief": 0.8
+          },
+          "relief": {
+            "bounds": {
+              "height": 512,
+              "width": 512,
+              "x": -256,
+              "y": -256
+            },
+            "layerId": "@1",
+            "maxHeight": 239
+          }
+        }
+      }
+    },
+    {
+      "tool": "flatten_relief",
+      "pixels": true,
+      "expect": {
+        "result": {
+          "flattened": true,
+          "layerId": "@1"
+        },
+        "pixels": {
+          "file": "png/thick-paint-and-light.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "9a01c1b949c670da71b2d05a3174d2238b4fd55d931e624f41cd8968ff9f6014",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_relief",
+      "expect": {
+        "result": {
+          "lighting": {
+            "azimuth": 135,
+            "elevation": 40,
+            "relief": 0.8
+          },
+          "relief": null
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Glow"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Glow",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 6,
+            "y": 26
+          },
+          {
+            "x": 16,
+            "y": 8,
+            "pressure": 0.9
+          },
+          {
+            "x": 30,
+            "y": 20
+          },
+          {
+            "x": 44,
+            "y": 6,
+            "pressure": 0.4
+          }
+        ],
+        "brushId": "glow-wash",
+        "color": "#ffcc44",
+        "seed": 82
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 69,
+            "width": 85,
+            "x": -23,
+            "y": -14
+          },
+          "dabs": 13,
+          "layerId": "@2",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#ffcc44"
+          },
+          "strokeId": "s2",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "get_light",
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 256,
+            "width": 256,
+            "x": 0,
+            "y": 0
+          },
+          "hasLight": true,
+          "layerId": "@2",
+          "peak": 255,
+          "spill": {
+            "radius": 24,
+            "strength": 1
+          }
+        }
+      }
+    },
+    {
+      "tool": "set_light_spill",
+      "arguments": {
+        "radius": 8,
+        "strength": 0.7
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "radius": 8,
+          "strength": 0.7
+        },
+        "pixels": {
+          "file": "png/thick-paint-and-light.9.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "07f3b9da40c09cd049bbc762b1c6767ab355913a06377c04e081c7bae438c577",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "clear_light",
+      "expect": {
+        "result": {
+          "cleared": true,
+          "layerId": "@2"
+        }
+      }
+    },
+    {
+      "tool": "get_light",
+      "expect": {
+        "result": {
+          "bounds": null,
+          "hasLight": false,
+          "layerId": "@2",
+          "peak": 0,
+          "spill": {
+            "radius": 8,
+            "strength": 0.7
+          }
+        }
+      }
+    }
+  ]
+}

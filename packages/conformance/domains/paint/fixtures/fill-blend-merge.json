@@ -1,0 +1,373 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "fill-blend-merge",
+  "description": "Filling layers, blend modes, merging down and clearing.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "list_layers",
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#3366cc",
+        "opacity": 0.8
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        },
+        "pixels": {
+          "file": "png/fill-blend-merge.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "4cf7badc98e9dd856fe27fc9b33c666ef6907bd2d25e6a72a7def8d7c9b42588",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Glaze"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Glaze",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "layerId": "@2",
+        "color": "#ffcc00",
+        "blend": "multiply",
+        "grain": 0.5
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@2"
+        },
+        "pixels": {
+          "file": "png/fill-blend-merge.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "62e401931c0e2eb693de4ef4c4b41248ef44e66c1550f8fe93210c0e9e8d12b3",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@2",
+        "blend": "screen",
+        "opacity": 0.6
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "screen",
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Glaze",
+          "opacity": 0.6,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "pixels": {
+          "file": "png/fill-blend-merge.5.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "dd9f7ceb00b36300fe29d6c03051953f91766c7e759f8ff4e53fa18acf902c49",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "merge_layer_down",
+      "arguments": {
+        "layerId": "@2"
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Layer 1",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:166-wyzvv9wrdy"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#3366cc",
+                  "grain": 0,
+                  "opacity": 0.8,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@1"
+              },
+              {
+                "at": 0,
+                "data": {
+                  "blend": "multiply",
+                  "color": "#ffcc00",
+                  "grain": 0.5,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@2"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/fill-blend-merge.6.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "dac1bfe222591e4a3e650815ad2a7eb7348351e529b380e4eaca1d15a6ce6b86",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "clear_layer",
+      "arguments": {
+        "layerId": "@1"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        },
+        "pixels": {
+          "file": "png/fill-blend-merge.7.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "79604470456a156c07d14b16690283c2927033d2f7884da30e23a68c1c533285",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "merge_layer_down",
+      "arguments": {
+        "layerId": "@1"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Merge down needs a pixel layer directly above another pixel layer in the same group."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

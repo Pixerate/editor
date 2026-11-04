@@ -1,0 +1,579 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "layers",
+  "description": "Adding, naming, hiding, ordering, duplicating and removing layers, and refusing unknown ones.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "list_layers",
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_blend_modes",
+      "expect": {
+        "result": {
+          "modes": [
+            {
+              "group": "standard",
+              "id": "normal",
+              "label": "Normal",
+              "psd": "normal"
+            },
+            {
+              "group": "standard",
+              "id": "darken",
+              "label": "Darken",
+              "psd": "darken"
+            },
+            {
+              "group": "standard",
+              "id": "multiply",
+              "label": "Multiply",
+              "psd": "multiply"
+            },
+            {
+              "group": "standard",
+              "id": "color-burn",
+              "label": "Color Burn",
+              "psd": "color-burn"
+            },
+            {
+              "group": "standard",
+              "id": "linear-burn",
+              "label": "Linear Burn",
+              "psd": "linear-burn"
+            },
+            {
+              "group": "standard",
+              "id": "darker-color",
+              "label": "Darker Color",
+              "psd": "darker-color"
+            },
+            {
+              "group": "standard",
+              "id": "lighten",
+              "label": "Lighten",
+              "psd": "lighten"
+            },
+            {
+              "group": "standard",
+              "id": "screen",
+              "label": "Screen",
+              "psd": "screen"
+            },
+            {
+              "group": "standard",
+              "id": "color-dodge",
+              "label": "Color Dodge",
+              "psd": "color-dodge"
+            },
+            {
+              "group": "standard",
+              "id": "linear-dodge",
+              "label": "Linear Dodge (Add)",
+              "psd": "linear-dodge"
+            },
+            {
+              "group": "standard",
+              "id": "lighter-color",
+              "label": "Lighter Color",
+              "psd": "lighter-color"
+            },
+            {
+              "group": "standard",
+              "id": "overlay",
+              "label": "Overlay",
+              "psd": "overlay"
+            },
+            {
+              "group": "standard",
+              "id": "soft-light",
+              "label": "Soft Light",
+              "psd": "soft-light"
+            },
+            {
+              "group": "standard",
+              "id": "hard-light",
+              "label": "Hard Light",
+              "psd": "hard-light"
+            },
+            {
+              "group": "standard",
+              "id": "vivid-light",
+              "label": "Vivid Light",
+              "psd": "vivid-light"
+            },
+            {
+              "group": "standard",
+              "id": "linear-light",
+              "label": "Linear Light",
+              "psd": "linear-light"
+            },
+            {
+              "group": "standard",
+              "id": "pin-light",
+              "label": "Pin Light",
+              "psd": "pin-light"
+            },
+            {
+              "group": "standard",
+              "id": "hard-mix",
+              "label": "Hard Mix",
+              "psd": "hard-mix"
+            },
+            {
+              "group": "standard",
+              "id": "difference",
+              "label": "Difference",
+              "psd": "difference"
+            },
+            {
+              "group": "standard",
+              "id": "exclusion",
+              "label": "Exclusion",
+              "psd": "exclusion"
+            },
+            {
+              "group": "standard",
+              "id": "subtract",
+              "label": "Subtract",
+              "psd": "subtract"
+            },
+            {
+              "group": "standard",
+              "id": "divide",
+              "label": "Divide",
+              "psd": "divide"
+            },
+            {
+              "group": "standard",
+              "id": "hue",
+              "label": "Hue",
+              "psd": "hue"
+            },
+            {
+              "group": "standard",
+              "id": "saturation",
+              "label": "Saturation",
+              "psd": "saturation"
+            },
+            {
+              "group": "standard",
+              "id": "color",
+              "label": "Color",
+              "psd": "color"
+            },
+            {
+              "group": "standard",
+              "id": "luminosity",
+              "label": "Luminosity",
+              "psd": "luminosity"
+            },
+            {
+              "description": "Mixes the layer into what is below like paint, by its opacity: blue and yellow make green.",
+              "group": "pigment",
+              "id": "pigment",
+              "label": "Pigment",
+              "psd": "normal"
+            },
+            {
+              "description": "A transparent wash: the colours filter each other wavelength by wavelength, so layers darken like glazes and blue over yellow gives green. White is clear.",
+              "group": "painterly",
+              "id": "watercolor",
+              "label": "Watercolor",
+              "psd": "multiply"
+            },
+            {
+              "description": "Tints what is below with the layer's colour and keeps its lightness; mid-tones take the full tint, highlights and darks stay clean.",
+              "group": "painterly",
+              "id": "tint",
+              "label": "Tint",
+              "psd": "color"
+            },
+            {
+              "description": "Adds the layer as coloured light that rolls off softly towards white instead of clipping. Black adds nothing.",
+              "group": "painterly",
+              "id": "highlight",
+              "label": "Highlight",
+              "psd": "screen"
+            },
+            {
+              "description": "Shades what is below as if the layer blocked the light, coloured by the layer, with ambient light so it never crushes to black. White does nothing.",
+              "group": "painterly",
+              "id": "shadow",
+              "label": "Shadow",
+              "psd": "multiply"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Sky"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Sky",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Group",
+        "type": "group"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "pass-through",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@3",
+          "locks": {},
+          "name": "Group",
+          "opacity": 1,
+          "parentId": null,
+          "type": "group",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Inside",
+        "parentId": "@3"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 1,
+          "id": "@4",
+          "locks": {},
+          "name": "Inside",
+          "opacity": 1,
+          "parentId": "@3",
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@2",
+        "opacity": 0.5,
+        "blend": "multiply",
+        "name": "Sky wash"
+      },
+      "expect": {
+        "result": {
+          "active": false,
+          "blend": "multiply",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Sky wash",
+          "opacity": 0.5,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@1",
+        "visible": false,
+        "locks": {
+          "pixels": true
+        }
+      },
+      "expect": {
+        "result": {
+          "active": false,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {
+            "pixels": true
+          },
+          "name": "Layer 1",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": false
+        }
+      }
+    },
+    {
+      "tool": "set_active_layer",
+      "arguments": {
+        "layerId": "@2"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "multiply",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Sky wash",
+          "opacity": 0.5,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "duplicate_layer",
+      "arguments": {
+        "layerId": "@2"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "multiply",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@5",
+          "locks": {},
+          "name": "Sky wash copy",
+          "opacity": 0.5,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "move_layer",
+      "arguments": {
+        "layerId": "@2",
+        "index": 0
+      },
+      "expect": {
+        "result": {
+          "active": false,
+          "blend": "multiply",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Sky wash",
+          "opacity": 0.5,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "move_layer",
+      "arguments": {
+        "layerId": "@4",
+        "index": 0,
+        "parentId": null
+      },
+      "expect": {
+        "result": {
+          "active": false,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@4",
+          "locks": {},
+          "name": "Inside",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "remove_layer",
+      "arguments": {
+        "layerId": "@3"
+      },
+      "expect": {
+        "result": {
+          "activeLayerId": "@5",
+          "removed": "@3"
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "expect": {
+        "result": {
+          "activeLayerId": "@5",
+          "layers": [
+            {
+              "active": true,
+              "blend": "multiply",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@5",
+              "locks": {},
+              "name": "Sky wash copy",
+              "opacity": 0.5,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {
+                "pixels": true
+              },
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": false
+            },
+            {
+              "active": false,
+              "blend": "multiply",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Sky wash",
+              "opacity": 0.5,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@4",
+              "locks": {},
+              "name": "Inside",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "missing"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown layer \"missing\". Call list_layers for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "remove_layer",
+      "arguments": {
+        "layerId": "@3"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown layer \"@3\". Call list_layers for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@2",
+        "opacity": 2
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Must be <= 1.",
+                "path": "/opacity"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__update_layer\"."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

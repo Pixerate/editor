@@ -1,0 +1,225 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "tracing-and-references",
+  "description": "A tracing image under the painting, and reference images to pick colours from.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "set_tracing_image",
+      "arguments": {
+        "png": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAALElEQVR4AYXIMQ0AQAjAwH7yApDDiHRG5OAA2BgZLmn6KEoykNQRfHMm1j0a0MQS1MVdGwoAAAAASUVORK5CYII=",
+        "opacity": 0.5,
+        "sampleColors": true,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 48,
+          "height": 32
+        }
+      },
+      "expect": {
+        "result": {
+          "height": 4,
+          "opacity": 0.5,
+          "rect": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "sampleColors": true,
+          "visible": true,
+          "width": 4
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "seed": 61
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 49,
+            "x": -1,
+            "y": 1
+          },
+          "dabs": 87,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/tracing-and-references.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "0f24e51262c9ed8292c076670108e42f3a0bfb79492263867c85432c3ef5bfcc",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "update_tracing_image",
+      "arguments": {
+        "opacity": 0.2,
+        "visible": false
+      },
+      "expect": {
+        "result": {
+          "height": 4,
+          "opacity": 0.2,
+          "rect": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "sampleColors": true,
+          "visible": false,
+          "width": 4
+        }
+      }
+    },
+    {
+      "tool": "clear_tracing_image",
+      "expect": {
+        "result": {
+          "tracing": null
+        }
+      }
+    },
+    {
+      "tool": "add_reference_image",
+      "arguments": {
+        "png": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAALElEQVR4AYXIMQ0AQAjAwH7yApDDiHRG5OAA2BgZLmn6KEoykNQRfHMm1j0a0MQS1MVdGwoAAAAASUVORK5CYII=",
+        "name": "Ref",
+        "x": 10,
+        "y": 10,
+        "displayWidth": 100
+      },
+      "expect": {
+        "result": {
+          "displayWidth": 100,
+          "height": 4,
+          "id": "ref1",
+          "name": "Ref",
+          "visible": true,
+          "width": 4,
+          "x": 10,
+          "y": 10
+        }
+      }
+    },
+    {
+      "tool": "list_reference_images",
+      "expect": {
+        "result": {
+          "references": [
+            {
+              "displayWidth": 100,
+              "height": 4,
+              "id": "ref1",
+              "name": "Ref",
+              "visible": true,
+              "width": 4,
+              "x": 10,
+              "y": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "pick_reference_color",
+      "arguments": {
+        "id": "ref1",
+        "x": 1,
+        "y": 2,
+        "setColor": true
+      },
+      "expect": {
+        "result": {
+          "color": "#906fc8"
+        }
+      }
+    },
+    {
+      "tool": "update_reference_image",
+      "arguments": {
+        "id": "ref1",
+        "name": "Moved",
+        "x": 30,
+        "visible": false
+      },
+      "expect": {
+        "result": {
+          "displayWidth": 100,
+          "height": 4,
+          "id": "ref1",
+          "name": "Moved",
+          "visible": false,
+          "width": 4,
+          "x": 30,
+          "y": 10
+        }
+      }
+    },
+    {
+      "tool": "remove_reference_image",
+      "arguments": {
+        "id": "ref1"
+      },
+      "expect": {
+        "result": {
+          "removed": "ref1"
+        }
+      }
+    },
+    {
+      "tool": "list_reference_images",
+      "expect": {
+        "result": {
+          "references": []
+        }
+      }
+    },
+    {
+      "tool": "set_tracing_image",
+      "arguments": {
+        "png": "bm90IGEgcG5n"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "The tracing image could not be decoded as a PNG (Not a PNG image.); decode other formats in the browser and pass pixels."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

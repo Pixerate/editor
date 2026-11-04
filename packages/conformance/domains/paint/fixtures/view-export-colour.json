@@ -1,0 +1,215 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "view-export-colour",
+  "description": "View settings, previews, exports and colour helpers.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "set_view",
+      "arguments": {
+        "zoom": 2,
+        "rotation": 15,
+        "mirror": true
+      },
+      "expect": {
+        "result": {
+          "mirror": true,
+          "pan": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 15,
+          "zoom": 2
+        }
+      }
+    },
+    {
+      "tool": "set_view",
+      "arguments": {
+        "reset": true
+      },
+      "expect": {
+        "result": {
+          "mirror": false,
+          "pan": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "zoom": 1
+        }
+      }
+    },
+    {
+      "tool": "set_hand",
+      "arguments": {
+        "hand": "left"
+      },
+      "expect": {
+        "result": {
+          "hand": "left"
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#88aacc"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "render_preview",
+      "arguments": {
+        "maxSide": 24
+      },
+      "expect": {
+        "result": "Preview 24×16"
+      }
+    },
+    {
+      "tool": "export_image",
+      "arguments": {
+        "format": "image/png",
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 130,
+          "data": "iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAAASUlEQVR4Ae3RQQ2AMAAEQUA9WtCCp1ZDX9smMwrusvf7/eM62LPfpDUO1BSoKVBToKZATYGaAjUFagrUFKgpUFOgpkBNgZoCtQkv6QM9EZd4SAAAAABJRU5ErkJggg==",
+          "mimeType": "image/png"
+        }
+      }
+    },
+    {
+      "tool": "color_harmony",
+      "arguments": {
+        "kind": "triadic",
+        "color": "#cc4422"
+      },
+      "expect": {
+        "result": {
+          "colors": [
+            {
+              "angle": 24,
+              "color": "#cc4422"
+            },
+            {
+              "angle": 144,
+              "color": "#88cc22"
+            },
+            {
+              "angle": 264,
+              "color": "#4f22cc"
+            }
+          ],
+          "kind": "triadic",
+          "wheel": "ryb"
+        }
+      }
+    },
+    {
+      "tool": "color_harmony",
+      "arguments": {
+        "kind": "complementary",
+        "color": "#cc4422",
+        "wheel": "rgb"
+      },
+      "expect": {
+        "result": {
+          "colors": [
+            {
+              "angle": 12,
+              "color": "#cc4422"
+            },
+            {
+              "angle": 192,
+              "color": "#22aacc"
+            }
+          ],
+          "kind": "complementary",
+          "wheel": "rgb"
+        }
+      }
+    },
+    {
+      "tool": "mix_colors",
+      "arguments": {
+        "colors": [
+          {
+            "color": "#1d4ed8",
+            "weight": 1
+          },
+          {
+            "color": "#facc15",
+            "weight": 1
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "mixed": "#5c9948",
+          "model": "kubelka-munk",
+          "pigment": "#5c9948",
+          "rgbLerp": "#8b8d77",
+          "weights": [
+            0.5,
+            0.5
+          ]
+        }
+      }
+    },
+    {
+      "tool": "mix_colors",
+      "arguments": {
+        "colors": [
+          {
+            "color": "#1d4ed8",
+            "weight": 1
+          },
+          {
+            "color": "#facc15",
+            "weight": 3
+          }
+        ],
+        "model": "rgb"
+      },
+      "expect": {
+        "result": {
+          "mixed": "#c3ad46",
+          "model": "rgb",
+          "pigment": "#90af3b",
+          "rgbLerp": "#c3ad46",
+          "weights": [
+            0.25,
+            0.75
+          ]
+        }
+      }
+    },
+    {
+      "tool": "export_psd",
+      "expect": {
+        "result": {
+          "bytes": 6214,
+          "data": "<binary>",
+          "psb": false,
+          "warnings": []
+        }
+      }
+    }
+  ]
+}
