@@ -1917,10 +1917,19 @@
       "grain": 0.15
     },
     "colour": {
-      "default": "#1e3a8a",
+      "default": {
+        "light": "#1e3a8a",
+        "dark": "#93c5fd"
+      },
       "palette": [
-        "#1e3a8a",
-        "#111827",
+        {
+          "light": "#1e3a8a",
+          "dark": "#93c5fd"
+        },
+        {
+          "light": "#111827",
+          "dark": "#f3f4f6"
+        },
         "#b91c1c",
         "#166534"
       ]
@@ -1943,9 +1952,15 @@
       "minSize": 0.8
     },
     "colour": {
-      "default": "#111827",
+      "default": {
+        "light": "#111827",
+        "dark": "#f3f4f6"
+      },
       "palette": [
-        "#111827",
+        {
+          "light": "#111827",
+          "dark": "#f3f4f6"
+        },
         "#7c3aed",
         "#db2777",
         "#0891b2",
@@ -1970,7 +1985,10 @@
       "pressureSize": false
     },
     "colour": {
-      "default": "#111827"
+      "default": {
+        "light": "#111827",
+        "dark": "#f3f4f6"
+      }
     }
   },
   {

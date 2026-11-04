@@ -83,8 +83,13 @@ drawn.
 - Give a brush a `colour.default` only when the medium has a typical colour (blue ballpoint,
   yellow highlighter): choosing the brush sets it as the user's colour. Use a light / dark pair
   when the right colour depends on the background (white chalk on a dark board, graphite on
-  paper), and a `palette` for the other usual colours. `colour.own` only for brushes that must
-  always paint their own (a rainbow marker).
+  paper), and a `palette` for the other usual colours. Dark inks need a pair too (navy / light
+  blue, near-black / near-white): a single dark default vanishes in a dark-scheme editor. Check
+  each side against the background it is for (3:1 at least). `colour.own` only for brushes that
+  must always paint their own (a rainbow marker).
+- Previews and thumbnails pick their own colour against what they are drawn on (the brush's
+  default when it reads there, else a colour for the medium). Don't give a brush a default just
+  to make its preview visible: choosing the brush makes that default the user's colour.
 - Stamp tips paint the sticker's shape in the paint colour; to keep a sticker's own colours, use
   `marks` objects instead.
 

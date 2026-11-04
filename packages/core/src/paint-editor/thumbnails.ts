@@ -4,6 +4,7 @@
  * shown dragged across two bands of colour. Pure TypeScript, so thumbnails render in Node too.
  */
 
+import { BRUSH_PREVIEW_DARK_PAPER, brushPreviewsOnDark } from '../brushes/preview';
 import { EMPTY_MIXER_LOAD } from '../paint/mixer';
 import { emptySurface, fillRect, type TiledSurface } from '../raster/surface';
 import { normalizePaintBrush, type PaintBrush } from './brushes';
@@ -142,8 +143,8 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
   if (b.engine === 'wet') surface = paintWetTestStroke(b, options.paper, options.color, width, height);
   else ({ surface, light } = paintTestStroke(surface, b, options.paper, options.color, width, height));
   const layer: ViewLayer = { type: 'pixel', id: 'thumbnail', name: 'thumbnail', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 } };
-  // Light paint reads on dark paper, with its spill.
-  const paper = light ? { ...options.paper, color: '#141414' } : options.paper;
+  // Light paint reads on dark paper, with its spill; a multiply light brush (a highlighter) is a tint on paper.
+  const paper = light && brushPreviewsOnDark(b) ? { ...options.paper, color: BRUSH_PREVIEW_DARK_PAPER } : options.paper;
   const spill = light ? computeSpill(surface, light, { radius: Math.max(4, height / 6), strength: 1 }) : null;
   const layers: ViewLayer[] = [paperNode(paper), layer];
   if (spill) layers.push({ type: 'pixel', id: 'thumbnail-light', name: 'light', visible: true, opacity: 1, blend: 'linear-dodge', surface: spill, offset: { x: 0, y: 0 } } as ViewLayer);

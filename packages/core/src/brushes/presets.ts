@@ -441,21 +441,21 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     tip: { shape: 'round', size: 3, hardness: 0.95, spacing: 0.05, opacity: 0.9 },
     dynamics: { smoothing: 0.35, pressureSmoothing: 0.3, pressureOpacity: true, minSize: 0.7, opacityJitter: 0.08 },
     behaviour: { grain: 0.15 },
-    colour: { default: '#1e3a8a', palette: ['#1e3a8a', '#111827', '#b91c1c', '#166534'] },
+    colour: { default: { light: '#1e3a8a', dark: '#93c5fd' }, palette: [{ light: '#1e3a8a', dark: '#93c5fd' }, { light: '#111827', dark: '#f3f4f6' }, '#b91c1c', '#166534'] },
   },
   // A gel pen: an even, opaque, saturated line.
   {
     id: 'gel-pen', name: 'Gel pen', kind: 'mark', medium: 'ink', variety: 'gel',
     tip: { shape: 'round', size: 4, spacing: 0.04 },
     dynamics: { smoothing: 0.3, pressureSmoothing: 0.3, minSize: 0.8 },
-    colour: { default: '#111827', palette: ['#111827', '#7c3aed', '#db2777', '#0891b2', '#16a34a', '#f59e0b'] },
+    colour: { default: { light: '#111827', dark: '#f3f4f6' }, palette: [{ light: '#111827', dark: '#f3f4f6' }, '#7c3aed', '#db2777', '#0891b2', '#16a34a', '#f59e0b'] },
   },
   // A fineliner: one width, whatever the pressure.
   {
     id: 'fineliner', name: 'Fineliner', kind: 'mark', medium: 'ink', variety: 'fineliner',
     tip: { shape: 'round', size: 2, spacing: 0.05 },
     dynamics: { smoothing: 0.4, pressureSize: false },
-    colour: { default: '#111827' },
+    colour: { default: { light: '#111827', dark: '#f3f4f6' } },
   },
   // A wax crayon: waxy, catching the paper's peaks, a little uneven.
   {
