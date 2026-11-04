@@ -170,6 +170,10 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         return .object(try c.strokePath(x.path, spacing: x.spacing, pressure: x.pressure, i))
     }
     h["replay_strokes"] = { a in
+        if a["color"] == nil {
+            let ids = Set(a["strokeIds"]?.arrayValue?.compactMap(\.stringValue) ?? [])
+            try await c.prepareEffectPaints(c.doc.strokes.filter { ids.contains($0.id) }.compactMap(\.effect))
+        }
         let o = a["origin"]?.objectValue
         let opts = ReplayOptions(
             strokeIds: a["strokeIds"]?.arrayValue?.compactMap(\.stringValue) ?? [], dx: a["dx"]?.numberValue, dy: a["dy"]?.numberValue,
@@ -212,8 +216,8 @@ func contractProvider(_ id: String, _ handlers: [String: PaintToolHandler], cont
 
 /// The paint editor's tools (`createPaintEditorToolProvider`): the ones this port implements.
 public func createPaintEditorToolProvider(_ controller: PaintEditorController) throws -> AgentToolProvider {
-    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }
-    return try contractProvider("paint-editor", handlers, content: paintContentHandlers(controller))
+    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }.merging(paintReplayExportHandlers(controller)) { a, _ in a }.merging(paintStickerHandlers(controller)) { a, _ in a }
+    return try contractProvider("paint-editor", handlers, content: paintContentHandlers(controller).merging(paintReplayExportContentHandlers(controller)) { a, _ in a })
 }
 
 /// The brush library's tools for a paint editor (`createPaintBrushLibraryToolProvider`): the ones this port implements.

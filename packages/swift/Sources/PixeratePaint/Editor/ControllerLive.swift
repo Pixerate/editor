@@ -59,6 +59,7 @@ extension PaintEditorController {
     public func convertToLiveStrokes(_ layerId: String?) throws -> PaintLayerInfo {
         let l = try paintTarget(layerId, "convert")
         if doc.liveStrokes?.get(l.id) != nil { return describeLayer(l) }
+        if doc.stickers?.get(l.id)?.isEmpty == false { throw PaintEditorError("Layer \"\(l.name)\" is a sticker layer; add a stroke layer instead (add_layer {type: \"strokes\"}).") }
         if contentBounds(l.pixelSurface) != nil { throw PaintEditorError("Layer \"\(l.name)\" already has paint, which isn't kept as strokes; convert an empty layer or add a stroke layer (add_layer {type: \"strokes\"}).") }
         commit("Convert to stroke layer", doc.with { d in
             var live = d.liveStrokes ?? OrderedMap()
@@ -105,9 +106,18 @@ extension PaintEditorController {
         if let color {
             next.color = try parseColor(.string(color))
             next.paint = nil
+            next.effect = nil
         }
         if let paint {
-            if paint == .null { next.paint = nil } else {
+            if paint == .null {
+                next.paint = nil
+                next.effect = nil
+            } else if isPaintEffectPaint(paint) {
+                guard let e = readPaintEffectPaint(paint), effectPaintImage(e) != nil else { throw PaintEditorError("The effect \"\(paint.objectValue?["effect"]?.stringValue ?? "")\" is not rendered yet; render it first (prepareEffectPaints; the update_stroke tool does this).") }
+                next.paint = nil
+                next.effect = e
+            } else {
+                next.effect = nil
                 switch try readStrokePaintPublic(paint) {
                 case .color(let c):
                     next.color = c
@@ -220,14 +230,28 @@ extension PaintEditorController {
             live.set(layer.id, list)
             o.liveStrokes = live
         }
-        return withPaintEvent(next, kind: "live-strokes", layerId: layer.id, data: ["strokes": .array(list.map(recordedStrokeJSON))])
+        return withPaintEvent(next, kind: "live-strokes", layerId: layer.id, data: ["strokes": .array(list.map(recordedStrokeJSON))], strokes: list)
+    }
+
+    /// Sets a stroke layer's strokes (a replay's `live-strokes` event); `nil` rasterizes it.
+    func replaceLiveStrokes(_ layerId: String, _ strokes: [RecordedStroke]?) throws {
+        let l = try pixelLayer(layerId, "set the strokes of")
+        guard let strokes else {
+            commit("Rasterize stroke layer", doc.with { d in
+                var live = d.liveStrokes ?? OrderedMap()
+                _ = live.delete(l.id)
+                d.liveStrokes = live.isEmpty ? nil : live
+            })
+            return
+        }
+        commit("Strokes", try withLiveStrokes(doc, l, strokes.map { var s = $0; s.layerId = l.id; return s }))
     }
 
     /// Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area it painted.
     private func drawLiveStroke(_ d: PaintDocumentState, _ plain: PaintLayer, _ surface: TiledSurface, _ st: RecordedStroke) throws -> (surface: TiledSurface, bounds: RasterRect?) {
         var i = PaintStrokeInit(layerId: plain.id, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
         i.fixedBrush = st.brush
-        i.paint = st.paint?.json
+        i.paint = st.effect?.json ?? st.paint?.json
         i.snapToPerspective = false
         i.stencils = false
         i.maskStencils = st.stencils ?? []

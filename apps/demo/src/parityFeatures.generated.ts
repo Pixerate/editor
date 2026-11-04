@@ -1974,7 +1974,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`setColorScheme`, `setColorLocked`, `brushColourHex`, canvas `selectBrush`, `vectorBrushstrokeDefaultColour`, `PaintBrush.stamp` / `.spray`, `stampSampler`, `snapshotBrushLibrary`",
         "react": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `useCanvasDraw` `selectBrush` and `colorScheme`",
         "svelte": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `createCanvasDraw` `selectBrush` and `setColorScheme`",
-        "swift": "Planned (#545) (stamp tips and textured particle dots need the sticker art)"
+        "swift": "Brush colours, palettes, `own` colours and the spray can ✅ (`PaintEditorController`); stamp tips and textured particle dots from library stickers: Planned (#545) (they need the sticker art)"
       },
       {
         "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
@@ -2030,7 +2030,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`toJSON`, `loadJSON`, `exportPng`, `exportImage`, `exportPsd`",
         "react": "`<PaintToolbar>` Save / Open / PNG / JPEG / PSD",
         "svelte": "`<PaintToolbar>` Save / Open / PNG / JPEG / PSD",
-        "swift": "Planned (#540) (JSON and PNG: `PaintEditorController.exportPng`; PSD, JPEG and WebP not yet)"
+        "swift": "JSON, PNG and PSD: `PaintEditorController` `toJSON`, `exportPng`, `exportPsd` (`PsdExportResult`, written by `PsdWriter`), PNG / PSD in the Export menu of `PaintEditorView`; JPEG and WebP not yet (no image encoder in the port)"
       },
       {
         "feature": "Wet Media (watercolour and gouache on a per-layer wet layer: D2Q9 lattice Boltzmann water pinned by the paper grain, absorption, evaporation and an edge band that carries pigment out to darken drying edges, Kubelka-Munk pigment in four channels that mixes linearly and glazes, granulation into the grain's valleys, blooms, colour bleed, re-wetting dried paint, pre-wetted paper, canvas tilt with drips, flow maps; brushes Watercolour round, Wash brush, Watercolour rigger, Gouache and the wet tools Add water, Dry, Blow, Wet blend, Wet smudge, Blot; pick-up and mix through the shared exchange; dry now, pause, speed, water overlay; dried deterministically on save and export; undo restores the wet state; WebAssembly SIMD in Web Workers, one thread without cross-origin isolation, TypeScript in Node, all bit-identical; `get_wet_paint`, `advance_wet_paint`, `dry_paint`, `wet_paper`, `set_wet_settings`, `set_flow_map`, `set_canvas_tilt`, `pause_wet_paint`, `set_water_overlay` agent tools)",
@@ -2058,14 +2058,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`timeLapse`, `renderHighRes`, `replayPainting`, `timeLapseZip`, `timeLapseVideo`",
         "react": "`<PaintToolbar>` Time-lapse and PNG 2×",
         "svelte": "`<PaintToolbar>` Time-lapse and PNG 2×",
-        "swift": "Planned (#540)"
+        "swift": "✅ `PaintEditorController` `timeLapse` (`PaintTimeLapse`) and `renderHighRes`, PNG 2× in the Export menu (wet events and flattened relief: Planned (#545))"
       },
       {
         "feature": "Procedural, Bristle & Sticker Brushes (particle brushes: spring-and-mass strings, springs, orbits, flow particles, elastic strands that stretch and snap back and fuzzy winding strands, drawn as dots, lines, bead sequences or filled ribbons between neighbouring paths (seamless, telescoped coverage); sine waves on any kind (amplitude, wavelength, speed by stroke time, phase jitter); dots and beads textured with up to four sticker stamps in turn or at random, turned by motion, at random or to the tip; `set_brush` `marks` and `tip.stamps` agent settings; bristle brushes whose bristles splay with pressure, flatten with tilt, bend at turns and run dry one by one; sticker spray of any sticker from the sticker library (the editor's procedural textured stamps by default, or a host's: `setStickersProvider`, refs `provider:id`; art loaded once and cached, tintable art in the paint colour; bare stamps in old brushes and documents read as `editor:` refs and paint the same pixels) that stay editable objects on a sticker layer: move, turn, resize, recolour, restamp, reorder, delete; placed exactly, picked by shape and dragged with the Stickers tool, each drag one undo step; all seeded and replayable; `add_stickers`, `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`, `remove_stickers` agent tools)",
         "core": "`ParticleStroke`, `BristleStroke`, `StickerSpray`, `addStickers`, `stickerAt`, `previewSticker`, `updateSticker`, `stickerSurface`",
         "react": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
         "svelte": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
-        "swift": "Planned (#540) (particle and bristle engines; sticker brushes: #545)"
+        "swift": "Particle, bristle and sticker brushes ✅ (every particle kind and render, dots textured with editor stamps; sticker spray and sticker layers of the editor's stickers: `Sticker`, `EditorStickers`, `PaintEditorController` `addStickers` / `updateSticker`; all in the brush picker of `PaintEditorView`); host sticker libraries and their art, the Stickers tool and sticker panel: Planned (#545)"
       },
       {
         "feature": "Light Paint (a per-layer light channel any dab, particle, bristle, Mixer Brush or impasto brush lays with `light.amount`: the paint glows in its own colour and spills, blurred, onto its surroundings; it moves with paint (smudges, blenders, the knife and pick-up brushes carry it; plain paint dims it; erasers remove it); glassy impasto with rim and clarity; Light presets glow gel, neon marker, light airbrush, spark trail, light ribbon, flame ribbon, neon strand, smoke ribbon, bokeh dots, twinkle sparks; per-layer spill radius and strength; saved, undone and replayed; PSD spill layers in Linear Dodge (Add); `get_light`, `set_light_spill`, `clear_light`, `set_brush` `light` / `behaviour.thick.rim` / `behaviour.thick.clarity` agent tools)",
@@ -2093,14 +2093,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`PaintDirector`, `PaintPresence` & `createPaintEditorToolProvider({ director })`",
         "react": "`usePaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",
         "svelte": "`createPaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#533)"
       },
       {
         "feature": "Paint Provider Effects (optional: with an `EffectProvider`, effect paper drawn over the sheet and under the paint, multiplied so the grain shows; effect layers drawn by generators, overlays and titles and redrawn with new values; effect fills; filter light baked onto dried paint, thick paint keeping its relief; each one undo step, a slider drag one; saved with the document; effect paint, where dry, particle, bristle, mixer, watercolour, gouache, oil and impasto brushes take each pixel's colour from an effect rendered once at the canvas size (in wet paint it flows with the water) or laid along each stroke, and sprayed stickers take it at their centre, recorded with the stroke and rendered again for replays, and live effect paint that keeps playing in strokes on stroke layers (play, pause, frame rate cap, export at a moment); agent tools `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect`, `set_effect_paint` and the shared effect tools)",
         "core": "`setPaperEffect`, `addEffectLayer`, `applyLightEffect`, `setEffectPaint`, `createPaintEffectsToolProvider` (`/paint-editor`)",
         "react": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
         "svelte": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
-        "swift": "Planned (#540)"
+        "swift": "✅ `EffectProvider`, `FakeEffectProvider`, `createPaintEffectsToolProvider`, `PaintEffectPaint`: effect paper, effect layers, fills, light baked onto dried paint, effect paint for dab, particle, bristle and Mixer Brush strokes, saved and replayed; no effects panel in `PaintEditorView`, live playback in the view or export at a moment yet; wet, impasto and sticker effect paint: Planned (#545)"
       }
     ]
   },

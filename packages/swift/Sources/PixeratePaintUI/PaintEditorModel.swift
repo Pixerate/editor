@@ -3,6 +3,8 @@ import Observation
 import PixerateCore
 import PixeratePaint
 import PixerateRaster
+import SwiftUI
+import UniformTypeIdentifiers
 
 /// Reads `a.b` from a JSON object as a number, 0 when missing (`readPath` in `paint-editor/ui.ts`).
 public func readPath(_ obj: JSONObject, _ path: String) -> Double {
@@ -107,6 +109,8 @@ public final class PaintEditorModel {
         tables = try PaintContracts.uiTables()
         commands = try PaintContracts.commands()
         subscriptions.append(try r.register(createPaintEditorToolProvider(c)))
+        // Provider effects: their read tools say when no provider is set (`controller.setEffectsProvider`).
+        subscriptions.append(try r.register(createPaintEffectsToolProvider(c)))
         subscriptions.append(try r.register(createPaintBrushLibraryToolProvider(c)))
         gesture = PaintGesture(controller: c) { [unowned self] in self.viewport }
         gesture.onSelectStroke = { [unowned self] id in self.selectedStroke = id }
@@ -210,6 +214,29 @@ public final class PaintEditorModel {
 
     public func undo() { _ = controller.undo() }
     public func redo() { _ = controller.redo() }
+
+    // MARK: - Export
+
+    /// The painting as a file (`export_image` / `export_psd`): PNG with the paper, or an 8-bit RGB PSD with its layers.
+    /// `scale` above 1 repaints the recorded strokes larger (`export_high_res`) instead of upscaling.
+    public func exportFile(_ format: PaintExportFormat, scale: Double = 1) async -> PaintExportFile? {
+        if format == .png && scale > 1 {
+            do {
+                let img = try await controller.renderHighRes(scale: scale)
+                error = nil
+                return PaintExportFile(format: .png, bytes: Data(encodePng(img.width, img.height, img.data)))
+            } catch {
+                self.error = error.localizedDescription
+                return nil
+            }
+        }
+        return attempt {
+            switch format {
+            case .png: return PaintExportFile(format: .png, bytes: Data(try controller.exportPng()))
+            case .psd: return PaintExportFile(format: .psd, bytes: Data(try controller.exportPsd().bytes))
+            }
+        }
+    }
 
     /// Fits the canvas in the viewport once per canvas size (`fitOnMount`).
     public func fitOnce() {
@@ -383,4 +410,29 @@ public final class PaintEditorModel {
         }
         return true
     }
+}
+
+/// File types the editor exports.
+public enum PaintExportFormat: String, CaseIterable, Sendable {
+    case png
+    case psd
+
+    public var contentType: UTType { self == .png ? .png : UTType("com.adobe.photoshop-image") ?? .data }
+}
+
+/// An exported painting, for `fileExporter`.
+public struct PaintExportFile: FileDocument {
+    public static var readableContentTypes: [UTType] { [] }
+    public static var writableContentTypes: [UTType] { PaintExportFormat.allCases.map(\.contentType) }
+    public let format: PaintExportFormat
+    public let bytes: Data
+
+    public init(format: PaintExportFormat, bytes: Data) {
+        self.format = format
+        self.bytes = bytes
+    }
+
+    public init(configuration: ReadConfiguration) throws { throw CocoaError(.fileReadUnsupportedScheme) }
+
+    public func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: bytes) }
 }

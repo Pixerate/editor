@@ -6,9 +6,6 @@
     "width": 24,
     "height": 16
   },
-  "skip": {
-    "swift": "High-resolution and time-lapse exports are not ported yet (#540)."
-  },
   "steps": [
     {
       "tool": "paint_stroke",

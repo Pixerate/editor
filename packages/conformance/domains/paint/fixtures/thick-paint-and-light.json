@@ -7,7 +7,7 @@
     "height": 32
   },
   "skip": {
-    "swift": "Thick paint and light are not ported yet (#545)."
+    "swift": "Thick paint (impasto relief, lighting, get_relief and flatten_relief), the light tools (get_light, set_light_spill, clear_light) and the wet glow-wash stroke the scenario paints are not ported yet (#545)."
   },
   "steps": [
     {

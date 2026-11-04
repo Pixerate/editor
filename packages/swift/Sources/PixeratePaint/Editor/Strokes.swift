@@ -38,6 +38,8 @@ public struct RecordedStroke {
     public var stencils: [Stencil]?
     /// Gradient paint, with concrete colours.
     public var paint: PaintGradientSource?
+    /// Effect paint (recorded instead of `paint`): strokes replay with the effect's pixels.
+    public var effect: PaintEffectPaint?
 }
 
 func applyAffine(_ m: Affine, _ x: Double, _ y: Double) -> (x: Double, y: Double) {
@@ -81,6 +83,7 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     if let load = s.load { o["load"] = loadJSON(load) }
     if let stencils = s.stencils { o["stencils"] = .array(stencils.map { .object($0.json) }) }
     if let paint = s.paint { o["paint"] = paint.json }
+    if let effect = s.effect { o["paint"] = effect.json }
     o["brush"] = .object(migrateBrushV1(s.brush))
     return .object(o)
 }
@@ -128,6 +131,12 @@ func varyStroke(_ stroke: RecordedStroke, _ m: Affine, pressureScale: Double = 1
             p.map.length = Swift.min(100000, Swift.max(1, (paint.map.length ?? 300) * s))
             out.paint = p
         }
+    }
+    // A stroke-mapped effect keeps its pattern the same size relative to the stroke.
+    if s != 1, var e = stroke.effect, var map = e.map {
+        map.length = Int(Swift.min(4096, Swift.max(16, JS.round(Double(map.length) * s))))
+        e.map = map
+        out.effect = e
     }
     if let copies = stroke.copies, !copies.isEmpty, let inv = try? invertAffine(m) {
         out.copies = copies.map { composeAffine(m, composeAffine($0, inv)) }

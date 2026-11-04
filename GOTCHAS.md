@@ -3731,3 +3731,28 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `.product(name: "PixeratePaintUI", package: "editor")` in `apps/swift-demo` fails to resolve in a git worktree or in a checkout whose directory has another name.
 - **Root Cause**: SwiftPM names a local package after the last component of its path, not after the `name:` in its manifest.
 - **Solution / Workaround**: The demo declares `.package(name: "Pixerate", path: "../..")` and refers to `package: "Pixerate"`, which resolves whatever the checkout directory is called.
+
+### [swift] `set_effect_playback` Unsets the Setting It Was Not Given
+- **Issue / Symptom**: `set_effect_playback {playing: false}` returned `{ playing: false, time: 0, animation: null }` with no `fps`, although the editor starts at 30 fps; a Swift port that kept the old `fps` returned an extra field.
+- **Root Cause**: The TS handler passes `{ playing: args.playing, fps: args.fps }` and the controller merges it with `{ ...state, ...update }`. A key that is present with the value `undefined` overwrites the old value, and `JSON.stringify` then leaves it out.
+- **Solution / Workaround**: The Swift controller stores both settings as optionals and replaces both with what the call gives (`setEffectPlayback`), so results match. If the TS core changes to keep unset settings, change both together and record the scenario again.
+
+### [swift] Provider Effect Ids Are an Enum in TS Only Once the Catalog Has Loaded
+- **Issue / Symptom**: `apply_effect` with a generator id, or `set_paper_effect` with a filter id, failed in TS with `invalid_arguments` ("Expected one of …") but in Swift with `tool_failed` and the controller's message ("… is a generator effect, and light on dried paint takes filter effects …").
+- **Root Cause**: `createEffectToolProvider` fetches the provider's catalog in the background and only then narrows `effect` arguments to an `enum` of matching ids. The contracts (`tools.json`) are exported without a catalog, so their schemas, which the Swift tools use, take any id; the TS host's schemas change shape once the fetch lands.
+- **Solution / Workaround**: Scenarios should not depend on the enum (the recorded ones do not); both ports refuse the wrong use, only with different codes. Compare a wrong-use call by its outcome, not its code, when testing by hand.
+
+### [swift] High-Resolution Replays of Stroke-Mapped Effect Paint Fail in Both Ports
+- **Issue / Symptom**: `export_high_res` on a painting with a stroke-mapped effect stroke (`set_effect_paint` with `map: { by: "stroke" }`) throws "… is not rendered at this canvas size; call set_effect_paint …".
+- **Root Cause**: `replayPainting` renders the effect paint of the recorded strokes before scaling them, and `varyStroke` then scales the map length, so the scaled stroke asks for a strip that was never rendered.
+- **Solution / Workaround**: The Swift port does the same (it matches the TS core call for call). Fix it in the TS core first (render the scaled paints), then in `ReplayExport.swift`, and add a scenario.
+
+### [swift] The Swift PSD Writer Leaves Layer Styles Out
+- **Issue / Symptom**: `export_psd` in Swift writes the same bytes as the TS core for pixel layers, groups, masks, locks and the merged image, but a layer with layer styles gets no `lfx2` block and an extra warning naming it.
+- **Root Cause**: Only the part of `image-editor/psd/export.ts` that paint layers need without styles was ported (`PixerateRaster/PSD.swift`); the descriptor writer, `writeLfx2` and pattern embedding were not.
+- **Solution / Workaround**: The merged image still shows the styles. Port `psd/descriptor.ts` and `writeLfx2` (and `Patt` for pattern effects) when a scenario exports styled layers to PSD, and drop the warning.
+
+### [swift] Replays Read Paint Events, so Moving the Document Must Move Them Too
+- **Issue / Symptom**: After `extend_canvas` with `left` or `top`, a Swift time-lapse or high-res export put a sticker layer's stickers (and a stroke layer's strokes) back where they were before the canvas grew, and the saved `paintEvents` differed from the TS core's.
+- **Root Cause**: Replays repaint sticker and stroke layers from their `paintEvents` (`stickers`, `live-strokes`), not from the document's current lists. The TS `extendCanvas` moves the stickers and strokes inside those events (rounding sticker centres to hundredths); the Swift `shiftDocument` only moved the document's own lists.
+- **Solution / Workaround**: `shiftDocument` moves `stickers` and `live-strokes` event data (and the in-memory strokes of `PaintEvent`) with the same rounding as the TS core. Anything new that moves paint must move the events too; a replay after the move is the test.

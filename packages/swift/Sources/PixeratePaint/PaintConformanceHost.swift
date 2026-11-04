@@ -7,7 +7,8 @@ import PixerateCore
  * `createPaintConformanceHost` in `paint-editor/contract.ts`: every paint tool provider this port
  * has in one registry that validates arguments, the saved document (the `pixerate.editor-document`
  * envelope) and the composited pixels. `setup` is the scenario's editor options (`width`,
- * `height`, `dpi`, `paper`, `brushId`, `color`).
+ * `height`, `dpi`, `paper`, `brushId`, `color`). Provider effects come from `FakeEffectProvider`,
+ * as the TS host uses the fake provider.
  */
 public final class PaintConformanceHost: ConformanceHost {
     public let controller: PaintEditorController
@@ -20,7 +21,9 @@ public final class PaintConformanceHost: ConformanceHost {
             paper: paper?.objectValue, paperPreset: paper?.stringValue, brushId: setup["brushId"]?.stringValue,
             color: setup["color"]?.stringValue, hand: setup["hand"]?.stringValue
         )
+        controller.setEffectsProvider(FakeEffectProvider())
         _ = try registry.register(createPaintEditorToolProvider(controller))
+        _ = try registry.register(createPaintEffectsToolProvider(controller))
         _ = try registry.register(createPaintBrushLibraryToolProvider(controller))
         _ = try registry.register(createPaintProposalToolProvider(PaintProposals(controller: controller)))
     }

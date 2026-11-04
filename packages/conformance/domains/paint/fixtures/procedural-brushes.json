@@ -6,9 +6,6 @@
     "width": 48,
     "height": 32
   },
-  "skip": {
-    "swift": "The particle and bristle engines are not ported yet (#540)."
-  },
   "steps": [
     {
       "tool": "paint_stroke",

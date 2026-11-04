@@ -32,6 +32,10 @@ public struct PaintEvent: Equatable {
     public var kind: String
     public var layerId: String
     public var data: JSONObject?
+    /// A `live-strokes` event's strokes as painted (in memory only; saved, they are `data.strokes`).
+    var strokes: [RecordedStroke]?
+
+    public static func == (a: PaintEvent, b: PaintEvent) -> Bool { a.at == b.at && a.kind == b.kind && a.layerId == b.layerId && a.data == b.data }
 
     public var json: JSONValue {
         var o: JSONObject = ["at": .number(Double(at)), "kind": .string(kind), "layerId": .string(layerId)]
@@ -57,6 +61,12 @@ public final class PaintDocumentState {
     public var light: OrderedMap<String, TiledSurface>?
     /// Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
     public var origin: LayerOffset?
+    /// Effect layers: the provider effect each is drawn from (layer id → effect).
+    public var effectLayers: OrderedMap<String, PaintEffectSource>?
+    /// Effect paper: a provider generator drawn over the paper, under the paint.
+    public var paperEffect: PaintPaperEffect?
+    /// Sticker layers: each layer's stickers, bottom first (its pixels are drawn from them).
+    public var stickers: OrderedMap<String, [Sticker]>?
 
     public init(canvas: PaintCanvas, paper: PaperSettings, layers: [PaintLayer], activeLayerId: String?, strokes: [RecordedStroke]) {
         self.canvas = canvas
@@ -73,6 +83,9 @@ public final class PaintDocumentState {
         d.liveStrokes = liveStrokes
         d.light = light
         d.origin = origin
+        d.effectLayers = effectLayers
+        d.paperEffect = paperEffect
+        d.stickers = stickers
         change(d)
         return d
     }

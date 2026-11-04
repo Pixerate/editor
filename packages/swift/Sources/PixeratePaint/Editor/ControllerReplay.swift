@@ -117,7 +117,7 @@ extension PaintEditorController {
                 i.stencils = false
                 i.maskStencils = []
                 // Gradient paint replays as recorded; a recolour paints the one new colour.
-                if let p = v.paint, options.color == nil { i.paint = p.json }
+                if let e = v.effect, options.color == nil { i.paint = e.json } else if let p = v.paint, options.color == nil { i.paint = p.json }
                 if let load, options.brushId == nil { i.load = load }
                 let run = try runStroke(d, i, v.points)
                 d = run.doc
