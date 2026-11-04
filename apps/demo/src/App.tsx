@@ -80,7 +80,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
       { id: "color", label: "Colour & A11y", icon: Palette, hint: "Perceptual spaces, WCAG, CVD" },
       { id: "typography", label: "Typography", icon: Type, hint: "Fonts, scales, readability" },
       { id: "params", label: "Parameters", icon: SlidersHorizontal, hint: "Typed controls from a schema" },
-      { id: "parity", label: "Feature parity", icon: CheckCircle2, hint: "Core, React and Svelte" },
+      { id: "parity", label: "Feature parity", icon: CheckCircle2, hint: "Core, React, Svelte and Swift" },
     ],
   },
 ];
