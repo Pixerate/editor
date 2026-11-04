@@ -20,6 +20,7 @@
     "check:packages": "node scripts/check-packages.mjs",
     "contracts": "node scripts/export-contracts.mjs",
     "conformance:record": "node scripts/record-conformance.mjs",
+    "gen:swift": "node scripts/gen-swift.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev": "pnpm --filter demo dev",
