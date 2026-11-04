@@ -4516,11 +4516,12 @@ export class PaintEditorController {
     return { layerIds: layers.map((x) => x.layer.id), strokes: layers.reduce((n, x) => n + x.strokes.filter(isLiveEffect).length, 0), sources: sources.length };
   }
 
-  /** Plays or pauses live effect paint, and caps its frame rate (1..60). Editor state, not an undo step. */
+  /** Plays or pauses live effect paint, and caps its frame rate (1..60); a setting left out keeps its value. Editor state, not an undo step. */
   setEffectPlayback(update: { playing?: boolean; fps?: number }): { playing: boolean; fps: number; time: number } {
     if (update.playing !== undefined && typeof update.playing !== 'boolean') throw new PaintEditorError('playing must be true or false.');
     if (update.fps !== undefined && !(Number.isInteger(update.fps) && update.fps >= 1 && update.fps <= 60)) throw new PaintEditorError(`fps ${update.fps} is out of range; use a whole number 1..60.`);
-    this.effectPlaybackState = { ...this.effectPlaybackState, ...update };
+    // A setting the call leaves out (or passes as undefined, as the tool does) keeps its value.
+    this.effectPlaybackState = { playing: update.playing ?? this.effectPlaybackState.playing, fps: update.fps ?? this.effectPlaybackState.fps };
     this.emit([]);
     return { ...this.effectPlaybackState, time: this.effectTime };
   }
