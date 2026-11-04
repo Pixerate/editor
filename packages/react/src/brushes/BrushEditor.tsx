@@ -1,18 +1,25 @@
 import React, { useMemo, useState } from 'react';
-import { brushEditorSections, PAINT_PROFILE, setBrushEditorValue, type Brush, type BrushEditorControl, type BrushHostProfile } from '@pixerate/editor/brushes';
-import { ErrorLine, PaintSlider, PixelCanvas, button, chip } from './shared';
+import { brushEditorScope, brushEditorSections, PAINT_PROFILE, setBrushEditorValue, type Brush, type BrushEditorControl, type BrushHostProfile } from '@pixerate/editor/brushes';
+import { ErrorLine, PaintSlider, PixelCanvas, button, chip } from '../paint-editor/shared';
 
 type Pixels = { width: number; height: number; data: Uint8ClampedArray };
 
 export interface BrushEditorProps {
   /** The brush being edited, as facets. */
   brush: Brush;
-  /** What the host renders (default the paint editor): other controls are left out. */
+  /**
+   * What the host renders (default the paint editor): only its sections, controls and options
+   * are shown. Facets of the brush it can't use stay as they are, named in a note.
+   */
   profile?: BrushHostProfile;
   /** Called with the whole brush after each change (normalised). */
   onChange: (brush: Brush) => void;
-  /** A live preview stroke of `brush` (e.g. `controller.brushThumbnail`). */
-  preview?: Pixels | null;
+  /** A live preview stroke of `brush`: pixels (e.g. `controller.brushThumbnail`) or an image URL. */
+  preview?: Pixels | string | null;
+  /** With it, a "Save" button (labelled `saveLabel`) saves the brush in place. */
+  onSave?: () => unknown;
+  /** The Save button's label (default "Save"; e.g. "Save a copy" for a built-in). */
+  saveLabel?: string;
   /** With it, a name field and "Save brush" save the brush under that name. */
   onSaveAs?: (name: string) => unknown;
   /** Extra controls a host adds to a section (e.g. the sticker picker for stamps). */
@@ -22,13 +29,25 @@ export interface BrushEditorProps {
 
 /**
  * Edits a brush by its facets (`brushEditorSections`): Medium, Shape, Marks, Feel, Behaviour,
- * Light, Motion and Colour, each control a facet, with a live preview stroke and "Save as". Only
- * what the host profile renders is shown; settings it paints without carry a note.
+ * Light, Motion and Colour, each control a facet, with a live preview stroke, "Save" and "Save
+ * as". It needs no editor controller, so every host that paints uses it. Only what the host
+ * profile uses is shown; what the brush has for other hosts is kept and named
+ * (`brushEditorScope`). `BrushLibraryEditor` wires it to a brush library.
  */
-export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT_PROFILE, onChange, preview, onSaveAs, renderExtra, className }) => {
+export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT_PROFILE, onChange, preview, onSave, saveLabel = 'Save', onSaveAs, renderExtra, className }) => {
   const sections = useMemo(() => brushEditorSections(brush, profile), [brush, profile]);
+  const scope = useMemo(() => brushEditorScope(brush, profile), [brush, profile]);
   const [problems, setProblems] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const save = async (fn: () => unknown, after?: () => void) => {
+    try {
+      await fn();
+      after?.();
+      setProblems(null);
+    } catch (e) {
+      setProblems((e as Error).message);
+    }
+  };
   const set = (path: string, value: unknown) => {
     const r = setBrushEditorValue(brush, path, value);
     setProblems(r.problems.length ? r.problems.join(' ') : null);
@@ -36,7 +55,16 @@ export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT
   };
   return (
     <div className={`flex flex-col gap-2 ${className ?? ''}`} data-testid="brush-editor">
-      {preview !== undefined && <PixelCanvas pixels={preview} label="Brush preview" className="rounded" style={{ width: '100%', aspectRatio: preview ? `${preview.width} / ${preview.height}` : '4 / 1' }} />}
+      {typeof preview === 'string' ? (
+        <img src={preview} alt="Brush preview" className="rounded object-contain" style={{ width: '100%', aspectRatio: '4 / 1' }} />
+      ) : (
+        preview !== undefined && <PixelCanvas pixels={preview} label="Brush preview" className="rounded" style={{ width: '100%', aspectRatio: preview ? `${preview.width} / ${preview.height}` : '4 / 1' }} />
+      )}
+      {scope.note && (
+        <p className="text-[10px] text-amber-400" data-testid="brush-editor-scope" title={`${profile.name} shows only what it can use; these are kept unchanged when you save.`}>
+          {scope.note}
+        </p>
+      )}
       {sections.map((s) => (
         <section key={s.id} className="flex flex-col gap-1.5" data-section={s.id} {...(s.id === 'behaviour' ? { 'data-testid': 'brush-engine' } : {})}>
           <span className="font-medium text-slate-300">{s.title}</span>
@@ -46,25 +74,21 @@ export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT
           {renderExtra?.(s.id)}
         </section>
       ))}
-      {onSaveAs && (
+      {(onSave || onSaveAs) && (
         <div className="flex flex-wrap items-center gap-1">
-          <input value={name} placeholder="Brush name" aria-label="Brush name" onChange={(e) => setName(e.target.value)} className="w-28 rounded bg-slate-800 px-1.5 py-0.5" />
-          <button
-            type="button"
-            className={button}
-            disabled={!name.trim()}
-            onClick={async () => {
-              try {
-                await onSaveAs(name.trim());
-                setName('');
-                setProblems(null);
-              } catch (e) {
-                setProblems((e as Error).message);
-              }
-            }}
-          >
-            Save brush
-          </button>
+          {onSave && (
+            <button type="button" className={button} onClick={() => save(onSave)}>
+              {saveLabel}
+            </button>
+          )}
+          {onSaveAs && (
+            <>
+              <input value={name} placeholder="Brush name" aria-label="Brush name" onChange={(e) => setName(e.target.value)} className="w-28 rounded bg-slate-800 px-1.5 py-0.5" />
+              <button type="button" className={button} disabled={!name.trim()} onClick={() => save(() => onSaveAs(name.trim()), () => setName(''))}>
+                Save brush
+              </button>
+            </>
+          )}
         </div>
       )}
       <ErrorLine error={problems} />
