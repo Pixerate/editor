@@ -7,7 +7,7 @@ tools do (see [Scenarios](#scenarios)).
 
 This data-only package is generated: never edit its files by hand. `scripts/export-contracts.mjs`
 writes them from the built core, and the files are committed. Core tests
-(`packages/core/tests/brush-contracts.test.ts`, `paint-contracts.test.ts`) fail when the committed
+(`packages/core/tests/brush-contracts.test.ts`, `paint-contracts.test.ts`, `vector-contracts.test.ts`) fail when the committed
 files differ from what the code exports. After changing a contract's source, run:
 
 ```bash
@@ -77,6 +77,34 @@ The paint editor of `@pixerate/editor/paint-editor` (`paintContracts()`).
   around a `pixerate-paint` document. Objects are open, because readers keep fields they don't know
   and write them back. Layers are the image editor's serialized layers. Each stroke's `brush`
   refers to the brushes domain's `brush.schema.json`.
+
+### `domains/vector`
+
+The vector editor of `@pixerate/editor/vector` (`vectorContracts()`, #618).
+
+- `manifest.json`: the domain, `formatVersion`, the saved document's kind and envelope
+  `formatVersion`, counts and the other files.
+- `commands.json`: every command agents run with `run_command` (`createVectorCommands`): `id`,
+  `label`, `group`, `keywords`, `description`, `params` (the JSON Schema `run_command` checks),
+  `shortcut` as written (`Mod` is Ctrl or Cmd), `scope`, `undoable`, `readOnly` and `hidden`.
+- `tools.json`: the agent tools as MCP tool lists: the command tools (`list_commands`,
+  `run_command`, `run_commands`, from `createCommandToolProvider` with bare names; `run_command`'s
+  `id` enum is every command), effects (`createVectorEffectsToolProvider`, listed with the fake
+  effect provider) and generation (`createVectorGenerationToolProvider` with
+  `FAKE_VECTOR_ART_MODELS`).
+- `ui.json`: the tables React and Svelte render: the tool bar (order, groups, glyphs, shortcuts),
+  the menus (blend modes, effects, filters, path and pathfinder actions, edit toggles, envelope
+  styles, mask types, text alignment, font weights), the effect, filter and lens control specs with
+  their defaults, the width-profile presets, the label tables and the overlay theme.
+- `document.schema.json`: a saved drawing, the `pixerate.editor-document` envelope of kind
+  `vector` around a `VectorDocument`. Objects are open; nodes are described by their common fields
+  and `type` (path, group, text or instance).
+
+The vector editor has no pixel renderer of its own (React and Svelte draw its render data as
+SVG), so its scenarios compare results, documents and SVG export, never `pixels`.
+`createVectorConformanceHost` makes node ids from a counter (`n1`, `n2`, …), which makes them
+part of the contract, and lays out text with the metric shaper (`createMetricTextShaper`).
+Generation runs `fakeVectorArtGenerator`, a fixed SVG from the prompt.
 
 ## Format
 

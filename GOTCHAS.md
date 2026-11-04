@@ -3830,3 +3830,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A failing iOS simulator job only listed `Failing tests: MarkdownSpecTests.testParseTimeGrowth()`, with no assertion message, so a flaky timing check could not be told from a real slowdown.
 - **Root Cause**: `-quiet` drops the test output, assertion messages included, and leaves only the summary.
 - **Solution / Workaround**: The job passes `-resultBundlePath`, and on failure prints each failure's test and message with `xcrun xcresulttool get test-results summary` (also as `::error` annotations) and uploads the bundle as the `ios-xcresult` artifact. Keep `-quiet`; read the failure step or the artifact.
+
+### [core/vector] Listed Command Shortcuts Depend on the Platform; Contracts Take the Spec's
+- **Issue / Symptom**: `vector/commands.json` would have changed between a Mac and a Linux CI runner had it used `CommandRegistry.list()`.
+- **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
+- **Solution / Workaround**: `vectorContracts()` writes each spec's own `shortcut` as written (`Mod` for Cmd or Ctrl), as paint's `PAINT_SHORTCUTS` do. Anything exported for another implementation must not go through platform-resolving APIs.

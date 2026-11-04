@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "document.schema.json",
+  "type": "object",
+  "description": "A saved vector document, as the vector editor's save tools and autosave write it.",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "pixerate.editor-document",
+      "description": "Always \"pixerate.editor-document\"."
+    },
+    "kind": {
+      "type": "string",
+      "const": "vector",
+      "description": "Always \"vector\"."
+    },
+    "formatVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version of the envelope for this kind; readers migrate older ones."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name, when it has one."
+    },
+    "document": {
+      "type": "object",
+      "description": "The drawing (`VectorDocument`, as get_vector_document returns it).",
+      "properties": {
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Artboard width in document units."
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Artboard height in document units."
+        },
+        "background": {
+          "type": "string",
+          "description": "Artboard colour (default: transparent)."
+        },
+        "nodes": {
+          "type": "array",
+          "description": "Top-level nodes, bottom to top. Groups hold their own children.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Node id."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "path",
+                  "group",
+                  "text",
+                  "instance"
+                ],
+                "description": "path, group, text or instance (of a symbol)."
+              },
+              "name": {
+                "type": "string",
+                "description": "Layer name."
+              },
+              "visible": {
+                "type": "boolean",
+                "description": "false hides it (default true)."
+              },
+              "locked": {
+                "type": "boolean",
+                "description": "true keeps it from being selected on the canvas."
+              },
+              "transform": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 6,
+                "maxItems": 6,
+                "description": "Affine matrix [a, b, c, d, e, f] (default identity)."
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ]
+          }
+        },
+        "symbols": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Symbol id."
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
+          "description": "Symbols the document's instances draw."
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Constraints between anchors, segments and circles, solved after every edit."
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Named values the constraints' expressions use."
+        },
+        "perspective": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "The perspective grid, or null."
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "nodes"
+      ]
+    }
+  },
+  "required": [
+    "format",
+    "kind",
+    "formatVersion",
+    "document"
+  ]
+}
