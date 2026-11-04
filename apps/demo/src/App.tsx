@@ -17,6 +17,7 @@ const ChartTab = lazy(() => import("./components/ChartTab").then((m) => ({ defau
 const ColorTab = lazy(() => import("./components/ColorTab").then((m) => ({ default: m.ColorTab })));
 const TypographyTab = lazy(() => import("./components/TypographyTab").then((m) => ({ default: m.TypographyTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
+const BrushesTab = lazy(() => import("./components/BrushesTab").then((m) => ({ default: m.BrushesTab })));
 const EffectAuthoringTab = lazy(() => import("./components/EffectAuthoringTab").then((m) => ({ default: m.EffectAuthoringTab })));
 import {
   Sparkles,
@@ -34,9 +35,10 @@ import {
   Palette,
   Wand2,
   Type,
+  Paintbrush,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "typography" | "params" | "effects" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "typography" | "params" | "brushes" | "effects" | "parity";
 
 interface TabInfo {
   id: TabId;
@@ -71,6 +73,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
       { id: "video", label: "Video", icon: Film, hint: "Tracks, trims, transitions, ffmpeg" },
       { id: "image", label: "Image", icon: ImageIcon, hint: "Adjustments, layers, masks" },
       { id: "paint", label: "Paint", icon: Brush, hint: "Natural media, paper, pigment" },
+      { id: "brushes", label: "Brushes", icon: Paintbrush, hint: "One library for every editor that paints" },
       { id: "effects", label: "Effect Authoring", icon: Wand2, hint: "Keyframes, shaders, presets" },
     ],
   },
@@ -232,6 +235,7 @@ export default function App() {
           {activeTab === "chart" && <ChartTab />}
           {activeTab === "color" && <ColorTab />}
           {activeTab === "typography" && <TypographyTab />}
+          {activeTab === "brushes" && <BrushesTab />}
           {activeTab === "effects" && <EffectAuthoringTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>

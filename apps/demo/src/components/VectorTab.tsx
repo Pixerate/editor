@@ -324,7 +324,7 @@ const STARTER: VectorDocument = {
 
 function VectorDemo() {
   // Brushstrokes may use the demo's shared brush library: a brush saved in the Paint tab paints here.
-  const controller = useVectorEditorController({ document: STARTER, brushLibrary: demoBrushLibrary, colorScheme: 'dark' });
+  const controller = useVectorEditorController({ document: STARTER, brushLibrary: demoBrushLibrary, brushPreview: renderCanvasBrushPreview, colorScheme: 'dark' });
   const state = useVectorEditorState(controller);
   // The library's tools for the vector profile (vectorbrushes__*), with previews as brushstrokes paint them.
   const vectorBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: VECTOR_PROFILE, renderPreview: renderCanvasBrushPreview, id: 'vector-brushes', namespace: 'vectorbrushes' }), []);

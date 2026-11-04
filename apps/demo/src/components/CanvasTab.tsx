@@ -49,7 +49,7 @@ import {
 } from "@pixerate/editor-react/canvas";
 import { createCanvasGestureRecorder, createCanvasStickerHost, renderCanvasBrushPreview, type CanvasEdge } from "@pixerate/editor/canvas";
 import { CANVAS_PROFILE, createBrushLibraryToolProvider } from "@pixerate/editor/brushes";
-import { BrushLibraryBrowser, useBrushLibrary } from "@pixerate/editor-react/brushes";
+import { BrushLibraryBrowser, BrushLibraryEditor, useBrushLibrary } from "@pixerate/editor-react/brushes";
 import { demoBrushLibrary } from "../demoBrushes";
 import { createOriginMiddleware } from "@pixerate/editor/tools";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
@@ -278,6 +278,7 @@ const CanvasDemo: React.FC = () => {
   const [brushId, setBrushId] = useState("");
   const [brushSize, setBrushSize] = useState<number | undefined>(undefined);
   const [brushMenuOpen, setBrushMenuOpen] = useState(false);
+  const [brushEditorOpen, setBrushEditorOpen] = useState(false);
   // The presets and the demo library's saved brushes the canvas can paint (a brush saved in the
   // Paint tab shows here); a saved brush's facets go into the stroke style, so strokes keep a copy.
   const brushes = useCanvasBrushes({ swatches: { width: 96, height: 22, color: "#e2e8f0" }, library: demoBrushLibrary });
@@ -811,6 +812,32 @@ const CanvasDemo: React.FC = () => {
                   {/* The shared brush library, filtered by the canvas profile; thumbnails are canvas swatches. */}
                   <BrushLibraryBrowser entries={brushEntries} activeId={brushId || undefined} profile={CANVAS_PROFILE} onSelect={pickBrush} thumbnail={(id) => brushes.brushes.find((b) => b.id === id)?.swatch} thumbnailWidth={96} thumbnailHeight={22} />
                 </div>
+              )}
+            </div>
+          )}
+          {draw.tool !== "select" && draw.tool !== "eraser" && (
+            <div className="relative">
+              <button
+                type="button"
+                className="bg-slate-800 text-slate-200 text-xs rounded px-1.5 py-1"
+                aria-expanded={brushEditorOpen}
+                onClick={() => setBrushEditorOpen((o) => !o)}
+                title="Edit this brush, or make a new one, with what canvas strokes can paint (saved to the shared brush library)"
+              >
+                Edit brush…
+              </button>
+              {brushEditorOpen && (
+                // The shared brush editor scoped to the canvas profile: no tools, wet, light or velocity.
+                <BrushLibraryEditor
+                  library={demoBrushLibrary}
+                  brushId={brushId || null}
+                  profile={CANVAS_PROFILE}
+                  renderPreview={renderCanvasBrushPreview}
+                  previewColor="#e2e8f0"
+                  className="absolute right-0 z-50 mt-1 w-72 max-h-[32rem] overflow-auto rounded border border-slate-700 bg-slate-900 p-2 shadow-lg"
+                  onSaved={(b) => pickBrush(b.id)}
+                  onClose={() => setBrushEditorOpen(false)}
+                />
               )}
             </div>
           )}
