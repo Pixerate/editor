@@ -17,6 +17,8 @@
     onchange: (brush: Brush) => void;
     /** A live preview stroke of `brush`: pixels (e.g. `controller.brushThumbnail`) or an image URL. */
     preview?: { width: number; height: number; data: Uint8ClampedArray } | string | null;
+    /** The colour behind an image-URL preview, for transparent previews (see `brushPreviewColours`). */
+    previewBackground?: string;
     /** With it, a "Save" button (labelled `saveLabel`) saves the brush in place. */
     onsave?: () => unknown;
     /** The Save button's label (default "Save"; e.g. "Save a copy" for a built-in). */
@@ -27,7 +29,7 @@
     extra?: Snippet<[string]>;
     class?: string;
   }
-  let { brush, profile = PAINT_PROFILE, onchange, preview, onsave, saveLabel = 'Save', onsaveas, extra, class: className = '' }: Props = $props();
+  let { brush, profile = PAINT_PROFILE, onchange, preview, previewBackground, onsave, saveLabel = 'Save', onsaveas, extra, class: className = '' }: Props = $props();
   const sections = $derived(brushEditorSections(brush, profile));
   const scope = $derived(brushEditorScope(brush, profile));
   let problems = $state<string | null>(null);
@@ -58,7 +60,7 @@
 -->
 <div class={`flex flex-col gap-2 ${className}`} data-testid="brush-editor">
   {#if typeof preview === 'string'}
-    <img src={preview} alt="Brush preview" class="rounded object-contain" style="width: 100%; aspect-ratio: 4 / 1" />
+    <img src={preview} alt="Brush preview" class="rounded object-contain" style={`width: 100%; aspect-ratio: 4 / 1${previewBackground ? `; background: ${previewBackground}` : ''}`} />
   {:else if preview !== undefined}
     <PixelCanvas pixels={preview} label="Brush preview" class="rounded" style={`width: 100%; aspect-ratio: ${preview ? `${preview.width} / ${preview.height}` : '4 / 1'}`} />
   {/if}
