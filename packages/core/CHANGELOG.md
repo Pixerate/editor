@@ -1,5 +1,17 @@
 # @pixerate/editor
 
+## 0.260.0
+
+### Minor Changes
+
+- 6e1f86d: Brush default colours reach the canvas and vector editors, and stamp tips and spray work on every dab brush.
+
+  - Canvas: `selectBrush(id, { keepColour })` picks a brush with its size and default colour (light / dark pairs resolve for the new `colorScheme` option and `setColorScheme`). `drawStroke` and `canvas.drawFreehand` with a brush and no colour paint in the brush's default colour. `CanvasBrushPreset.defaultColor` lists it. React `useCanvasDraw` takes `colorScheme` and returns `selectBrush`; Svelte `createCanvasDraw` returns `selectBrush` and `setColorScheme`.
+  - Vector: `addBrushstroke` and `setBrushstroke` (another brush) take the brush's default colour unless `keepColour` or a `color` is given, also as `vector.addBrushstroke` / `vector.setBrushstroke` params. New `colorScheme` option and `setColorScheme`, and `vectorBrushstrokeDefaultColour`.
+  - Paint: stamp tips and spray (`marks: scatter`) now also paint on brushes that pick paint up or use gradient paint, instead of round dabs. Scatter marks are kept on pick-up brushes; only bristle, wet, thick and Mixer brushes drop them.
+
+- 52bf258: Paint editor conformance contracts (#534): `paintContracts({ effects })` exports the paint domain for `@pixerate/conformance` (`domains/paint`): every paint provider's agent tools, the keyboard commands, the UI tables and a JSON Schema of a saved painting (`PAINT_DOCUMENT_JSON_SCHEMA`). The paint editor's keyboard shortcuts are now a table, `PAINT_SHORTCUTS`, with `paintShortcutFor(event)`; `handlePaintShortcut` dispatches from it, with the same keys as before.
+
 ## 0.259.0
 
 ### Minor Changes
