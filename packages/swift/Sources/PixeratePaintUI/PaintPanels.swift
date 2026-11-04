@@ -143,6 +143,7 @@ public func quickStencil(_ kind: String, _ canvas: PaintCanvas) -> JSONObject {
  */
 public struct PaintToolbarView: View {
     let model: PaintEditorModel
+    @State private var exportFile: PaintExportFile?
     public init(model: PaintEditorModel) { self.model = model }
 
     public var body: some View {
@@ -182,11 +183,25 @@ public struct PaintToolbarView: View {
                 }
                 .fixedSize()
                 Button(model.hand == "right" ? "Right-handed" : "Left-handed") { model.toggleHand() }.help("Which hand holds the pen (palm rejection)")
+                Divider().frame(height: 16)
+                Menu("Export") {
+                    Button("PNG image…") { exportFile = model.exportFile(.png) }
+                    Button("Photoshop (PSD)…") { exportFile = model.exportFile(.psd) }
+                }
+                .fixedSize()
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
         }
         .controlSize(.small)
+        .fileExporter(
+            isPresented: Binding(get: { exportFile != nil }, set: { if !$0 { exportFile = nil } }),
+            document: exportFile, contentType: exportFile?.format.contentType ?? .png,
+            defaultFilename: "Painting.\(exportFile?.format.rawValue ?? "png")"
+        ) { result in
+            if case .failure(let e) = result { model.error = e.localizedDescription }
+            exportFile = nil
+        }
     }
 }
 

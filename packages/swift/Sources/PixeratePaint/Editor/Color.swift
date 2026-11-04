@@ -149,5 +149,54 @@ func paintExportHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         let bytes = try c.exportPng(scale: a["scale"]?.numberValue, paper: a["paper"]?.boolValue)
         return ["mimeType": .string(format), "bytes": .number(Double(bytes.count)), "data": .string(bytesToBase64(bytes))]
     }
+    h["export_psd"] = { a in
+        if a["time"] != nil { throw UnportedBrushError(message: "Exporting live effect paint at a moment is not ported to Swift yet.") }
+        let r = try c.exportPsd()
+        return ["data": .string(bytesToBase64(r.bytes)), "bytes": .number(Double(r.bytes.count)), "psb": .bool(r.psb), "warnings": .array(r.warnings.map { .string($0) })]
+    }
     return h
+}
+
+extension PaintEditorController {
+    /**
+     * The document as an 8-bit RGB PSD (`exportPsd`): every layer and group, the paper as a locked
+     * "Paper" pixel layer at the bottom, light paint as pixels (its spill as Linear Dodge (Add)
+     * layers) and the composite as the merged image. Pigment and painterly modes are written as
+     * their nearest standard mode, with a warning.
+     */
+    public func exportPsd() throws -> PsdExportResult {
+        let w = doc.canvas.width, h = doc.canvas.height
+        let rect = RasterRect(x: 0, y: 0, width: w, height: h)
+        let paperPixels = createPaintCompositor().composite(renderLayers(paper: true, layerIds: []), rect, sources())
+        let paperLayer = RasterLayer(id: "paper", name: "Paper", locks: LayerLocks(all: true), content: .pixel(surface: surfaceFromPixels(width: w, height: h, data: paperPixels), offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))
+        let merged = compositePixels(paper: true).data
+        var changed: [(BlendMode, [String])] = []
+        func toStandard(_ layers: [PaintLayer]) -> [PaintLayer] {
+            layers.map { l in
+                var next = l
+                if case .mode(let m) = l.blend {
+                    let std = standardBlendMode(m)
+                    if std != m {
+                        if let i = changed.firstIndex(where: { $0.0 == m }) { changed[i].1.append(l.name) } else { changed.append((m, [l.name])) }
+                        next = l.copy(blend: .mode(std))
+                    }
+                }
+                if let children = next.children { next = next.withChildren(toStandard(children)) }
+                return next
+            }
+        }
+        let layers = toStandard(lightLayers(doc.layers))
+        var result = try PixerateRaster.exportPsd(width: w, height: h, layers: [paperLayer] + layers, merged: merged, resolution: doc.canvas.dpi)
+        for (mode, names) in changed {
+            let label = BLEND_MODES.first { $0.id == mode }?.label ?? mode.rawValue
+            let std = BLEND_MODES.first { $0.id == standardBlendMode(mode) }?.label ?? standardBlendMode(mode).rawValue
+            let list = names.map { "\"\($0)\"" }.joined(separator: ", ")
+            let one = names.count == 1
+            result.warnings.append("\(label) blending has no PSD equivalent; \(list) \(one ? "was" : "were") written as \(std), the nearest Photoshop mode, so \(one ? "it looks" : "they look") different in Photoshop (the merged image is exact).")
+        }
+        if let light = doc.light, light.values.contains(where: { !$0.tiles.isEmpty }) {
+            result.warnings.append("Light paint is written as pixels: each layer with its glow, and its spill as a \"‹layer› light\" Linear Dodge (Add) layer above it. Opening the PSD again gives plain pixel layers, not editable light.")
+        }
+        return result
+    }
 }

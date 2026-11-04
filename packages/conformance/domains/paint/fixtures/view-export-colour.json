@@ -6,9 +6,6 @@
     "width": 48,
     "height": 32
   },
-  "skip": {
-    "swift": "The PSD writer (export_psd) is not ported yet (#540)."
-  },
   "steps": [
     {
       "tool": "set_view",
