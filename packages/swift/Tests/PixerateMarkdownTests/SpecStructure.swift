@@ -54,7 +54,10 @@ enum TimingBudget {
     }
 
     /// The best times (ms) of `run` on a small and a 4× input, alternating the two five times so
-    /// that a busy stretch on the machine slows both rather than only one of them.
+    /// that a busy stretch on the machine slows both rather than only one of them. While the ratio
+    /// looks worse than linear it measures again, up to four rounds: a shared CI simulator can
+    /// stall for a whole round (×10.8 there for a parse that is ×4.0 locally), and a quadratic
+    /// path stays at ~16× however often it is measured.
     static func growth(small: String, large: String, _ run: (String) -> Void) -> (small: Double, large: Double) {
         func time(_ input: String) -> Double {
             let start = Date()
@@ -62,9 +65,12 @@ enum TimingBudget {
             return Date().timeIntervalSince(start) * 1000
         }
         var best = (small: Double.infinity, large: Double.infinity)
-        for _ in 0..<5 {
-            best.small = min(best.small, time(small))
-            best.large = min(best.large, time(large))
+        for round in 0..<4 {
+            for _ in 0..<5 {
+                best.small = min(best.small, time(small))
+                best.large = min(best.large, time(large))
+            }
+            if round == 3 || best.large / max(best.small, 0.01) <= 5 { break }
         }
         return best
     }
