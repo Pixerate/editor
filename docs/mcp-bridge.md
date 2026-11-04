@@ -56,3 +56,15 @@ The page sends its tool list on connect and whenever it changes. The bridge then
 - Browsers always send an `Origin` header. Non-local origins are refused unless they are listed with `--origin`.
 - Any page on this machine could otherwise connect, so pass a token.
 - Clients that are not browsers (scripts) send no origin and only need the token.
+
+## Native editors (Swift)
+
+The Swift editors (`packages/swift`, #533) connect the same way with `ToolBridgeClient` from `PixerateCore`:
+
+```swift
+let client = ToolBridgeClient(registry: registry, options: ToolBridgeOptions(name: "Paint — Sketch", kind: "paint", token: "choose-a-secret"))
+// client.status: .connecting / .connected / .disconnected / .closed; client.editorId once connected
+client.close()
+```
+
+It speaks protocol 1 over `URLSessionWebSocketTask` (the token goes in `?token=`, so a native app needs no `--origin`), sends the registry's tools on connect and when they change, runs calls through `registry.callTool` (a cancelled call sends no result) and reconnects with the same back-off. Its tools carry the TypeScript editors' names and schemas, so an agent and the skills use them the same way. `ToolBridgeLiveTests` runs against a real bridge when `PIXERATE_BRIDGE_TEST_PORT` is set.
