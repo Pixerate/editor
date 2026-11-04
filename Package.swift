@@ -32,8 +32,9 @@ let package = Package(
         // The raster module (`raster/` in the TS core): tiled surfaces, blend modes, the layer
         // compositor, layer effects, transforms and the PNG / zlib codec. Foundation only.
         .target(name: "PixerateRaster", dependencies: ["PixerateCore"], path: "packages/swift/Sources/PixerateRaster", swiftSettings: settings),
-        // The paint editor. `Generated/` is written by scripts/gen-swift.mjs from the paint contracts.
-        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
+        // The paint editor (`paint-editor`, `paint` and `brushes` in the TS core) on the raster module.
+        // `Generated/` is written by scripts/gen-swift.mjs from the paint contracts.
+        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(

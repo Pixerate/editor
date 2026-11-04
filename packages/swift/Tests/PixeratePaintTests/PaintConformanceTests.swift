@@ -34,10 +34,9 @@ final class PaintConformanceTests: XCTestCase {
     }
 }
 
-/// A fresh Swift paint editor for a scenario's `setup`. There is none until the editor is ported
-/// (#540); every scenario is skipped until then.
+/// A fresh Swift paint editor for a scenario's `setup`.
 private func makePaintHost(_ setup: JSONObject) -> (any ConformanceHost)? {
-    nil
+    try? PaintConformanceHost(setup: setup)
 }
 
 /// Prints the summary and adds it to the GitHub job summary when there is one.
