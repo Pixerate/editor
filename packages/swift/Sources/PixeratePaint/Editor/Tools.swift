@@ -212,7 +212,7 @@ func contractProvider(_ id: String, _ handlers: [String: PaintToolHandler], cont
 
 /// The paint editor's tools (`createPaintEditorToolProvider`): the ones this port implements.
 public func createPaintEditorToolProvider(_ controller: PaintEditorController) throws -> AgentToolProvider {
-    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }
+    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }
     return try contractProvider("paint-editor", handlers, content: paintContentHandlers(controller))
 }
 

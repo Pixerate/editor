@@ -1071,6 +1071,16 @@ public final class PaintEditorController {
         return (tw, th, downsampleRgba(full, w, h, Double(tw), Double(th)))
     }
 
+    /// The canvas as PNG bytes (pure Swift, the same bytes as the TS encoder), scaled down by `scale`.
+    public func exportPng(scale: Double? = nil, paper: Bool? = nil) throws -> [UInt8] {
+        let full = compositePixels(paper: paper)
+        let s = scale ?? 1
+        if !(s > 0 && s <= 1) { throw PaintEditorError("scale \(jsText(s)) is out of range; use above 0 up to 1 (exports never upscale pixels).") }
+        if s == 1 { return encodePng(full.width, full.height, full.data) }
+        let w = Swift.max(1, Int(JS.round(Double(full.width) * s))), h = Swift.max(1, Int(JS.round(Double(full.height) * s)))
+        return encodePng(w, h, downsampleRgba(full.data, full.width, full.height, Double(w), Double(h)))
+    }
+
     // MARK: - Save
 
     /// The document as JSON with inline PNG data URLs (`toJSON`).

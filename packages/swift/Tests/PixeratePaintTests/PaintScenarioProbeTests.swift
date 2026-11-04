@@ -29,3 +29,17 @@ final class PaintScenarioProbeTests: XCTestCase {
         }
     }
 }
+
+/// With `PIXERATE_PAINT_PROBE` set, prints the contract tools this port does not implement yet.
+final class PaintUnportedToolsProbeTests: XCTestCase {
+    func testUnportedTools() throws {
+        guard ProcessInfo.processInfo.environment["PIXERATE_PAINT_PROBE"] != nil else { return }
+        let host = try PaintConformanceHost(setup: [:])
+        let c = host.controller
+        let have = Set(try (createPaintEditorToolProvider(c).tools + createPaintBrushLibraryToolProvider(c).tools + createPaintProposalToolProvider(PaintProposals(controller: c)).tools).map(\.name))
+        for p in try PaintContracts.toolProviders() {
+            let missing = p.tools.map(\.name).filter { !have.contains($0) }
+            print("UNPORTED \(p.id): \(missing.joined(separator: ", "))")
+        }
+    }
+}
