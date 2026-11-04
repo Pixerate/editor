@@ -19,6 +19,7 @@ package works as a git dependency); its sources are here.
 | :--- | :--- | :--- |
 | `PixerateCore` | The `pixerate.editor-document` envelope with step-by-step migrations and load reports (`persistence/migrate.ts`, `editorDocument.ts`); undo / redo with gestures, marks, batches, origins (`user` / `agent:<id>`) and commit events (`history/`); the seeded RNG, bit-exact with `paint/rand.ts`; JSON Schema validation with the same messages (`tools/schema.ts`); `ToolRegistry` with MCP-shaped results, middleware and the origin middleware (`tools/registry.ts`, `tools/origin.ts`); `ToolBridgeClient`, which connects a registry to `pixerate-mcp-bridge` so MCP clients drive the editor (`tools/bridge-client.ts`, see `docs/mcp-bridge.md`); an order-preserving `JSONValue` whose `stringified()` matches `JSON.stringify` | Foundation only |
 | `PixerateContracts` | The files of `@pixerate/conformance` (`packages/conformance`), bundled as resources: each domain's contracts and recorded scenarios (`ConformanceContracts.url("domains/paint/tools.json")`) | Foundation only |
+| `PixerateRaster` | The raster module (`raster/`): tiled copy-on-write surfaces (`TiledSurface`, 256 px tiles, straight 8-bit RGBA or mask bytes) with 16- and 32-bit deep samples; every blend mode, pigment mixing and the painterly modes; Gaussian blur and curves; transforms and mesh warps; the cached per-tile `RasterCompositor` and the float `DeepCompositor`, with editor profiles; layer effects (model, validation, renderer, panel view model) and patterns; the PNG / zlib codec; viewport maths. Same pixels and bytes as the TS core; `JS` holds JavaScript's number semantics (`Math.round`, `Uint8ClampedArray` stores, V8's `exp`, `sin`, `cbrt`, …) | `PixerateCore` |
 | `PixeratePaint` | The paint editor. `PaintContracts` reads the paint contracts; `Generated/` holds what `scripts/gen-swift.mjs` writes from them: `PaintToolName`, an `…Arguments` struct per tool (`paintToolArguments(_:_:)` reads any of them by name), `PaintCommandID`, `PaintUITables` and `PaintContractVersions` | `PixerateCore`, `PixerateContracts` |
 | `PixerateConformance` | The scenario runner: replays a domain's recorded scenarios (`ConformanceScenario.load(domain:)`) against a `ConformanceHost` with the same normalization rules as the TypeScript runner, and compares results, documents and pixels (`compareConformance`, `decodeConformancePNG`) | `PixerateCore`, `PixerateContracts` |
 
@@ -59,7 +60,12 @@ swift test
 output, schema validation messages and migrations. That test fails when the TS core's outputs
 drift from the file; after an intended change, rewrite it with
 `UPDATE_SWIFT_VECTORS=1 pnpm --filter @pixerate/editor exec vitest run tests/swift-vectors.test.ts`
-and run `swift test` again.
+and run `swift test` again. `Tests/PixerateRasterTests/Fixtures/raster-vectors.json` works the
+same way for the raster module (`tests/swift-raster-vectors.test.ts`): blend modes, surfaces, deep
+samples, pigment, blur, curves, transforms, both compositors, every layer effect, the effects
+panel, PNG / zlib bytes and the viewport. Pixels and codec bytes must match exactly; numbers that
+went through `Math.exp`, `sin`, `cbrt`, … are stored as `Math.fround`, because V8 rounds those
+differently in the last bit on x64 and arm64 (see GOTCHAS).
 
 Async code runs on its caller's executor (`NonisolatedNonsendingByDefault`), as JavaScript's does,
 so histories and registries (not `Sendable`) can be used from async tool handlers.
