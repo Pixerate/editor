@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   BRUSH_JSON_SCHEMA,
   BRUSH_PRESETS,
@@ -10,7 +11,7 @@ import {
   resolveEngine,
   type Brush,
 } from '../src/brushes';
-import { BUILTIN_BRUSHES, normalizePaintBrush, type PaintBrush, type PaintBrushInput } from '../src/paint-editor/brushes';
+import { brushToJSON, BUILTIN_BRUSHES, normalizePaintBrush, type PaintBrush, type PaintBrushInput } from '../src/paint-editor/brushes';
 import { STAMP_KINDS as RENDERER_STAMPS } from '../src/paint-editor/stickers';
 import { DEFAULT_PARTICLE as RENDERER_PARTICLE } from '../src/paint-editor/procedural';
 import { DEFAULT_PARTICLE, STAMP_KINDS } from '../src/paint-editor/mark-settings';
@@ -24,9 +25,13 @@ describe('brush presets', () => {
     expect(new Set(BRUSH_PRESETS.map((b) => b.id)).size).toBe(BRUSH_PRESETS.length);
   });
 
-  it.each(BUILTIN_BRUSHES.map((b) => [b.id, b] as const))('%s resolves to the built-in brush', (id, old) => {
-    const spec = BRUSH_PRESETS.find((b) => b.id === id)!;
-    expect(json(resolveBrush(spec, { builtin: true }))).toEqual(json(old));
+  // BUILTIN_BRUSHES is derived from BRUSH_PRESETS (#588), so the committed conformance file
+  // `resolved.json` is the golden that pins every built-in brush's engine settings.
+  it.each(BUILTIN_BRUSHES.map((b, i) => [b.id, b, i] as const))('%s is built in and matches the committed resolved.json', (id, brush, i) => {
+    const resolved = JSON.parse(readFileSync(new URL('../../conformance/domains/brushes/resolved.json', import.meta.url), 'utf8')) as Array<{ id: string; brush: unknown }>;
+    expect(brush.builtin).toBe(true);
+    expect(resolved[i].id).toBe(id);
+    expect(brushToJSON(brush)).toEqual(resolved[i].brush);
   });
 
   it('gives every mark preset a medium or variety, and every tool a tool', () => {
