@@ -3835,3 +3835,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `vector/commands.json` would have changed between a Mac and a Linux CI runner had it used `CommandRegistry.list()`.
 - **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
 - **Solution / Workaround**: `vectorContracts()` writes each spec's own `shortcut` as written (`Mod` for Cmd or Ctrl), as paint's `PAINT_SHORTCUTS` do. Anything exported for another implementation must not go through platform-resolving APIs.
+
+### [svelte/runes] Destructuring ProseMirror `$from` / `$to` in `.svelte.ts` Files Fails Compilation
+- **Issue / Symptom**: Writing `const { $from, from, to } = selection;` inside a `.svelte.ts` rune module fails with `CompileError: The $ prefix is reserved, and cannot be used for variables and imports`.
+- **Root Cause**: The Svelte 5 compiler reserves all local identifier names prefixed with `$` inside `.svelte` and `.svelte.ts` files for runes and store auto-subscriptions.
+- **Solution / Workaround**: Rename `$`-prefixed ProseMirror properties when destructuring in `.svelte.ts` files (e.g. `const { $from: resolvedFrom, from, to } = selection;`) or access them as property lookups (`selection.$from`).

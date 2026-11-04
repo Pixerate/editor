@@ -192,11 +192,11 @@ Every feature is available from core and from both framework packages, except wh
 | Comparison Conditions (`{?amount>100}…{/amount}`, `= <> < > <= >=`) | ✅ | ✅ | ✅ | Planned (#546) |
 | Mail-Merge Data Sources (`parseDataSource`, `matchFields`: CSV/TSV/JSON, fuzzy field matching) | ✅ | Via core | Via core | Planned (#546) |
 | Multi-Record Merge & Preview (`mergeRecords` / `<MergePreview />`) | Headless | `<MergePreview />` & `useMergePreview` | `<MergePreview />` & `createMergePreview` | Planned (#546) |
-| Plain Text Clipboard & Linebreak Parser | ✅ | ✅ | Via core¹ | Planned (#546) |
-| Live Animated Gradient Text | ✅ | ✅ | Via core¹ | Planned (#546) |
-| Slash Command Trigger (`/command`) | ✅ | ✅ | Via core¹ | Planned (#546) |
-| Template Autocomplete (`{{`) | ✅ | ✅ | Via core¹ | Planned (#546) |
-| Loading Placeholder (`loadingNode`: SVG spinner in `currentColor`, `role="status"` with a label, custom indicator or component) | `LoadingNode.configure({ label, renderIndicator, nodeView })` | `usePromptEditor({ loadingIndicator, loadingLabel })` & `createReactLoadingNodeView` | `createSvelteLoadingNodeView` | Planned (#546) |
+| Plain Text Clipboard & Linebreak Parser | ✅ | ✅ | ✅ | Planned (#546) |
+| Live Animated Gradient Text | ✅ | ✅ | ✅ | Planned (#546) |
+| Slash Command Trigger (`/command`) | ✅ | ✅ | ✅ | Planned (#546) |
+| Template Autocomplete (`{{`) | ✅ | ✅ | ✅ | Planned (#546) |
+| Loading Placeholder (`loadingNode`: SVG spinner in `currentColor`, `role="status"` with a label, custom indicator or component) | `LoadingNode.configure({ label, renderIndicator, nodeView })` | `usePromptEditor({ loadingIndicator, loadingLabel })` & `createReactLoadingNodeView` | `usePromptEditor({ loadingIndicator, loadingLabel })` & `createSvelteLoadingNodeView` | Planned (#546) |
 | Read-Only Token Renderer (`<TemplateRenderer />`) | AST Only | Component | Component | Planned (#546) |
 
 </details>
@@ -684,8 +684,6 @@ Every feature is available from core and from both framework packages, except wh
 | Typography Agent Tools (`list_fonts`, `resolve_font_stack`, `generate_type_hierarchy`, `audit_text_readability`, `check_typography_accessibility`, `segment_text`, `set_font_selection`, …) | `createTypographyToolProvider`, `createFontPickerToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` | Planned (#533) |
 
 </details>
-
-¹ Svelte doesn't have a prompt-editor equivalent of React's `usePromptEditor` yet. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`.
 
 ## Documentation
 
