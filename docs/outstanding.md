@@ -60,7 +60,7 @@ Shipped behaviour with a documented gap.
 
 ### Tests and CI
 
-These tests are opt-in and don't run in CI: the PSD corpus (`pnpm test:corpus`), the wet-media GPU tests (`WET_GPU`, Dawn installed outside the repo), the ffmpeg render tests when ffmpeg is missing, the wet look renders (`OUT`), and the benchmarks (`IMAGE_LAYERS_BENCH`, `DEEP_BENCH`, `WET_BENCH`, `SPREADSHEET_BENCH`, transform bench). There are no unconditional skips or `todo` tests. Running the corpus and the GPU tests on a schedule would catch regressions there. S–M.
+These tests are opt-in and don't run on every pull request: the PSD corpus (`pnpm test:corpus`), the wet-media GPU tests (`WET_GPU`, Dawn installed outside the repo), the ffmpeg render tests when ffmpeg is missing, the wet look renders (`OUT`), and the benchmarks (`IMAGE_LAYERS_BENCH`, `DEEP_BENCH`, `WET_BENCH`, `SPREADSHEET_BENCH`, transform bench). There are no unconditional skips or `todo` tests. `.github/workflows/scheduled-suites.yml` runs the PSD corpus, the headless WebGPU wet-media suite, and the benchmarks weekly (and on `workflow_dispatch`).
 
 ## Skills with out-of-date prose
 
