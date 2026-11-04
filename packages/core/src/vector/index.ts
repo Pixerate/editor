@@ -57,3 +57,4 @@ export * from './playback.js';
 export * from './editorDocument.js';
 export * from './layers.js';
 export * from './stickers.js';
+export { createVectorConformanceHost, vectorContracts, VECTOR_CONTRACT_FORMAT_VERSION, VECTOR_DOCUMENT_JSON_SCHEMA, FAKE_VECTOR_ART_MODELS, fakeVectorArtGenerator } from './contract.js';
