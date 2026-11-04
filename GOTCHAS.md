@@ -3649,6 +3649,16 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The first generated `PaintToolArguments.swift` did not compile ("type member must not be named 'Type'"), and reading `set_paper_effect` arguments threw "effect is required." for `{ "effect": null }`, a call the schema allows.
 - **Root Cause**: An argument called `type` with an `enum` became a nested `enum Type`, which Swift reserves for metatypes (`Protocol`, `Self` and `Any` too). `effect` is required but its schema is `anyOf: [string, null]`, so a present `null` is valid and reads as `nil`.
 - **Solution / Workaround**: `scripts/gen-swift.mjs` names such nested enums `TypeOption` (and so on), and makes a required argument optional in Swift when its schema allows `null` (the registry has already checked it is there). The Swift test reads every argument the recorded scenarios pass into its typed struct, which is how this was found.
+
+### [swift] Assigning `nil` to a `JSONObject` Member Writes JSON `null`
+- **Issue / Symptom**: `omitConformancePaths` in Swift left `"backend": null` where the TypeScript version removed `backend`.
+- **Root Cause**: `JSONValue` is `ExpressibleByNilLiteral` (so `nil` can be written for JSON `null` in literals). In `o[key] = cond ? nil : value`, the `nil` is typed as `JSONValue` (`.null`), not as `Optional.none`, so the subscript stores a null member instead of removing it.
+- **Solution / Workaround**: Remove members with `o[key] = Optional<JSONValue>.none` (or a plain `o[key] = nil` statement where the right side is not inferred as `JSONValue`). The runner test compares the result with the TypeScript cases, which caught it.
+
+### [monorepo] Changesets Skips Private Packages Unless `privatePackages.version` Is On
+- **Issue / Symptom**: `@pixerate/swift` changesets (#559, #593) stayed in `.changeset/` after their releases, the package stayed at 0.0.0, and "Tag the Swift package" never tagged a version. `changeset version` printed "All files have been updated" and changed nothing.
+- **Root Cause**: `@changesets/config` 4 defaults `privatePackages` to `{ version: false, tag: false }`, so a private package's changesets are never applied.
+- **Solution / Workaround**: `.changeset/config.json` sets `"privatePackages": { "version": true, "tag": false }`: private packages are versioned (the release workflow tags `v<version>` for `@pixerate/swift` itself) and changesets adds no `name@version` tags for them. Check with `changeset status --verbose` that a private package's changeset shows up under "Packages to be bumped".
 ### [swift] The Swift Tool Bridge Client Lives on the Main Actor
 - **Issue / Symptom**: `ToolRegistry` is not `Sendable`, while `URLSessionWebSocketTask` calls back on its session's queue, so a bridge client that touched the registry from those callbacks would not compile under Swift 6 (or would race).
 - **Root Cause**: Editors and their registries are main-thread objects, as in the browser; socket callbacks are not.
