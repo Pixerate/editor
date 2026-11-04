@@ -42,6 +42,7 @@ final class PaintScenarioProbeTests: XCTestCase {
             }
             if let dir = ProcessInfo.processInfo.environment["PIXERATE_PAINT_DUMP"] {
                 try JSONValue.array(host.raw).stringified().write(toFile: "\(dir)/\(scenario.id).swift.json", atomically: true, encoding: .utf8)
+                try outputs.map { $0.pixels.map { Data($0.data).base64EncodedString() } ?? "" }.joined(separator: "\n").write(toFile: "\(dir)/\(scenario.id).swift.px", atomically: true, encoding: .utf8)
             }
             let mismatches = compareConformance(scenario, outputs) { try decodeConformancePNG(Data(contentsOf: $0)) }
             print("PROBE \(scenario.id): \(mismatches.isEmpty ? "pass" : "\(mismatches.count) mismatches")")

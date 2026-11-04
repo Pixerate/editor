@@ -76,7 +76,7 @@ final class PaintStrokeSession: PaintTileTarget {
     private var live: [TileKey: ByteTile] = [:]
     private var touched: [TileKey] = []
     private var touchedSet: Set<TileKey> = []
-    private let dry: DryStroke?
+    private let dry: CoverageStroke?
     private var wet: PaintDabStroke?
     private let apply: StrokeApply
     private var bounds: RasterRect?
@@ -131,6 +131,10 @@ final class PaintStrokeSession: PaintTileTarget {
             dry = nil
         } else if brush.engine == "dab" || brush.engine == "eraser" {
             dry = DryStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies)
+        } else if brush.engine == "particle" {
+            dry = ParticleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
+        } else if brush.engine == "bristle" {
+            dry = BristleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
         } else {
             throw UnportedBrushError(message: "The \(brush.name) brush paints with the \(brush.engine) engine, which the Swift paint editor does not paint with yet.")
         }

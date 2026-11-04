@@ -132,7 +132,7 @@ extension PaintEditorController {
      * ported yet, so a brush picker leaves them out.
      */
     public func canPaint(_ brush: PaintBrush) -> Bool {
-        brush.stamp == nil && ["dab", "eraser", "mixer", "blender", "smudge"].contains(brush.engine)
+        brush.stamp == nil && ["dab", "eraser", "mixer", "blender", "smudge", "particle", "bristle"].contains(brush.engine)
     }
 
     // MARK: - Colour
