@@ -3570,11 +3570,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: A dab brush paints through `DryStroke`, or through `PaintDabStroke` (the exchange path) when it picks paint up or takes gradient paint. At first only `DryStroke` asked `stampSampler` for the tip and scattered droplets.
 - **Solution / Workaround**: Both engines rasterise stamp tips (`rasterizeStampDab`) and expand dabs into droplets with the shared `sprayDroplets(dab, spray, seed)`. In the exchange path each droplet picks up and lays paint, so a dirty spray mixes droplet by droplet. Keep droplet generation in that one helper so the two engines can't drift. The normaliser still drops scatter marks on bristle, wet and thick brushes and on the Mixer Brush, which have engines of their own. Provider sticker art must be loaded first (`prepareStickers`, which `set_brush` and `paint_stroke` call); until it is, the tip paints round. Canvas, vector and image profiles refuse stamp tips and scatter marks.
 
-### [core/brushes] Every Built-In Preset Needs a Flat Twin in `BUILTIN_BRUSHES`
+### [core/brushes] `BUILTIN_BRUSHES` Is Derived From `BRUSH_PRESETS`; Don't Import It Into `brushes/resolve`
 
-- **Issue / Symptom**: A preset added to `BRUSH_PRESETS` alone failed "has a facet spec for every built-in brush". Canvas and vector also threw while building their lists (`find` returned undefined).
-- **Root Cause**: The paint editor's v1 `BUILTIN_BRUSHES` is still a hand-written flat list. The hosts pair each preset with its flat brush by id. Making `BUILTIN_BRUSHES` resolve the presets would create an import cycle (`brushes/resolve` imports `paint-editor/brushes`).
-- **Solution / Workaround**: Add the facet spec, then generate the flat entry from what it resolves to: `engineChanges(normalizePaintBrush({ id, name }), resolveBrush(spec))`, with the category set by hand. Append it at the same position in both lists. `tests/brushes.test.ts` checks every pair deep-equals.
+- **Issue / Symptom**: Every facet preset in `BRUSH_PRESETS` used to need a hand-written flat twin in the paint editor's `BUILTIN_BRUSHES`. Deriving the list from the presets created an import cycle, because `brushes/resolve` imported `paint-editor/brushes` for `normalizePaintBrush`.
+- **Root Cause**: The engine brush type and its normaliser lived in the same module as the built-in list that has to resolve the presets.
+- **Solution / Workaround**: The engine brush (`PaintBrush`, its settings, `normalizePaintBrush`) lives in `paint-editor/brush-model.ts`, which `brushes/resolve` imports. `paint-editor/brushes.ts` re-exports it and builds `BUILTIN_BRUSHES` as `BRUSH_PRESETS.map((spec) => resolveBrush(spec, { builtin: true }))`. Add a preset to `BRUSH_PRESETS` only, then run `pnpm contracts`: `tests/brushes.test.ts` checks each built-in brush against the committed `resolved.json`. Never import `paint-editor/brushes` (or anything that does) from `brushes/resolve`, `brushes/presets` or `brush-model.ts`; use `brush-model` for engine types and the normaliser.
 
 ### [core/canvas] Canvas and Vector Strokes Copy a Saved Brush Into the Stroke
 

@@ -1,7 +1,7 @@
 /**
- * The built-in brushes as facet specs. Each resolves (`resolveBrush`) to exactly the paint
- * editor's built-in brush of the same id (`BUILTIN_BRUSHES`, which `tests/brushes.test.ts`
- * checks), so the engine paints them as it always has. Medium and variety are new: they file
+ * The built-in brushes as facet specs. The paint editor's built-in library (`BUILTIN_BRUSHES`)
+ * is these, resolved (`resolveBrush`), so a preset is written only here; the committed brush
+ * contracts (`resolved.json`) catch a change in what one paints. Medium and variety file
  * each brush under what it is for browsing and filtering. Only what differs from the engine's
  * defaults is written down.
  *
