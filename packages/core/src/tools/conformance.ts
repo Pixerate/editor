@@ -254,6 +254,24 @@ function resultText(result: McpToolResult): string | undefined {
 	return undefined;
 }
 
+/**
+ * Numbers within this relative difference compare equal: maths functions (`Math.sin`, `Math.cos`)
+ * may differ in their last bits between CPUs (x64 and arm64 fuse multiply-adds differently), so a
+ * recording made on one machine is replayed on another. The Swift runner uses the same tolerance.
+ */
+export const CONFORMANCE_NUMBER_TOLERANCE = 1e-9;
+
+/** Whether two normalized values match: the same structure and strings, numbers within tolerance. */
+export function conformanceValuesMatch(a: unknown, b: unknown): boolean {
+	if (typeof a === 'number' && typeof b === 'number') return a === b || Math.abs(a - b) <= CONFORMANCE_NUMBER_TOLERANCE * Math.max(1, Math.abs(a), Math.abs(b));
+	if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => conformanceValuesMatch(x, b[i]));
+	if (a && b && typeof a === 'object' && typeof b === 'object') {
+		const ka = Object.keys(a), kb = Object.keys(b);
+		return ka.length === kb.length && ka.every((k) => k in (b as object) && conformanceValuesMatch((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+	}
+	return a === b;
+}
+
 /** Runs a scenario's calls in order against a fresh host and returns what each step produced. */
 export async function runConformanceScenario(scenario: ConformanceScenario, host: ConformanceHost): Promise<ConformanceStepOutput[]> {
 	const ids = new ConformanceIds();

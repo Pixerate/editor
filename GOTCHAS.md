@@ -3835,3 +3835,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `vector/commands.json` would have changed between a Mac and a Linux CI runner had it used `CommandRegistry.list()`.
 - **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
 - **Solution / Workaround**: `vectorContracts()` writes each spec's own `shortcut` as written (`Mod` for Cmd or Ctrl), as paint's `PAINT_SHORTCUTS` do. Anything exported for another implementation must not go through platform-resolving APIs.
+
+### [core/vector] Regenerating Vector Art Without a Seed Picks a Random One
+- **Issue / Symptom**: The vector scenario recorder refused `effects-and-generation`: the document after `regenerate_vector_art` differed between its two runs, in the generation provenance's `seed`.
+- **Root Cause**: Without a `seed`, generation and regeneration draw a fresh random seed (so a new take looks different), and record it in the provenance.
+- **Solution / Workaround**: Scenarios pass a `seed` to both `generate_vector_art` and `regenerate_vector_art`. The provenance's `createdAt` is normalised to `"<time>"` by the runner, so it needs nothing.
+
+### [core] Trig Results Differ in the Last Bits Between Mac and Linux, So Recordings Compare Numbers Within 1e-9
+- **Issue / Symptom**: The vector `blends-and-envelopes` scenario, recorded on an M-series Mac, failed on the Linux CI runner: a blend step's rotation matrix read `0.6595295122134215` where the recording had `0.6595295122134217`.
+- **Root Cause**: V8's `Math.sin` / `Math.cos` are fdlibm ports compiled per CPU, and clang fuses multiply-adds on arm64 but not on x64, so results can differ in the last bits. Anything stored straight from trig (orient-to-spine transforms, rotations) is then machine-dependent.
+- **Solution / Workaround**: The TS replay tests compare with `conformanceValuesMatch` (numbers equal within a relative `CONFORMANCE_NUMBER_TOLERANCE`, 1e-9), as the Swift runner always has; on a mismatch they fall back to `toEqual` to show the diff. Recordings stay exact. Strings are still compared exactly, so text that formats such a number (SVG path data, messages) should round it, as `exportSvg`'s `precision` does.
+
+### [swift] PixerateMarkdown's Growth Checks Remeasure While the Ratio Looks Superlinear
+- **Issue / Symptom**: `MarkdownSpecTests.testParseTimeGrowth` failed on the iOS simulator job of unrelated PRs: "growth angle brackets 5k 15.8 ms 20k 171.2 ms ×10.8", over the limit of 10. The same parse is ×4.0 locally, in both debug and release builds.
+- **Root Cause**: The shared CI simulator can stall for the length of a whole measurement round, so even the best of five alternating runs can catch the large input in a slow stretch.
+- **Solution / Workaround**: `TimingBudget.growth` measures up to four rounds while the ratio is above 5 and keeps the best times. A linear parse settles near ×4; a quadratic one stays near ×16 in every round, so it still fails. As with the TS `measureGrowth`, never fix such a flake by raising the limit alone.
