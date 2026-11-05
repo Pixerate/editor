@@ -15,6 +15,7 @@ const preset = (id: string) => BRUSH_PRESETS.find((b) => b.id === id)!;
 /** A saved brush: the HB pencil, thicker and in its own colour. */
 const myPencil: Brush = { ...preset('pencil-hb'), id: 'my-pencil', name: 'My pencil', tip: { ...preset('pencil-hb').tip, size: 9 } };
 const myWash: Brush = { ...preset('watercolor-wash'), id: 'my-wash', name: 'My wash' };
+const myTube: Brush = { ...preset('paint-tube'), id: 'my-tube', name: 'My tube' };
 
 const canvas = (library?: ReturnType<typeof createBrushLibrary>) => {
 	let nodes: unknown[] = [];
@@ -127,14 +128,16 @@ describe('vector brushstrokes on a brush library', () => {
 		const library = createBrushLibrary();
 		await library.save(myWash);
 		await library.save(myPencil);
+		await library.save(myTube);
 		const c = new VectorEditorController({ document: { width: 200, height: 100, nodes: [line()] }, brushLibrary: library });
 		await c.whenBrushesLoaded();
-		expect(c.addBrushstroke({ brushId: 'my-wash' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Brush "my-wash" \(My wash\) can't paint a brushstroke: .*wet/) });
+		expect(c.addBrushstroke({ brushId: 'my-tube' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Brush "my-tube" \(My tube\) can't paint a brushstroke: .*thick/) });
 		const registry = new CommandRegistry();
 		registry.register(createVectorCommands(c));
 		const listed = (registry.execute('vector.listBrushes', {}) as { result: { brushes: Array<{ id: string; builtin: boolean }> } }).result;
-		expect(listed.brushes.at(-1)).toMatchObject({ id: 'my-pencil', builtin: false });
-		expect(listed.brushes.map((b) => b.id)).not.toContain('my-wash');
+		// Saved wet brushes paint on vector paths too (#519).
+		expect(listed.brushes.slice(-2)).toMatchObject([{ id: 'my-wash', builtin: false }, { id: 'my-pencil', builtin: false }]);
+		expect(listed.brushes.map((b) => b.id)).not.toContain('my-tube');
 		expect(VECTOR_PROFILE.id).toBe('vector');
 	});
 });

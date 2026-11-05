@@ -10932,7 +10932,7 @@
       "marker",
       "natural media"
     ],
-    "description": "Lists the brushes a brushstroke can use (the dry presets, then saved brushes from the brush library the vector profile admits): { brushes: [{ id, name, category, size, builtin }], colorScheme, colorLocked } (size: the brush's own diameter in document units; colorScheme picks the side of light / dark default colours; colorLocked: brushstrokes keep their colour, vector.setColorLocked).",
+    "description": "Lists the brushes a brushstroke can use (the dry presets, wet paint (watercolour, gouache, wet oils), the Mixer Brush, smudge and blender, then saved brushes from the brush library the vector profile admits): { brushes: [{ id, name, category, size, builtin }], colorScheme, colorLocked } (size: the brush's own diameter in document units; colorScheme picks the side of light / dark default colours; colorLocked: brushstrokes keep their colour, vector.setColorLocked).",
     "params": {
       "type": "object",
       "properties": {},
@@ -10955,7 +10955,7 @@
       "hand-drawn",
       "ink stroke"
     ],
-    "description": "Paints paths (`ids`, default the selection; groups: every path inside) with a natural-media brush along their outline, as a stroke layer of kind brushstroke: `brushId` from vector.listBrushes, `size` (document units), an optional `pressure` profile (0–1 values spread from start to end, e.g. [0.2, 1, 0.2] for a tapered stroke), `color` and `opacity`. Pass a `seed` for the brush's character (seeded size, angle, opacity and scatter jitter plus a paper grain: what makes pencil, pastel and charcoal look real), with `paper` to choose the grain or null for none; without a seed the brush paints plain, even dabs. The path stays editable; the strokes follow it. One undo step. Returns { paths: [{ id, strokes }] } (the brushstroke is a stroke layer; change it with vector.setBrushstroke, remove it with vector.removeStroke).",
+    "description": "Paints paths (`ids`, default the selection; groups: every path inside) with a natural-media brush along their outline, as a stroke layer of kind brushstroke: `brushId` from vector.listBrushes, `size` (document units), an optional `pressure` profile (0–1 values spread from start to end, e.g. [0.2, 1, 0.2] for a tapered stroke), `color`, `opacity` and gradient `paint` sampled dab by dab along the path. Wet paint (watercolour, gouache, wet oils) bleeds and dries; the scene shows it as laid until it settles, exports wait for it. The Mixer Brush, smudge and blender act on the shapes beneath the stroke (fills, strokes and brushstrokes; not text, images or effects). Pass a `seed` for the brush's character (seeded size, angle, opacity and scatter jitter plus a paper grain: what makes pencil, pastel and charcoal look real), with `paper` to choose the grain or null for none; without a seed the brush paints plain, even dabs. The path stays editable; the strokes follow it. One undo step. Returns { paths: [{ id, strokes }] } (the brushstroke is a stroke layer; change it with vector.setBrushstroke, remove it with vector.removeStroke).",
     "params": {
       "type": "object",
       "properties": {
@@ -11060,6 +11060,167 @@
             }
           ],
           "description": "With `seed`: the paper the grain comes from { pattern, seed, scale, depth }, or null for jitter without grain (default: the sanded paper)."
+        },
+        "paint": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "color"
+              ],
+              "description": "One colour instead of the layer colour (the layer colour still gives the alpha).",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "color"
+                  ],
+                  "description": "Always \"color\"."
+                },
+                "color": {
+                  "type": "string",
+                  "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+                  "description": "The colour as #rrggbb."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "stops"
+              ],
+              "description": "Gradient paint: the brush samples it dab by dab along the path.",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "gradient"
+                  ],
+                  "description": "Always \"gradient\"."
+                },
+                "stops": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 16,
+                  "description": "2..16 stops sorted by offset.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "offset",
+                      "color"
+                    ],
+                    "properties": {
+                      "offset": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Position 0..1 along the gradient."
+                      },
+                      "color": {
+                        "type": "string",
+                        "description": "The stop colour as #rrggbb, or \"paint\" (the layer colour) or \"secondary\" (white).",
+                        "anyOf": [
+                          {
+                            "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+                          },
+                          {
+                            "enum": [
+                              "paint",
+                              "secondary"
+                            ]
+                          }
+                        ]
+                      },
+                      "opacity": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Multiplies the brush flow where this colour is laid, 0..1 (default 1)."
+                      },
+                      "midpoint": {
+                        "type": "number",
+                        "minimum": 0.05,
+                        "maximum": 0.95,
+                        "description": "Where between this stop and the next the colours are half mixed, 0.05..0.95 (default 0.5)."
+                      }
+                    }
+                  }
+                },
+                "space": {
+                  "type": "string",
+                  "enum": [
+                    "pigment",
+                    "oklab",
+                    "srgb"
+                  ],
+                  "description": "How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers)."
+                },
+                "map": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "by"
+                  ],
+                  "description": "What moves the stroke along the gradient (default distance, 300 document units, mirror).",
+                  "properties": {
+                    "by": {
+                      "type": "string",
+                      "enum": [
+                        "distance",
+                        "pressure",
+                        "tilt",
+                        "direction",
+                        "across-tip",
+                        "random"
+                      ],
+                      "description": "distance: document units (or dabs) travelled along the path; pressure: the pressure profile 0..1; tilt: no tilt on paths, so the start of the gradient; direction: direction of travel, once round per 360°; across-tip: left to right across the tip (a brush loaded with several colours); random: a seeded random point per dab (the layer seed). Paths have no timing, so velocity and time are not available."
+                    },
+                    "length": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 100000,
+                      "description": "distance: document units (or dabs, with unit \"dabs\") per run through the gradient (default 300)."
+                    },
+                    "repeat": {
+                      "type": "string",
+                      "enum": [
+                        "clamp",
+                        "repeat",
+                        "mirror"
+                      ],
+                      "description": "distance: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default)."
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "px",
+                        "dabs"
+                      ],
+                      "description": "distance: document units (\"px\", default) or dabs."
+                    },
+                    "every": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 500,
+                      "description": "random: dabs per random pick (default 1)."
+                    }
+                  }
+                },
+                "softness": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps."
+                }
+              }
+            }
+          ],
+          "description": "Gradient paint sampled dab by dab along the path instead of the colour, e.g. { type: \"gradient\", stops: [{ offset: 0, color: \"#e11d48\" }, { offset: 1, color: \"#2563eb\" }], map: { by: \"distance\", length: 200, repeat: \"clamp\" } } (default: the colour; a gradient layer colour or a gradient brush paints its own gradient)."
         }
       },
       "required": [
@@ -11081,7 +11242,7 @@
       "pressure",
       "taper"
     ],
-    "description": "Changes the brushstroke at stroke layer `index` of path `id` (vector.getAppearance lists strokes; 0 is the bottom): `brushId` (the same id again takes that saved brush as the library has it now), `size` (null: the brush's own), `pressure` (null: full pressure), `color`, `opacity`, `seed` (turns the brush's character on; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default paper). Pass at least one. One undo step. Returns { id, strokes }.",
+    "description": "Changes the brushstroke at stroke layer `index` of path `id` (vector.getAppearance lists strokes; 0 is the bottom): `brushId` (the same id again takes that saved brush as the library has it now), `size` (null: the brush's own), `pressure` (null: full pressure), `color`, `opacity`, `seed` (turns the brush's character on; null: plain dabs), `paper` (replaced whole; null: no grain; {}: the default paper) and gradient `paint` (null: the colour). Pass at least one. One undo step. Returns { id, strokes }.",
     "params": {
       "type": "object",
       "properties": {
@@ -11192,6 +11353,170 @@
             }
           ],
           "description": "The paper the grain comes from { pattern, seed, scale, depth } (applies with a seed), null for no grain, or {} for the default sanded paper."
+        },
+        "paint": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "color"
+              ],
+              "description": "One colour instead of the layer colour (the layer colour still gives the alpha).",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "color"
+                  ],
+                  "description": "Always \"color\"."
+                },
+                "color": {
+                  "type": "string",
+                  "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+                  "description": "The colour as #rrggbb."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "stops"
+              ],
+              "description": "Gradient paint: the brush samples it dab by dab along the path.",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "gradient"
+                  ],
+                  "description": "Always \"gradient\"."
+                },
+                "stops": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 16,
+                  "description": "2..16 stops sorted by offset.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "offset",
+                      "color"
+                    ],
+                    "properties": {
+                      "offset": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Position 0..1 along the gradient."
+                      },
+                      "color": {
+                        "type": "string",
+                        "description": "The stop colour as #rrggbb, or \"paint\" (the layer colour) or \"secondary\" (white).",
+                        "anyOf": [
+                          {
+                            "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+                          },
+                          {
+                            "enum": [
+                              "paint",
+                              "secondary"
+                            ]
+                          }
+                        ]
+                      },
+                      "opacity": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Multiplies the brush flow where this colour is laid, 0..1 (default 1)."
+                      },
+                      "midpoint": {
+                        "type": "number",
+                        "minimum": 0.05,
+                        "maximum": 0.95,
+                        "description": "Where between this stop and the next the colours are half mixed, 0.05..0.95 (default 0.5)."
+                      }
+                    }
+                  }
+                },
+                "space": {
+                  "type": "string",
+                  "enum": [
+                    "pigment",
+                    "oklab",
+                    "srgb"
+                  ],
+                  "description": "How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers)."
+                },
+                "map": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "by"
+                  ],
+                  "description": "What moves the stroke along the gradient (default distance, 300 document units, mirror).",
+                  "properties": {
+                    "by": {
+                      "type": "string",
+                      "enum": [
+                        "distance",
+                        "pressure",
+                        "tilt",
+                        "direction",
+                        "across-tip",
+                        "random"
+                      ],
+                      "description": "distance: document units (or dabs) travelled along the path; pressure: the pressure profile 0..1; tilt: no tilt on paths, so the start of the gradient; direction: direction of travel, once round per 360°; across-tip: left to right across the tip (a brush loaded with several colours); random: a seeded random point per dab (the layer seed). Paths have no timing, so velocity and time are not available."
+                    },
+                    "length": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 100000,
+                      "description": "distance: document units (or dabs, with unit \"dabs\") per run through the gradient (default 300)."
+                    },
+                    "repeat": {
+                      "type": "string",
+                      "enum": [
+                        "clamp",
+                        "repeat",
+                        "mirror"
+                      ],
+                      "description": "distance: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default)."
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "px",
+                        "dabs"
+                      ],
+                      "description": "distance: document units (\"px\", default) or dabs."
+                    },
+                    "every": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 500,
+                      "description": "random: dabs per random pick (default 1)."
+                    }
+                  }
+                },
+                "softness": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps."
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Gradient paint sampled dab by dab along the path (replaced whole), or null to paint the colour again."
         }
       },
       "required": [
