@@ -81,6 +81,11 @@ export function stickerCollections(items: readonly StickerSummary[], names: Reco
   return [...out.values()];
 }
 
+/** Calls `provider.collections()` or `provider.listCollections()` when the provider defines either. */
+export function providerCollections(provider: StickerProvider): ReturnType<NonNullable<StickerProvider['collections']>> | undefined {
+  return provider.collections ? provider.collections() : provider.listCollections?.();
+}
+
 /** A ref split into provider and id. A bare editor stamp (`"star"`) is `editor:star`; any other bare id is refused. */
 export function parseStickerRef(ref: StickerRef): { provider: string; id: string } {
   if (typeof ref !== 'string' || !ref) throw new StickerError('invalid_argument', 'A sticker ref is a "provider:id" string, e.g. "editor:star" (find_stickers lists them).');
