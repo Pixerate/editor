@@ -321,7 +321,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` facet changes (as `set_brush` takes), `color` or `paint` (a gradient for this stroke), `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
-| `stroke_path` | Brush SVG path data (`path`, document px; M, L, C, Q, A, Z…) with the active brush or `brushId` / `brush`, as if drawn along it by hand: each subpath one recorded stroke, sampled every `spacing` px (default 2), with a `pressure` profile spread along each subpath (`[0.2, 1, 0.2]` tapers both ends). One undo step. Returns `layerId`, `bounds`, `dabs` and `strokeIds` (for `replay_strokes`, `update_stroke`). Use it for clean curves, outlines of shapes and lettering guides instead of working out points; use `paint_stroke` when the marks need time or tilt. |
+| `stroke_path` | Brush SVG path data (`path`, document px; M, L, C, Q, A, Z…) with the active brush or `brushId` / `brush`, as if drawn along it by hand: each subpath one recorded stroke, sampled every `spacing` px (default 2), with a `pressure` profile spread along each subpath (`[0.2, 1, 0.2]` tapers both ends) and optional `speed` (px/ms, stamps each sample with `t`). With an agent director, each subpath is painted live in turn. One undo step. Returns `layerId`, `bounds`, `dabs` and `strokeIds` (for `replay_strokes`, `update_stroke`). Use it for clean curves, outlines of shapes and lettering guides instead of working out points; use `paint_stroke` when the marks need variable timing or tilt. |
 | `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds, `live`. With `ids`, their points too; with `layerId`, one layer's. With `live: true`, the editable strokes of stroke layers as they are now, bottom first: the ids for the stroke layer tools. |
 | `get_live_stroke` | Read the stroke the user is painting right now (layer, brush, colour, samples so far; `live: false` when none). For painting along with the user; hosts stream the samples live. |
 | `stroke_at` | Read the top-most stroke of a stroke layer that painted the pixel at `x`, `y`, or null. Use it to pick one stroke among overlapping ones. |
@@ -339,7 +339,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 
 | Tool | Use |
 | --- | --- |
-| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
+| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could, e.g. on one thread because the page is not cross-origin isolated (COOP / COEP)), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
 | `advance_wet_paint` | Let time pass: `steps` (120 = one second at the default speed) or `seconds`. The paint spreads, blooms, runs and dries. Not an undo step. Returns `steps`, `clock`, `stillWet`, `layers`. Call after a group of wet strokes, before `render_preview`. |
 | `dry_paint` | Dry wet paint at once where it is (one layer with `layerId` or all, optionally inside `rect`). One undo step. Returns `dried` (layer ids and rectangles) and `stillWet`. Dry before glazing over a wash. |
 | `wet_paper` | Pre-wet the paper with clear water over `rect` (default the canvas) on a layer, `amount` 0..1, for wet-in-wet. One undo step. Returns the rectangle and `wet`. Then paint into it. |
@@ -462,7 +462,8 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   keep taking its colours.
 - **Strokes take real time when the host shows your cursor.** With a director (the demo and
   editors that set `createPaintEditorToolProvider({ director })`), `paint_stroke` paints live at
-  the pace of the points' `t` (else about 1.5 px per ms, at most ~1.8 s), and `fill_layer` /
+  the pace of the points' `t` (else about 1.5 px per ms, at most ~1.8 s), `stroke_path` paints
+  each subpath in turn (paced by its `speed` when given) as one undo step, and `fill_layer` /
   `replay_strokes` move the cursor first. Results and undo are the same; it is one more reason to
   paint a few long strokes and replay them rather than many short ones. A stroke fails with "A
   stroke is in progress" while the user is painting; try it again afterwards.
@@ -470,7 +471,10 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   flowed; `advance_wet_paint` first. Paint that should stay exactly where it was laid needs
   `dry_paint` (or a dry medium).
 - **Wet strokes on one layer interact**; washes that must not mix go on separate layers, or dry
-  the first before painting the second (glazing). At most 8 layers hold wet paint at once.
+  the first before painting the second (glazing). At most 8 layers hold wet paint at once, and the simulation holds at most 328 wet tiles (256 × 256 px each) across them; water that spreads past
+  that limit is lost (`dry_paint` frees tiles). Multi-threaded wet media needs a cross-origin isolated
+  page (COOP / COEP, for `SharedArrayBuffer`) and runs on one thread otherwise, more slowly but with
+  the same result.
 - **Undoing far back** past the wet undo memory (512 MB by default) leaves that paint dry as it
   looked, rather than wet.
 - **Replays repeat what was recorded**: strokes, fills, clears, flattened relief and wet events.

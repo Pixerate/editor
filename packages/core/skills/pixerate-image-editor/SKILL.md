@@ -1,17 +1,19 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation and smart object layers; masks, clipping, blend modes, merge, filters), smart objects and smart filters, shape and type layers, layer effects, adjustments, selections and masks, Free Transform, crop, rotate, flip, painting and the Mixer Brush, retouching (Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge), undo, PSD, histogram and previews. Use when asked to edit, grade, correct, crop, straighten or mask an image, remove a blemish or spot, clone, dodge or burn, add a shadow, glow or outline, transform or warp a layer, draw a shape or arrow, add or edit text, make a smart object, or open or save a PSD, or when list_layers, set_adjustments, add_layer_effect, transform_layer, add_shape_layer, add_text_layer, paint_stroke, clone_stamp, spot_heal, import_psd or render_preview are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation, smart object; masks, clipping, blend modes, filters), 16/32-bit depth, colour management (profiles, proofing, CMYK, Lab), smart objects and smart filters, provider effects, layer effects, adjustments, selections and masks, Free Transform, crop, rotate, flip, painting and Mixer Brush, retouching (Clone Stamp, Healing, Spot Healing, Smudge, Dodge, Burn, Sponge, Blur, Sharpen, History Brush), undo, PSD, histogram and previews. Use when editing, grading, cropping, masking or retouching an image, adding effects, shapes or text, converting profiles or bit depth, transforming layers, or when list_layers, set_adjustments, add_layer_effect, apply_effect, transform_layer, add_text_layer, paint_stroke, clone_stamp, spot_heal, blur_stroke, sharpen_stroke, history_brush, set_bit_depth, convert_to_profile or import_psd are available.
 ---
 
 # Image editor
 
-The image editor holds a layer stack over a canvas the size of the source image. Opening an
+The image editor holds a layer stack over a canvas the size of the source image (8-, 16- or
+32-bit depth, with RGB, CMYK and Lab colour management, ICC profiles and soft proofing). Opening an
 image gives one pixel layer, **Background**, whose pixels are the source and whose `develop`
 filter holds the base adjustments (the base controls edit the develop filter of the active pixel
 layer). Adjustment layers sit above it, each through its mask, opacity and blend mode, and
 annotations are shape and type layers on top. Edits never touch the source pixels; `list_layers`
 shows the whole stack. Pixel, group and smart object layers can carry live effects; a smart
-object places contents through a transform and smart filters; shape layers hold vector paths and
+object places contents through a transform and smart filters (including provider effects, which
+also add generator and overlay effect layers); shape layers hold vector paths and
 type layers live text, re-rendered on every change. There is also an optional selection and a
 crop, rotation and flip. See `pixerate-agent-tools` for errors and batching.
 
@@ -95,9 +97,9 @@ Boxes, badges, arrows and callouts are shape layers (`add_shape_layer`), text is
 (`add_text_layer`); both stay sharp and take effects, masks and blends. Read
 [references/shapes-and-type.md](references/shapes-and-type.md) before drawing or editing either.
 
-### Layer effects
+### Layer and provider effects
 
-Live per-layer effects (shadows, glows, bevel, overlays, strokes): see `references/layer-effects.md`.
+Live per-layer styles (shadows, glows, bevel, overlays, strokes): see [references/layer-effects.md](references/layer-effects.md). Provider filter smart filters and generator / overlay effect layers (`search_effects`, `describe_effect`, `apply_effect`, `add_effect_layer`): see [references/provider-effects.md](references/provider-effects.md).
 
 ### Paths and cutout edges
 
@@ -110,13 +112,15 @@ Keep outlines as paths (`make_work_path`, `add_path`) and edit their anchors: se
 Paint on its own layer (`add_pixel_layer`), one stroke per call and one undo step, limited by a
 selection or locked transparency. Read [references/painting.md](references/painting.md) first.
 
-### Colour management
+### Bit depth and colour management
 
-Working space, profiles, soft proofing and print conversions: read [references/color-management.md](references/color-management.md).
+Switch between 8-, 16- and 32-bit (float, linear light) with `set_bit_depth` (`references/photoshop-files.md`). For working space profiles (`assign_profile`, `convert_to_profile`), soft proofing (`set_proof_setup`) and CMYK / Lab print modes (`set_color_mode`, `convert_colors`), read [references/color-management.md](references/color-management.md).
 
 ### Retouching
 
-Heal, clone, dodge and burn on layers above the photo (`sample: "current-below"`): load
+Heal and clone on layers above the photo (`sample: "current-below"`); dodge, burn, sponge, blur
+(`blur_stroke`), sharpen (`sharpen_stroke`) and History Brush (`history_brush`) change the pixels
+they touch, so run them on a duplicate. Load
 `pixerate-image-portrait-retouch`, and read [references/retouching.md](references/retouching.md) first.
 
 ### Photoshop files
@@ -136,11 +140,11 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 - **Blend modes for tone-only or colour-only changes:** `luminosity` applies a curves or
   levels layer without shifting hue or saturation; `color` applies a tint without changing
   brightness; `soft-light` / `overlay` for gentle contrast.
-- **`pigment` mixes like paint.** On a layer, a fill or a brush, `pigment` mixes the colour into
+- **`pigment` and painterly modes mix like paint.** On a layer, a fill or a brush, `pigment` mixes the colour into
   what is below as real paint would (Kubelka-Munk): blue into yellow gives green, white gives
   tints, and opacity is the share of new paint (0.5 is half and half). Use it for glazes,
-  natural colour mixing and painterly strokes; it is not a Photoshop mode, so keep it off
-  layers that must survive a PSD round trip. It costs about ten times a normal blend.
+  natural colour mixing and painterly strokes; neither `pigment` nor the painterly modes (`watercolor`, `tint`, `highlight`, `shadow`) are Photoshop modes (`export_psd` writes them as Normal), so keep them off
+  layers that must stay editable in a PSD round trip. `pigment` costs about ten times a normal blend.
 - **Name layers** (`name`) by intent ("Sky darken", "Warm skin"), so the stack stays readable.
 - **Effects, transforms and smart objects** have their own best practices in
   `references/layer-effects.md`, `references/free-transform.md` and `references/smart-objects.md`.
@@ -174,7 +178,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `measure_region` | Measure a rectangle of the composited image (`x`, `y`, `width`, `height` in natural pixels; default the crop, else the whole image) without a render: the `get_histogram` summary plus `meanColor` (hex) and `cast` (`redBlue`, `greenMagenta` in levels; within about ±4 is neutral). Check a neutral reference, skin, a background or clipping after each correction. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart`, `shape` and `type` for Photoshop smart objects, shapes and text) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
-| `export_psd` | Save the document as an RGB PSD at its bit depth (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Shape and type layers are written as real Photoshop shape and type layers. Changes nothing. |
+| `export_psd` | Save the document as a PSD in its colour mode (RGB, or CMYK / Lab channels after `set_color_mode`) with its profile, at its bit depth (RGB 8, 16 or 32; CMYK and Lab 8 or 16, so a 32-bit CMYK / Lab document is written at 16 with a warning; PSB above 30000 px), with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal; painterly blends are written as Normal too, without a warning). Shape and type layers are written as real Photoshop shape and type layers. Changes nothing. |
 | `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
 | `get_smart_object` | Read a smart object: `contents` (`id` shared by linked instances, `name`, `kind` raster or document, `width` / `height`, `decoded`, `fileType`, `linkedPath`, `instances`), `placement` (`corners`, `warp` in contents px, `interpolation`, and when `affine` the `scaleX` / `scaleY` in percent of the contents, `rotate`, `skewX`, `center`, `bounds`) and `smartFilters` (`enabled`, `filters` bottom to top with ids, settings, `blend`, `opacity`; kind `psd` is a Photoshop filter kept but not drawn; the filter `mask`). Call before changing a smart object. |
 | `list_fonts` | Read the font families type layers can use here (generic families always work) and which shaper draws them. Call before choosing a font. |
@@ -381,13 +385,7 @@ The host may add the shared document tools (see `pixerate-agent-tools`). An imag
 ## Pitfalls
 
 - Agent playback (if on) opens each write's panel, then traces `points`, drags boxes or visits the layers and sliders named; results are unchanged.
-- Effects need a shape: on an empty layer they draw nothing. They cannot go on adjustment layers. A clipped layer's effects stay inside the layer it is clipped to.
-- `bevel-emboss` has no `blend` / `opacity`: it uses `highlightBlend`, `highlightOpacity`,
-  `shadowBlend` and `shadowOpacity`. Inner shadows and inner glows use `choke`, not `spread`.
-- Glows paint a colour or a gradient, never a pattern; strokes take all three. Pattern effects
-  need a pattern id from `list_layer_effects.patterns`; an unknown id paints nothing.
-- Effect angles are where the light comes *from*: 120° (top left) casts a shadow down and to
-  the right. With `useGlobalLight` true an effect's own `angle` is ignored.
+- Domain-specific pitfalls live in their references: layer styles in [references/layer-effects.md](references/layer-effects.md), provider effects in [references/provider-effects.md](references/provider-effects.md), painting and the Mixer Brush in [references/painting.md](references/painting.md), retouching in [references/retouching.md](references/retouching.md), shapes and text in [references/shapes-and-type.md](references/shapes-and-type.md), smart objects in [references/smart-objects.md](references/smart-objects.md), Free Transform in [references/free-transform.md](references/free-transform.md), colour management in [references/color-management.md](references/color-management.md), and PSD in [references/photoshop-files.md](references/photoshop-files.md).
 - A layer's `kind` cannot change; to switch kinds add a new layer and remove the old one.
   Curves points, `colorize` and colours are only set when the layer is added, so get them
   right in `add_adjustment_layer` (or replace the layer).
@@ -395,41 +393,7 @@ The host may add the shared document tools (see `pixerate-agent-tools`). An imag
   `locks` only when the user wants that layer changed.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
-- Retouching pitfalls (empty layers, sources, what ignores opacity): see references/retouching.md.
-- `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
-  raster mask and `channel: "mask"`); adjustment, group, shape, type, annotation and smart object layers can
-  only be painted through their masks (and a smart object through `channel: "filter-mask"`).
-  To paint a smart object's pixels, `edit_smart_object_contents` or rasterize it. A layer with
-  `locks.pixels` refuses paint.
-- Text ranges count UTF-16 code units (an emoji is two). Point text grows from its origin: centred
-  text is centred on `x`. Type cannot be distorted, put in perspective or warped; it can be scaled,
-  rotated and skewed. Where no font shaper exists (a server without one), type layers keep their
-  stored pixels and edits are refused with a reason.
-- Shape strokes are not layer-effect strokes: `stroke` on `add_shape_layer` / `update_shape`
-  follows the path (and its dashes and caps); `add_layer_effect` `stroke` outlines the rendered
-  pixels. Arrowheads belong to `line` live shapes (their `width` and `length` are pixels), not to
-  strokes. A shape drawn over an annotation migrated from an old document (a shape layer with an
-  `annotation` in `list_layers`) stops being that annotation once you edit it as a shape.
-- Shapes render up to 512 px beyond the canvas; moving one in from far outside draws it again
-  from its paths, so nothing is lost.
-- While contents are open (`edit_smart_object_contents`), `list_layers` and every tool see the
-  contents, not the document, and `export_psd` / saving write the document without the open
-  edits. Close with `close_smart_object_contents` before anything else.
-- Smart filters run over the canvas, like layer filters: a blur clamps at the canvas edge, and a
-  smart object is drawn only up to 512 px beyond the canvas. `get_transform_frame` on a smart
-  object returns the contents' rectangle (contents px) as the `frame`, and a warp `mesh` in
-  contents px.
-- `mix_colors` predicts a mix; it does not paint. To paint the mix, pass `blend: "pigment"` to
-  `paint_stroke` (in `brush`) or `fill_pixels`, or set it on a layer.
-- `pigment` has no PSD equivalent: `export_psd` writes those layers as Normal (the merged image
-  keeps the look) and says so in `warnings`, naming the layers. `import_psd` never produces it.
-  Over transparent pixels there is nothing to mix with, so it lays the colour down as Normal.
-- The Mixer Brush ignores `brush.blend` (including `pigment`; use its own `mixer.mixing` instead) and the opacity ceiling: each dab lays paint at
-  `flow × opacity` over the pixels as they are now, so overlapping dabs build up. At `flow` 1
-  each dab covers what is under it, the pickup then sees mostly the brush's own paint, and the
-  stroke drifts towards the loaded colour; lower the flow for more blending.
-- An empty, dry mixer (no reservoir, `wet` 0) paints nothing; the call succeeds with
-  `bounds: null`. A mixer stroke over transparent pixels has nothing to pick up.
+- `pigment` and the painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) have no Photoshop mode in the image editor's PSD exporter: `export_psd` writes those layers as Normal (the merged image keeps the composited look; only `pigment` adds a warning, naming the layers). `import_psd` never produces them.
 - `export_psd` is in the source frame: a crop or rotation is not in the file (the warnings say
   so). Crop with `set_crop` only for PNG / JPEG output, or flatten the look you need first.
 - PSD opacity, fill and mask density come in as whole percents (Photoshop stores bytes), so a
@@ -444,19 +408,10 @@ The host may add the shared document tools (see `pixerate-agent-tools`). An imag
   Do not keep raising it; correct the green-magenta cast with a `colorBalance` layer instead.
 - Base `opacity` fades the whole image, not an adjustment. Base `blur` blurs a whole layer (the
   Background by default, before the adjustment layers; in older documents with blur and
-  adjustment layers, the output after them). It is not a local softening tool.
+  adjustment layers, the output after them). For local softening use `blur_stroke`.
 - New adjustment layers go above the other adjustment layers and below annotations, so they
   never tint arrows, labels or watermarks. `list_layers` shows where each one went.
 - `invert` and `threshold` are destructive-looking creative effects; never use them for a
   correction the user did not ask for. Posterize `levels` below ~8 bands visibly.
-- Transforms refuse hidden layers, layers with `locks.position` or `locks.pixels`, and adjustment,
-  annotation and group layers (transform a layer's mask with `channel: "mask"` after unlinking
-  it). A result larger than about 11 600 × 11 600 px is refused.
-- `transform_layer` scale fields are percent (100 = unchanged), not factors; `rotate` is degrees
-  clockwise. `corners` that cross or fold through the horizon are refused: keep the quad convex.
-- With a selection, `content: "auto"` (the default) moves only the selected pixels, not the
-  whole layer. Pass `content: "layer"` to move everything regardless of the selection.
-- A Background transformed smaller leaves transparent canvas around it; fill it with a layer
-  below or crop afterwards.
 - Opacity values are 0..1, not percent. Curves and levels points are 0..255 levels; levels
   `gamma` is 0.1..9.99 (1 = neutral); hue is degrees -180..180.

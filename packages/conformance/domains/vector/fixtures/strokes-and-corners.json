@@ -280,6 +280,27 @@
               },
               {
                 "builtin": true,
+                "category": "blender",
+                "id": "blender",
+                "name": "Blender",
+                "size": 34
+              },
+              {
+                "builtin": true,
+                "category": "smudge",
+                "id": "smudge",
+                "name": "Smudge",
+                "size": 26
+              },
+              {
+                "builtin": true,
+                "category": "smudge",
+                "id": "wet-smudge",
+                "name": "Pigment smudge",
+                "size": 30
+              },
+              {
+                "builtin": true,
                 "category": "paint",
                 "id": "dirty-round",
                 "name": "Dirty round",
@@ -322,6 +343,62 @@
               },
               {
                 "builtin": true,
+                "category": "mixer",
+                "id": "mixer-brush",
+                "name": "Mixer Brush",
+                "size": 30
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "watercolor-round",
+                "name": "Watercolour round",
+                "size": 28
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "watercolor-wash",
+                "name": "Wash brush",
+                "size": 90
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "gradient-wash",
+                "name": "Gradient wash",
+                "size": 80
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "watercolor-detail",
+                "name": "Watercolour rigger",
+                "size": 7
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "gouache",
+                "name": "Gouache",
+                "size": 26
+              },
+              {
+                "builtin": true,
+                "category": "oil",
+                "id": "oil-round",
+                "name": "Wet oil round",
+                "size": 24
+              },
+              {
+                "builtin": true,
+                "category": "oil",
+                "id": "oil-flat",
+                "name": "Wet oil flat",
+                "size": 40
+              },
+              {
+                "builtin": true,
                 "category": "light",
                 "id": "neon-marker",
                 "name": "Neon marker",
@@ -333,6 +410,13 @@
                 "id": "light-airbrush",
                 "name": "Light airbrush",
                 "size": 90
+              },
+              {
+                "builtin": true,
+                "category": "light",
+                "id": "glow-wash",
+                "name": "Glow wash",
+                "size": 40
               },
               {
                 "builtin": true,
@@ -376,7 +460,47 @@
                 "name": "Chalk",
                 "size": 18
               }
-            ]
+            ],
+            "colorLocked": false,
+            "colorScheme": "light"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setColorScheme",
+        "params": {
+          "scheme": "light"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setColorScheme",
+          "ok": true,
+          "result": {
+            "colorLocked": false,
+            "colorScheme": "light"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setColorLocked",
+        "params": {
+          "locked": false
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setColorLocked",
+          "ok": true,
+          "result": {
+            "colorLocked": false,
+            "colorScheme": "light"
           }
         }
       }
@@ -411,7 +535,25 @@
             "n4"
           ],
           "size": 6,
-          "seed": 3
+          "seed": 3,
+          "paint": {
+            "type": "gradient",
+            "stops": [
+              {
+                "offset": 0,
+                "color": "#e11d48"
+              },
+              {
+                "offset": 1,
+                "color": "#2563eb"
+              }
+            ],
+            "map": {
+              "by": "distance",
+              "length": 130,
+              "repeat": "clamp"
+            }
+          }
         }
       },
       "expect": {
@@ -430,6 +572,26 @@
                   {
                     "brush": {
                       "brushId": "pencil-hb",
+                      "paint": {
+                        "map": {
+                          "by": "distance",
+                          "length": 130,
+                          "repeat": "clamp",
+                          "unit": "px"
+                        },
+                        "space": "pigment",
+                        "stops": [
+                          {
+                            "color": "#e11d48",
+                            "offset": 0
+                          },
+                          {
+                            "color": "#2563eb",
+                            "offset": 1
+                          }
+                        ],
+                        "type": "gradient"
+                      },
                       "seed": 3,
                       "size": 6
                     },
@@ -467,6 +629,26 @@
               {
                 "brush": {
                   "brushId": "pencil-hb",
+                  "paint": {
+                    "map": {
+                      "by": "distance",
+                      "length": 130,
+                      "repeat": "clamp",
+                      "unit": "px"
+                    },
+                    "space": "pigment",
+                    "stops": [
+                      {
+                        "color": "#e11d48",
+                        "offset": 0
+                      },
+                      {
+                        "color": "#2563eb",
+                        "offset": 1
+                      }
+                    ],
+                    "type": "gradient"
+                  },
                   "seed": 3,
                   "size": 9
                 },
@@ -601,6 +783,26 @@
                   {
                     "brush": {
                       "brushId": "pencil-hb",
+                      "paint": {
+                        "map": {
+                          "by": "distance",
+                          "length": 130,
+                          "repeat": "clamp",
+                          "unit": "px"
+                        },
+                        "space": "pigment",
+                        "stops": [
+                          {
+                            "color": "#e11d48",
+                            "offset": 0
+                          },
+                          {
+                            "color": "#2563eb",
+                            "offset": 1
+                          }
+                        ],
+                        "type": "gradient"
+                      },
                       "seed": 3,
                       "size": 9
                     },
@@ -1056,6 +1258,26 @@
                   {
                     "brush": {
                       "brushId": "pencil-hb",
+                      "paint": {
+                        "map": {
+                          "by": "distance",
+                          "length": 130,
+                          "repeat": "clamp",
+                          "unit": "px"
+                        },
+                        "space": "pigment",
+                        "stops": [
+                          {
+                            "color": "#e11d48",
+                            "offset": 0
+                          },
+                          {
+                            "color": "#2563eb",
+                            "offset": 1
+                          }
+                        ],
+                        "type": "gradient"
+                      },
                       "seed": 3,
                       "size": 9
                     },

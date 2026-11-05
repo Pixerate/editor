@@ -33,10 +33,15 @@ public let BRUSH_MARKS_KINDS = ["continuous", "scatter", "particles", "objects"]
 public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full")
 public let IMAGE_PROFILE = BrushHostProfile(id: "image", name: "Image editor", kinds: ["mark", "tool"], tools: ["eraser"], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "full", grain: "ignored", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "ignored")
 public let CANVAS_PROFILE = BrushHostProfile(id: "canvas", name: "Canvas", kinds: ["mark"], tools: [], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "none", grain: "full", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "full")
+/// Vector brushstrokes: as canvas, plus wet paint, the Mixer Brush, smudge and blender (#519); light paints as plain colour.
 public let VECTOR_PROFILE: BrushHostProfile = {
     var p = CANVAS_PROFILE
     p.id = "vector"
     p.name = "Vector editor"
+    p.kinds = ["mark", "tool"]
+    p.tools = ["blender", "smudge"]
+    p.surfaces = ["dry", "wet"]
+    p.reservoir = "full"
     p.light = "ignored"
     return p
 }()

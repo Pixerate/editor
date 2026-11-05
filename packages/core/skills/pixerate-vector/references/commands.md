@@ -180,3 +180,22 @@ inside the intended face.
 | transparency | 0–100 % see-through (50) | – | The lens's own fill, see-through. |
 
 The lens shows what is drawn before it (below it), follows edits there, and keeps its own bounds. Move it with `vector.transform` like any path. Remove it with `vector.removeLens`.
+
+## Brushstrokes (`vector.listBrushes`, `vector.addBrushstroke`, `vector.setBrushstroke`)
+
+A brushstroke is a stroke layer (kind brushstroke) in a path's appearance stack that paints a dry
+brush along the path's outline; the path stays editable and the stroke follows it.
+
+| Parameter | Meaning |
+| --- | --- |
+| `ids` / `id` | `vector.addBrushstroke`: paths or groups (`ids`, default the selection; a group paints every path inside). `vector.setBrushstroke`: one path `id` plus the stroke layer `index` (from `vector.getAppearance`, 0 the bottom). |
+| `brushId` | Required on add. A preset or saved brush id from `vector.listBrushes` (dry brushes only: pencils, pastels, charcoal, crayon, chalk, markers, inks, ballpoint, gel pen, fineliner). Wet, thick, particle, sticker and tool brushes are refused. |
+| `size` | Brush diameter in document units, up to 500 (default the brush's own; `null` on set restores it). |
+| `pressure` | Pressure profile 0–1 spread evenly from start to end (`[0.2, 1, 0.2]` tapers both ends; default full pressure; `null` on set). |
+| `color` | CSS colour. Default: the brush's own default colour (e.g. the ballpoint's blue) unless `keepColour`, else the path's stroke colour, else black. |
+| `keepColour` | Use the path's (or, on set with another `brushId`, the layer's) colour instead of the brush's default colour. |
+| `opacity` | Layer opacity 0–1 (default 1). `index` on add places the layer in the stroke stack (default on top). |
+| `seed` | Integer 0–2147483647 that turns on the brush's character: seeded size, angle, opacity and scatter jitter plus paper grain. The same seed renders the same stroke. Without a seed (or `null` on set) the brush paints plain, even dabs. |
+| `paper` | Applies with a `seed`: `{ pattern?, seed?, scale?, depth? }` for the grain (pattern `sanded` by default, `rough`, `cold-pressed`, `canvas`, `linen`; `scale` 0.25–8; `depth` 0–1, default 0.5). Omitted: the sanded paper; `null`: jitter without grain. On set it is replaced whole and `{}` is the default paper. |
+
+Remove a brushstroke with `vector.removeStroke`, like any stroke layer.

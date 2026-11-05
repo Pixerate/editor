@@ -34,3 +34,13 @@ Read this before `add_layer_effect`, `update_layer_effect`, `set_global_light` o
   layer `opacity` fades the effects too.
 - **Prefer an effect over painted pixels** for shadows, glows, outlines and colour fills of a
   shape: it follows later edits and stays adjustable.
+
+## Pitfalls
+
+- Effects need a shape: on an empty layer they draw nothing. They cannot go on adjustment layers. A clipped layer's effects stay inside the layer it is clipped to.
+- `bevel-emboss` has no `blend` / `opacity`: it uses `highlightBlend`, `highlightOpacity`,
+  `shadowBlend` and `shadowOpacity`. Inner shadows and inner glows use `choke`, not `spread`.
+- Glows paint a colour or a gradient, never a pattern; strokes take all three. Pattern effects
+  need a pattern id from `list_layer_effects.patterns`; an unknown id paints nothing.
+- Effect angles are where the light comes *from*: 120° (top left) casts a shadow down and to
+  the right. With `useGlobalLight` true an effect's own `angle` is ignored.

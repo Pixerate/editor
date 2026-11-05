@@ -454,7 +454,7 @@ export function vectorDocumentToPdf(doc: VectorDocument, options: VectorPdfOptio
 	const pageIds: number[] = [];
 	docs.forEach((d, k) => {
 		w.pageIndex = k;
-		const scene = getVectorSceneRenderData({ document: d, viewport: { x: 0, y: 0, zoom: 1 } }, { idPrefix: `p${k}-` });
+		const scene = getVectorSceneRenderData({ document: d, viewport: { x: 0, y: 0, zoom: 1 } }, { idPrefix: `p${k}-`, brushstrokes: 'settled' });
 		const defs = new Map<string, VectorPaintDef>(scene.defs.map((x) => [x.id, x]));
 		const page = new Page(w, defs, notes);
 		const W = d.width * scale;

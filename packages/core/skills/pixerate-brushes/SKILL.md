@@ -43,7 +43,7 @@ paints without (warnings), each with a fix; lists and writes use the current hos
 | Paint editor (`paint`) | Everything. |
 | Image editor (`image`) | Dry dabs on round, flat and chisel tips, the Mixer Brush and the eraser; no wet or thick surface, particles, objects, light or motion. Pick one with `set_brush_preset`. |
 | Canvas (`canvas`) | Dry dab brushes along a path (no tools, wet, thick, particles, objects or light); velocity is ignored. Draw with one as `canvas.drawFreehand` `brush`. |
-| Vector strokes (`vector`) | As canvas, but light brushes paint as plain colour. Draw with one as `vector.addBrushstroke` `brushId`. |
+| Vector strokes (`vector`) | As canvas, plus wet paint (watercolour, gouache, wet oils: simulated in the stroke's own area, then dried), the Mixer Brush, and the smudge and blender tools (acting on the shapes beneath the stroke); light brushes paint as plain colour. The wet tools (water, hair dryer, blow, wet blend, wet drag, blot), thick paint, particles, objects and erasers are refused. Draw with one as `vector.addBrushstroke` `brushId`. |
 
 Every host lists the presets its profile admits and the library's saved brushes it admits, and
 each registers these tools with its own profile, so `list_brush_presets` shows that host's brushes.

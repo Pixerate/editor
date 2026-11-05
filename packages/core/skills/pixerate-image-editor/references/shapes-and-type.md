@@ -72,3 +72,17 @@ upright-Latin runs) and goes back out as vertical type. `get_text_layer` reports
 and `missingFonts` for those: if a font is missing, edits draw with a fallback, so tell the user
 before editing such text, or pick an available font with `set_text_style`. `export_psd` writes both
 kinds back as Photoshop layers; unchanged ones are written byte for byte as they were read.
+
+## Pitfalls
+
+- Text ranges count UTF-16 code units (an emoji is two). Point text grows from its origin: centred
+  text is centred on `x`. Type cannot be distorted, put in perspective or warped; it can be scaled,
+  rotated and skewed. Where no font shaper exists (a server without one), type layers keep their
+  stored pixels and edits are refused with a reason.
+- Shape strokes are not layer-effect strokes: `stroke` on `add_shape_layer` / `update_shape`
+  follows the path (and its dashes and caps); `add_layer_effect` `stroke` outlines the rendered
+  pixels. Arrowheads belong to `line` live shapes (their `width` and `length` are pixels), not to
+  strokes. A shape drawn over an annotation migrated from an old document (a shape layer with an
+  `annotation` in `list_layers`) stops being that annotation once you edit it as a shape.
+- Shapes render up to 512 px beyond the canvas; moving one in from far outside draws it again
+  from its paths, so nothing is lost.

@@ -1,17 +1,17 @@
 {
-	"prompt": "A teammate's brush team-wash is in the library, but it won't work for vector brushstrokes. Make a copy called team-wash-vector that does, and leave theirs as it is.",
+	"prompt": "A teammate's brush team-knife is in the library, but it won't work for vector brushstrokes. Make a copy called team-knife-vector that does, and leave theirs as it is.",
 	"fixture": {
 		"editor": "brushes",
-		"setup": [{ "tool": "create_brush", "args": { "id": "team-wash", "name": "Team wash", "basedOn": "watercolor-wash", "tags": ["team"] } }]
+		"setup": [{ "tool": "create_brush", "args": { "id": "team-knife", "name": "Team knife", "basedOn": "palette-knife", "tags": ["team"] } }]
 	},
 	"checks": [
-		{ "why": "the copy works in the vector editor", "tool": "check_brush", "args": { "id": "team-wash-vector", "host": "vector" }, "expect": { "ok": true } },
-		{ "why": "the copy keeps the wash's tip", "tool": "describe_brush", "args": { "id": "team-wash-vector" }, "expect": { "brush": { "tip": { "size": 90, "roundness": 0.45 } } } },
-		{ "why": "the teammate's brush still paints wet", "tool": "describe_brush", "args": { "id": "team-wash" }, "expect": { "brush": { "behaviour": { "surface": "wet" } } } }
+		{ "why": "the copy works in the vector editor", "tool": "check_brush", "args": { "id": "team-knife-vector", "host": "vector" }, "expect": { "ok": true } },
+		{ "why": "the copy keeps the knife's tip", "tool": "describe_brush", "args": { "id": "team-knife-vector" }, "expect": { "brush": { "tip": { "size": 48, "roundness": 0.18 } } } },
+		{ "why": "the teammate's brush still lays thick paint", "tool": "describe_brush", "args": { "id": "team-knife" }, "expect": { "brush": { "behaviour": { "surface": "thick" } } } }
 	],
 	"solution": [
-		{ "tool": "check_brush", "args": { "id": "team-wash", "host": "vector" } },
-		{ "tool": "create_brush", "args": { "id": "team-wash-vector", "name": "Team wash (vector)", "basedOn": "team-wash", "behaviour": { "surface": "dry" } } },
-		{ "tool": "check_brush", "args": { "id": "team-wash-vector", "host": "vector" } }
+		{ "tool": "check_brush", "args": { "id": "team-knife", "host": "vector" } },
+		{ "tool": "create_brush", "args": { "id": "team-knife-vector", "name": "Team knife (vector)", "basedOn": "team-knife", "behaviour": { "surface": "wet" } } },
+		{ "tool": "check_brush", "args": { "id": "team-knife-vector", "host": "vector" } }
 	]
 }

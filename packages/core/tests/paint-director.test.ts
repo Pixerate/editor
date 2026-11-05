@@ -102,6 +102,54 @@ describe('paint director', () => {
     expect(unknown!.ok).toBe(false);
   });
 
+  it('paints several strokes live as one undo step', async () => {
+    const { c, director } = setup();
+    c.paintStroke({ points: line(5, 5, 20, 5), seed: 1 });
+    const [r] = await director.perform({ id: 'agent' }, [
+      { kind: 'strokes', label: 'Path', strokes: [{ points: line(10, 20, 110, 20) }, { points: line(10, 60, 110, 60) }] },
+    ]);
+    expect(r).toMatchObject({ ok: true, result: { strokeIds: ['s2', 's3'] } });
+    expect(c.busyReason()).toBeNull();
+    expect(c.historyLabels().undo.slice(-2)).toEqual(['6B pencil stroke', 'Path']);
+    c.undo();
+    expect(c.getStrokes().map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('holds an async group open, refusing changes made outside it until it settles', async () => {
+    const c = new PaintEditorController({ width: 64, height: 64 });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const done = c.group('Path', async (within) => {
+      c.paintStroke({ points: line(5, 5, 20, 5) });
+      await gate;
+      within(() => c.paintStroke({ points: line(5, 30, 20, 30) }));
+      return 'ok';
+    });
+    expect(c.busyReason()).toMatch(/"Path" is still being painted/);
+    expect(() => c.undo()).toThrow(/"Path" is still being painted \(one undo step\); wait for it to finish before undoing/);
+    expect(() => c.beginStroke()).toThrow(/"Path" is still being painted/);
+    expect(() => c.group('Other', () => c.paintStroke({ points: line(0, 0, 9, 9) }))).toThrow(/"Path" is still being painted/);
+    release();
+    await expect(done).resolves.toBe('ok');
+    expect(c.busyReason()).toBeNull();
+    expect(c.historyLabels().undo).toEqual(['Path']);
+    expect(c.getStrokes()).toHaveLength(2);
+  });
+
+  it('puts back every subpath when a later one fails', async () => {
+    const { c, director } = setup();
+    const [r] = await director.perform({ id: 'agent' }, [
+      { kind: 'strokes', strokes: [{ points: line(10, 20, 110, 20) }, { layerId: 'nope', points: line(10, 60, 110, 60) }] },
+    ]);
+    expect(r).toMatchObject({ ok: false, message: expect.stringMatching(/Unknown layer "nope"/) });
+    expect(c.getStrokes()).toHaveLength(0);
+    expect(c.historyLabels().undo).toEqual([]);
+    expect(c.busyReason()).toBeNull();
+    expect(c.paintStroke({ points: line(0, 0, 50, 50) }).strokeId).toBe('s1');
+    const [empty] = await director.perform({ id: 'agent' }, [{ kind: 'strokes', strokes: [] }]);
+    expect(empty).toMatchObject({ ok: false, message: expect.stringMatching(/strokes is empty/) });
+  });
+
   it('hides the cursor after linger', async () => {
     const c = new PaintEditorController({ width: 64, height: 64 });
     const presence = new PaintPresence();
@@ -130,8 +178,15 @@ describe('paint tools with a director', () => {
     expect(stroke.structuredContent).toMatchObject({ strokeId: 's1', layerId: c.document.activeLayerId });
     const replay = await r.callTool('replay_strokes', { strokeIds: ['s1'], dx: 5, repeat: 2 });
     expect(replay.structuredContent).toMatchObject({ strokeIds: ['s2', 's3'] });
+    const path = await r.callTool('stroke_path', { path: 'M 10 20 L 60 20 M 10 50 L 60 50', speed: 0.5, brushId: 'soft-pastel', color: '#1d4ed8', seed: 9 });
+    expect(path.isError).toBeFalsy();
+    expect(path.structuredContent).toMatchObject({ strokeIds: ['s4', 's5'], layerId: c.document.activeLayerId });
+    expect(c.getStrokes()[3]!.points.at(-1)?.t).toBe(100);
     expect(seen.has('Bot')).toBe(true);
-    expect(c.historyLabels().undo.slice(-3)).toEqual(['Fill layer', 'Soft pastel stroke', 'Replay strokes']);
+    expect(c.historyLabels().undo.slice(-4)).toEqual(['Fill layer', 'Soft pastel stroke', 'Replay strokes', 'Soft pastel path stroke']);
+    // Undoing the path undoes both subpaths as one step.
+    c.undo();
+    expect(c.getStrokes().map((s) => s.id)).toEqual(['s1', 's2', 's3']);
   });
 
   it('turns director failures into tool errors that say what to fix', async () => {

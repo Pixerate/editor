@@ -3,7 +3,8 @@
  * gradient defs) and the overlay (screen-space selection box, anchors, handles, marquee and
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
-import { isVectorBrushstrokeLayer, vectorBrushstrokeBrushOf, vectorBrushstrokeImages, type VectorBrushstrokeImage } from './brushstroke.js';
+import { isVectorBrushstrokeLayer, setVectorBackdropSource, vectorBrushstrokeBrushOf, vectorBrushstrokeImages, type VectorBrushstrokeImage } from './brushstroke.js';
+import { rasterizeVectorBackdrop } from './backdrop.js';
 import { resolveVectorMasterPages } from './pages.js';
 import { vectorPerspectiveGridLines, vectorPerspectivePlanes } from './perspective.js';
 import { resolveVectorLenses } from './lens.js';
@@ -46,7 +47,7 @@ import {
 	type AffineMatrix
 } from './geometry.js';
 import { vectorNodeFilterSvg, vectorPaintToSvg, vectorStrokeSvgParts, type VectorRenderStrokeParts } from './svg.js';
-import { needsVectorPaintLayers, vectorBlendModeCss, vectorFills, vectorPaintLayerNodes, vectorStrokes, vectorTargetPaint, VECTOR_BLEND_MODE_LABELS } from './paintLayers.js';
+import { needsVectorPaintLayers, vectorBlendModeCss, vectorFills, vectorPaintLayerNodes, vectorStrokes, vectorTargetPaint, withVectorStrokes, VECTOR_BLEND_MODE_LABELS } from './paintLayers.js';
 import { VECTOR_FILTER_LABELS, VECTOR_FILTER_PARAM_SPECS, type VectorFilterParamSpec, type VectorRenderFilter } from './filters.js';
 import { vectorCorners } from './corners.js';
 import {
@@ -502,7 +503,7 @@ function renderLayers(node: VectorPathNode, defs: VectorPaintDef[], idPrefix: st
 	const out: VectorRenderPaintLayer[] = [];
 	for (const l of vectorPaintLayerNodes(node)) {
 		if (l.kind === 'stroke' && isVectorBrushstrokeLayer(l.layer as VectorStrokeLayer) && l.layer.visible !== false && (l.layer.opacity ?? 1) > 0) {
-			const images = vectorBrushstrokeImages(node, l.layer as VectorStrokeLayer);
+			const images = vectorBrushstrokeImages(node, l.layer as VectorStrokeLayer, scene ?? {});
 			const blend = vectorBlendModeCss(l.layer.blendMode);
 			if (images.length) out.push({ kind: 'brushstroke', index: l.index, fill: 'none', stroke: 'none', strokeWidth: 0, opacity: l.layer.opacity ?? 1, ...(blend ? { blendMode: blend } : {}), images });
 			continue;
@@ -676,6 +677,12 @@ export interface VectorSceneRenderOptions {
 	viewportSize?: { width: number; height: number };
 	/** With `viewportSize`: groups, text and instances smaller than this many screen pixels draw as one rectangle in their main colour (default 2; 0 turns it off). */
 	lod?: number;
+	/**
+	 * `live` (default): wet brushstrokes show the paint as laid until they settle (re-render when
+	 * `onVectorBrushstrokesSettled` fires; the controller notifies then). `settled`: settle them
+	 * first, as exports must.
+	 */
+	brushstrokes?: 'live' | 'settled';
 }
 
 /** A small subtree as one rectangle over its paint box in its main colour (cached per node), or null when it paints nothing solid. */
@@ -718,6 +725,79 @@ function resolvedLensNodes(doc: VectorDocument): VectorNode[] {
  * (`viewportSize`) to draw only what the view shows.
  */
 export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'document' | 'viewport'>, options: VectorSceneRenderOptions = {}): VectorSceneRenderData {
+	const outer = scene;
+	scene = { document: state.document, settle: options.brushstrokes === 'settled' ? 'now' : 'async' };
+	try {
+		return sceneRenderData(state, options);
+	} finally {
+		scene = outer;
+	}
+}
+
+/** The scene being rendered: brushstrokes that act on what lies beneath them draw it from here. */
+let scene: { document: VectorDocument; settle: 'async' | 'now' } | null = null;
+
+/** Where node `id` sits: at each level, the list holding it (or its ancestor) and the index there; null when it is not in `nodes`. */
+function nodeChain(nodes: readonly VectorNode[], id: string): Array<{ list: readonly VectorNode[]; at: number }> | null {
+	for (let i = 0; i < nodes.length; i++) {
+		const n = nodes[i];
+		if (n.id === id) return [{ list: nodes, at: i }];
+		if (n.type === 'group') {
+			const inner = nodeChain(n.children, id);
+			if (inner) return [{ list: nodes, at: i }, ...inner];
+		}
+	}
+	return null;
+}
+
+/** The nodes drawn before the last level of `chain`, with `last` in its place (ancestors kept, their later children dropped). */
+function nodesBelow(chain: ReadonlyArray<{ list: readonly VectorNode[]; at: number }>, last: VectorNode): VectorNode[] {
+	const [level, ...rest] = chain;
+	const before = level.list.slice(0, level.at);
+	if (!rest.length) return [...before, last];
+	const group = level.list[level.at] as VectorGroupNode;
+	return [...before, { ...group, children: nodesBelow(rest, last) }];
+}
+
+// What lies beneath a mixer, smudge or blender brushstroke: the scene up to it (the path with only
+// its fills and lower strokes), drawn on the CPU over the stroke's area in the path's space.
+setVectorBackdropSource((document, node, index, settle) => {
+	const nodes = document ? resolvedLensNodes(document) : [];
+	const chain = document ? nodeChain(nodes, node.id) : null;
+	const deps: unknown[] = [];
+	if (chain) {
+		for (let k = 0; k < chain.length; k++) {
+			const { list, at } = chain[k];
+			deps.push(...list.slice(0, at));
+			const n = list[at];
+			if (k < chain.length - 1) deps.push(JSON.stringify([n.transform ?? null, n.opacity ?? 1, n.visible ?? true]));
+		}
+		if (document?.symbols) deps.push(document.symbols);
+	}
+	deps.push(...vectorFills(node), ...vectorStrokes(node).slice(0, index));
+	return {
+		deps,
+		backdrop: (rect, scale) => {
+			const lower = withVectorStrokes(node, vectorStrokes(node).slice(0, index));
+			const below = chain ? nodesBelow(chain, lower) : [lower];
+			const world = (chain ? vectorWorldMatrix(nodes, node.id) : null) ?? nodeMatrix(node);
+			const defs: VectorPaintDef[] = [];
+			// Brushstrokes beneath render in the same document, settled as this one is.
+			const outer = scene;
+			scene = { document: document ?? outer?.document ?? { width: 0, height: 0, nodes: [] }, settle };
+			let items: VectorRenderNode[];
+			try {
+				items = below.map((n) => renderNode(n, defs, [], 've-backdrop-')).filter((n): n is VectorRenderNode => !!n);
+			} finally {
+				scene = outer;
+			}
+			const toPixels = multiplyMatrices(invertMatrix(world), [scale, 0, 0, scale, -rect.x, -rect.y]);
+			return rasterizeVectorBackdrop(items, defs, toPixels, { x: 0, y: 0, width: rect.width, height: rect.height });
+		}
+	};
+});
+
+function sceneRenderData(state: Pick<VectorEditorState, 'document' | 'viewport'>, options: VectorSceneRenderOptions): VectorSceneRenderData {
 	const defs: VectorPaintDef[] = [];
 	const filters: VectorRenderFilter[] = [];
 	const prefix = options.idPrefix ?? 've-';
