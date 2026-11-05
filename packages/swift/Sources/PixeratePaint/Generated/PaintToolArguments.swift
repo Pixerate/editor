@@ -2808,6 +2808,39 @@ public struct ImportBrushesArguments: Sendable {
     }
 }
 
+/// Arguments of `import_brush_pack`.
+public struct ImportBrushPackArguments: Sendable {
+    /// abr, brush or brushset (default: from the file name, then the contents).
+    public enum Format: String, CaseIterable, Sendable {
+        case abr
+        case brush
+        case brushset
+    }
+
+    /// The pack's bytes, base64 (at most 64 MB).
+    public var file: String
+    /// The file name, e.g.
+    public var fileName: String
+    /// abr, brush or brushset (default: from the file name, then the contents).
+    public var format: Format?
+    /// Id prefix for the brushes and sources (default: from the file name).
+    public var prefix: String?
+    /// The licence or terms the pack came with, kept on every source it adds.
+    public var licence: String?
+    /// Replace saved brushes and sources with the same ids (default false: skip them).
+    public var overwrite: Bool?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        file = try args.required(try args.string("file"), "file")
+        fileName = try args.required(try args.string("fileName"), "fileName")
+        format = try args.enumeration("format", as: Format.self)
+        prefix = try args.string("prefix")
+        licence = try args.string("licence")
+        overwrite = try args.bool("overwrite")
+    }
+}
+
 /// Arguments of `propose_paint`.
 public struct ProposePaintArguments: Sendable {
     /// Where the new layer goes: top (default), bottom (behind everything: grounds and washes), or above layerId.
@@ -3001,6 +3034,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .duplicateBrush: try DuplicateBrushArguments(args)
     case .removeBrush: try RemoveBrushArguments(args)
     case .importBrushes: try ImportBrushesArguments(args)
+    case .importBrushPack: try ImportBrushPackArguments(args)
     case .proposePaint: try ProposePaintArguments(args)
     case .listPaintProposals: try ListPaintProposalsArguments(args)
     case .acceptPaintProposal: try AcceptPaintProposalArguments(args)
