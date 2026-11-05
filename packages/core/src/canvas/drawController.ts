@@ -19,7 +19,7 @@ import {
 import { listCanvasBrushes, loadCanvasBrushstrokeRenderer, resolveCanvasBrushSpec, validateCanvasBrush, type CanvasBrush, type CanvasBrushPaint } from './brushstroke.js';
 import type { BrushLibrary } from '../brushes/library.js';
 import { brushColourHex } from '../brushes/colour.js';
-import type { CanvasBrushPreset } from './brushTypes.js';
+import type { CanvasBrushPreset, CanvasBrushChoice } from './brushTypes.js';
 
 /** A stroke drawn by code or an agent (`drawStroke`). */
 export interface DrawStrokeInput {
@@ -55,6 +55,8 @@ export interface CanvasDrawControllerOptions<TNode extends CanvasNode = CanvasNo
 	brushLibrary?: Pick<BrushLibrary, 'list' | 'get' | 'isBuiltin'>;
 	/** The host's colour scheme (default light): a brush's light / dark default colour resolves to its side. */
 	colorScheme?: 'light' | 'dark';
+	/** Start with the colour locked: choosing a brush keeps the stroke colour (see `setColorLocked`). */
+	colorLocked?: boolean;
 	getNodes: () => TNode[];
 	setNodes: (nodes: TNode[]) => void;
 	history?: ArrangeHistoryTarget;
@@ -64,6 +66,8 @@ export interface CanvasDrawControllerOptions<TNode extends CanvasNode = CanvasNo
 	generateNodeId?: () => string;
 	onToolChange?: (tool: FreehandTool) => void;
 	onStyleChange?: (style: FreehandStrokeStyle) => void;
+	/** The colour lock changed (`setColorLocked`). */
+	onColorLockChange?: (locked: boolean) => void;
 	onActiveStrokeChange?: (stroke: FreehandStroke | null) => void;
 	onStrokeComplete?: (node: TNode) => void;
 	onNodesErase?: (erasedNodes: TNode[]) => void;
@@ -79,6 +83,9 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 	};
 	let activeStroke: FreehandStroke | null = null;
 	let colorScheme: 'light' | 'dark' = options.colorScheme === 'dark' ? 'dark' : 'light';
+	let colorLocked = !!options.colorLocked;
+	/** The brush default colour the stroke colour came from (resolved again when the scheme changes), or `null`. */
+	let brushColour: CanvasBrushPreset['defaultColor'] | null = null;
 	const erasedInDrag = new Map<string, { node: TNode; index: number }>();
 
 	let dragStartNodes: TNode[] | null = null;
@@ -93,12 +100,19 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 				...createDefaultStrokeStyle(tool),
 				...options.style
 			};
+			brushColour = null;
 			options.onStyleChange?.(currentStyle);
 		}
 		options.onToolChange?.(tool);
 	}
 
 	function setStyle(style: Partial<FreehandStrokeStyle>) {
+		// A colour the user picks stops following a brush's light / dark default.
+		if (style.color !== undefined) brushColour = null;
+		applyStyle(style);
+	}
+
+	function applyStyle(style: Partial<FreehandStrokeStyle>) {
 		currentStyle = { ...currentStyle, ...style };
 		options.onStyleChange?.(currentStyle);
 	}
@@ -356,8 +370,10 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		/**
 		 * A brush picker's choice: brushes the pen and highlighter with `id` (`null`: a plain vector
 		 * stroke) at the brush's own size, embedding a saved brush, and makes its default colour
-		 * (resolved for the colour scheme) the stroke colour unless `keepColour`. Throws for a brush
-		 * the canvas can't paint. Resolves with the brush chosen.
+		 * (resolved for the colour scheme) the stroke colour unless `keepColour` or the colour is
+		 * locked (`setColorLocked`). A light / dark default resolves again when the scheme changes,
+		 * until another colour is set. Throws for a brush the canvas can't paint. Resolves with the
+		 * brush chosen.
 		 */
 		async selectBrush(id: string | null, choice: { keepColour?: boolean } = {}): Promise<CanvasBrushPreset | null> {
 			if (id === null) {
@@ -369,13 +385,43 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 				await validateCanvasBrush(id);
 				throw new Error(`Brush '${id}' is not one the canvas can paint; listBrushes lists them.`);
 			}
-			const hex = !choice.keepColour && preset.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
-			setStyle({ brush: id, brushSize: preset.size, brushSpec: preset.spec, ...(hex ? { color: hex } : {}) });
+			const hex = !choice.keepColour && !colorLocked && preset.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
+			if (hex) brushColour = preset.defaultColor ?? null;
+			applyStyle({ brush: id, brushSize: preset.size, brushSpec: preset.spec, ...(hex ? { color: hex } : {}) });
 			return preset;
 		},
-		/** The host's colour scheme, for brushes' light / dark default colours. */
+		get colorScheme() {
+			return colorScheme;
+		},
+		/**
+		 * The host's colour scheme, for brushes' light / dark default colours: a stroke colour that
+		 * came from one (`selectBrush`) resolves to the new side. Strokes already drawn keep theirs.
+		 */
 		setColorScheme(scheme: 'light' | 'dark') {
-			colorScheme = scheme === 'dark' ? 'dark' : 'light';
+			const next = scheme === 'dark' ? 'dark' : 'light';
+			if (next === colorScheme) return;
+			colorScheme = next;
+			const hex = brushColour ? brushColourHex(brushColour, next) : null;
+			if (hex && hex !== currentStyle.color) applyStyle({ color: hex });
+		},
+		get colorLocked() {
+			return colorLocked;
+		},
+		/** Locks the stroke colour ("Keep my colour"): choosing a brush with a default colour keeps it. */
+		setColorLocked(locked: boolean) {
+			if (colorLocked === !!locked) return;
+			colorLocked = !!locked;
+			options.onColorLockChange?.(colorLocked);
+		},
+		/** What the brush picker is set to: the brush, colour, scheme and lock (a snapshot). */
+		brushSettings(): CanvasBrushChoice {
+			return {
+				brush: typeof currentStyle.brush === 'string' ? currentStyle.brush : null,
+				color: typeof currentStyle.color === 'string' ? currentStyle.color : null,
+				colorScheme,
+				colorLocked,
+				colorFollowsScheme: brushColour !== null && typeof brushColour === 'object'
+			};
 		},
 		/** The saved brush to embed for a brush id (undefined for presets and tip settings); for a brush picker. */
 		brushSpec: (brush: CanvasBrush) => resolveCanvasBrushSpec(brush, options.brushLibrary)

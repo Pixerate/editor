@@ -238,4 +238,139 @@ describe('default colours in canvas and vector', () => {
 		expect(c.addBrushstroke({ brushId: 'fineliner' }, { ids: ['a'], keepColour: true }).ok).toBe(true);
 		expect(top().paint).toBe('#1d4ed8');
 	});
+
+	it('re-resolves a canvas colour taken from a light / dark default when the scheme changes, until another colour is set', async () => {
+		const { draw } = canvas();
+		await draw.selectBrush('chalk');
+		expect(draw.style.color).toBe('#475569');
+		expect(draw.brushSettings()).toEqual({ brush: 'chalk', color: '#475569', colorScheme: 'light', colorLocked: false, colorFollowsScheme: true });
+		draw.setColorScheme('dark');
+		expect(draw.style.color).toBe('#f8fafc');
+		draw.setColorScheme('light');
+		expect(draw.style.color).toBe('#475569');
+		// Changing the brush's size or swapping its spec does not stop the colour following.
+		draw.setStyle({ brushSize: 12 });
+		draw.setColorScheme('dark');
+		expect(draw.style.color).toBe('#f8fafc');
+		// A colour the user picks stays put.
+		draw.setStyle({ color: '#ff0000' });
+		expect(draw.brushSettings().colorFollowsScheme).toBe(false);
+		draw.setColorScheme('light');
+		expect(draw.style.color).toBe('#ff0000');
+		// A brush with no default colour leaves the colour alone.
+		await draw.selectBrush('pencil-hb');
+		draw.setColorScheme('dark');
+		expect(draw.style.color).toBe('#ff0000');
+	});
+
+	it('keeps the canvas colour while locked, and reports the lock', async () => {
+		let nodes: unknown[] = [];
+		const locks: boolean[] = [];
+		const draw = createCanvasDrawController({ getNodes: () => nodes as never, setNodes: (next) => void (nodes = next), colorScheme: 'dark', onColorLockChange: (l) => locks.push(l) });
+		draw.setStyle({ color: '#16a34a' });
+		draw.setColorLocked(true);
+		draw.setColorLocked(true);
+		expect(locks).toEqual([true]);
+		expect(draw.colorLocked).toBe(true);
+		await draw.selectBrush('chalk');
+		expect(draw.style).toMatchObject({ brush: 'chalk', color: '#16a34a' });
+		// Nothing was taken, so the scheme leaves the colour alone.
+		draw.setColorScheme('light');
+		expect(draw.style.color).toBe('#16a34a');
+		draw.setColorLocked(false);
+		await draw.selectBrush('chalk');
+		expect(draw.style.color).toBe('#475569');
+		// Locking after taking a default keeps it following the scheme: the colour is still the brush's.
+		draw.setColorLocked(true);
+		draw.setColorScheme('dark');
+		expect(draw.style.color).toBe('#f8fafc');
+		expect(locks).toEqual([true, false, true]);
+		// Starts locked when asked.
+		const locked = createCanvasDrawController({ getNodes: () => [], setNodes: () => {}, colorLocked: true });
+		await locked.selectBrush('ballpoint');
+		expect(locked.style.color).not.toBe('#1e3a8a');
+	});
+
+	it('gives agents the canvas brush picker, lock and scheme as commands', async () => {
+		const { draw } = canvas();
+		const commands = new CommandRegistry();
+		for (const spec of createDrawCommands(draw)) commands.register(spec);
+		const tools = new ToolRegistry();
+		tools.register(createCommandToolProvider(commands));
+		const run = async (id: string, params?: unknown) => {
+			const r = await tools.callTool('run_command', { id, ...(params !== undefined ? { params } : {}) });
+			return { isError: !!r.isError, text: r.content?.map((x: any) => x.text).join('') ?? '', ...(r.structuredContent as any) };
+		};
+		expect((await run('canvas.selectBrush', { brushId: 'chalk' })).result).toEqual({ brush: 'chalk', color: '#475569', colorScheme: 'light', colorLocked: false, colorFollowsScheme: true });
+		expect((await run('canvas.setColorScheme', { scheme: 'dark' })).result).toMatchObject({ color: '#f8fafc', colorScheme: 'dark' });
+		expect((await run('canvas.setColorLocked', { locked: true })).result).toMatchObject({ colorLocked: true, color: '#f8fafc' });
+		await run('canvas.selectBrush', { brushId: 'ballpoint' });
+		expect(draw.brushSettings()).toMatchObject({ brush: 'ballpoint', color: '#f8fafc', colorLocked: true });
+		await run('canvas.setColorLocked', { locked: false });
+		expect((await run('canvas.selectBrush', { brushId: 'ballpoint', keepColour: true })).result.color).toBe('#f8fafc');
+		expect((await run('canvas.selectBrush', { brushId: null })).result).toMatchObject({ brush: null });
+		// Strict params and useful errors.
+		expect((await run('canvas.setColorScheme', { scheme: 'sepia' })).isError).toBe(true);
+		expect((await run('canvas.setColorLocked', {})).isError).toBe(true);
+		expect((await run('canvas.selectBrush', { brushId: 'chalk', colour: '#fff' })).isError).toBe(true);
+		const wet = await run('canvas.selectBrush', { brushId: 'watercolor-wash' });
+		expect(wet.isError).toBe(true);
+		expect(wet.text).toMatch(/can't brush a canvas stroke/);
+		// A target without a picker gets none of them.
+		const bare = createDrawCommands({ drawStroke: draw.drawStroke, listBrushes: draw.listBrushes }).map((c) => c.id);
+		expect(bare).not.toContain('canvas.selectBrush');
+		expect(bare).toContain('canvas.drawFreehand');
+	});
+
+	it('keeps vector brushstroke colours while locked; strokes already made never change', async () => {
+		const path = { id: 'a', type: 'path', subpaths: [{ closed: false, anchors: [{ x: 10, y: 50 }, { x: 190, y: 50 }] }], fill: null, stroke: '#1d4ed8', strokeWidth: 2 } as unknown as VectorPathNode;
+		const c = new VectorEditorController({ document: { width: 200, height: 100, nodes: [path] } });
+		const top = () => (c.getNode('a') as VectorPathNode).strokes!.at(-1)!;
+		expect(c.getState()).toMatchObject({ colorScheme: 'light', colorLocked: false });
+		expect(c.addBrushstroke({ brushId: 'chalk' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#475569');
+		const revision = c.getState().revision;
+		c.setColorScheme('dark');
+		expect(c.getState()).toMatchObject({ colorScheme: 'dark' });
+		expect(c.getState().revision).toBeGreaterThan(revision);
+		expect(top().paint).toBe('#475569');
+		c.setColorLocked(true);
+		expect(c.getState().colorLocked).toBe(true);
+		const index = (c.getNode('a') as VectorPathNode).strokes!.length - 1;
+		expect(c.setBrushstroke(index, { brushId: 'ballpoint' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#475569');
+		expect(c.addBrushstroke({ brushId: 'ballpoint' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#1d4ed8');
+		// An explicit colour still applies while locked.
+		expect(c.addBrushstroke({ brushId: 'ballpoint' }, { ids: ['a'], color: '#22c55e' }).ok).toBe(true);
+		expect(top().paint).toBe('#22c55e');
+		c.setColorLocked(false);
+		expect(c.addBrushstroke({ brushId: 'ballpoint' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#93c5fd');
+		expect(new VectorEditorController({ colorLocked: true }).getState().colorLocked).toBe(true);
+	});
+
+	it('gives agents the vector lock and scheme as commands', async () => {
+		const path = { id: 'a', type: 'path', subpaths: [{ closed: false, anchors: [{ x: 10, y: 50 }, { x: 190, y: 50 }] }], fill: null, stroke: '#1d4ed8', strokeWidth: 2 } as unknown as VectorPathNode;
+		const c = new VectorEditorController({ document: { width: 200, height: 100, nodes: [path] } });
+		const commands = new CommandRegistry();
+		for (const spec of createVectorCommands(c)) commands.register(spec);
+		const tools = new ToolRegistry();
+		tools.register(createCommandToolProvider(commands));
+		const run = async (id: string, params?: unknown) => {
+			const r = await tools.callTool('run_command', { id, ...(params !== undefined ? { params } : {}) });
+			return { isError: !!r.isError, text: r.content?.map((x: any) => x.text).join('') ?? '', ...(r.structuredContent as any) };
+		};
+		expect((await run('vector.listBrushes')).result).toMatchObject({ colorScheme: 'light', colorLocked: false });
+		expect((await run('vector.setColorScheme', { scheme: 'dark' })).result).toEqual({ colorScheme: 'dark', colorLocked: false });
+		expect((await run('vector.setColorLocked', { locked: true })).result).toEqual({ colorScheme: 'dark', colorLocked: true });
+		const added = await run('vector.addBrushstroke', { ids: ['a'], brushId: 'chalk' });
+		expect(added.result.paths[0].strokes.at(-1).paint).toBe('#1d4ed8');
+		await run('vector.setColorLocked', { locked: false });
+		const index = added.result.paths[0].strokes.length - 1;
+		expect((await run('vector.setBrushstroke', { id: 'a', index, brushId: 'ballpoint' })).result.strokes[index].paint).toBe('#93c5fd');
+		expect((await run('vector.setColorScheme', { scheme: 'dim' })).isError).toBe(true);
+		expect((await run('vector.setColorLocked', { locked: 'yes' })).isError).toBe(true);
+		expect((await run('vector.setColorLocked', {})).isError).toBe(true);
+	});
 });

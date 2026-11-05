@@ -3561,8 +3561,9 @@ All contributors and AI assistants should check this file before starting work a
   - `colour.own` brushes paint their default at every stroke, resolved when the stroke starts. The stroke records the hex, so replays in another scheme stay exact.
   - Gradient defaults were already the brush's own paint. Effect defaults stay a suggestion.
   - The image editor's `setBrushPreset` takes the default as the foreground unless `keepColour`.
-  - Canvas: `selectBrush(id, { keepColour })` takes the default (`CanvasBrushPreset.defaultColor`) for the controller's `colorScheme`; `drawStroke` with a brush and no `style.color` paints in it, so agents get the ballpoint's blue without asking.
-  - Vector: `addBrushstroke` and `setBrushstroke` with another brush take its default unless `keepColour`; an explicit `color` always wins. Existing strokes keep their colour when the scheme changes.
+  - Canvas: `selectBrush(id, { keepColour })` takes the default (`CanvasBrushPreset.defaultColor`) for the controller's `colorScheme`, unless `setColorLocked(true)` (`canvas.setColorLocked`). Like paint, a light / dark default taken this way resolves again on `setColorScheme` until `setStyle` sets a colour (or the pen / highlighter switch resets the style); locking afterwards doesn't stop it following, since the colour is still the brush's. `drawStroke` with a brush and no `style.color` paints in it, so agents get the ballpoint's blue without asking; the lock doesn't apply there, since `drawStroke` ignores the picker's style anyway.
+  - Vector: `addBrushstroke` and `setBrushstroke` with another brush take its default unless `keepColour` or `setColorLocked(true)` (`vector.setColorLocked`); an explicit `color` always wins. Existing strokes keep their colour when the scheme changes: vector has no current brush colour to follow.
+  - A host that keeps the picked brush in its own state (the demo's canvas tab did) undoes an agent's `canvas.selectBrush` on the next render. Read the brush from the draw style instead.
 
 ### [core/paint-editor] Stamp Tips and Spray Run in Both Dab Engines
 

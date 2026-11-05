@@ -1547,6 +1547,11 @@ export function createVectorCommands(controller: VectorEditorController, options
 		additionalProperties: false
 	} as const;
 
+	// The scheme and lock that decide whether brushstrokes take a brush's default colour.
+	const brushColourResult = () => {
+		const st = controller.getState();
+		return { colorScheme: st.colorScheme, colorLocked: st.colorLocked };
+	};
 	const brushstrokeCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -1554,9 +1559,9 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Brushstroke Brushes',
 			readOnly: true,
 			keywords: ['brush', 'brushstroke', 'pencil', 'pastel', 'charcoal', 'ink', 'marker', 'natural media'],
-			description: 'Lists the brushes a brushstroke can use (the dry presets, then saved brushes from the brush library the vector profile admits): { brushes: [{ id, name, category, size, builtin }] } (size: the brush\'s own diameter in document units).',
+			description: 'Lists the brushes a brushstroke can use (the dry presets, then saved brushes from the brush library the vector profile admits): { brushes: [{ id, name, category, size, builtin }], colorScheme, colorLocked } (size: the brush\'s own diameter in document units; colorScheme picks the side of light / dark default colours; colorLocked: brushstrokes keep their colour, vector.setColorLocked).',
 			params: { type: 'object', properties: {}, additionalProperties: false },
-			run: () => ({ brushes: controller.listBrushstrokeBrushes().map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size, builtin: vectorBrushstrokeBrush(b.id) !== null })) })
+			run: () => ({ brushes: controller.listBrushstrokeBrushes().map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size, builtin: vectorBrushstrokeBrush(b.id) !== null })), ...brushColourResult() })
 		},
 		{
 			...base,
@@ -1637,6 +1642,42 @@ export function createVectorCommands(controller: VectorEditorController, options
 				layerIndex(id, 'stroke', index);
 				check(controller.setBrushstroke(index, patch, { ids: [id] }));
 				return stackResult(id, 'stroke');
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setColorLocked`,
+			label: 'Keep My Colour',
+			keywords: ['lock colour', 'keep colour', 'brush colour', 'color lock', 'brushstroke'],
+			description:
+				'Locks or unlocks the brushstroke colour ("Keep my colour"): while locked, vector.addBrushstroke and vector.setBrushstroke with another brushId keep the colour (the path\'s stroke colour, or the layer\'s) instead of taking the brush\'s default colour; an explicit color still applies. Strokes already made are unchanged. Editor state, not an undo step. Returns { colorScheme, colorLocked }.',
+			params: {
+				type: 'object',
+				properties: { locked: { type: 'boolean', description: 'true locks the colour, false unlocks it (the editor starts unlocked).' } },
+				required: ['locked'],
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { locked: boolean }) => {
+				controller.setColorLocked(params.locked);
+				return brushColourResult();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setColorScheme`,
+			label: 'Brush Colours for Light / Dark',
+			keywords: ['colour scheme', 'dark mode', 'light mode', 'theme', 'brush colour'],
+			description:
+				'Sets the colour scheme that picks the side of a brush\'s light / dark default colour for brushstrokes made from now on (white chalk in dark, dark chalk in light). Strokes already made keep their colour. The host usually sets it to match its theme. Editor state, not an undo step. Returns { colorScheme, colorLocked }.',
+			params: {
+				type: 'object',
+				properties: { scheme: { type: 'string', enum: ['light', 'dark'], description: 'light (dark chalk on a light background) or dark (light chalk on a dark one).' } },
+				required: ['scheme'],
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { scheme: 'light' | 'dark' }) => {
+				controller.setColorScheme(params.scheme);
+				return brushColourResult();
 			}
 		}
 	];

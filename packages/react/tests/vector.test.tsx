@@ -1436,4 +1436,26 @@ describe("Brushstrokes (react)", () => {
     expect(brush().paper).toBeUndefined();
     expect(grain().checked).toBe(true);
   });
+
+  it("keeps the stroke's colour when choosing a brush while 'Keep my colour' is on", async () => {
+    const { VectorAppearancePanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    c.select(["a"]);
+    await act(async () => root.render(<VectorAppearancePanel controller={c} />));
+    expect(container.querySelector("[data-vector-keep-colour]")).toBeNull();
+    await act(async () => (container.querySelector("[data-vector-add-brushstroke]") as HTMLButtonElement).click());
+    const index = (c.getNode("a") as VectorPathNode).strokes!.length - 1;
+    const layer = () => (c.getNode("a") as VectorPathNode).strokes![index];
+    const before = layer().paint;
+    const keep = () => container.querySelector("[data-vector-keep-colour]") as HTMLInputElement;
+    expect(keep().checked).toBe(false);
+    await act(async () => keep().click());
+    expect(c.getState().colorLocked).toBe(true);
+    expect(keep().checked).toBe(true);
+    await act(async () => void c.setBrushstroke(index, { brushId: "chalk" }, { ids: ["a"] }));
+    expect(layer()).toMatchObject({ paint: before, brush: { brushId: "chalk" } });
+    await act(async () => keep().click());
+    await act(async () => void c.setBrushstroke(index, { brushId: "ballpoint" }, { ids: ["a"] }));
+    expect(layer().paint).toBe("#1e3a8a");
+  });
 });
