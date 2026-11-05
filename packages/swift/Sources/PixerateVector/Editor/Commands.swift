@@ -7,8 +7,8 @@ import PixerateRaster
 // with `run_command`, palettes list and shortcuts trigger. Every command's metadata (label,
 // group, keywords, description, params schema, shortcut, read-only flag) comes from the contract
 // (`commands.json`); this file adds each command's `enabled` check and its `run`. Commands whose
-// `run` is not ported yet are listed with their TS enablement and fail with a "not ported yet"
-// message (#624).
+// `run` is not ported yet would be listed with their TS enablement and fail with a "not ported
+// yet" message (#624); every command has its run now.
 
 /// A command's run: the controller and the validated params, returning the result (nil for `undefined`).
 typealias VectorCommandRun = (VectorEditorController, JSONObject) throws -> JSONValue?
@@ -27,7 +27,8 @@ private let ENABLED_FOR: Set<String> = [
  * Palette and agent commands for a vector editor (`createVectorCommands`): list, select, add
  * shapes and paths, style, transform, align, arrange, group, boolean operations, Pathfinder, path
  * editing, appearance, blends, envelopes, symmetry, symbols, constraints, frames, pages,
- * connectors, snapping options, perspective grids and SVG export. Register them in a
+ * connectors, snapping options, perspective grids, SVG import and export, PDF and Lottie export,
+ * Lottie import, Image Trace and the bitmap-to-vector styles. Register them in a
  * `CommandRegistry` whose context is the controller
  * and whose history is `controller.history`; agents get them through `createCommandToolProvider`.
  * Failures throw sentences, which the registry returns as `{ ok: false, code: 'failed', message }`.
@@ -220,7 +221,7 @@ extension VectorEditorController {
 
 // MARK: - Runs
 
-private func vectorCommandRuns() -> [String: VectorCommandRun] {
+func vectorCommandRuns() -> [String: VectorCommandRun] {
     var r: [String: VectorCommandRun] = [:]
 
     // Listing, selection, tools and settings
@@ -484,6 +485,7 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     vectorConstraintRuns(&r)
     vectorFrameRuns(&r)
     vectorTextCommandRuns(&r)
+    vectorIoRuns(&r)
     return r
 }
 
@@ -1452,5 +1454,76 @@ private func vectorTextCommandRuns(_ r: inout [String: VectorCommandRun]) {
         let r = c.createOutlines(ids: try targetIds(c, VectorParams(params)))
         try check(r.result)
         return ["ids": idList(r.ids ?? [])]
+    }
+}
+
+// MARK: - PDF, Lottie, Image Trace and stylise
+
+/// A PNG data URL as RGBA pixels, or the command's failure (`decodeImage`).
+private func decodeImageParam(_ image: String) throws -> VectorTracePixels {
+    guard let parsed = parseDataUrl(image), isPng(parsed.bytes) else { throw fail("image must be a PNG data URL (data:image/png;base64,…).") }
+    do {
+        let png = try decodePng(parsed.bytes, maxPixels: VECTOR_TRACE_MAX_PIXELS)
+        return VectorTracePixels(width: png.width, height: png.height, data: png.data)
+    } catch {
+        throw fail("The PNG could not be read: \(error)")
+    }
+}
+
+/// `{ id, paths: [{ id, name, fill, subpaths }] }` of a traced or stylised group.
+private func imageResult(_ c: VectorEditorController, _ r: VectorImageResult) throws -> JSONValue {
+    try check(r.result)
+    let paths: [JSONValue] = r.ids.map { id in
+        let n = c.getNode(id)
+        var o = JSONObject([("id", .string(id))])
+        o["name"] = n?["name"]
+        o["fill"] = n?["fill"]
+        o["subpaths"] = .number(Double(n?.subpaths.count ?? 0))
+        return .object(o)
+    }
+    return .object(JSONObject([("id", .string(r.id ?? "")), ("paths", .array(paths))]))
+}
+
+/// Where an image command places its group.
+private func placement(_ p: VectorParams) -> VectorImagePlacement {
+    VectorImagePlacement(x: p.num("x"), y: p.num("y"), width: p.num("width"), name: p.str("name"))
+}
+
+private func vectorIoRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.exportPdf"] = { c, params in
+        let p = VectorParams(params)
+        let out = try c.toPdf(VectorPdfOptions(pages: p.str("pages"), scale: p.num("scale"), title: p.str("title"), compress: p.bool("compress")))
+        return .object(JSONObject([
+            ("pdf", .string("data:application/pdf;base64,\(bytesToBase64(out.bytes))")), ("pages", .number(Double(out.pages))), ("bytes", .number(Double(out.bytes.count))),
+            ("notes", .array(out.notes.map { .string($0) })),
+        ]))
+    }
+    r["vector.exportLottie"] = { c, params in
+        let p = VectorParams(params)
+        let ids = p.strings("ids")
+        for id in ids ?? [] where c.getNode(id) == nil { throw fail("There is no node \"\(id)\".") }
+        return try c.toLottie(VectorLottieExportOptions(fps: p.num("fps"), frames: p.num("frames"), name: p.str("name")), ids: ids).json
+    }
+    r["vector.importLottie"] = { c, params in
+        let p = VectorParams(params)
+        let out = try c.importLottie(params["lottie"] ?? .null, frame: p.num("frame"), replace: p.bool("replace") == true)
+        try check(out.result)
+        return .object(JSONObject([("ids", idList(out.ids)), ("notes", .array(out.notes.map { .string($0) }))]))
+    }
+    r["vector.traceImage"] = { c, params in
+        let p = VectorParams(params)
+        let pixels = try decodeImageParam(p.str("image") ?? "")
+        let options = VectorTraceOptions(mode: p.str("mode"), channel: p.str("channel"), threshold: p.num("threshold"), color: p.str("color"), colors: p.num("colors"),
+                                         tolerance: p.num("tolerance"), minArea: p.num("minArea"), cornerRoundness: p.num("cornerRoundness"))
+        return try imageResult(c, c.traceImage(pixels, options, placement(p)))
+    }
+    for style in VECTOR_STYLIZE_STYLES {
+        r["vector.\(style)Image"] = { c, params in
+            let p = VectorParams(params)
+            let pixels = try decodeImageParam(p.str("image") ?? "")
+            let options = VectorStylizeOptions(cell: p.num("cell"), colors: p.num("colors"), shape: p.str("shape"), gap: p.num("gap"), angle: p.num("angle"), color: p.str("color"),
+                                               colorNull: params["color"] == .null, jitter: p.num("jitter"), seed: p.num("seed"))
+            return try imageResult(c, c.stylizeImage(pixels, style, options, placement(p)))
+        }
     }
 }

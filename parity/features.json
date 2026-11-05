@@ -1071,21 +1071,21 @@
           "core": "`traceImage`, `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`",
           "react": "`<VectorTracePanel>` (in `<VectorToolbar>`)",
           "svelte": "`<VectorTracePanel>` (in `<VectorStylePanel>`)",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController.traceImage`, `vector.traceImage`; `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`); the trace panel and the views: Planned (#533)"
         },
         {
           "feature": "Vector Lottie Export & Import (Bodymovin v5 JSON: groups mirroring the nodes, paths with solid and gradient fills and strokes (dashes, caps, joins, blend modes), path effects kept live as Lottie modifiers — trim, round corners, pucker & bloat, twist, zig zag, offset, merge, repeater — live booleans as Merge Paths, masks and frames clipped, text, instances and wiggle / envelope effects as drawn, aligned or arrowed strokes as outlines; import of one frame with eased keyframes, layer parenting, precomps, solids and additive masks, modifiers becoming live effects; notes for what was approximated; agent commands `vector.exportLottie`, `vector.importLottie`)",
           "core": "`toLottie`, `importLottie`, `vectorDocumentToLottie`, `parseVectorLottie`, `lottieValueAt`",
           "react": "headless (demo Export / Import Lottie)",
           "svelte": "headless",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController`: `toLottie`, `importLottie`; `vector.exportLottie`, `vector.importLottie`; `vectorDocumentToLottie`, `parseVectorLottie`, `lottieValueAt`); the views: Planned (#533)"
         },
         {
           "feature": "Vector PDF Export (real vector PDF: paths from the canvas's render data — effects, text outlines, paint stacks, aligned and arrowed strokes, clip masks and frames — filled and stroked with dashes, caps and joins; opacity and blend modes as graphics states; linear and radial gradients as PDF shadings, conic, diamond, mesh and freeform as their tiles; one page, or a page per artboard; points per unit; Flate compression; notes for filters, opacity masks and text without outlines; agent command `vector.exportPdf`)",
           "core": "`toPdf`, `vectorDocumentToPdf`",
           "react": "headless (demo Export PDF)",
           "svelte": "headless",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController.toPdf`, `vector.exportPdf`, `vectorDocumentToPdf`, byte for byte the TS file) for what the Swift render data draws; aligned, arrowed and profiled strokes, brushstrokes, lenses and opacity masks wait on render data, and the views: Planned (#533)"
         },
         {
           "feature": "Vector Text (point, area and text on a path as `text` nodes painted with the same fill and stroke stacks, filters and blend modes as paths; base character style plus styled runs with their own fill, paragraph alignment, indents and spacing; laid out by the layout engine shared with the image editor's type layers (`src/text`: line breaking, justification, tracking, leading, baseline shift, underline, strike-through, horizontal and vertical writing — columns right to left, CJK upright, Latin turned or upright, `vert` alternates and `vhea` / `vmtx` metrics) over a pluggable text shaper — the browser's fonts as SVG `<text>` placed character by character, or glyph outlines from fonts read by the built-in OpenType reader (TrueType, CFF, WOFF; kern and GPOS pair kerning) so path effects, envelopes, booleans and Create Outlines act on the glyphs; Type (T) and Type on a Path (Q) tools, on-canvas editing with caret, selection, word moves, IME through a hidden textarea and one undo step per typing session; area overflow and path overflow reported; scale bakes into font size; SVG export as `<text>` (or outlines) with a lossless round-trip and import of foreign `<text>`; agent commands `vector.listFonts`, `vector.addText`, `vector.getText`, `vector.setText`, `vector.setTextStyle`, `vector.setParagraphStyle`, `vector.setTextFrame`, `vector.setTextOrientation`, `vector.typeOnPath`, `vector.createOutlines`)",
@@ -1155,7 +1155,7 @@
           "core": "`stylizeImage`, `stylizeVectorImage`, `vectorMosaic`, `vectorHalftone`, `vectorLowPoly`, `vectorHatch`",
           "react": "`<VectorTracePanel>` styles",
           "svelte": "`<VectorTracePanel>` styles",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController.stylizeImage`; `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage`, `vector.hatchImage`; `stylizeVectorImage`, `vectorMosaic`, `vectorHalftone`, `vectorLowPoly`, `vectorHatch`); the panel: Planned (#533)"
         },
         {
           "feature": "Vector Distortion Brushes (CorelDRAW-style Smudge, Twirl, Attract, Repel and Roughen: a round brush with a smooth falloff that bends the outlines under it, as the Distort Brush tool (D) with mode, size and strength options and a brush circle on the canvas, each drag one undo step; a stroke's dabs are composed into one map applied to the paths as they were when it began, curves re-fitted, so anchors do not pile up; roughen breaks the outline into deterministic spikes; agent commands `vector.smudgeBrush`, `vector.twirlBrush`, `vector.attractBrush`, `vector.repelBrush`, `vector.roughenBrush`)",
@@ -1218,7 +1218,7 @@
           "core": "`parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands`",
           "react": "`useVectorCommands`",
           "svelte": "`useVectorCommands`",
-          "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata and enablement; those not ported yet fail, #624) and SVG export of plain paths and groups ✅; SVG import and the rest: Planned (#533)"
+          "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata, enablement and Swift run), SVG export and import ✅ headless (`vectorDocumentToSvg`, `parseVectorSvg`); the views: Planned (#533)"
         },
         {
           "feature": "Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools)",

@@ -44,7 +44,7 @@ final class VectorConformanceTests: XCTestCase {
     /// The scenarios this port covers stay unskipped.
     func testPortedScenariosAreNotSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text"] {
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text", "import-export"] {
             let scenario = try XCTUnwrap(scenarios.first { $0.id == id })
             XCTAssertNil(scenario.skip["swift"], id)
         }
@@ -61,11 +61,9 @@ final class VectorConformanceTests: XCTestCase {
         }
     }
 
-    /// `import-export` is skipped for PDF, Lottie and tracing; its SVG steps (import, export and a
-    /// failed import) replay on their own.
+    /// The SVG steps of `import-export` (import, export and a failed import) also replay on their own.
     func testImportExportSvgSteps() async throws {
         var scenario = try XCTUnwrap(ConformanceScenario.load(domain: "vector").first { $0.id == "import-export" })
-        XCTAssertNotNil(scenario.skip["swift"])
         scenario.steps = [scenario.steps[0], scenario.steps[1], scenario.steps[10]]
         XCTAssertEqual(scenario.steps.map { $0.arguments["id"]?.stringValue }, ["vector.importSvg", "vector.exportSvg", "vector.importSvg"])
         let outputs = try await runConformanceScenario(scenario, host: VectorConformanceHost(setup: scenario.setup))
@@ -91,8 +89,7 @@ final class VectorConformanceTests: XCTestCase {
         }
     }
 
-    /// Every command of the contract is registered, with the TS metadata, and a command that is
-    /// not ported yet fails with a message rather than crashing.
+    /// Every command of the contract is registered, with the TS metadata and a Swift run.
     func testEveryContractCommandIsRegistered() throws {
         let host = try VectorConformanceHost(setup: [:])
         let contract = try VectorContracts.commands()
@@ -113,10 +110,10 @@ final class VectorConformanceTests: XCTestCase {
         XCTAssertNil(listed.first { $0.id == "vector.list" }?.params)
         _ = host.commands.execute("vector.addShape", ["kind": "rect", "x": 0, "y": 0, "width": 10, "height": 10])
         XCTAssertEqual(host.commands.list().filter { !$0.enabled }.map(\.id), ["vector.exitSymbolEdit"])
-        let result = host.commands.execute("vector.exportPdf")
-        guard case .failure(let f) = result else { return XCTFail("exportPdf ran") }
-        XCTAssertEqual(f.code, .failed)
-        XCTAssertTrue(f.message.contains("not ported to Swift yet (#624)"), f.message)
+        guard case .ok(_, let pdf) = host.commands.execute("vector.exportPdf") else { return XCTFail("exportPdf failed") }
+        XCTAssertEqual(pdf?["pages"], 1)
+        // Every command has a Swift run: none falls back to the "not ported" failure.
+        XCTAssertEqual(Set(contract.map(\.id)).subtracting(vectorCommandRuns().keys), [])
     }
 }
 

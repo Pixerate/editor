@@ -143,8 +143,8 @@ private func at(_ poly: Poly, _ t: Double) -> (P, Int) {
 private func arcPoints(_ c: P, _ a0: Double, _ sweep: Double, _ r0: Double, _ r1: Double, _ tol: Double) -> [P] {
     let r = JS.max(r0, r1)
     if !(r > tol * 0.5) || !sweep.isFinite { return [] }
-    // `Math.acos` is Foundation's: only the whole number of steps depends on it.
-    let stepAngle = 2 * Foundation.acos(JS.min(JS.max(1 - tol / r, -1), 1))
+    // `Math.acos` is V8's (`JS.acos`); only the whole number of steps depends on it.
+    let stepAngle = 2 * JS.acos(JS.min(JS.max(1 - tol / r, -1), 1))
     let n = JS.min(128, JS.max(2, JS.ceil(abs(sweep) / JS.max(stepAngle, 1e-3))))
     var out: [P] = []
     var k = 1.0

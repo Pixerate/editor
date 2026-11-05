@@ -352,6 +352,51 @@ public enum JS {
         return hx < 0 ? -z : z
     }
 
+    // MARK: acos
+
+    private static let pS: [Double] = [
+        1.66666666666666657415e-01, -3.25565818622400915405e-01, 2.01212532134862925881e-01, -4.00555345006794114027e-02, 7.91534994289814532176e-04,
+        3.47933107596021167570e-05,
+    ]
+    private static let qS: [Double] = [0, -2.40339491173441421878e+00, 2.02094576023350569471e+00, -6.88283971605453293030e-01, 7.70381505559019352791e-02]
+
+    /// `Math.acos` (fdlibm `e_acos.c`).
+    public static func acos(_ x: Double) -> Double {
+        let pi = 3.14159265358979311600e+00
+        let pio2Hi = 1.57079632679489655800e+00
+        let pio2Lo = 6.12323399573676603587e-17
+        let hx = hi(x)
+        let ix = hx & 0x7FFF_FFFF
+        if ix >= 0x3FF0_0000 {
+            if ((ix - 0x3FF0_0000) | Int32(bitPattern: lo(x))) == 0 { return hx > 0 ? 0.0 : fma(2.0, pio2Lo, pi) }
+            return .nan
+        }
+        func pq(_ z: Double) -> Double {
+            let p = z * fma(z, fma(z, fma(z, fma(z, fma(z, pS[5], pS[4]), pS[3]), pS[2]), pS[1]), pS[0])
+            let q = fma(z, fma(z, fma(z, fma(z, qS[4], qS[3]), qS[2]), qS[1]), 1.0)
+            return p / q
+        }
+        if ix < 0x3FE0_0000 {
+            if ix <= 0x3C60_0000 { return pio2Hi + pio2Lo }
+            let r = pq(x * x)
+            return pio2Hi - (x - fma(-x, r, pio2Lo))
+        } else if hx < 0 {
+            let z = (1.0 + x) * 0.5
+            let s = z.squareRoot()
+            let r = pq(z)
+            let w = fma(r, s, -pio2Lo)
+            return fma(-2.0, s + w, pi)
+        } else {
+            let z = (1.0 - x) * 0.5
+            let s = z.squareRoot()
+            let df = withLow(s, 0)
+            let c = fma(-df, df, z) / (s + df)
+            let r = pq(z)
+            let w = fma(r, s, c)
+            return 2.0 * (df + w)
+        }
+    }
+
     /// `Math.atan2` (fdlibm `e_atan2.c`).
     public static func atan2(_ y: Double, _ x: Double) -> Double {
         let tiny = 1.0e-300
