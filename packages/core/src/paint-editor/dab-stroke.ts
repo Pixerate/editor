@@ -28,6 +28,7 @@ import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
+import { TipGrain } from './tip-grain';
 import { rasterizeStampDab, sprayDroplets, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
 import type { StickerArtLookup } from './sticker-art';
 
@@ -143,12 +144,15 @@ export class PaintDabStroke {
 
   /** The stamp tip's shape (dab brushes), or `null` for the round computed tip. */
   private readonly stamp: StampSampler | null;
+  /** The tip's own grain, or `null`. */
+  private readonly tipGrain: TipGrain | null;
 
   constructor(
     readonly brush: PaintBrush,
     private readonly options: PaintDabStrokeOptions
   ) {
-    this.stamp = brush.engine === 'dab' && brush.stamp ? stampSampler(brush.stamp, options.stampArt) : null;
+    this.stamp = brush.engine === 'dab' && brush.stamp ? stampSampler(brush.stamp, options.stampArt, brush.tip.hardness) : null;
+    this.tipGrain = TipGrain.create(brush.tipGrain, options.stampArt);
     this.smoother = new PenSmoother(brush.tip.smoothing, brush.pressureSmoothing);
     this.copies = options.copies?.length ? options.copies : [IDENTITY_COPY];
     const exchanging = brush.engine === 'mixer' || brush.engine === 'dab';
@@ -227,6 +231,7 @@ export class PaintDabStroke {
     tip.fill(0);
     if (this.stamp) rasterizeStampDab({ ...d, alpha: 1 }, this.stamp, d.index, rect, tip);
     else rasterizeDab({ ...d, alpha: 1 }, this.brush.tip.hardness, rect, tip);
+    this.tipGrain?.apply(tip, rect, d);
     if (!(this.depth > 0 && this.options.grain)) return { tip, cov: tip };
     const cov = this.cov.subarray(0, n);
     const grain = this.options.grain;

@@ -27,7 +27,7 @@ const control = (brush: Brush, path: string, profile = PAINT_PROFILE): BrushEdit
 describe('brushEditorSections', () => {
   it('lists the facets of a brush in order, with values from the brush or its engine defaults', () => {
     const sections = brushEditorSections(preset('highlighter'));
-    expect(sections.map((s) => s.id)).toEqual(['medium', 'shape', 'marks', 'feel', 'behaviour', 'light', 'colour']);
+    expect(sections.map((s) => s.id)).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'colour']);
     expect(control(preset('highlighter'), 'tip.size')).toMatchObject({ kind: 'slider', value: 30, min: 1 });
     expect(control(preset('highlighter'), 'tip.blend')).toMatchObject({ kind: 'choice', value: 'multiply', ariaLabel: 'Brush blend' });
     expect(control(preset('highlighter'), 'light.spill.radius')).toMatchObject({ value: 0 });

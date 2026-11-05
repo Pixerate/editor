@@ -9,7 +9,8 @@ import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
-import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS } from './types';
+import { GRAIN_PATTERNS } from '../paint/grain';
+import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS } from './types';
 
 /** Most colours in a brush's palette. */
 export const MAX_BRUSH_PALETTE = 16;
@@ -38,8 +39,25 @@ export const BRUSH_STAMP_PATTERN = `^(?:[^:\\s]+:\\S+|${STAMP_KINDS.join('|')})$
 const STAMP: JsonSchema = {
   type: 'string',
   pattern: BRUSH_STAMP_PATTERN,
-  description: `A sticker ref provider:id (find_stickers lists them; the editor's own are ${STAMP_KINDS.map((k) => `editor:${k}`).join(', ')}). A bare editor stamp (star) means editor:star.`,
+  description: `A sticker ref provider:id (find_stickers lists them; the editor's own are ${STAMP_KINDS.map((k) => `editor:${k}`).join(', ')}), or an image source source:<id> (list_brush_sources lists them; add_brush_source makes one from an image). A bare editor stamp (star) means editor:star.`,
 };
+
+/** Tip grain sources: the built-in patterns (not the flat `smooth`) or an image source `source:<id>`. */
+export const TIP_GRAIN_PATTERNS = GRAIN_PATTERNS.filter((p) => p !== 'smooth');
+export const BRUSH_GRAIN_SOURCE_PATTERN = `^(?:source:[a-z0-9][a-z0-9-]{0,63}|${TIP_GRAIN_PATTERNS.join('|')})$`;
+
+const TIP_GRAIN = object(
+  "Texture inside the tip (a grain source), separate from the paper's grain: each dab is multiplied by it. Continuous and scatter marks of round and stamp tips.",
+  {
+    source: { type: 'string', pattern: BRUSH_GRAIN_SOURCE_PATTERN, description: `The texture: a built-in pattern (${TIP_GRAIN_PATTERNS.join(', ')}) or an image source source:<id> (list_brush_sources); light parts are peaks, which paint.` },
+    mode: oneOf(BRUSH_GRAIN_MODES, 'texturised (default): the grain stays put on the canvas, a texture under the paint; moving: it rolls along with the tip, turning with it.'),
+    scale: num(0.05, 20, "Grain size: 1 is the pattern's or image's own size, 2 twice as coarse (default 1)."),
+    depth: unit('How much the grain takes out of each dab: 0 none, 1 only the peaks paint (default 0.6).'),
+    contrast: num(0, 3, 'Height contrast around the middle: below 1 softer, above 1 harsher (default 1).'),
+    invert: bool('Swap peaks and valleys (default false).'),
+  },
+  ['source'],
+);
 
 const BRISTLES = object('Bristle tips: the tuft. Missing fields take their defaults.', {
   count: int(3, 128, 'Bristles in the tuft (default 32).'),
@@ -53,9 +71,9 @@ const BRISTLES = object('Bristle tips: the tuft. Missing fields take their defau
 const TIP = object(
   'The tip: its shape and the dab it lays.',
   {
-    shape: oneOf(BRUSH_TIP_SHAPES, 'round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: textured stamps (see stamps), laid as objects or particles.'),
+    shape: oneOf(BRUSH_TIP_SHAPES, 'round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: dabs shaped like a stamp, a sticker or an image source (see stamps), also laid as sprays, objects or particles.'),
     size: num(1, MAX_BRUSH_SIZE, 'Diameter in px (default 20).'),
-    hardness: unit('Edge hardness, 0 soft .. 1 hard (default 1).'),
+    hardness: unit('Edge hardness, 0 soft .. 1 hard (default 1). Image-source stamps fade towards their edges below 1.'),
     spacing: num(0.01, 10, 'Dab spacing as a fraction of the diameter: 0.05 smooth, 1 dotted (default 0.1).'),
     angle: num(-360, 360, 'Tip angle in degrees, counter-clockwise; added to the stroke direction or barrel with dynamics.rotation (default 0).'),
     roundness: num(0.01, 1, 'Roundness: 1 round (default), lower a flat ellipse (pastel, chisel).'),
@@ -71,8 +89,9 @@ const TIP = object(
       minItems: 1,
       maxItems: MAX_STICKER_STAMPS,
       items: STAMP,
-      description: `Stamp tips: the stickers. Objects take any sticker and pick one at random per mark (default editor:star; repeats count once); particles take only the editor's stamps, use the first ${MAX_DOT_TEXTURES} in marks.stampOrder, and repeats weight the order.`,
+      description: `Stamp tips: stickers or image sources (source:<id>). Continuous dabs and sprays lay the first; objects take only stickers and pick one at random per mark (default editor:star; repeats count once); particles use the first ${MAX_DOT_TEXTURES} in marks.stampOrder, and repeats weight the order.`,
     },
+    grain: TIP_GRAIN,
   },
   ['shape'],
 );
@@ -148,6 +167,8 @@ const DYNAMICS = object('Pen feel: pressure, tilt, velocity, jitter, rotation an
   angleJitter: unit('Random angle per dab, as a fraction of ±180° (default 0).'),
   opacityJitter: unit('Random opacity drop per dab (default 0).'),
   scatter: num(0, 4, 'Random offset across the stroke, in diameters (default 0).'),
+  count: int(1, 16, 'Dabs laid at each spacing step, each with its own jitter and scatter (default 1). Dab brushes.'),
+  flip: oneOf(BRUSH_FLIPS, 'Mirror each dab at random across x, y or both (default none): variety for image and stamp tips.'),
 });
 
 const EXCHANGE = object('Paint exchange with the canvas: picking up paint and mixing it into what the brush lays. Paint brushes on a dry, wet or thick surface and Mixer Brushes.', {
@@ -284,6 +305,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
 /** The facet schemas, for tools that take one facet. */
 export const BRUSH_FACET_SCHEMAS = {
   tip: TIP,
+  tipGrain: TIP_GRAIN,
   marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS },
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,

@@ -19,10 +19,11 @@ import { CoverageMap, dabRect, rasterizeDab, type BrushSettings, type Dab, type 
 import type { RasterRect } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
-import { randSigned } from './noise';
+import { rand01, randSigned } from './noise';
 import { rasterizeStampDab, sprayDroplets, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
 import type { StickerArtLookup } from './sticker-art';
 import { grainCatch, type PaperGrain } from './paper';
+import { TipGrain } from './tip-grain';
 
 /** One pen sample in document pixels. Every channel but x and y is optional. */
 export interface PenPoint {
@@ -129,6 +130,8 @@ export interface PenDab extends Dab {
   lean: number;
   /** Pen speed (px/ms), or `null` when the samples carry no time. */
   speed: number | null;
+  /** Mirrored across the tip's x axis (bit 1) and y axis (bit 2), from `dynamics.flip`; 0 or missing: not mirrored. */
+  flip?: number;
 }
 
 const enum Stream {
@@ -136,6 +139,8 @@ const enum Stream {
   Angle = 2,
   Opacity = 3,
   Scatter = 4,
+  FlipX = 5,
+  FlipY = 6,
 }
 
 interface Sample {
@@ -252,7 +257,13 @@ export class PenDabWalker {
       x += Math.sin(this.dir) * off;
       y += Math.cos(this.dir) * off;
     }
+    let flip = 0;
+    if (dyn.flip && dyn.flip !== 'none') {
+      if (dyn.flip !== 'y' && rand01(seed, i, Stream.FlipX) < 0.5) flip |= 1;
+      if (dyn.flip !== 'x' && rand01(seed, i, Stream.FlipY) < 0.5) flip |= 2;
+    }
     return {
+      ...(flip ? { flip } : {}),
       x,
       y,
       radius: Math.max(0.5, diameter / 2),
@@ -284,7 +295,7 @@ export class PenDabWalker {
     const len = Math.hypot(dx, dy);
     if (len > 1e-9) this.dir = Math.atan2(-dy, dx);
     if (this.pendingFirst) {
-      out.push(this.dab(this.pendingFirst));
+      this.lay(this.pendingFirst, out);
       this.pendingFirst = null;
     }
     if (len > 1e-9) {
@@ -302,7 +313,7 @@ export class PenDabWalker {
           travel: a.travel + this.nextAt,
           time: a.time !== null && s.time !== null ? lerp(a.time, s.time) : s.time,
         };
-        out.push(this.dab(q));
+        this.lay(q, out);
         this.nextAt += this.stepLen(q);
       }
       this.nextAt -= len;
@@ -312,9 +323,15 @@ export class PenDabWalker {
 
   finish(out: PenDab[]): void {
     if (this.pendingFirst) {
-      out.push(this.dab(this.pendingFirst));
+      this.lay(this.pendingFirst, out);
       this.pendingFirst = null;
     }
+  }
+
+  /** The dabs of one spacing step: `dynamics.count` of them, each with its own index and so its own jitter. */
+  private lay(s: Sample, out: PenDab[]): void {
+    const n = this.brush.dynamics.count ?? 1;
+    for (let k = 0; k < n; k++) out.push(this.dab(s));
   }
 }
 
@@ -343,7 +360,10 @@ export interface DryStrokeOptions {
   copies?: readonly StrokeCopy[];
   /** Effect paint: each pixel takes its colour (and alpha) from these canvas-sized pixels. */
   effect?: EffectPaintPixels | null;
-  /** Loaded sticker art, for a stamp tip of a sticker from the sticker library (`brush.stamp`); without it such a tip paints round. */
+  /**
+   * Loaded art for a stamp tip of a sticker or an image source (`brush.stamp`) and for an image
+   * tip grain (`brush.tipGrain.source`); without it such a tip paints round, and the grain is left out.
+   */
   stampArt?: StickerArtLookup;
 }
 
@@ -365,9 +385,12 @@ export class DryStroke {
 
   /** The stamp tip's shape, or `null` for the round computed tip. */
   private readonly stamp: StampSampler | null;
+  /** The tip's own grain, or `null`. */
+  private readonly tipGrain: TipGrain | null;
 
   constructor(readonly brush: PaintBrush, private readonly options: DryStrokeOptions) {
-    this.stamp = brush.stamp ? stampSampler(brush.stamp, options.stampArt) : null;
+    this.stamp = brush.stamp ? stampSampler(brush.stamp, options.stampArt, brush.tip.hardness) : null;
+    this.tipGrain = TipGrain.create(brush.tipGrain, options.stampArt);
     this.smoother = new PenSmoother(brush.tip.smoothing, brush.pressureSmoothing);
     this.copies = options.copies?.length ? options.copies : [IDENTITY_COPY];
     this.walkers = this.copies.map((c, i) => new PenDabWalker(brush, ((options.seed ?? 0) + i * 7919) | 0, c.linear));
@@ -411,7 +434,7 @@ export class DryStroke {
     return rects;
   }
 
-  /** Lays one mark (a dab, or a spray droplet of dab `d`): the round tip or the stamp, the paper grain, effect paint. */
+  /** Lays one mark (a dab, or a spray droplet of dab `d`): the round tip or the stamp, the tip grain, the paper grain, effect paint. */
   private mark(m: Dab, d: PenDab, rects: RasterRect[]): void {
     const hardness = this.brush.tip.hardness;
     const grain = this.options.grain;
@@ -421,6 +444,8 @@ export class DryStroke {
     const vals = this.buf.subarray(0, n);
     if (this.stamp) rasterizeStampDab(m, this.stamp, d.index, rect, vals);
     else rasterizeDab(m, hardness, rect, vals);
+    // The tip's grain turns with the mark (a spray droplet's own angle) and rolls with the dab's travel.
+    this.tipGrain?.apply(vals, rect, { x: m.x, y: m.y, angle: m.angle, travel: d.travel });
     if (this.depth > 0 && grain) {
       for (let yy = 0, k = 0; yy < rect.height; yy++) {
         const y = rect.y + yy + 0.5;

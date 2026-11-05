@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { brushEditorScope, brushEditorSections, PAINT_PROFILE, setBrushEditorValue, type Brush, type BrushEditorControl, type BrushHostProfile } from '@pixerate/editor/brushes';
+import { brushEditorScope, brushEditorSections, PAINT_PROFILE, setBrushEditorValue, withBrushSource, type Brush, type BrushEditorControl, type BrushHostProfile, type BrushSource } from '@pixerate/editor/brushes';
 import { ErrorLine, PaintSlider, PixelCanvas, button, chip } from '../paint-editor/shared';
 
 type Pixels = { width: number; height: number; data: Uint8ClampedArray };
@@ -26,6 +26,13 @@ export interface BrushEditorProps {
   onSaveAs?: (name: string) => unknown;
   /** Extra controls a host adds to a section (e.g. the sticker picker for stamps). */
   renderExtra?: (section: string) => React.ReactNode;
+  /** The library's image sources, offered as stamps and as grain. */
+  sources?: ReadonlyArray<Pick<BrushSource, 'id' | 'name'>>;
+  /**
+   * With it, "Add image…" buttons for an image tip and for grain: it stores the picked file as a
+   * source (e.g. `addBrushSourceFromFile`) and returns its `source:<id>` ref.
+   */
+  onAddSource?: (file: File) => Promise<string>;
   className?: string;
 }
 
@@ -36,8 +43,8 @@ export interface BrushEditorProps {
  * profile uses is shown; what the brush has for other hosts is kept and named
  * (`brushEditorScope`). `BrushLibraryEditor` wires it to a brush library.
  */
-export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT_PROFILE, onChange, preview, previewBackground, onSave, saveLabel = 'Save', onSaveAs, renderExtra, className }) => {
-  const sections = useMemo(() => brushEditorSections(brush, profile), [brush, profile]);
+export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT_PROFILE, onChange, preview, previewBackground, onSave, saveLabel = 'Save', onSaveAs, renderExtra, sources, onAddSource, className }) => {
+  const sections = useMemo(() => brushEditorSections(brush, profile, { sources }), [brush, profile, sources]);
   const scope = useMemo(() => brushEditorScope(brush, profile), [brush, profile]);
   const [problems, setProblems] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -55,6 +62,18 @@ export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT
     setProblems(r.problems.length ? r.problems.join(' ') : null);
     if (r.brush !== brush) onChange(r.brush);
   };
+  /** Stores a picked image as a source and makes it the tip or the grain. */
+  const addSource = onAddSource
+    ? async (file: File, as: 'tip' | 'grain') => {
+        try {
+          const r = withBrushSource(brush, await onAddSource(file), as);
+          setProblems(r.problems.length ? r.problems.join(' ') : null);
+          onChange(r.brush);
+        } catch (e) {
+          setProblems((e as Error).message);
+        }
+      }
+    : undefined;
   return (
     <div className={`flex flex-col gap-2 ${className ?? ''}`} data-testid="brush-editor">
       {typeof preview === 'string' ? (
@@ -71,7 +90,10 @@ export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT
         <section key={s.id} className="flex flex-col gap-1.5" data-section={s.id} {...(s.id === 'behaviour' ? { 'data-testid': 'brush-engine' } : {})}>
           <span className="font-medium text-slate-300">{s.title}</span>
           {s.controls.map((c) => (
-            <EditorControl key={c.path} control={c} onSet={set} />
+            <React.Fragment key={c.path}>
+              <EditorControl control={c} onSet={set} />
+              {addSource && (c.path === 'tip.stamps' || c.path === 'tip.grain.source') && <AddImage label={c.path === 'tip.stamps' ? 'Add image tip…' : 'Add grain image…'} onFile={(f) => addSource(f, c.path === 'tip.stamps' ? 'tip' : 'grain')} />}
+            </React.Fragment>
           ))}
           {renderExtra?.(s.id)}
         </section>
@@ -97,6 +119,24 @@ export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT
     </div>
   );
 };
+
+/** A file picker for an image (PNG, JPEG, WebP…). */
+const AddImage: React.FC<{ label: string; onFile: (file: File) => void }> = ({ label, onFile }) => (
+  <label className={`${button} cursor-pointer self-start`}>
+    {label}
+    <input
+      type="file"
+      accept="image/*"
+      aria-label={label}
+      className="sr-only"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (file) onFile(file);
+      }}
+    />
+  </label>
+);
 
 const EditorControl: React.FC<{ control: BrushEditorControl; onSet: (path: string, value: unknown) => void }> = ({ control: c, onSet }) => {
   const note = c.note ? <span className="text-[10px] text-amber-400">{c.note}</span> : null;

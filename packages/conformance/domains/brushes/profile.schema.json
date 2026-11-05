@@ -155,6 +155,24 @@
         "none"
       ],
       "description": "Tilt dynamics."
+    },
+    "tipGrain": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Texture inside the tip (tip.grain); missing: none."
+    },
+    "dabCount": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Several dabs per spacing step (dynamics.count); missing: none."
     }
   },
   "required": [

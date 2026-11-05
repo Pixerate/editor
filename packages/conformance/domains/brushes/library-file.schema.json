@@ -20,6 +20,62 @@
         "$ref": "brush.schema.json"
       },
       "description": "The brushes, each a facet brush (brush.schema.json)."
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 500,
+      "description": "The image sources the brushes name (source:<id> in tip.stamps or tip.grain.source), bytes included.",
+      "items": {
+        "type": "object",
+        "description": "An image source: a grey mask, 255 paints (or is a grain peak).",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "Source id."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "Display name."
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 512,
+            "description": "Width in px."
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 512,
+            "description": "Height in px."
+          },
+          "image": {
+            "type": "string",
+            "pattern": "^data:image/png;base64,",
+            "description": "The mask as a greyscale PNG data: URL."
+          },
+          "licence": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "The licence or terms it came with."
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Where it came from (a file or pack name)."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "width",
+          "height",
+          "image"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [
