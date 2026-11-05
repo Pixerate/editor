@@ -7,7 +7,7 @@
     "height": 32
   },
   "skip": {
-    "swift": "Image brush sources, stamp and image tips, tip grain, dab count and flip are not ported yet (#TBD)"
+    "swift": "Image brush sources, stamp and image tips, tip grain, dab count and flip are not ported yet (#646)"
   },
   "steps": [
     {

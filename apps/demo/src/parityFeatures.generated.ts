@@ -1995,7 +1995,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`createBrushLibrary` `addSource` / `listSources`, `makeBrushSource`, `BrushSource`, `TipGrain`, `BrushSourceArtCache`, `addBrushSourceFromFile`, `withBrushSource`",
         "react": "`<BrushEditor>` `sources` / `onAddSource` and Grain section, `<BrushLibraryEditor>` (image uploads into the library)",
         "svelte": "`<BrushEditor>` `sources` / `onaddsource` and Grain section, `<BrushLibraryEditor>` (image uploads into the library)",
-        "swift": "Planned (#569): stamp and image tips, tip grain, count and flip need the stamp tip engine (#545)"
+        "swift": "Planned (#646): stamp and image tips, tip grain, count and flip need the stamp tip engine (#545)"
       },
       {
         "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
