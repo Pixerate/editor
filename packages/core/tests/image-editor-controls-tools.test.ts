@@ -193,6 +193,90 @@ describe('image editor agent tools', () => {
     expect(badKind.isError).toBe(true);
   });
 
+  it('add_adjustment_layer applies valid nested params', async () => {
+    const { controller, registry } = setup();
+    const res = await registry.callTool('add_adjustment_layer', { kind: 'levels', params: { master: { gamma: 1.18 } } });
+    expect(res.isError).toBeFalsy();
+    const id = (res.structuredContent as any).layer.id;
+    const layer = controller.getAdjustmentLayer(id)!;
+    expect(layer.kind === 'levels' && layer.params.master.gamma).toBe(1.18);
+
+    const shapes: [string, Record<string, unknown>][] = [
+      ['curves', { master: [{ input: 0, output: 20 }, { input: 255, output: 255 }] }],
+      ['hueSaturation', { colorize: true, hue: 200, ranges: [null, { saturation: -30 }] }],
+      ['colorBalance', { midtones: [10, 0, -10], preserveLuminosity: false }],
+      ['blackWhite', { reds: 80, tint: '#a08060' }],
+      ['blackWhite', { tint: null }],
+      ['photoFilter', { color: '#3366cc', density: 40 }],
+    ];
+    for (const [kind, params] of shapes) {
+      expect((await registry.callTool('add_adjustment_layer', { kind, params })).isError, kind).toBeFalsy();
+    }
+  });
+
+  it('accepts the neutral params of every kind', async () => {
+    const { registry } = setup();
+    for (const { kind } of ADJUSTMENT_KINDS) {
+      const res = await registry.callTool('add_adjustment_layer', { kind, params: defaultAdjustmentParams(kind) as never });
+      expect(res.isError, kind).toBeFalsy();
+    }
+  });
+
+  it('add_adjustment_layer refuses unknown params by name and adds nothing', async () => {
+    const { controller, registry } = setup();
+    const text = async (args: Record<string, unknown>) => {
+      const res = await registry.callTool('add_adjustment_layer', args);
+      expect(res.isError).toBe(true);
+      return (res.content[0] as any).text as string;
+    };
+
+    const dotted = await text({ kind: 'levels', params: { 'master.gamma': 1.18 } });
+    expect(dotted).toContain('Unknown params key(s) for a levels layer: master.gamma.');
+    expect(dotted).toContain('set_adjustments');
+    expect(dotted).toContain('master: {inBlack, inWhite, gamma, outBlack, outWhite}');
+
+    expect(await text({ kind: 'levels', params: { master: { gama: 1.18 } } })).toContain('layer: master.gama.');
+    expect(await text({ kind: 'levels', params: { gamma: 1.18, brightness: 3 } })).toContain('layer: gamma, brightness.');
+    expect(await text({ kind: 'hueSaturation', params: { ranges: [{ sat: 3 }] } })).toContain('layer: ranges.0.sat.');
+    expect(await text({ kind: 'curves', params: { master: [{ x: 0, y: 0 }] } })).toContain('layer: master.0.x, master.0.y.');
+    expect(await text({ kind: 'invert', params: { amount: 1 } })).toContain('This invert layer takes no params.');
+
+    expect(controller.getAdjustmentLayers()).toEqual([]);
+    expect(controller.canUndo).toBe(false);
+  });
+
+  it('add_adjustment_layer refuses params of the wrong type, which would also be dropped', async () => {
+    const { controller, registry } = setup();
+    const cases: [string, Record<string, unknown>, string][] = [
+      ['levels', { master: 1.18 }, 'master must be an object'],
+      ['levels', { master: { gamma: '1.18' } }, 'master.gamma must be a number'],
+      ['colorBalance', { shadows: { 0: 10 } }, 'shadows must be an array'],
+      ['colorBalance', { preserveLuminosity: 'no' }, 'preserveLuminosity must be a boolean'],
+      ['photoFilter', { color: 'orange' }, 'color must be a #rrggbb colour'],
+      ['blackWhite', { tint: 'sepia' }, 'tint must be a #rrggbb colour or null'],
+    ];
+    for (const [kind, params, message] of cases) {
+      const res = await registry.callTool('add_adjustment_layer', { kind, params });
+      expect(res.isError, message).toBe(true);
+      expect((res.content[0] as any).text).toContain(message);
+    }
+    expect(controller.getAdjustmentLayers()).toEqual([]);
+  });
+
+  it('apply_selection_as_mask checks the params of a new layer the same way', async () => {
+    const { controller, registry } = setup();
+    controller.selectAll();
+    const bad = await registry.callTool('apply_selection_as_mask', { kind: 'levels', params: { 'master.gamma': 1.18 } });
+    expect(bad.isError).toBe(true);
+    expect((bad.content[0] as any).text).toContain('master.gamma');
+    expect(controller.getAdjustmentLayers()).toEqual([]);
+
+    const good = await registry.callTool('apply_selection_as_mask', { kind: 'levels', params: { master: { gamma: 1.18 } } });
+    expect(good.isError).toBeFalsy();
+    const layer = controller.getAdjustmentLayer((good.structuredContent as any).layerId)!;
+    expect(layer.kind === 'levels' && layer.params.master.gamma).toBe(1.18);
+  });
+
   it('changes, reorders and removes adjustment layers as single undo steps', async () => {
     const { controller, registry } = setup();
     const a = controller.addAdjustmentLayer('vibrance');

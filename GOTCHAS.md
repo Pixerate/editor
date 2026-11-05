@@ -3866,3 +3866,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Wet and mixer vector brushstrokes cut corners and lagged behind the end of the path.
 - **Root Cause**: `PaintDabStroke` and `WetStrokeDriver` smooth pen input (`PenSmoother` with `tip.smoothing` and `pressureSmoothing`), which suits a hand but not a path that is already exact data.
 - **Solution / Workaround**: `brushstrokeMedia.ts` places the stroke with `tip.smoothing` and `pressureSmoothing` set to 0 (and the tip size scaled to image pixels) before handing the brush to the engines.
+
+### [core] `normalizeAdjustmentLayer` Drops What It Does Not Know, So Tools Must Check `params` First
+- **Issue / Symptom**: `add_adjustment_layer` with `{ kind: "levels", params: { "master.gamma": 1.18 } }` returned success and a neutral layer. An agent had no sign that its adjustment was lost.
+- **Root Cause**: `normalizeAdjustmentLayer` rebuilds `params` from the keys each kind uses and fills the rest with neutral values. That is right for stored and hand-written documents. `list_controls` also shows dotted ids (`master.gamma`), which only `set_adjustments` resolves, while `params` is nested.
+- **Solution / Workaround**: A tool taking `params` calls `assertAdjustmentParams(kind, params)` before changing anything. It walks them beside `defaultAdjustmentParams(kind)`, so a new parameter only needs its default. Keep the normaliser lenient: documents must still load.
