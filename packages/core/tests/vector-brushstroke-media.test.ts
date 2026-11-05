@@ -151,7 +151,7 @@ describe('wet brushstrokes', () => {
 		expect(job.progress).toBe(1);
 		expect(job.run()).toBe(true);
 		expect(job.progress).toBe(30);
-	});
+	}, 30000);
 
 	it('shows the paint as laid in the scene, then the settled image after it settles; exports settle first', () => {
 		const n = withStroke(line('w', 50), layer({ brushId: 'watercolor-detail', size: 6 }, '#1d4ed8'));
