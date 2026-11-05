@@ -136,6 +136,7 @@ extension PaintEditorController {
         if w > 16384 || h > 16384 { throw PaintEditorError("At scale \(jsText(scale)) the canvas would be \(jsText(w))×\(jsText(h)); the limit is 16384 px per side. Use a smaller scale.") }
         let target = try PaintEditorController(width: w, height: h, dpi: doc.canvas.dpi * scale, brushLibrary: brushLibrary, wet: wetOptions)
         target.brushEntries = brushEntries
+        target.brushSources.set(brushSources.all())
         var paper = doc.paper
         paper.scale = Swift.min(8, paper.scale * scale)
         target.doc = PaintDocumentState(canvas: target.doc.canvas, paper: paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [])

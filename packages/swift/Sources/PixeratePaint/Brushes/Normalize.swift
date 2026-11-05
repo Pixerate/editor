@@ -276,10 +276,35 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
         tip["stamps"] = nil
     }
     if let stamps = tip["stamps"]?.arrayValue {
-        let refs = stamps.compactMap { $0.stringValue.flatMap(normalizeStickerRef) }
+        // Stamps are sticker refs, or image sources of the brush library, except as objects: each object mark stays a sticker.
+        var refs = stamps.compactMap { $0.stringValue.flatMap(normalizeStickerRef) }
+        if brush.path("marks.kind") == "objects" && refs.contains(where: isBrushSourceRef) {
+            problems.append("tip.stamps: image sources (source:…) dropped: objects marks lay stickers; use continuous, scatter or particles marks for an image tip.")
+            refs = refs.filter { !isBrushSourceRef($0) }
+        }
         if !refs.isEmpty { tip["stamps"] = .array(refs.map { .string($0) }) } else {
             drop("tip.stamps", "none of the stamps can be laid")
             tip["stamps"] = nil
+        }
+    }
+    if let grain = tip["grain"]?.objectValue {
+        // Tip grain textures dabs: not bristles, particles or objects, nor the wet and thick engines, which lay their own marks.
+        let surface = behaviour?["surface"]?.stringValue
+        let marks = brush.path("marks.kind")?.stringValue
+        let why: String? = grain["source"]?.stringValue == nil
+            ? "it needs a source (a grain pattern or source:<id>)"
+            : tip["shape"] == "bristle"
+            ? "bristle tips lay their own marks"
+            : marks == "particles" || marks == "objects"
+            ? "\(marks!) marks are not dabs"
+            : surface == "wet" || surface == "thick"
+            ? "\(surface!) paint lays its own texture"
+            : kind == "tool" && WET_BRUSH_TOOLS.contains(brush["tool"]?.stringValue ?? "")
+            ? "the wet tools work on the wet layer"
+            : nil
+        if let why {
+            drop("tip.grain", why)
+            tip["grain"] = nil
         }
     }
     brush["tip"] = .object(tip)

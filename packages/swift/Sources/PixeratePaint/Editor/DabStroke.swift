@@ -49,10 +49,16 @@ final class PaintDabStroke {
     private var lastFed: PenPoint?
     /// Effect paint: each dab's colour (and flow, by alpha) is the effect's at the dab's centre.
     private let effect: EffectPaintPixels?
+    /// The stamp tip's shape (dab brushes), or nil for the round computed tip.
+    private let stamp: StampSampler?
+    /// The tip's own grain, or nil.
+    private let tipGrain: TipGrain?
 
-    init(_ brush: PaintBrush, target: PaintTileTarget, load: MixerLoad, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?, effect: EffectPaintPixels? = nil) {
+    init(_ brush: PaintBrush, target: PaintTileTarget, load: MixerLoad, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?, effect: EffectPaintPixels? = nil, stampArt: StampArtLookup? = nil) {
         self.brush = brush
         self.effect = effect
+        stamp = brush.engine == "dab" ? brush.stamp.flatMap { stampSampler($0, stampArt, brush.tip.hardness) } : nil
+        tipGrain = TipGrain.create(brush.tipGrain, stampArt)
         self.target = target
         self.grain = grain
         self.seed = seed
@@ -117,7 +123,7 @@ final class PaintDabStroke {
         let spray = brush.engine == "dab" ? brush.spray : nil
         let list = spray.map { s in dabs.flatMap { sprayDroplets($0, s, seed + copy * 7919) } } ?? dabs
         for d in list {
-            let rect = dabRect(d.dab, brush.tip.hardness)
+            let rect = stamp != nil ? stampDabRect(d.dab) : dabRect(d.dab, brush.tip.hardness)
             if rect.width <= 0 || rect.height <= 0 { continue }
             dab(copy, d, rect)
             rects.append(rect)
@@ -131,7 +137,8 @@ final class PaintDabStroke {
         var flat = d.dab
         flat.alpha = 1
         var t = [Float](repeating: 0, count: n)
-        rasterizeDab(flat, brush.tip.hardness, rect, &t)
+        if let stamp { rasterizeStampDab(flat, d.flip, stamp, d.index, rect, &t) } else { rasterizeDab(flat, brush.tip.hardness, rect, &t) }
+        tipGrain?.apply(&t, rect, x: d.dab.x, y: d.dab.y, angle: d.dab.angle, travel: d.travel)
         guard depth > 0, let grain else { return (t, t) }
         var c = [Float](repeating: 0, count: n)
         var k = 0

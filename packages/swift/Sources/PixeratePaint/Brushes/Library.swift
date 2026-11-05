@@ -17,7 +17,7 @@ public let BRUSH_PRESETS: [Brush] = {
 }()
 
 public struct BrushLibraryError: Error, LocalizedError {
-    public enum Code: String { case unknownBrush = "unknown_brush", builtin, exists, invalid }
+    public enum Code: String { case unknownBrush = "unknown_brush", unknownSource = "unknown_source", builtin, exists, invalid }
     public let code: Code
     public let message: String
     public init(_ code: Code, _ message: String) {
@@ -135,6 +135,25 @@ public func parseBrushLibrary(_ rawIn: JSONValue, _ problems: inout [String]) th
     return out
 }
 
+/// The image sources of a library file (`sources`), each checked; bad ones are skipped and reported.
+public func parseBrushLibrarySources(_ raw: JSONValue, _ problems: inout [String]) -> [BrushSource] {
+    guard let file = raw.objectValue, let list = file["sources"] else { return [] }
+    guard let items = list.arrayValue else {
+        problems.append("sources is not a list; skipped.")
+        return []
+    }
+    return items.enumerated().compactMap { readBrushSource($0.element, "sources[\($0.offset)]", &problems) }
+}
+
+public struct AddBrushSourceResult {
+    /// The source as stored.
+    public var source: BrushSource
+    /// What reading the image changed (the channel picked, scaling).
+    public var problems: [String]
+    /// It replaced a source of the same id.
+    public var replaced: Bool
+}
+
 public struct SaveBrushResult {
     public var brush: Brush
     public var problems: [String]
@@ -146,13 +165,16 @@ public struct ImportBrushesResult {
     public var replaced: [String] = []
     public var skipped: [String] = []
     public var problems: [String] = []
+    /// Image sources added or replaced (nil when there were none).
+    public var sources: [String]? = nil
 }
 
-/// The brush library: presets plus user brushes (in memory).
+/// The brush library: presets plus user brushes and image sources (in memory).
 public final class BrushLibrary {
     private let presets: [Brush]
     private let builtinIds: Set<String>
     private var user: [Brush] = []
+    private var sources: [BrushSource] = []
     private var listeners: [UUID: () -> Void] = [:]
 
     public init(presets: [Brush] = BRUSH_PRESETS) {
@@ -240,13 +262,85 @@ public final class BrushLibrary {
 
     public func exportFile(_ ids: [String]? = nil) throws -> JSONObject {
         let brushes = try ids.map { try $0.map { try find($0).brush } } ?? user
-        return ["format": "pixerate-brushes", "version": 2, "brushes": .array(brushes.map { .object($0) })]
+        var file: JSONObject = ["format": "pixerate-brushes", "version": 2, "brushes": .array(brushes.map { .object($0) })]
+        let used = Set(brushes.flatMap(brushSourceIds))
+        let withSources = sources.filter { used.contains($0.id) }
+        if !withSources.isEmpty { file["sources"] = .array(withSources.map(\.json)) }
+        return file
     }
 
-    public func importFile(_ raw: JSONValue, overwrite: Bool = false) throws -> ImportBrushesResult {
+    /// The image sources brushes lay (`tip.stamps` `source:<id>`) or texture with (`tip.grain.source`), in the order added.
+    public func listSources() -> [BrushSource] { sources }
+
+    public func getSource(_ id: String) -> BrushSource? { sources.first { $0.id == id } }
+
+    /// Adds or replaces sources in one go; returns the ids that changed, and what was skipped in `problems`.
+    private func putSources(_ incoming: [BrushSource], _ overwrite: Bool, _ problems: inout [String]) -> [String] {
+        var changed: [String] = []
+        for src in incoming {
+            if let at = sources.firstIndex(where: { $0.id == src.id }) {
+                if sources[at].image == src.image { continue }
+                if overwrite {
+                    sources[at] = src
+                    changed.append(src.id)
+                } else {
+                    problems.append("Source \"\(src.id)\" exists already with another image; skipped (pass overwrite to replace it).")
+                }
+            } else if sources.count >= MAX_BRUSH_SOURCES {
+                problems.append("Source \"\(src.id)\" skipped: the library holds at most \(MAX_BRUSH_SOURCES) sources.")
+            } else {
+                sources.append(src)
+                changed.append(src.id)
+            }
+        }
+        return changed
+    }
+
+    /**
+     * Stores an image source made from an uploaded image (`makeBrushSource`). Without an id it gets
+     * one from its name; a taken id is refused unless `overwrite`.
+     */
+    public func addSource(_ input: BrushSourceInput, overwrite: Bool = false) throws -> AddBrushSourceResult {
+        var given = input
+        if given.id == nil {
+            let stem = brushSourceIdFromName(given.name)
+            var id = stem
+            var n = 2
+            while sources.contains(where: { $0.id == id }) {
+                id = "\(stem)-\(n)"
+                n += 1
+            }
+            given.id = id
+        }
         var problems: [String] = []
+        let source: BrushSource
+        do { source = try makeBrushSource(given, &problems) } catch { throw BrushLibraryError(.invalid, error.localizedDescription) }
+        return try storeSource(source, overwrite: overwrite, problems: problems)
+    }
+
+    /// Stores a source as it is stored (a library file's, an importer's).
+    public func addSource(_ source: BrushSource, overwrite: Bool = false) throws -> AddBrushSourceResult {
+        try storeSource(source, overwrite: overwrite, problems: [])
+    }
+
+    private func storeSource(_ source: BrushSource, overwrite: Bool, problems: [String]) throws -> AddBrushSourceResult {
+        let at = sources.firstIndex { $0.id == source.id }
+        if at != nil && !overwrite { throw BrushLibraryError(.exists, "A source \"\(source.id)\" exists already; pick another id, or pass overwrite to replace its image (brushes using it change too).") }
+        if at == nil && sources.count >= MAX_BRUSH_SOURCES { throw BrushLibraryError(.invalid, "The library holds at most \(MAX_BRUSH_SOURCES) sources.") }
+        if let at { sources[at] = source } else { sources.append(source) }
+        notify()
+        return AddBrushSourceResult(source: source, problems: problems, replaced: at != nil)
+    }
+
+    public func importFile(_ rawIn: JSONValue, overwrite: Bool = false) throws -> ImportBrushesResult {
+        var problems: [String] = []
+        let raw = rawIn.stringValue.flatMap { try? JSONValue.parse($0) } ?? rawIn
         let incoming = try parseBrushLibrary(raw, &problems)
         var result = ImportBrushesResult()
+        // Sources first, so the brushes that name them can paint as soon as they are listed.
+        let fileSources = parseBrushLibrarySources(raw, &problems)
+        let changedSources = fileSources.isEmpty ? [] : putSources(fileSources, overwrite, &problems)
+        if !changedSources.isEmpty { result.sources = changedSources }
         var brushes = user
         for brush in incoming {
             let id = brush["id"]!.stringValue!
@@ -269,10 +363,8 @@ public final class BrushLibrary {
             }
         }
         result.problems = problems
-        if !result.added.isEmpty || !result.replaced.isEmpty {
-            user = brushes
-            notify()
-        }
+        if !result.added.isEmpty || !result.replaced.isEmpty { user = brushes }
+        if !result.added.isEmpty || !result.replaced.isEmpty || !changedSources.isEmpty { notify() }
         return result
     }
 }

@@ -48,6 +48,8 @@ struct StrokeSessionInit {
     var wet: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
     /// Impasto brushes: the layer's thick-paint channels before the stroke.
     var thick: ThickChannels? = nil
+    /// The art of image sources, for stamp tips and tip grain.
+    var stampArt: StampArtLookup? = nil
 }
 
 public struct PaintStrokeResult {
@@ -152,7 +154,7 @@ final class PaintStrokeSession: PaintTileTarget {
             thickDriver = ThickStrokeDriver(ThickStrokeInit(brush: brush, target: self, channels: ch, color: i.color.prefix(3).map { Double($0) / 255 }, load: i.mixerLoad, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels))
             return
         }
-        if brush.stamp != nil { throw UnportedBrushError(message: "The \(brush.name) brush has a stamp tip, which the Swift paint editor does not draw yet.") }
+        if let ref = brushStickerRefs(brush).first { throw UnportedBrushError(message: "The \(brush.name) brush lays the sticker \"\(ref)\", which the Swift paint editor can't draw: it has the editor's stamps (editor:star…) and image sources (source:<id>), not a host's sticker library.") }
         if brush.engine == "sticker" {
             dry = nil
             spray = StickerSpray(brush: brush, target: self, color: i.colorHex, seed: i.seed, copies: copies, nextId: i.stickerNextId ?? 1, paint: i.paint, effect: i.effect?.pixels)
@@ -162,18 +164,19 @@ final class PaintStrokeSession: PaintTileTarget {
         if dabByDab {
             dry = nil
         } else if brush.engine == "dab" || brush.engine == "eraser" {
-            dry = DryStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, effect: i.effect?.pixels)
+            dry = DryStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, effect: i.effect?.pixels, stampArt: i.stampArt)
         } else if brush.engine == "particle" || brush.engine == "bristle" {
             let m: MarkStroke = brush.engine == "particle"
                 ? ParticleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
                 : BristleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
             m.effect = i.effect?.pixels
+            m.stampArt = i.stampArt
             dry = m
         } else {
             throw UnportedBrushError(message: "The \(brush.name) brush paints with the \(brush.engine) engine, which the Swift paint editor does not paint with yet.")
         }
         if dabByDab {
-            wet = PaintDabStroke(brush, target: self, load: i.mixerLoad, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels)
+            wet = PaintDabStroke(brush, target: self, load: i.mixerLoad, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels, stampArt: i.stampArt)
         }
     }
 
