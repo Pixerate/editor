@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.268.2
+
+### Patch Changes
+
+- fcae5ae: Add complete `typesVersions` subpath mappings across `@pixerate/editor`, `@pixerate/editor-react`, and `@pixerate/editor-svelte` for `moduleResolution: "node"` (`node10`) compatibility (#501).
+
 ## 0.268.1
 
 ### Patch Changes
