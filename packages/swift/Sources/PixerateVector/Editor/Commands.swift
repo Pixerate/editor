@@ -26,7 +26,8 @@ private let ENABLED_FOR: Set<String> = [
 /**
  * Palette and agent commands for a vector editor (`createVectorCommands`): list, select, add
  * shapes and paths, style, transform, align, arrange, group, boolean operations, Pathfinder, path
- * editing and SVG export. Register them in a `CommandRegistry` whose context is the controller
+ * editing, appearance, blends, envelopes, symmetry and SVG export. Register them in a
+ * `CommandRegistry` whose context is the controller
  * and whose history is `controller.history`; agents get them through `createCommandToolProvider`.
  * Failures throw sentences, which the registry returns as `{ ok: false, code: 'failed', message }`.
  */
@@ -178,8 +179,12 @@ extension VectorEditorController {
                     // not ported yet: text and instances (#624)
                     throw VectorNotPorted("listing \(n.typeName) nodes")
                 }
-                // not ported yet: blend summaries (#624)
-                if n.isGroup && truthy(n["blend"]) { throw VectorNotPorted("listing blend groups") }
+                if n.isGroup && truthy(n["blend"]) {
+                    var blend = resolveVectorBlendOptions(n["blend"])
+                    blend["spine"] = .bool(truthy(n["blend"]?["spine"]))
+                    blend["keys"] = idList(vectorBlendKeys(n).map(\.id))
+                    o["blend"] = .object(blend)
+                }
                 if truthy(n["blendStep"]) { o["blendStep"] = true }
                 if let e = n["effects"], let c = e.arrayValue?.count, c > 0 { o["effects"] = e }
                 if n.isGroup && truthy(n["liveBoolean"]) { o["liveBoolean"] = n["liveBoolean"] }
@@ -467,7 +472,122 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     vectorAppearanceRuns(&r)
     vectorStrokeRuns(&r)
     vectorShadingRuns(&r)
+    vectorBlendRuns(&r)
     return r
+}
+
+// MARK: - Blends, envelopes and symmetry
+
+/// `checkBlendOptions`: the blend options of `params` that are given must be valid.
+private func checkBlendOptions(_ p: VectorParams) throws {
+    if let s = p.o["spacing"], !VECTOR_BLEND_SPACINGS.contains(s.stringValue ?? "") { throw fail("Unknown blend spacing \"\(s.stringValue ?? s.stringified())\".") }
+    if p.has("steps"), !(p.num("steps").map { $0.isFinite && $0 >= 1 } ?? false) { throw fail("steps must be at least 1.") }
+    if p.has("distance"), !(p.num("distance").map { $0.isFinite && $0 > 0 } ?? false) { throw fail("distance must be positive.") }
+}
+
+/// `{ id, symmetry, children }` of a symmetry group (`symmetryResult`).
+private func symmetryResult(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let n = c.getNode(id), n.isGroup, truthy(n["symmetry"]) else { throw fail("\"\(id)\" is not a symmetry group.") }
+    return .object(JSONObject([("id", .string(id)), ("symmetry", n["symmetry"]!), ("children", idList(n.children.map(\.id)))]))
+}
+
+private func vectorBlendRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.blend"] = { c, params in
+        let p = VectorParams(params)
+        try checkBlendOptions(p)
+        let ids = try targetIds(c, p)
+        guard let id = c.blend(ids: ids, params, keepOrder: p.bool("keepOrder") ?? false) else { throw fail("Select two or more shapes that share a parent.") }
+        return ["id": .string(id)]
+    }
+    r["vector.blendOptions"] = { c, params in
+        let p = VectorParams(params)
+        try checkBlendOptions(p)
+        try check(c.setBlendOptions(params, ids: p.strings("ids")))
+        return ok()
+    }
+    r["vector.expandBlend"] = { c, params in
+        let groups = c.expandBlend(ids: VectorParams(params).strings("ids"))
+        if groups.isEmpty { throw fail("Select a blend to expand.") }
+        return ["ids": idList(groups)]
+    }
+    r["vector.releaseBlend"] = { c, params in
+        let released = try c.releaseBlend(ids: VectorParams(params).strings("ids"))
+        if released.isEmpty { throw fail("Select a blend to release.") }
+        return ["ids": idList(released)]
+    }
+    r["vector.replaceSpine"] = { c, params in
+        try check(c.replaceBlendSpine(ids: VectorParams(params).strings("ids")))
+        return ok()
+    }
+    r["vector.envelope"] = { c, params in
+        let p = VectorParams(params)
+        let target = try targetIds(c, p)
+        if p.bool("release") == true {
+            let shapes = try c.releaseEnvelope(ids: target)
+            return .object(JSONObject([("released", idList(target)), ("shapes", idList(shapes))]))
+        }
+        if p.bool("expand") == true { return ["expanded": idList(try c.expandAppearance(ids: target))] }
+        let mesh = params["mesh"]?.objectValue
+        if p.bool("topObject") == true {
+            let r = try c.makeEnvelopeWithTopObject(ids: target, rows: mesh?["rows"]?.numberValue, columns: mesh?["columns"]?.numberValue)
+            try check(r.result)
+            return ["nodeId": .string(r.nodeId ?? "")]
+        }
+        if let preset = p.str("preset"), !VECTOR_WARP_STYLES.contains(preset) { throw fail("Unknown warp preset \"\(preset)\".") }
+        var patch = JSONObject()
+        if let preset = p.str("preset"), !preset.isEmpty { patch["style"] = .string(preset) }
+        for k in ["bend", "horizontal", "vertical"] { if let v = params[k] { patch[k] = v } }
+        if let o = p.str("orientation"), !o.isEmpty { patch["orientation"] = .string(o) }
+        if let mesh {
+            if let preset = p.str("preset"), !preset.isEmpty { throw fail("Give either `preset` or `mesh`, not both.") }
+            patch["style"] = "mesh"
+            let columns = mesh["columns"]?.numberValue ?? 2
+            let rows = mesh["rows"]?.numberValue ?? 2
+            patch["columns"] = .number(columns)
+            patch["rows"] = .number(rows)
+            if let points = mesh["points"]?.arrayValue {
+                func even(_ n: Double) -> JSONValue { .array((0 ... Int(n)).map { .number(Double($0) / n) }) }
+                let json = JSONValue.object(JSONObject([("us", even(columns)), ("vs", even(rows)), ("points", .array(points.map { pt in Vec2(pt["x"]?.numberValue ?? .nan, pt["y"]?.numberValue ?? .nan).json }))]))
+                if !isValidVectorMesh(json) { throw fail("A \(JSONValue.jsNumber(columns)) × \(JSONValue.jsNumber(rows)) mesh needs \(JSONValue.jsNumber((3 * columns + 1) * (3 * rows + 1))) finite points.") }
+                patch["mesh"] = json
+            }
+        }
+        let made = try c.envelope(patch, ids: target)
+        if made.isEmpty { throw fail("Nothing to envelope.") }
+        return ["envelopes": .array(made.map { .object(JSONObject([("nodeId", .string($0.nodeId)), ("effectId", .string($0.effectId))])) })]
+    }
+    r["vector.makeSymmetry"] = { c, params in
+        var input = params
+        input["ids"] = Optional<JSONValue>.none
+        let list = VectorParams(params).strings("ids")
+        let result = try c.makeSymmetry(input, ids: list)
+        guard result.ok, let id = result.id else { throw fail(result.message ?? "The command failed.") }
+        return try symmetryResult(c, id)
+    }
+    r["vector.setSymmetry"] = { c, params in
+        var patch = params
+        patch["ids"] = Optional<JSONValue>.none
+        let list = VectorParams(params).strings("ids")
+        if patch.isEmpty { throw fail("Pass at least one of mode, center, rotation, copies, mirror.") }
+        try check(c.setSymmetry(patch, ids: list))
+        let ids = list ?? c.selection.filter { c.getNode($0)?.isGroup == true }
+        return ["groups": .array(try ids.filter { truthy(c.getNode($0)?["symmetry"]) }.map { try symmetryResult(c, $0) })]
+    }
+    r["vector.releaseSymmetry"] = { c, params in
+        let p = VectorParams(params)
+        let r = try c.releaseSymmetry(ids: p.strings("ids"), expand: p.bool("expand") ?? false)
+        try check(r.result)
+        return ["ids": idList(r.ids)]
+    }
+    r["vector.enterSymmetry"] = { c, params in
+        let id = VectorParams(params).str("id") ?? ""
+        try check(c.enterSymmetry(id))
+        return ["id": .string(id)]
+    }
+    r["vector.exitSymmetry"] = { c, _ in
+        c.exitSymmetry()
+        return ok()
+    }
 }
 
 // MARK: - Appearance, effects, masks and lenses

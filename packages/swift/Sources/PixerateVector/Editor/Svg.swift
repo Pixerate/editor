@@ -7,9 +7,10 @@ import PixerateRaster
 //
 // Export writes plain paths and groups with colour, gradient, mesh and freeform paints (see
 // `Gradient.swift` and `Shading.swift`), paint stacks, live corners, live booleans (drawn shapes plus the hidden
-// source), transforms, opacity, visibility, blend modes and filters.
+// source), path effects and symmetry groups (drawn shapes plus the hidden source), blends (their
+// options on `data-vector-blend`), transforms, opacity, visibility, blend modes and filters.
 // Stroke parts (inside / outside alignment, arrowheads, width profiles), masks,
-// frames, text, instances, symbols, blends, connectors, generated art,
+// frames, text, instances, symbols, connectors, generated art,
 // lenses and brushstrokes throw `VectorNotPorted` (#624).
 
 private func escapeAttr(_ value: String) -> String {
@@ -78,11 +79,12 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
         if let o = node.opacity, o < 1 { out += " opacity=\"\(num(o))\"" }
         if !node.isVisible { out += " display=\"none\"" }
         if truthy(node["blendStep"]) { out += " data-vector-blend-step=\"\"" }
+        if node.isGroup && truthy(node["blend"]) { out += " data-vector-blend=\"\(escapeAttr(node["blend"]!.stringified()))\"" }
         if let op = node["booleanOperation"]?.stringValue, !op.isEmpty { out += " data-vector-boolean-operation=\"\(op)\"" }
         if truthy(node["resizing"]) { out += " data-vector-resizing=\"\(escapeAttr(node["resizing"]!.stringified()))\"" }
         if node.isPath && isVectorShadedPaint(node.fill) { out += " data-vector-shading=\"\(escapeAttr(node.fill!.stringified()))\"" }
-        // not ported yet: blends, connectors, generated art, lenses (#624)
-        for key in ["blend", "connector", "generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
+        // not ported yet: connectors, generated art, lenses (#624)
+        for key in ["connector", "generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
         if let blend = vectorBlendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
         if let filters = node["filters"], let n = arrayLength(filters), n > 0 {
             let data = " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""

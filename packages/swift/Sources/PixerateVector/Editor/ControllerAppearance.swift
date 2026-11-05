@@ -227,7 +227,7 @@ extension VectorEditorController {
     }
 
     /// Selected (or given) nodes that can carry effects and filters: the roots of the selection, blend steps left out (`effectTargets`).
-    private func effectTargets(_ ids: [String]?) -> [VectorNode] {
+    func effectTargets(_ ids: [String]?) -> [VectorNode] {
         (ids ?? selectedRoots()).compactMap { getNode($0) }.filter { !truthy($0["blendStep"]) }
     }
 
@@ -352,20 +352,20 @@ extension VectorEditorController {
     }
 
     /// Turns an effect on or off and changes its parameters (`updateEffect`). Unknown or invalid
-    /// values are ignored. Editing an envelope's parameters is not ported yet (#624).
+    /// values are ignored; an envelope preset switched to `mesh` becomes the mesh it stood for.
     @discardableResult
     public func updateEffect(_ nodeId: String, _ effectId: String, params: JSONObject? = nil, enabled: Bool? = nil) throws -> VectorActionResult {
         let current = getNode(nodeId)?["effects"]?.arrayValue?.first { $0["id"]?.stringValue == effectId }
         let label = current?["type"]?.stringValue.flatMap { VECTOR_EFFECT_LABELS[$0] } ?? "Effect"
-        return try editEffects(nodeId, "Edit \(label)") { _, list in
+        return try editEffects(nodeId, "Edit \(label)") { node, list in
             guard let i = list.firstIndex(where: { $0["id"]?.stringValue == effectId }), var e = list[i].objectValue else {
                 return .failure(VectorEditorError("Node \"\(nodeId)\" has no effect \"\(effectId)\"."))
             }
             let type = e["type"]?.stringValue ?? ""
             if let params {
-                // not ported yet: envelope meshes (envelopeParams, vectorEnvelopeFrame) (#624)
-                if type == "envelope" { throw VectorNotPorted("editing envelope effects") }
-                e["params"] = try normalizeVectorEffectParams(type, params, e["params"]?.objectValue).map { .object($0) } ?? .null
+                // A preset switched to a mesh becomes the mesh it stood for.
+                let raw = type == "envelope" ? try envelopeParams(node, e, params) : params
+                e["params"] = try normalizeVectorEffectParams(type, raw, e["params"]?.objectValue).map { .object($0) } ?? .null
             }
             if let enabled { e["enabled"] = .bool(enabled) }
             if e["enabled"] != .bool(false) { e["enabled"] = Optional<JSONValue>.none }

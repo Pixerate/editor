@@ -3660,7 +3660,7 @@ All contributors and AI assistants should check this file before starting work a
 ### [swift] Assigning `nil` to a `JSONObject` Member Writes JSON `null`
 - **Issue / Symptom**: `omitConformancePaths` in Swift left `"backend": null` where the TypeScript version removed `backend`.
 - **Root Cause**: `JSONValue` is `ExpressibleByNilLiteral` (so `nil` can be written for JSON `null` in literals). In `o[key] = cond ? nil : value`, the `nil` is typed as `JSONValue` (`.null`), not as `Optional.none`, so the subscript stores a null member instead of removing it.
-- **Solution / Workaround**: Remove members with `o[key] = Optional<JSONValue>.none` (or a plain `o[key] = nil` statement where the right side is not inferred as `JSONValue`). The runner test compares the result with the TypeScript cases, which caught it.
+- **Solution / Workaround**: Remove members with `o[key] = Optional<JSONValue>.none` (or a plain `o[key] = nil` statement where the right side is not inferred as `JSONValue`). The runner test compares the result with the TypeScript cases, which caught it. The same applies to any `JSONValue?` built from a conditional: `func paint(_ v: JSONValue) -> JSONValue? { v == "undefined" ? nil : v }` returns `.some(.null)`, never `nil`; write `Optional<JSONValue>.none` there too (`VectorBlendVectorTests` hit it for paints that are `undefined` in the TS).
 
 ### [monorepo] Changesets Skips Private Packages Unless `privatePackages.version` Is On
 - **Issue / Symptom**: `@pixerate/swift` changesets (#559, #593) stayed in `.changeset/` after their releases, the package stayed at 0.0.0, and "Tag the Swift package" never tagged a version. `changeset version` printed "All files have been updated" and changed nothing.
@@ -4023,3 +4023,19 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `vector.setStyle` with `fill: { type: "mesh", … }` (or `vector.addFill` with a freeform paint) fails with `invalid_params … /fill Expected string, got object.`, although `checkPaint` in `commands.ts` has a branch that checks mesh and freeform paints.
 - **Root Cause**: The `PAINT` params schema allows a string, `null` or a gradient object with `required: ['type', 'stops']`. A mesh or freeform paint has no `stops`, so argument validation rejects it before `checkPaint` runs; the shaded branch is only reached by callers that skip the schema.
 - **Solution / Workaround**: Agents give paths meshes and freeform gradients with `vector.setMeshGradient` / `vector.setFreeformGradient` and edit them with the point commands. The controller (`setStyle`, paint stacks) and SVG import still take them, and the Swift port checks them the same way (`sanitizeVectorShadedPaint`). Widening `PAINT` would make the shaded branch reachable; the recorded scenarios and Swift vectors pin the current errors.
+
+### [swift] A Spread's New Values Read the Object Before the Spread
+- **Issue / Symptom**: The first Swift port of `transformVectorEffects` and Free Distort's `mapEffects` turned an envelope preset under a skew into the flat identity mesh, not the warp it stood for.
+- **Root Cause**: The TS writes `{ ...e.params, style: 'mesh', mesh: mapVectorMeshPoints(vectorEnvelopeMesh(e.params, bounds), f) }`: every value in the literal is computed from the old `e.params` (style still a preset). The port set `params["style"] = "mesh"` first and then called `vectorEnvelopeMesh(params, …)`, which for a `mesh` style without a mesh returns the identity mesh.
+- **Solution / Workaround**: When porting a spread with computed members, compute every new value from the original object before assigning any of them (`let mesh = …; params["style"] = "mesh"; params["mesh"] = mesh.json`). `swift-vector-blend-vectors.test.ts` covers presets under a skew, a mirror and a distort.
+
+### [swift] Live Blend Steps Are Cached by Value, and Refreshing Them Cannot Throw
+- **Issue / Symptom**: The TS regenerates a blend's steps in `refreshed()` after every change, caching them per first-key object and morphs per key pair, so an unchanged blend costs nothing. Swift nodes are values, and `refreshed()` cannot throw, while the morph can (`VectorNotPorted` for text or instance keys).
+- **Root Cause**: Identity caches have no Swift equivalent; regenerating every blend on every `notify()` would run every morph again.
+- **Solution / Workaround**: `VectorBlendCache` (owned by the controller) keeps each blend's children by blend id and reuses them while the blend's JSON and its keys compare equal, which gives the TS result. `refreshed()` calls `refreshVectorBlends` with `try?`: a blend whose steps cannot be made keeps the children it has. Steps are ids `<blend>~<n>`, renamed by Expand with the controller's counter in tree order, so expanding must create ids exactly where the TS does.
+
+### [core/vector] Replace Spine Drops a Rotated Path's Rotation
+- **Issue / Symptom**: `vector.replaceSpine` with a path that has a rotation (`transform`) makes a spine that runs the way the path ran before it was turned: a horizontal line rotated 90° gives a horizontal spine.
+- **Root Cause**: `replaceBlendSpine` maps the path into the blend's space with `transformVectorNode({ subpaths: [first] }, m).subpaths[0]`. `transformVectorNode` puts the rigid part of `m` (rotation and translation) into the node's `transform` and bakes only the residual into the anchors, and that `transform` is thrown away.
+- **Solution / Workaround**: Not fixed: the Swift port (`ControllerBlends.swift`) does the same, so both agree. A fix maps the anchors through the whole matrix (as `bakeIntoGeometry` does with `mapAnchor`), then re-records the scenarios that replace a spine and updates the Swift port with it.
+

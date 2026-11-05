@@ -1015,14 +1015,14 @@
           "core": "`blend`, `setBlendOptions`, `replaceBlendSpine`, `expandBlend`, `createVectorMorph`, `interpolateVectorPaths`, `evaluateVectorPathKeyframes` & `getVectorOverlayRenderData().blend`",
           "react": "`<VectorCanvas>` spines & Blend tool picks, `<VectorToolbar>` Blend group",
           "svelte": "`<VectorCanvas>` spines & Blend tool picks, `<VectorToolbar>` Blend group",
-          "swift": "Planned (#533)"
+          "swift": "Live blends and morphs ✅ headless (`VectorEditorController`: `blend`, `setBlendOptions`, `replaceBlendSpine`, `expandBlend`, `releaseBlend`; `createVectorMorph`, `interpolateVectorPaths`; steps in bounds, render data and the SVG round-trip); the Blend tool, path keyframes and the views: Planned (#533)"
         },
         {
           "feature": "Vector Path Effects (editable effect stacks on paths and groups: Trim Paths simultaneous / individual, Round Corners, Pucker & Bloat, Twist, Zig Zag, seeded Wiggle Paths, Offset Paths with copies, Merge Paths, Repeater with opacity ramp and fractional copies; After Effects stacking; effected geometry for render, hit-test, bounds, snapping, booleans, Pathfinder and SVG; per-node cache; Expand Appearance; slider drags as one undo step)",
           "core": "`addEffect`, `updateEffect`, `expandAppearance`, `expandVectorAppearance`, `applyVectorEffects` & `getVectorEffectsPanel`",
           "react": "`<VectorEffectsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>`",
           "svelte": "`<VectorEffectsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>`",
-          "swift": "Every effect but Envelope, Extrude and Bevel ✅ headless (`VectorEditorController`: `addEffect`, `updateEffect`, `removeEffect`, `expandAppearance`; effected geometry for bounds, booleans, render data and SVG export); Envelope, Extrude, Bevel, the per-node cache and the views: Planned (#533)"
+          "swift": "Every effect but Extrude and Bevel ✅ headless (`VectorEditorController`: `addEffect`, `updateEffect`, `removeEffect`, `expandAppearance`; effected geometry for bounds, booleans, render data and SVG export with its round-trip); Extrude, Bevel, the per-node cache and the views: Planned (#533)"
         },
         {
           "feature": "Vector Appearance Stack (several fills and strokes per path, bottom to top with fills under strokes, each with its own paint, opacity, blend mode and visibility and each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile; `fill` / `stroke` as shorthands for the top layer, so old documents and commands keep working; node blend modes from the CSS `mix-blend-mode` set under the image editor's names; drop shadow, inner shadow, outer / inner glow, layer blur and feather as one SVG filter per node; topmost-visible-paint hit-testing; Outline Stroke per stroke layer; gradient editor and tool per layer; SVG export with filters and lossless round-trip, import of `fill-opacity`, `mix-blend-mode`, `feDropShadow` / blur filters and, optionally, stacked shapes; agent commands `vector.addFill` … `vector.moveFilter`)",
@@ -1050,7 +1050,7 @@
           "core": "`setFreeDistort`, `distort`, `skew`, `envelope`, `makeEnvelopeWithTopObject`, `releaseEnvelope`, `mapVectorSubpaths`, `vectorHomography`, `vectorWarpPresetMesh`, `getVectorEnvelopePanel` & `getVectorOverlayRenderData().envelope` / `.distort`",
           "react": "`<VectorEnvelopePanel>` (in `<VectorStylePanel>`), `<VectorToolbar>` Distort toggle & `<VectorCanvas>` mesh / quad overlay",
           "svelte": "`<VectorEnvelopePanel>` (in `<VectorStylePanel>`), `<VectorToolbar>` Distort toggle & `<VectorCanvas>` mesh / quad overlay",
-          "swift": "Free Distort and skew ✅ headless (`VectorEditorController`; `vector.distort`, `vector.skew`); envelopes and the selection box: Planned (#533)"
+          "swift": "Free Distort, skew and envelopes ✅ headless (`VectorEditorController`: `distort`, `skew`, `envelope`, `makeEnvelopeWithTopObject`, `releaseEnvelope`; warp presets and meshes, `VectorWarpMesh`); the Envelope tool, the selection box and the views: Planned (#533)"
         },
         {
           "feature": "Vector Gradients (linear, radial with focal point / focal radius and aspect, conic, reflected and diamond; explicit start / end / aspect frames in the box or node space with the angle / centre shorthand; stop midpoints, smoothness and sRGB / linear-light / Oklab interpolation exported as extra stops; pad / reflect / repeat; within, along or across strokes; conic, diamond and stroke modes as SVG patterns; Gradient tool (G) with start, end, radius, aspect and focal handles, click-to-add, drag and drag-off-to-delete stops and midpoints, one undo step per gesture; gradients follow scale and skew; SVG import of fx / fy / fr / spreadMethod / gradientTransform / userSpaceOnUse and lossless round-trip)",
@@ -1148,7 +1148,7 @@
           "core": "`makeSymmetry`, `setSymmetry`, `releaseSymmetry`, `enterSymmetry`, `vectorSymmetryMatrices`, `vectorSymmetryDrawn` & `getVectorOverlayRenderData().symmetry`",
           "react": "`<VectorSymmetryPanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` axes",
           "svelte": "`<VectorSymmetryPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` axes",
-          "swift": "Planned (#533)"
+          "swift": "Symmetry groups ✅ headless (`VectorEditorController`: `makeSymmetry`, `setSymmetry`, `releaseSymmetry`, `enterSymmetry`, `exitSymmetry`; `vectorSymmetryDrawn` in bounds, render data and the SVG round-trip); drawing inside, the axes and the views: Planned (#533)"
         },
         {
           "feature": "Vector Bitmap-to-Vector Stylise (a PNG turned into stylised vector art rather than traced outlines: mosaic tiles (square or round, with grout), halftone dots on a turned screen whose area follows the darkness (one ink or the picture's colours), low-poly triangles on a seeded jittered grid, and engraving lines that swell where the picture is dark and break where it is light; colours reduced to a median-cut palette with one compound path per colour; placed like Image Trace; agent commands `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage`, `vector.hatchImage`)",
