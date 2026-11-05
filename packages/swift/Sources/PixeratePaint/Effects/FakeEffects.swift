@@ -7,11 +7,12 @@ import PixerateRaster
  * CPU-only provider with the TS core's nine effects (ids `fake.…`). The shader effects render the
  * same pixels as the TS one: `invert` and `tint` (filters), `gradient` (a generator that loops),
  * `bar` (a lower-third title / overlay), `crossfade` (a transition) and `trail` (an overlay along a
- * path). `fade-in`, `badge` and `route` are vector and motion effects: they are listed and
- * described, and refuse to render pixels, as in the TS core. Tests and the conformance host use
+ * path). `fade-in`, `badge` and `route` are vector and motion effects: they refuse to render
+ * pixels and draw SVG instead (`applyVectorEffect`: `badge` a disc, `route` a line along its path,
+ * `fade-in` the target's elements fading in one after another), as in the TS core. Tests and the conformance host use
  * it; it is also a reference for real providers.
  */
-public final class FakeEffectProvider: EffectProvider {
+public final class FakeEffectProvider: VectorEffectProvider {
     public let id = "fake"
     public let name = "Fake effects"
     public let capabilities: JSONObject = [
@@ -37,6 +38,42 @@ public final class FakeEffectProvider: EffectProvider {
         if d.kind != "shader" { throw EffectError.unsupported("\"\(id)\" is a \(d.kind) effect; use applyVectorEffect.", id) }
         if !(width > 0 && height > 0) || width > 8192 || height > 8192 { throw EffectError.unsupported("Renderer size \(width)×\(height) is outside 1–8192.", id) }
         return FakeRenderer(d, width, height)
+    }
+
+    public func applyVectorEffect(_ id: String, target: EffectVectorTarget, values: JSONObject?) async throws -> EffectVectorMotion {
+        let d = try get(id)
+        if d.kind != "motion" && d.kind != "vector" { throw EffectError.unsupported("\"\(id)\" is a \(d.kind) effect, not a vector one.", id) }
+        let v = try resolveEffectValues(d, values)
+        let fade: JSONValue = ["opacity": [0, 1]]
+        if d.id == "fake.route" {
+            // The path as a line; the picture's viewBox is the path's bounds, so it lands on the path at scale 1.
+            var pts = [0.0, 20, 25, 0, 50, 20, 75, 40, 100, 20]
+            if let a = v["path"]?.arrayValue, a.count >= 4 { pts = a.map { $0.numberValue ?? .nan } }
+            else if let s = v["path"]?.stringValue, pathNumbers(s).count >= 4 { pts = pathNumbers(s) }
+            let xs = pts.enumerated().filter { $0.offset % 2 == 0 }.map(\.element)
+            let ys = pts.enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
+            let x0 = xs.reduce(Double.infinity) { JS.min($0, $1) }, y0 = ys.reduce(Double.infinity) { JS.min($0, $1) }
+            let w = JS.max(1, xs.reduce(-Double.infinity) { JS.max($0, $1) } - x0), h = JS.max(1, ys.reduce(-Double.infinity) { JS.max($0, $1) } - y0)
+            var dpath = "M" + pts.map { jsText(Double(jsToFixed($0, 3)) ?? .nan) }.joined(separator: " ")
+            // `.replace(/^(\S+ \S+) /, '$1 L')`
+            if let r = dpath.range(of: "^\\S+ \\S+ ", options: .regularExpression) { dpath.replaceSubrange(r, with: String(dpath[r].dropLast()) + " L") }
+            let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"\(jsText(x0)) \(jsText(y0)) \(jsText(w)) \(jsText(h))\" width=\"\(jsText(w))\" height=\"\(jsText(h))\"><path id=\"route\" d=\"\(dpath)\" fill=\"none\" stroke=\"\(v["color"]?.stringValue ?? "")\" stroke-width=\"2\"/></svg>"
+            return EffectVectorMotion(svg: svg, animate: [["id": "route", "ms": 400, "attrs": fade]], duration: 400, loop: false)
+        }
+        if d.kind == "vector" {
+            // Its own picture: the target is not used.
+            let ms = v["ms"]?.numberValue ?? 0
+            let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\" width=\"100\" height=\"100\"><circle id=\"badge\" cx=\"50\" cy=\"50\" r=\"40\" fill=\"\(v["color"]?.stringValue ?? "")\"/></svg>"
+            return EffectVectorMotion(svg: svg, animate: [["id": "badge", "ms": .number(ms), "attrs": fade]], duration: ms, loop: false)
+        }
+        var ids = target.nodeIds ?? []
+        if target.nodeIds == nil, let re = try? NSRegularExpression(pattern: "\\sid=\"([^\"]+)\"") {
+            let ns = target.svg as NSString
+            ids = re.matches(in: target.svg, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range(at: 1)) }
+        }
+        let ms = v["ms"]?.numberValue ?? 0, stagger = v["stagger"]?.numberValue ?? 0
+        let animate: [EffectSvgAnimation] = ids.enumerated().map { i, elementId in ["id": .string(elementId), "delay": .number(Double(i) * stagger), "ms": .number(ms), "attrs": fade] }
+        return EffectVectorMotion(svg: target.svg, animate: animate, duration: ms + Double(Swift.max(0, ids.count - 1)) * stagger, loop: false)
     }
 }
 

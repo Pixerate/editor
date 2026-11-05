@@ -5,9 +5,9 @@ import PixerateCore
 import XCTest
 @testable import PixerateVector
 
-/// Replays the vector scenarios of `@pixerate/conformance` against the Swift vector editor. A
-/// scenario the Swift port can't pass yet is marked `"skip": { "swift": "… (#issue)" }` in its file
-/// and reported here, so the remaining work is a count that goes down.
+/// Replays the vector scenarios of `@pixerate/conformance` against the Swift vector editor. The
+/// vector domain is fully ported: every scenario runs, and a scenario marked
+/// `"skip": { "swift": "… (#issue)" }` fails here, so new skips can't creep in.
 final class VectorConformanceTests: XCTestCase {
     func testVectorScenarios() async throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
@@ -38,15 +38,16 @@ final class VectorConformanceTests: XCTestCase {
             }
         }
         for failure in failures { XCTFail(failure.description) }
+        for (id, reason) in skipped { XCTFail("The vector domain is fully ported, but \(id) is skipped for Swift: \(reason)") }
         VectorConformanceReport.write(passed: passed, skipped: skipped, failed: Set(failures.map(\.scenario)).count)
     }
 
-    /// The scenarios this port covers stay unskipped.
-    func testPortedScenariosAreNotSkipped() throws {
+    /// Every vector scenario runs on Swift: none carries a skip, and the 15 known ones are there.
+    func testNoVectorScenarioIsSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text", "import-export"] {
-            let scenario = try XCTUnwrap(scenarios.first { $0.id == id })
-            XCTAssertNil(scenario.skip["swift"], id)
+        for scenario in scenarios { XCTAssertNil(scenario.skip["swift"], "\(scenario.id) is skipped for Swift; the vector domain is fully ported (#624).") }
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text", "import-export", "effects-and-generation"] {
+            XCTAssertNotNil(scenarios.first { $0.id == id }, id)
         }
     }
 

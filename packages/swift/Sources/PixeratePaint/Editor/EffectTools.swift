@@ -12,42 +12,12 @@ import PixerateRaster
  * tools refuse with the reason.
  */
 
-private let NO_PROVIDER = "No effects provider is registered with this editor, so there are no effects to search, describe or apply. The host app must register one (setEffectsProvider); effects already in the document are kept and shown as placeholders."
 private let PAPER_TARGET = "paper"
 private let PAINT_TARGET = "paint"
-/// Most tags `search_effects` lists from its matches.
-private let TAG_LIMIT = 40
 /// What `apply_effect` takes in the paint editor.
 private let APPLY_USES = ["filter"]
 
-private struct ToolError: Error, LocalizedError {
-    let message: String
-    init(_ m: String) { message = m }
-    var errorDescription: String? { message }
-}
-
-/// A catalog entry as the tools return it (`summaryOut`).
-private func summaryOut(_ e: EffectDescription) -> JSONObject {
-    let j = e.json
-    var o: JSONObject = ["id": .string(e.id), "name": .string(e.name), "kind": .string(e.kind), "category": .string(e.category), "uses": .array(e.uses.map { .string($0) })]
-    if let d = j["description"]?.stringValue, !d.isEmpty { o["description"] = .string(d) }
-    if !e.tags.isEmpty { o["tags"] = .array(e.tags.map { .string($0) }) }
-    o["transparent"] = j["transparent"] ?? false
-    o["loop"] = j["loop"] ?? false
-    if let d = j["duration"] { o["duration"] = d }
-    if let c = j["camera"] { o["camera"] = c }
-    if let a = j["accepts"]?.arrayValue, !a.isEmpty { o["accepts"] = .array(a) }
-    return o
-}
-
-/// Catalog tags close to an unknown one (`nearestTags`).
-private func nearestTags(_ tag: String, _ known: [(tag: String, count: Int)]) -> [String] {
-    let t = normaliseEffectTag(tag)
-    let stem = String(t.prefix(4))
-    return known.filter { $0.tag.contains(t) || t.contains($0.tag) || (stem.count == 4 && $0.tag.hasPrefix(stem)) }.prefix(5).map(\.tag)
-}
-
-private func tagsJSON(_ tags: [(tag: String, count: Int)]) -> JSONValue { .array(tags.map { ["tag": .string($0.tag), "count": .number(Double($0.count))] }) }
+private typealias ToolError = EffectToolError
 
 private func refJSON(_ s: PaintEffectSource) -> JSONObject {
     var o: JSONObject = ["effect": .string(s.effect)]
@@ -59,7 +29,7 @@ private func refJSON(_ s: PaintEffectSource) -> JSONObject {
 /// The effect tools of a paint editor (`createPaintEffectsToolProvider`).
 public func createPaintEffectsToolProvider(_ c: PaintEditorController) throws -> AgentToolProvider {
     func requireProvider() throws -> EffectProvider {
-        guard let p = c.effectsProvider else { throw ToolError(NO_PROVIDER) }
+        guard let p = c.effectsProvider else { throw ToolError(NO_EFFECTS_PROVIDER) }
         return p
     }
     func paperInfo() -> [JSONObject] {
@@ -130,127 +100,58 @@ public func createPaintEffectsToolProvider(_ c: PaintEditorController) throws ->
         return out
     }
 
-    var h: [String: PaintToolHandler] = [:]
-    h["search_effects"] = { a in
-        guard let p = c.effectsProvider else { return ["available": false, "reason": .string(NO_PROVIDER), "effects": [], "total": 0] }
-        let tags = a["tags"]?.arrayValue?.compactMap(\.stringValue)
-        let accepts = a["accepts"]?.arrayValue?.compactMap(\.stringValue)
-        var found = try await p.search(a["query"]?.stringValue ?? "", EffectSearchOptions(kind: a["kind"]?.stringValue, category: a["category"]?.stringValue, use: a["use"]?.stringValue, tags: tags, accepts: accepts?.isEmpty == false ? accepts : nil)).filter { hasEffectTags($0, tags) }
-        if accepts?.contains("path") == true {
-            var kept: [EffectDescription] = []
-            for e in found {
-                if let acc = e.json["accepts"]?.arrayValue?.compactMap(\.stringValue) {
-                    if accepts!.allSatisfy(acc.contains) { kept.append(e) }
-                } else if kept.count < 200, !pathControlsOf(try await p.describe(e.id)).isEmpty { kept.append(e) }
+    let host = EffectToolHost(
+        applyUses: APPLY_USES,
+        provider: { c.effectsProvider },
+        list: list,
+        apply: { target, effect, a in
+            if target == PAPER_TARGET { throw ToolError("The paper takes generator effects through set_paper_effect; apply_effect runs a filter on a layer's paint.") }
+            if target == PAINT_TARGET { throw ToolError("Brushes paint with an effect through set_effect_paint; apply_effect runs a filter on a layer's paint.") }
+            try noStackArgs(a)
+            _ = try requireLayer(target)
+            let r = try await c.applyLightEffect(target, effect, values: a["values"]?.objectValue, amount: a["opacity"]?.numberValue)
+            var applied: JSONObject = ["id": "light"]
+            for (k, v) in refJSON(r.source) { applied[k] = v }
+            applied["role"] = "baked light"
+            applied["enabled"] = true
+            applied["opacity"] = .number(r.amount)
+            applied["values"] = .object(r.source.values)
+            return ["target": .string(target), "effect": .object(applied), "effects": .array(layerInfo(target).map { .object($0) }), "baked": true]
+        },
+        update: { target, instance, a in
+            try instanceCheck(target, instance)
+            try noStackArgs(a)
+            let values = a["values"]?.objectValue
+            if target == PAINT_TARGET {
+                if a["opacity"] != nil { throw ToolError("opacity does not apply to the effect paint: change the brush opacity (set_brush tip.opacity).") }
+                let p = c.getEffectPaint()!
+                var merged = p.values
+                for (k, v) in values ?? [:] { merged[k] = v }
+                _ = try await c.setEffectPaint(p.effect, values: merged, time: p.time, map: p.map?.json, live: p.live)
+                return change(target, paintInfo())
             }
-            found = kept
+            if target == PAPER_TARGET {
+                _ = try await c.updatePaperEffect(values: values, opacity: a["opacity"]?.numberValue)
+                return change(target, paperInfo())
+            }
+            if a["opacity"] != nil { throw ToolError("An effect layer's opacity is the layer's: change it with update_layer.") }
+            _ = try await c.updateEffectLayer(target, values: values)
+            return change(target, layerInfo(target))
+        },
+        remove: { target, instance in
+            try instanceCheck(target, instance)
+            let was = effectsOf(target)[0]
+            if target == PAINT_TARGET {
+                _ = try c.setColor(c.color)
+                return ["target": .string(target), "effect": .object(was), "effects": []]
+            }
+            if target == PAPER_TARGET { _ = try await c.setPaperEffect(nil) } else { _ = try c.rasterizeEffectLayer(target) }
+            var o: JSONObject = ["target": .string(target), "effect": .object(was), "effects": []]
+            if target != PAPER_TARGET { o["keptPixels"] = true }
+            return .object(o)
         }
-        let limit = Int(a["limit"]?.numberValue ?? 20)
-        var out: JSONObject = [
-            "available": true, "provider": ["id": .string(p.id), "name": .string(p.name), "capabilities": .object(p.capabilities)],
-            "effects": .array(found.prefix(limit).map { .object(summaryOut($0)) }), "total": .number(Double(found.count)), "tags": tagsJSON(Array(countEffectTags(found).prefix(TAG_LIMIT))),
-        ]
-        if let tags, !tags.isEmpty, found.isEmpty {
-            let known = countEffectTags(try await p.list())
-            let have = Set(known.map(\.tag))
-            let unknown = tags.filter { !have.contains(normaliseEffectTag($0)) }
-            if !unknown.isEmpty { out["unknownTags"] = .array(unknown.map { ["tag": .string($0), "nearest": .array(nearestTags($0, known).map { .string($0) })] }) }
-        }
-        return .object(out)
-    }
-    h["describe_effect"] = { a in
-        guard let p = c.effectsProvider else { return ["available": false, "reason": .string(NO_PROVIDER)] }
-        let d = try await p.describe(a["effect"]?.stringValue ?? "")
-        var o: JSONObject = ["available": true]
-        for (k, v) in summaryOut(d) { o[k] = v }
-        o["controls"] = d.json["controls"] ?? Optional<JSONValue>.none
-        o["defaults"] = d.json["defaults"] ?? Optional<JSONValue>.none
-        o["presets"] = d.json["presets"] ?? Optional<JSONValue>.none
-        o["inputs"] = d.json["inputs"] ?? Optional<JSONValue>.none
-        o["appliesHere"] = .bool(effectOffered(d, APPLY_USES))
-        let paths = pathControlsOf(d)
-        if !paths.isEmpty { o["pathControls"] = .array(paths.map { .string($0) }) }
-        return .object(o)
-    }
-    h["list_applied_effects"] = { a in
-        let p = c.effectsProvider
-        let known = Set(try await p?.list().map(\.id) ?? [])
-        func unavailable(_ e: JSONObject) -> String? {
-            guard let p else { return nil }
-            if let ep = e["provider"]?.stringValue, ep != p.id { return "It comes from the \"\(ep)\" provider, but \"\(p.id)\" (\(p.name)) is registered: register \"\(ep)\" again, or remove it and apply one from search_effects." }
-            let id = e["effect"]?.stringValue ?? ""
-            return known.contains(id) ? nil : "\(p.name) has no effect \"\(id)\": remove it and apply one from search_effects."
-        }
-        let targets: [JSONValue] = try list(a["target"]?.stringValue).map { t in
-            var t = t
-            t["effects"] = .array((t["effects"]?.arrayValue ?? []).map { ev in
-                var e = ev.objectValue ?? [:]
-                let why = unavailable(e)
-                e["available"] = .bool(p != nil && why == nil)
-                if let why { e["reason"] = .string(why) }
-                return .object(e)
-            })
-            return .object(t)
-        }
-        var o: JSONObject = ["provider": p.map { ["id": .string($0.id), "name": .string($0.name)] } ?? .null]
-        if p == nil { o["reason"] = .string(NO_PROVIDER) }
-        o["targets"] = .array(targets)
-        return .object(o)
-    }
-    h["apply_effect"] = { a in
-        _ = try requireProvider()
-        let target = a["target"]?.stringValue ?? ""
-        let effect = a["effect"]?.stringValue ?? ""
-        if target == PAPER_TARGET { throw ToolError("The paper takes generator effects through set_paper_effect; apply_effect runs a filter on a layer's paint.") }
-        if target == PAINT_TARGET { throw ToolError("Brushes paint with an effect through set_effect_paint; apply_effect runs a filter on a layer's paint.") }
-        try noStackArgs(a)
-        _ = try requireLayer(target)
-        let r = try await c.applyLightEffect(target, effect, values: a["values"]?.objectValue, amount: a["opacity"]?.numberValue)
-        var applied: JSONObject = ["id": "light"]
-        for (k, v) in refJSON(r.source) { applied[k] = v }
-        applied["role"] = "baked light"
-        applied["enabled"] = true
-        applied["opacity"] = .number(r.amount)
-        applied["values"] = .object(r.source.values)
-        return ["target": .string(target), "effect": .object(applied), "effects": .array(layerInfo(target).map { .object($0) }), "baked": true]
-    }
-    h["update_effect"] = { a in
-        _ = try requireProvider()
-        if a["values"] == nil && a["enabled"] == nil && a["opacity"] == nil && a["index"] == nil { throw ToolError("Give at least one of values, enabled, opacity, index to change.") }
-        let target = a["target"]?.stringValue ?? ""
-        try instanceCheck(target, a["effect"]?.stringValue ?? "")
-        try noStackArgs(a)
-        let values = a["values"]?.objectValue
-        if target == PAINT_TARGET {
-            if a["opacity"] != nil { throw ToolError("opacity does not apply to the effect paint: change the brush opacity (set_brush tip.opacity).") }
-            let p = c.getEffectPaint()!
-            var merged = p.values
-            for (k, v) in values ?? [:] { merged[k] = v }
-            _ = try await c.setEffectPaint(p.effect, values: merged, time: p.time, map: p.map?.json, live: p.live)
-            return change(target, paintInfo())
-        }
-        if target == PAPER_TARGET {
-            _ = try await c.updatePaperEffect(values: values, opacity: a["opacity"]?.numberValue)
-            return change(target, paperInfo())
-        }
-        if a["opacity"] != nil { throw ToolError("An effect layer's opacity is the layer's: change it with update_layer.") }
-        _ = try await c.updateEffectLayer(target, values: values)
-        return change(target, layerInfo(target))
-    }
-    h["remove_effect"] = { a in
-        _ = try requireProvider()
-        let target = a["target"]?.stringValue ?? ""
-        try instanceCheck(target, a["effect"]?.stringValue ?? "")
-        let was = effectsOf(target)[0]
-        if target == PAINT_TARGET {
-            _ = try c.setColor(c.color)
-            return ["target": .string(target), "effect": .object(was), "effects": []]
-        }
-        if target == PAPER_TARGET { _ = try await c.setPaperEffect(nil) } else { _ = try c.rasterizeEffectLayer(target) }
-        var o: JSONObject = ["target": .string(target), "effect": .object(was), "effects": []]
-        if target != PAPER_TARGET { o["keptPixels"] = true }
-        return .object(o)
-    }
+    )
+    var h: [String: PaintToolHandler] = effectToolHandlers(host)
     h["set_paper_effect"] = { a in
         let effect = a["effect"]?.stringValue
         if effect != nil { _ = try requireProvider() }

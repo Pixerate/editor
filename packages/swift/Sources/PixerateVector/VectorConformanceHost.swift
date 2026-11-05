@@ -1,6 +1,7 @@
 import Foundation
 import PixerateConformance
 import PixerateCore
+import PixeratePaint
 
 /**
  * A fresh vector editor for replaying a conformance scenario (`domains/vector/fixtures`), as
@@ -13,8 +14,10 @@ import PixerateCore
  * for the process, `setVectorTextShaper`), the one every implementation can match. `setup` is the scenario's artboard
  * size (`{ width, height }`, default the editor's).
  *
- * The effect and generation tools (`vector-effects`, `vector-generation`) are not ported yet
- * (#624); the scenarios that call them are skipped.
+ * Beside the commands the registry holds the effect tools (`vector-effects`, on the fake effect
+ * provider `FakeEffectProvider`) and the generation tools (`vector-generation`, on
+ * `FAKE_VECTOR_ART_MODELS` and `fakeVectorArtGenerator`), as `vectorProviders` registers them.
+ * Provenance `createdAt` times are normalised by the runner.
  */
 public final class VectorConformanceHost: ConformanceHost {
     public let controller: VectorEditorController
@@ -32,9 +35,12 @@ public final class VectorConformanceHost: ConformanceHost {
             next += 1
             return "n\(next)"
         })
+        controller.setEffectsProvider(FakeEffectProvider())
         commands = CommandRegistry(context: controller, history: controller.history)
         try commands.register(createVectorCommands(controller))
         _ = try registry.register(createCommandToolProvider(commands, CommandToolProviderOptions(id: "vector-commands", namespace: "")))
+        _ = try registry.register(createVectorEffectsToolProvider(controller))
+        _ = try registry.register(createVectorGenerationToolProvider(controller, VectorGenerationToolProviderOptions(VectorGenerationOptions(models: FAKE_VECTOR_ART_MODELS, generate: fakeVectorArtGenerator))))
     }
 
     public func callTool(_ name: String, _ args: JSONObject) async -> McpToolResult {

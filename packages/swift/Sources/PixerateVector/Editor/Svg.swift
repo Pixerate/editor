@@ -93,8 +93,9 @@ public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, 
         if truthy(node["resizing"]) { out += " data-vector-resizing=\"\(escapeAttr(node["resizing"]!.stringified()))\"" }
         if node.isPath && isVectorShadedPaint(node.fill) { out += " data-vector-shading=\"\(escapeAttr(node.fill!.stringified()))\"" }
         if node.isPath && truthy(node["connector"]) { out += " data-vector-connector=\"\(escapeAttr(node["connector"]!.stringified()))\"" }
-        // not ported yet: generated art, lenses (#624)
-        for key in ["generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
+        if node.isGroup && truthy(node["generation"]) { out += " data-vector-generation=\"\(escapeAttr(node["generation"]!.stringified()))\"" }
+        // not ported yet: lenses (#624)
+        if node.isPath && truthy(node["lens"]) { throw VectorNotPorted("exporting lens to SVG") }
         if let blend = vectorBlendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
         if let filters = node["filters"], let n = arrayLength(filters), n > 0 {
             let data = " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""

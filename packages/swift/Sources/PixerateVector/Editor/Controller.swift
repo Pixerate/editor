@@ -2,6 +2,7 @@ import Foundation
 import PixerateCore
 import PixerateGeometry
 import PixerateRaster
+import PixeratePaint
 
 // The vector editor's headless state (`VectorEditorController` in `vector/controller.ts`): the
 // document, selection, tool, history and editing options the commands work on. It is ported
@@ -170,6 +171,10 @@ public final class VectorEditorController {
     var connectorRoute = "straight"
     /// The font and alignment new text gets (`textDefaults`).
     var textDefaults = DEFAULT_VECTOR_FONT
+    /// The registered effects provider (`effects`), or nil.
+    var effectsSlot: EffectProvider?
+    /// Generations by idempotency key (`generate_vector_art`, `regenerate_vector_art`).
+    let generationRuns = VectorGenerationRuns()
     /// Bumped on every change listeners hear about.
     public private(set) var revision = 0
     private var listeners: [(id: UUID, fn: () -> Void)] = []

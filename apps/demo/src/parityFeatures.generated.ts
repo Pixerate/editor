@@ -1193,7 +1193,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`generateVectorArt`, `regenerateVectorArt`, `createVectorGenerationToolProvider`, `vectorArtModels`",
         "react": "`<VectorGeneratePanel>` & `useVectorGenerationTools`",
         "svelte": "`<VectorGeneratePanel>` & `useVectorGenerationTools`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`generateVectorArt`, `regenerateVectorArt`, `createVectorGenerationToolProvider`, `vectorArtModels`: SVG through the SVG importer, pictures traced or stylised, provenance kept and exported to SVG); the views: Planned (#533)"
       },
       {
         "feature": "Vector Pages & Master Pages (multipage documents on top of frames: the top-level frames are the pages, in order, numbered from 1; master pages are frames whose art shows on every page that uses them, laid out by each object's resizing constraints for pages of other sizes, with `{page}` / `{pages}` in master text; Add Page, Add Master Page, Apply Master, Move Page and Go to Page, each edit one undo step; the master art follows every edit of the master, is drawn on the canvas, SVG and Lottie, and PDF export by artboards writes the pages (not the masters); agent commands `vector.listPages`, `vector.addPage`, `vector.addMasterPage`, `vector.setPageMaster`, `vector.movePage`, `vector.goToPage`, and `parentId` on `vector.addText`)",
@@ -1235,7 +1235,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`vectorEffectGroups`, `createVectorEffectsToolProvider`",
         "react": "`<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools`",
         "svelte": "`<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups`, `createVectorEffectsToolProvider`); the views: Planned (#533)"
       }
     ]
   },
@@ -2189,7 +2189,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`createEffectToolProvider`",
         "react": "`useEffects` + the editor's tools hook",
         "svelte": "`useEffects` + the editor's tools hook",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`effectToolHandlers` with an `EffectToolHost`, used by `createPaintEffectsToolProvider` and `createVectorEffectsToolProvider`; schemas from the contracts, without the catalog's ids); the views: Planned (#533)"
       },
       {
         "feature": "Effect Authoring (`supportsAuthoring`, `openAuthoring`, reactive session with keyframe tracks, playback, undo/redo, source editing & live shader compilation, agent authoring tools & skill, visual authoring editor)",
@@ -2550,7 +2550,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`planGenerationRequest` (`/generation`)",
         "react": "`useGenerationPlan`",
         "svelte": "`createGenerationPlan`",
-        "swift": "Planned (#533)"
+        "swift": "✅ (`planGenerationRequest`, `ModelCapabilities`, every strategy)"
       },
       {
         "feature": "Generation Settings Form from Capabilities (enums, ranges, reference slots, adjustments)",
