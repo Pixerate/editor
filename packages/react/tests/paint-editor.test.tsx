@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 // The DOM must exist before react-dom loads, or range inputs never fire onChange.
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -199,7 +200,7 @@ describe('React paint editor', () => {
     expect(q<HTMLInputElement>('input[aria-label="Brush variety"]').value).toBe('highlighter');
     // Facets of the preset, edited: a narrower tip, a pink default colour and a palette colour.
     expect(q('[data-testid="brush-editor"] canvas[aria-label="Brush preview"]')).not.toBeNull();
-    expect([...container.querySelectorAll('[data-testid="brush-editor"] section')].map((s) => s.getAttribute('data-section'))).toEqual(['medium', 'shape', 'marks', 'feel', 'behaviour', 'light', 'colour']);
+    expect([...container.querySelectorAll('[data-testid="brush-editor"] section')].map((s) => s.getAttribute('data-section'))).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'colour']);
     setValue(q('input[aria-label="Size"]'), '18');
     setValue(q('input[aria-label="Brush default colour"]'), '#ff6ec7');
     setValue(q('input[aria-label="Add a palette colour"]'), '#ffd1ec');
@@ -776,5 +777,20 @@ describe('React PathStrokePanel', () => {
     click(byText('Brush path'));
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('no segments to brush');
     expect(c.getStrokes().length).toBe(1);
+  });
+
+  it('the brush panel imports a Procreate brush pack into the library', async () => {
+    const c = new PaintEditorController({ width: 32, height: 32 });
+    render(<BrushPanel controller={c} />);
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Import brushes"]')!;
+    expect(input.accept).toContain('.brushset');
+    const bytes = readFileSync(`${__dirname}/../../core/tests/fixtures/brush-packs/test-set.brushset`);
+    Object.defineProperty(input, 'files', { value: [new File([bytes], 'Test set.brushset')], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect((await c.brushLibrary.list({ source: 'user' })).map((e) => e.brush.id)).toEqual(['test-set-dry-ink', 'test-set-soft-round']);
+    expect((await c.brushLibrary.listSources()).length).toBe(3);
   });
 });

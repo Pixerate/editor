@@ -18,8 +18,10 @@ import PixerateRaster
  * - **Light paint** is a fifth mass channel; `lightDisplay` shades the live light over the lane's
  *   light surface and drying bakes it in.
  *
- * This port has no WebAssembly, worker or WebGPU engine: the CPU (the TS core's authority) is all
- * there is, so `backend()` always reports the TypeScript kernel on one thread.
+ * The CPU (the TS core's authority) runs every step: tiles on several threads (`threads`), four
+ * cells at a time (`wetStepSlotSIMD`), with the scalar kernel's bits. Metal can shade the display
+ * (`attachGpu`). `backend()` still reports the TypeScript kernel on one thread, the words the
+ * recorded scenarios expect.
  */
 
 /// Wet layers a world can hold at once.
@@ -43,7 +45,7 @@ public struct WetPaperInput {
     var paper: WetPaper { WetPaper(absorption: absorption, permeability: permeability, roughness: roughness) }
 }
 
-/// The kernel in use: always the TypeScript kernel's maths, on one thread, in this port.
+/// The kernel in use, in the TS core's words (this port reports the TypeScript kernel on one thread, which recorded scenarios compare).
 public struct WetBackendInfo: Equatable {
     public var kind: String
     public var threads: Int
@@ -98,14 +100,25 @@ public struct WetWorldError: Error, LocalizedError, CustomStringConvertible {
     public var description: String { message }
 }
 
-/// One tile slot: `SLOT_PLANES` planes of 258 × 258 f32.
+/// Bytes of a slot's allocation: whole pages, so Metal can use it in place (`makeBuffer(bytesNoCopy:)`).
+let WET_SLOT_ALLOCATION: Int = {
+    let page = Int(getpagesize())
+    return (SLOT_FLOATS * 4 + page - 1) / page * page
+}()
+
+/// One tile slot: `SLOT_PLANES` planes of 258 × 258 f32, page-aligned.
 final class WetSlot {
     let f: UnsafeMutablePointer<Float>
+    /// The GPU's view of this memory (a Metal buffer over it), made on first use and dropped with the slot.
+    var gpuBuffer: AnyObject?
     init() {
-        f = UnsafeMutablePointer<Float>.allocate(capacity: SLOT_FLOATS)
-        f.initialize(repeating: 0, count: SLOT_FLOATS)
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: WET_SLOT_ALLOCATION, alignment: Int(getpagesize()))
+        f = raw.initializeMemory(as: Float.self, repeating: 0, count: WET_SLOT_ALLOCATION / 4)
     }
-    deinit { f.deallocate() }
+    deinit {
+        gpuBuffer = nil
+        UnsafeMutableRawPointer(f).deallocate()
+    }
     func clear() { f.update(repeating: 0, count: SLOT_FLOATS) }
 }
 
@@ -170,6 +183,20 @@ private func unionRectWet(_ a: RasterRect?, _ b: RasterRect) -> RasterRect {
     return RasterRect(x: x, y: y, width: Swift.max(a.x + a.width, b.x + b.width) - x, height: Swift.max(a.y + a.height, b.y + b.height) - y)
 }
 
+/// Runs `body` for 0..<count on up to `workers` threads, in contiguous chunks (inline for one).
+private func wetParallel(_ count: Int, _ workers: Int, _ body: (Int) -> Void) {
+    if workers <= 1 || count <= 1 {
+        for i in 0..<count { body(i) }
+        return
+    }
+    let chunks = Swift.min(count, workers)
+    withoutActuallyEscaping(body) { body in
+        DispatchQueue.concurrentPerform(iterations: chunks) { c in
+            for i in stride(from: c, to: count, by: chunks) { body(i) }
+        }
+    }
+}
+
 /// Rounds a height to 1/65536 so tiny floating-point differences in the grain never reach the simulation.
 private func quantizeHeight(_ v: Double) -> Float {
     Float(JS.round(Swift.min(1, Swift.max(0, v)) * 65536) / 65536)
@@ -194,6 +221,17 @@ public final class WetWorld {
     private var tilt = FLAT_TILT
     private var paper: WetPaperInput
     private var paperBytes: [Int]
+    /// Threads that step tiles (1: the calling thread only). Any count gives the same bits.
+    public var threads = Swift.max(1, ProcessInfo.processInfo.activeProcessorCount)
+    /// Steps with the scalar reference kernel (`wetStepSlot`) instead of the SIMD one: tests only (same bits, slower).
+    var scalarKernel = false
+    // Metal shading (see `attachGpu`).
+    private var gpu: WetMetalEngine?
+    /// GPU shading starts at this many live tiles (all layers), and stops below half of it.
+    public var gpuMinTiles = 16
+    private var gpuLive = false
+    /// Why the GPU stopped (a failed command buffer), or nil.
+    public private(set) var gpuError: String?
 
     public init(width: Int, height: Int, paper: WetPaperInput) throws {
         if !(width >= 1 && height >= 1 && width <= 16384 && height <= 16384) { throw WetWorldError("A wet canvas must be 1..16384 pixels per side, not \(width)×\(height).") }
@@ -479,15 +517,31 @@ public final class WetWorld {
         return Swift.max(1, Swift.min(want, MAX_BATCH, toFree))
     }
 
+    /**
+     * Runs `n` steps of every live tile. Within a step each tile reads only its own slot (current
+     * set, halo included) and writes only its own next set and deposits, and each halo is filled
+     * from the neighbours' interiors after every tile has stepped, so tiles run on several threads
+     * (`threads`) and give the same bits as one.
+     */
     private func runHere(_ n: Int) {
+        let keys = active
+        let slotPtrs = keys.map { slotPtr(slotOf($0)) }
+        let prms = keys.map { lanes[laneIndexOf($0)]?.prm }
+        var stepped = [UInt32](repeating: 0, count: keys.count)
+        let workers = Swift.min(threads, keys.count)
+        let scalar = scalarKernel
         for _ in 0..<n {
-            for key in active {
-                guard let lane = lanes[laneIndexOf(key)] else { continue }
-                let fl = wetStepSlot(slotPtr(slotOf(key)), parity, lane.prm)
-                flags[key] |= fl
-                last[key] = fl
+            let par = parity
+            stepped.withUnsafeMutableBufferPointer { out in
+                wetParallel(keys.count, workers) { i in
+                    if let prm = prms[i] { out[i] = scalar ? wetStepSlot(slotPtrs[i], par, prm) : wetStepSlotSIMD(slotPtrs[i], par, prm) }
+                }
             }
-            for key in active { halo(key, 1 - parity) }
+            for (i, key) in keys.enumerated() where prms[i] != nil {
+                flags[key] |= stepped[i]
+                last[key] = stepped[i]
+            }
+            wetParallel(keys.count, workers) { i in self.halo(keys[i], 1 - par) }
             parity = 1 - parity
         }
     }
@@ -560,6 +614,7 @@ public final class WetWorld {
             afterBatch(n)
             left -= n
         }
+        if gpu != nil { _ = gpuDecide() }
         return clock
     }
 
@@ -1119,6 +1174,88 @@ public final class WetWorld {
             }
         }
         return any ? out : nil
+    }
+
+    // MARK: - Metal shading
+
+    /**
+     * Attaches a Metal engine (or nil to detach). From then on, whenever at least `gpuMinTiles`
+     * tiles are live, `displayGpu` shades on it. The CPU stays the authority.
+     */
+    public func attachGpu(_ engine: WetMetalEngine?) {
+        gpu = engine
+        gpuLive = false
+        gpuError = nil
+    }
+
+    /// The attached engine, if any.
+    public var gpuEngine: WetMetalEngine? { gpu }
+
+    /// Whether the GPU shades now (an engine is attached and the wet area is large).
+    public var gpuActive: Bool { gpuLive }
+
+    private func gpuStop(_ reason: String?) {
+        gpuLive = false
+        guard let reason else { return }
+        gpuError = reason
+        gpu = nil
+        if !warnings.contains(reason) { warnings.append(reason) }
+    }
+
+    /// Turns GPU shading on or off for the current wet area. Returns whether it is on.
+    private func gpuDecide() -> Bool {
+        // On at gpuMinTiles, off below half of it (so it does not flip at the threshold).
+        let want = gpu != nil && active.count >= (gpuLive ? (gpuMinTiles + 1) / 2 : gpuMinTiles)
+        if want && !gpuLive {
+            if let lost = gpu!.lostReason {
+                gpuStop("The GPU was lost (\(lost)); wet paint runs on the CPU.")
+                return false
+            }
+            gpuLive = true
+        } else if !want && gpuLive {
+            gpuStop(nil)
+        }
+        return gpuLive
+    }
+
+    /**
+     * Like `display`, but shades every stale tile on the GPU at once when GPU shading is on
+     * (otherwise, or when the GPU fails, it is `display(id, maxTiles: maxCpuTiles)`).
+     */
+    public func displayGpu(_ id: String, maxCpuTiles: Int = Int.max) throws -> (surface: TiledSurface, changed: [RasterRect], pending: Int, gpu: Bool) {
+        func cpu() throws -> (surface: TiledSurface, changed: [RasterRect], pending: Int, gpu: Bool) {
+            let d = try display(id, maxTiles: maxCpuTiles)
+            return (d.surface, d.changed, d.pending, false)
+        }
+        guard let engine = gpu, gpuDecide() else { return try cpu() }
+        let lane = try laneOf(id)
+        let stale = active.filter { laneIndexOf($0) == lane.index && lane.shaded.get(tileKeyOf($0))?.stamp != lane.stamp }
+        if stale.isEmpty {
+            let d = try display(id, maxTiles: 0)
+            return (d.surface, d.changed, d.pending, true)
+        }
+        let jobs = stale.map { key -> WetShadeJob in
+            let (tx, ty) = tileXY(key)
+            return WetShadeJob(slot: slots[slotOf(key)], width: Swift.min(WET_TILE, width - tx * WET_TILE), height: Swift.min(WET_TILE, height - ty * WET_TILE), src: lane.base.tiles.get(tileKeyOf(key))?.data)
+        }
+        let tiles: [[UInt8]]
+        do {
+            tiles = try engine.shade(jobs, parity: parity, paper: paperBytes)
+        } catch {
+            gpuStop("Wet paint stopped using the GPU (\(error.localizedDescription)).")
+            return try cpu()
+        }
+        var changed: [RasterRect] = []
+        for (i, key) in stale.enumerated() {
+            let tk = tileKeyOf(key)
+            lane.shaded.set(tk, (lane.stamp, finishTile(tiles[i], 4, 0)))
+            lane.urgent.remove(tk)
+            let (tx, ty) = tileXY(key)
+            changed.append(RasterRect(x: tx * WET_TILE, y: ty * WET_TILE, width: WET_TILE, height: WET_TILE))
+        }
+        lane.shadedVersion += 1
+        let d = try display(id, maxTiles: 0)
+        return (d.surface, changed, 0, true)
     }
 
     // MARK: - Snapshots

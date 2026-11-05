@@ -1,8 +1,8 @@
 name: Swift
 
 # The Swift editors (#533): build and test the package on macOS and in the iOS simulator, and check
-# the Swift generated from @pixerate/conformance is current. Runs when the Swift code, the
-# contracts or the scripts that write them change.
+# the Swift generated from @pixerate/conformance and @pixerate/markdown-conformance is current.
+# Runs when the Swift code, the contracts or the scripts that write them change.
 on:
   push:
     branches: [main]
@@ -11,7 +11,10 @@ on:
       - "apps/swift-demo/**"
       - "packages/swift/**"
       - "packages/conformance/**"
+      - "packages/markdown-conformance/**"
       - "scripts/gen-swift.mjs"
+      - "scripts/gen-swift-markdown.mjs"
+      - "scripts/gen-msl.mjs"
       - "scripts/export-contracts.mjs"
       - "scripts/record-conformance.mjs"
       - ".github/workflows/swift.yml"
@@ -22,7 +25,10 @@ on:
       - "apps/swift-demo/**"
       - "packages/swift/**"
       - "packages/conformance/**"
+      - "packages/markdown-conformance/**"
       - "scripts/gen-swift.mjs"
+      - "scripts/gen-swift-markdown.mjs"
+      - "scripts/gen-msl.mjs"
       - "scripts/export-contracts.mjs"
       - "scripts/record-conformance.mjs"
       - ".github/workflows/swift.yml"
@@ -32,8 +38,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  swift:
-    name: Swift (macOS and iOS)
+  # Three jobs in parallel: the wall time is the slowest one, not the sum. Tests build with -O
+  # (and testability): the debug-built wet and conformance code ran ~7x slower than the extra
+  # compile time it saves (#533).
+  macos:
+    name: Swift (macOS)
     runs-on: macos-latest
     timeout-minutes: 30
 
@@ -47,31 +56,81 @@ jobs:
           node-version: 24
 
       - name: Check the generated Swift is current
-        run: node scripts/gen-swift.mjs --check
+        run: |
+          node scripts/gen-swift.mjs --check
+          node scripts/gen-swift-markdown.mjs --check
 
       - name: Toolchain
         run: |
           xcodebuild -version
           swift --version
 
-      - name: Build (macOS)
-        run: swift build
-
-      - name: Build the demo app (macOS)
-        # apps/swift-demo: its own package, on the root package by relative path.
-        run: swift build --package-path apps/swift-demo
-
       - name: Test (macOS)
-        # Writes the conformance summary (passed / failed / skipped scenarios) to the job summary.
-        run: swift test
+        # Builds every target and test optimised, then runs the tests. Writes the conformance summary
+        # (passed / failed / skipped scenarios) to the job summary.
+        run: swift test -Xswiftc -O -Xswiftc -enable-testing
+
+  ios:
+    name: Swift (iOS simulator)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       - name: Test (iOS simulator)
         # The Pixerate-Package scheme builds and tests every target, PixeratePaintUI and its tests included.
         run: |
+          xcodebuild -version
           udid=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           devices = json.load(sys.stdin)["devices"]
           print(next(d["udid"] for runtime, ds in sorted(devices.items(), reverse=True) if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))
           ')
           echo "Simulator: $udid"
-          xcodebuild test -scheme Pixerate-Package -destination "id=$udid" -quiet
+          # -quiet keeps the log short but hides why a test failed: the result bundle keeps it.
+          xcodebuild test -scheme Pixerate-Package -destination "id=$udid" -quiet -resultBundlePath "$RUNNER_TEMP/ios.xcresult" SWIFT_OPTIMIZATION_LEVEL=-O ENABLE_TESTABILITY=YES
+
+      - name: Show iOS test failures
+        # Each failing test with its message, in the log and as an annotation on the run.
+        if: failure()
+        run: |
+          [ -d "$RUNNER_TEMP/ios.xcresult" ] || { echo "No result bundle: the build or the simulator failed before tests ran."; exit 0; }
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/ios.xcresult" --compact | python3 -c '
+          import json, sys
+          failures = json.load(sys.stdin).get("testFailures", [])
+          if not failures:
+              print("The result bundle records no test failures.")
+          for f in failures:
+              name = f.get("testIdentifierString") or f.get("testName", "?")
+              text = f.get("failureText", "")
+              print(f"--- {name}\n{text}\n")
+              escaped = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              title = name.replace("%", "%25").replace(",", "%2C").replace(":", "%3A")
+              print(f"::error title={title}::{escaped}")
+          '
+
+      - name: Keep the iOS result bundle
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-xcresult
+          path: ${{ runner.temp }}/ios.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
+  demo:
+    name: Swift (demo app)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build the demo app (macOS)
+        # apps/swift-demo: its own package, on the root package by relative path.
+        run: |
+          swift --version
+          swift build --package-path apps/swift-demo

@@ -188,12 +188,12 @@ extension PaintEditorController {
 
     /**
      * Whether this port paints with `brush`: every engine (dab, eraser, Mixer Brush, blender,
-     * smudge, wet, impasto, particle, bristle) except stamp tips, and sticker brushes whose stamps
-     * are the editor's own. A brush picker leaves the others out.
+     * smudge, wet, impasto, particle, bristle, sticker), stamp tips included, unless it lays a
+     * sticker from a host's sticker library, which has no art here. A brush picker leaves those out.
      */
     public func canPaint(_ brush: PaintBrush) -> Bool {
-        if brush.engine == "sticker" { return (brush.sticker["stamps"]?.arrayValue ?? []).allSatisfy { $0.stringValue.flatMap(editorStampOf) != nil } }
-        return brush.stamp == nil && ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle"].contains(brush.engine)
+        // Editor stamps and image sources have their art here; a host's library stickers don't.
+        brushStickerRefs(brush).isEmpty && ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker"].contains(brush.engine)
     }
 
     // MARK: - Colour

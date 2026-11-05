@@ -89,7 +89,7 @@ Strokes are data (`strokes.ts`), and so are fills, clears, flattened relief and 
 
 ## Beyond the paint editor
 
-- **Brushstrokes on paths.** `paintPathStroke` paints flattened path samples onto a surface, and `renderBrushstroke` with `BrushstrokeCache` (#271, gradient paint in #277) renders a standalone stroke image. The canvas uses them for brushed freehand strokes (#274, #278) and the vector editor for brushstroke stroke layers (#305). #306 added brush character (seeded jitter and paper grain) to the shared renderer. Only dry dab-engine brushes render this way.
+- **Brushstrokes on paths.** `paintPathStroke` paints flattened path samples onto a surface, and `renderBrushstroke` with `BrushstrokeCache` (#271, gradient paint in #277) renders a standalone stroke image. The canvas uses them for brushed freehand strokes (#274, #278) and the vector editor for brushstroke stroke layers (#305). #306 added brush character (seeded jitter and paper grain) to the shared renderer. Only dry dab-engine brushes render this way; vector brushstrokes also run wet, mixer, smudge and blender brushes through the paint editor's own engines (`vector/brushstrokeMedia.ts`, #519).
 - **Paint layers on the infinite canvas** (#275): `raster/viewport.ts` (world ↔ surface mapping, mip levels, `SurfaceViewportRenderer`), `paint/pointer.ts` and `WetWorld.stepRegion`, with a demo recipe in `apps/demo/src/components/CanvasPaintLayerRecipe.tsx`.
 - **Provider effects** (#284): effect paper, effect layers, effect fills and light baked into dried paint. See [effects.md](./effects.md).
 

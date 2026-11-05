@@ -82,7 +82,7 @@
             "bristle",
             "stamp"
           ],
-          "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: textured stamps (see stamps), laid as objects or particles."
+          "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: dabs shaped like a stamp, a sticker or an image source (see stamps), also laid as sprays, objects or particles."
         },
         "size": {
           "type": "number",
@@ -94,7 +94,7 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1,
-          "description": "Edge hardness, 0 soft .. 1 hard (default 1)."
+          "description": "Edge hardness, 0 soft .. 1 hard (default 1). Image-source stamps fade towards their edges below 1."
         },
         "spacing": {
           "type": "number",
@@ -213,9 +213,54 @@
           "items": {
             "type": "string",
             "pattern": "^(?:[^:\\s]+:\\S+|dot|star|heart|leaf|flower|confetti|splat|sparkle|ring)$",
-            "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring). A bare editor stamp (star) means editor:star."
+            "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring), or an image source source:<id> (list_brush_sources lists them; add_brush_source makes one from an image). A bare editor stamp (star) means editor:star."
           },
-          "description": "Stamp tips: the stickers. Objects take any sticker and pick one at random per mark (default editor:star; repeats count once); particles take only the editor's stamps, use the first 4 in marks.stampOrder, and repeats weight the order."
+          "description": "Stamp tips: stickers or image sources (source:<id>). Continuous dabs and sprays lay the first; objects take only stickers and pick one at random per mark (default editor:star; repeats count once); particles use the first 4 in marks.stampOrder, and repeats weight the order."
+        },
+        "grain": {
+          "type": "object",
+          "description": "Texture inside the tip (a grain source), separate from the paper's grain: each dab is multiplied by it. Continuous and scatter marks of round and stamp tips.",
+          "properties": {
+            "source": {
+              "type": "string",
+              "pattern": "^(?:source:[a-z0-9][a-z0-9-]{0,63}|cold-pressed|hot-pressed|rough|vellum|laid|ingres|sanded|canvas|linen|gesso)$",
+              "description": "The texture: a built-in pattern (cold-pressed, hot-pressed, rough, vellum, laid, ingres, sanded, canvas, linen, gesso) or an image source source:<id> (list_brush_sources); light parts are peaks, which paint."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "moving",
+                "texturised"
+              ],
+              "description": "texturised (default): the grain stays put on the canvas, a texture under the paint; moving: it rolls along with the tip, turning with it."
+            },
+            "scale": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 20,
+              "description": "Grain size: 1 is the pattern's or image's own size, 2 twice as coarse (default 1)."
+            },
+            "depth": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How much the grain takes out of each dab: 0 none, 1 only the peaks paint (default 0.6)."
+            },
+            "contrast": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3,
+              "description": "Height contrast around the middle: below 1 softer, above 1 harsher (default 1)."
+            },
+            "invert": {
+              "type": "boolean",
+              "description": "Swap peaks and valleys (default false)."
+            }
+          },
+          "required": [
+            "source"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -553,6 +598,22 @@
           "minimum": 0,
           "maximum": 4,
           "description": "Random offset across the stroke, in diameters (default 0)."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "description": "Dabs laid at each spacing step, each with its own jitter and scatter (default 1). Dab brushes."
+        },
+        "flip": {
+          "type": "string",
+          "enum": [
+            "none",
+            "x",
+            "y",
+            "xy"
+          ],
+          "description": "Mirror each dab at random across x, y or both (default none): variety for image and stamp tips."
         }
       },
       "additionalProperties": false

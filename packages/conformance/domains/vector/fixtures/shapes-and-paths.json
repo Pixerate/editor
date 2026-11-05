@@ -1,0 +1,1201 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "shapes-and-paths",
+  "description": "Shapes, paths, the command tools, listing, selection, styles and SVG export.",
+  "setup": {
+    "width": 400,
+    "height": 300
+  },
+  "steps": [
+    {
+      "tool": "list_commands",
+      "arguments": {
+        "query": "boolean"
+      },
+      "expect": {
+        "result": {
+          "commands": [
+            {
+              "description": "Combines two or more paths with union, subtract (upper shapes from the lowest), intersect or exclude. With `live`, the shapes stay editable operands of a live boolean group instead (a lone live group gets the operation; its operands get their own).",
+              "enabled": true,
+              "group": "Vector",
+              "id": "vector.boolean",
+              "label": "Boolean Operation…",
+              "params": {
+                "properties": {
+                  "ids": {
+                    "description": "Node ids (default: the selection).",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "live": {
+                    "description": "Keep the operands editable in a live boolean group (default false: one new path).",
+                    "type": "boolean"
+                  },
+                  "operation": {
+                    "enum": [
+                      "union",
+                      "subtract",
+                      "intersect",
+                      "exclude"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operation"
+                ],
+                "type": "object"
+              },
+              "readOnly": false
+            },
+            {
+              "description": "Bakes the path effects and live booleans of nodes (and everything inside them) into plain paths.",
+              "disabledReason": "Nothing is selected.",
+              "enabled": false,
+              "group": "Vector",
+              "id": "vector.expandAppearance",
+              "label": "Expand Appearance",
+              "params": {
+                "properties": {
+                  "ids": {
+                    "description": "Node ids (default: the selection).",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "readOnly": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 20,
+          "y": 20,
+          "width": 100,
+          "height": 60,
+          "fill": "#2563eb",
+          "stroke": "#111827",
+          "strokeWidth": 2,
+          "cornerRadius": 8
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 150,
+          "y": 30,
+          "width": 80,
+          "height": 80,
+          "fill": "#e11d48"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "polygon",
+          "x": 260,
+          "y": 30,
+          "width": 90,
+          "height": 80,
+          "sides": 6,
+          "fill": "#16a34a"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "star",
+          "x": 40,
+          "y": 140,
+          "width": 90,
+          "height": 90,
+          "points": 5,
+          "innerRatio": 0.45,
+          "fill": "#d97706"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "line",
+          "x": 160,
+          "y": 160,
+          "width": 120,
+          "height": 40,
+          "stroke": "#111827",
+          "strokeWidth": 3
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n5"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M300 150 C 340 130 370 190 330 220 L 290 210 Z",
+          "fill": "#7c3aed",
+          "name": "Blob"
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n6"
+          }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M28 20L112 20C116.418 20 120 23.582 120 28L120 72C120 76.418 116.418 80 112 80L28 80C23.582 80 20 76.418 20 72L20 28C20 23.582 23.582 20 28 20Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M190 30C212.091 30 230 47.909 230 70C230 92.091 212.091 110 190 110C167.909 110 150 92.091 150 70C150 47.909 167.909 30 190 30Z",
+              "fill": "#e11d48",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M305 30L343.971 50L343.971 90L305 110L266.029 90L266.029 50Z",
+              "fill": "#16a34a",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M85 140L96.903 168.617L127.798 171.094L104.259 191.258L111.45 221.406L85 205.25L58.55 221.406L65.741 191.258L42.202 171.094L73.097 168.617Z",
+              "fill": "#d97706",
+              "fillRule": "nonzero",
+              "id": "n4",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M160 160L280 200",
+              "fill": "none",
+              "fillRule": "nonzero",
+              "id": "n5",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeWidth": 3
+            },
+            {
+              "d": "M300 150C340 130 370 190 330 220L290 210Z",
+              "fill": "#7c3aed",
+              "fillRule": "nonzero",
+              "id": "n6",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 6
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 10
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n7"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 300,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 60,
+                  "width": 100,
+                  "x": 20,
+                  "y": 20
+                },
+                "d": "M28 20L112 20C116.42 20 120 23.58 120 28L120 72C120 76.42 116.42 80 112 80L28 80C23.58 80 20 76.42 20 72L20 28C20 23.58 23.58 20 28 20Z",
+                "depth": 0,
+                "fill": "#2563eb",
+                "id": "n1",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 80,
+                  "x": 150,
+                  "y": 30
+                },
+                "d": "M190 30C212.09 30 230 47.91 230 70C230 92.09 212.09 110 190 110C167.91 110 150 92.09 150 70C150 47.91 167.91 30 190 30Z",
+                "depth": 0,
+                "fill": "#e11d48",
+                "id": "n2",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 77.94,
+                  "x": 266.03,
+                  "y": 30
+                },
+                "d": "M305 30L343.97 50L343.97 90L305 110L266.03 90L266.03 50Z",
+                "depth": 0,
+                "fill": "#16a34a",
+                "id": "n3",
+                "locked": false,
+                "name": "Polygon",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 81.41,
+                  "width": 85.6,
+                  "x": 42.2,
+                  "y": 140
+                },
+                "d": "M85 140L96.9 168.62L127.8 171.09L104.26 191.26L111.45 221.41L85 205.25L58.55 221.41L65.74 191.26L42.2 171.09L73.1 168.62Z",
+                "depth": 0,
+                "fill": "#d97706",
+                "id": "n4",
+                "locked": false,
+                "name": "Star",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 120,
+                  "x": 160,
+                  "y": 160
+                },
+                "d": "M160 160L280 200",
+                "depth": 0,
+                "fill": null,
+                "id": "n5",
+                "locked": false,
+                "name": "Line",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#111827",
+                "strokeWidth": 3,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 74,
+                  "width": 58.89,
+                  "x": 290,
+                  "y": 146
+                },
+                "d": "M300 150C340 130 370 190 330 220L290 210Z",
+                "depth": 0,
+                "fill": "#7c3aed",
+                "id": "n6",
+                "locked": false,
+                "name": "Blob",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 10,
+                  "width": 0,
+                  "x": 0,
+                  "y": 0
+                },
+                "d": "M0 0L0 0L0 10L0 10Z",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n7",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n7"
+            ],
+            "tool": "select",
+            "width": 400
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.select",
+        "params": {
+          "ids": [
+            "n1",
+            "n2"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.select",
+          "ok": true,
+          "result": {
+            "selection": [
+              "n1",
+              "n2"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setStyle",
+        "params": {
+          "fill": "#0ea5e9",
+          "strokeWidth": 4,
+          "strokeLinecap": "round",
+          "strokeDasharray": [
+            6,
+            3
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setStyle",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.select",
+        "params": {
+          "ids": [
+            "n3"
+          ],
+          "add": true
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.select",
+          "ok": true,
+          "result": {
+            "selection": [
+              "n1",
+              "n2",
+              "n3"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.rename",
+        "params": {
+          "id": "n3",
+          "name": "Hexagon"
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "vector.rename",
+          "ok": true,
+          "result": {
+            "id": "n3",
+            "name": "Hexagon"
+          }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M28 20L112 20C116.418 20 120 23.582 120 28L120 72C120 76.418 116.418 80 112 80L28 80C23.582 80 20 76.418 20 72L20 28C20 23.582 23.582 20 28 20Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M190 30C212.091 30 230 47.909 230 70C230 92.091 212.091 110 190 110C167.909 110 150 92.091 150 70C150 47.909 167.909 30 190 30Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M305 30L343.971 50L343.971 90L305 110L266.029 90L266.029 50Z",
+              "fill": "#16a34a",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M85 140L96.903 168.617L127.798 171.094L104.259 191.258L111.45 221.406L85 205.25L58.55 221.406L65.741 191.258L42.202 171.094L73.097 168.617Z",
+              "fill": "#d97706",
+              "fillRule": "nonzero",
+              "id": "n4",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M160 160L280 200",
+              "fill": "none",
+              "fillRule": "nonzero",
+              "id": "n5",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeWidth": 3
+            },
+            {
+              "d": "M300 150C340 130 370 190 330 220L290 210Z",
+              "fill": "#7c3aed",
+              "fillRule": "nonzero",
+              "id": "n6",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M0 0L0 0L0 10L0 10Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n7",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 7
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.rename",
+        "params": {
+          "id": "nope",
+          "name": "x"
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "There is no node \"nope\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setTool",
+        "params": {
+          "tool": "pen"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setTool",
+          "ok": true,
+          "result": {
+            "tool": "pen"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "vector.addShape",
+            "params": {
+              "kind": "rect",
+              "x": 10,
+              "y": 250,
+              "width": 30,
+              "height": 30
+            }
+          },
+          {
+            "id": "vector.rename",
+            "params": {
+              "id": "$0.id",
+              "name": "Batch rect"
+            }
+          }
+        ],
+        "atomic": true,
+        "label": "Batch"
+      },
+      "expect": {
+        "result": {
+          "completed": 2,
+          "failed": 0,
+          "results": [
+            {
+              "id": "vector.addShape",
+              "ok": true,
+              "result": {
+                "id": "n8"
+              }
+            },
+            {
+              "id": "vector.rename",
+              "ok": true,
+              "result": {
+                "id": "n8",
+                "name": "Batch rect"
+              }
+            }
+          ],
+          "rolledBack": false,
+          "skipped": 0
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.delete",
+        "params": {
+          "ids": [
+            "n5"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.delete",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.exportSvg",
+        "params": {
+          "precision": 2
+        }
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "vector.exportSvg",
+          "ok": true,
+          "result": {
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"300\" viewBox=\"0 0 400 300\">\n  <path id=\"n1\" d=\"M28 20L112 20C116.42 20 120 23.58 120 28L120 72C120 76.42 116.42 80 112 80L28 80C23.58 80 20 76.42 20 72L20 28C20 23.58 23.58 20 28 20Z\" fill=\"#0ea5e9\" stroke=\"#111827\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"6 3\" data-vector-d=\"M20 20L120 20L120 80L20 80Z\" data-vector-corners=\"0.0:8 0.1:8 0.2:8 0.3:8\"/>\n  <path id=\"n2\" d=\"M190 30C212.09 30 230 47.91 230 70C230 92.09 212.09 110 190 110C167.91 110 150 92.09 150 70C150 47.91 167.91 30 190 30Z\" fill=\"#0ea5e9\" stroke=\"#18181b\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"6 3\"/>\n  <path id=\"n3\" d=\"M305 30L343.97 50L343.97 90L305 110L266.03 90L266.03 50Z\" fill=\"#16a34a\" stroke=\"#18181b\" stroke-width=\"2\"/>\n  <path id=\"n4\" d=\"M85 140L96.9 168.62L127.8 171.09L104.26 191.26L111.45 221.41L85 205.25L58.55 221.41L65.74 191.26L42.2 171.09L73.1 168.62Z\" fill=\"#d97706\" stroke=\"#18181b\" stroke-width=\"2\"/>\n  <path id=\"n6\" d=\"M300 150C340 130 370 190 330 220L290 210Z\" fill=\"#7c3aed\" stroke=\"#18181b\" stroke-width=\"2\"/>\n  <path id=\"n7\" d=\"M0 0L0 0L0 10L0 10Z\" fill=\"#d4d4d8\" stroke=\"#18181b\" stroke-width=\"2\"/>\n  <path id=\"n8\" d=\"M10 250L40 250L40 280L10 280Z\" fill=\"#d4d4d8\" stroke=\"#18181b\" stroke-width=\"2\"/>\n</svg>"
+          }
+        },
+        "document": {
+          "document": {
+            "height": 300,
+            "nodes": [
+              {
+                "fill": "#0ea5e9",
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#111827",
+                "strokeDasharray": [
+                  6,
+                  3
+                ],
+                "strokeLinecap": "round",
+                "strokeWidth": 4,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 20,
+                        "y": 20
+                      },
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 120,
+                        "y": 20
+                      },
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 120,
+                        "y": 80
+                      },
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 20,
+                        "y": 80
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#0ea5e9",
+                "id": "n2",
+                "name": "Ellipse",
+                "stroke": "#18181b",
+                "strokeDasharray": [
+                  6,
+                  3
+                ],
+                "strokeLinecap": "round",
+                "strokeWidth": 4,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "in": {
+                          "x": 167.90861000676824,
+                          "y": 30
+                        },
+                        "out": {
+                          "x": 212.09138999323176,
+                          "y": 30
+                        },
+                        "type": "symmetric",
+                        "x": 190,
+                        "y": 30
+                      },
+                      {
+                        "in": {
+                          "x": 230,
+                          "y": 47.90861000676826
+                        },
+                        "out": {
+                          "x": 230,
+                          "y": 92.09138999323174
+                        },
+                        "type": "symmetric",
+                        "x": 230,
+                        "y": 70
+                      },
+                      {
+                        "in": {
+                          "x": 212.09138999323176,
+                          "y": 110
+                        },
+                        "out": {
+                          "x": 167.90861000676824,
+                          "y": 110
+                        },
+                        "type": "symmetric",
+                        "x": 190,
+                        "y": 110
+                      },
+                      {
+                        "in": {
+                          "x": 150,
+                          "y": 92.09138999323174
+                        },
+                        "out": {
+                          "x": 150,
+                          "y": 47.90861000676826
+                        },
+                        "type": "symmetric",
+                        "x": 150,
+                        "y": 70
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#16a34a",
+                "id": "n3",
+                "name": "Hexagon",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 305,
+                        "y": 30
+                      },
+                      {
+                        "x": 343.97114317029974,
+                        "y": 50
+                      },
+                      {
+                        "x": 343.97114317029974,
+                        "y": 90
+                      },
+                      {
+                        "x": 305,
+                        "y": 110
+                      },
+                      {
+                        "x": 266.02885682970026,
+                        "y": 90.00000000000001
+                      },
+                      {
+                        "x": 266.02885682970026,
+                        "y": 50
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d97706",
+                "id": "n4",
+                "name": "Star",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 85,
+                        "y": 140
+                      },
+                      {
+                        "x": 96.90265135892258,
+                        "y": 168.61740586390732
+                      },
+                      {
+                        "x": 127.79754323328191,
+                        "y": 171.09423525312738
+                      },
+                      {
+                        "x": 104.25889445497685,
+                        "y": 191.25759413609268
+                      },
+                      {
+                        "x": 111.45033635316129,
+                        "y": 221.40576474687265
+                      },
+                      {
+                        "x": 85,
+                        "y": 205.25
+                      },
+                      {
+                        "x": 58.54966364683871,
+                        "y": 221.40576474687265
+                      },
+                      {
+                        "x": 65.74110554502315,
+                        "y": 191.25759413609268
+                      },
+                      {
+                        "x": 42.202456766718086,
+                        "y": 171.09423525312738
+                      },
+                      {
+                        "x": 73.09734864107742,
+                        "y": 168.61740586390732
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#7c3aed",
+                "id": "n6",
+                "name": "Blob",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "out": {
+                          "x": 340,
+                          "y": 130
+                        },
+                        "x": 300,
+                        "y": 150
+                      },
+                      {
+                        "in": {
+                          "x": 370,
+                          "y": 190
+                        },
+                        "x": 330,
+                        "y": 220
+                      },
+                      {
+                        "x": 290,
+                        "y": 210
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n7",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 0,
+                        "y": 0
+                      },
+                      {
+                        "x": 0,
+                        "y": 0
+                      },
+                      {
+                        "x": 0,
+                        "y": 10
+                      },
+                      {
+                        "x": 0,
+                        "y": 10
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n8",
+                "name": "Batch rect",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 10,
+                        "y": 250
+                      },
+                      {
+                        "x": 40,
+                        "y": 250
+                      },
+                      {
+                        "x": 40,
+                        "y": 280
+                      },
+                      {
+                        "x": 10,
+                        "y": 280
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 400
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M28 20L112 20C116.418 20 120 23.582 120 28L120 72C120 76.418 116.418 80 112 80L28 80C23.582 80 20 76.418 20 72L20 28C20 23.582 23.582 20 28 20Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M190 30C212.091 30 230 47.909 230 70C230 92.091 212.091 110 190 110C167.909 110 150 92.091 150 70C150 47.909 167.909 30 190 30Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M305 30L343.971 50L343.971 90L305 110L266.029 90L266.029 50Z",
+              "fill": "#16a34a",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M85 140L96.903 168.617L127.798 171.094L104.259 191.258L111.45 221.406L85 205.25L58.55 221.406L65.741 191.258L42.202 171.094L73.097 168.617Z",
+              "fill": "#d97706",
+              "fillRule": "nonzero",
+              "id": "n4",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M300 150C340 130 370 190 330 220L290 210Z",
+              "fill": "#7c3aed",
+              "fillRule": "nonzero",
+              "id": "n6",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M0 0L0 0L0 10L0 10Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n7",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M10 250L40 250L40 280L10 280Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n8",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 7
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
+        }
+      }
+    }
+  ]
+}

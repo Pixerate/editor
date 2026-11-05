@@ -537,7 +537,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 			if (l.kind === 'stroke' && isVectorBrushstrokeLayer(l.layer as VectorStrokeLayer)) {
 				// A brushstroke draws as its rendered images (the layer data above rebuilds it on import).
 				lines.push(`${indent(depth + 1)}<g data-vector-part="brushstroke" data-vector-layer="${l.index}"${layerAttrs(l.layer)}>`);
-				for (const im of vectorBrushstrokeImages(node, l.layer as VectorStrokeLayer)) lines.push(`${indent(depth + 2)}<image href="${im.href}" x="${num(im.x)}" y="${num(im.y)}" width="${num(im.width)}" height="${num(im.height)}" preserveAspectRatio="none"/>`);
+				for (const im of vectorBrushstrokeImages(node, l.layer as VectorStrokeLayer, { document: doc, settle: 'now' })) lines.push(`${indent(depth + 2)}<image href="${im.href}" x="${num(im.x)}" y="${num(im.y)}" width="${num(im.width)}" height="${num(im.height)}" preserveAspectRatio="none"/>`);
 				lines.push(`${indent(depth + 1)}</g>`);
 				continue;
 			}

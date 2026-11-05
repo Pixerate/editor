@@ -8,7 +8,9 @@ more; this is where each one went.
 | Engine setting | Facet |
 | --- | --- |
 | Tip size, hardness, spacing, angle, roundness, opacity, flow, blend | `tip` |
-| Smoothing, pressure, tilt, velocity, jitter, scatter, rotation | `dynamics` |
+| Smoothing, pressure, tilt, velocity, jitter, scatter, rotation, dabs per step (`count`), random `flip` | `dynamics` |
+| Image tip | `tip` `{ shape: 'stamp', stamps: ['source:<id>'] }` (an image source from `add_brush_source`) |
+| Texture inside the tip | `tip.grain` `{ source: 'sanded' or 'source:<id>', mode: 'texturised' or 'moving', scale, depth, contrast, invert }` |
 | Grain, pick-up and mix (behavior), blender and smudge strength | `behaviour` (`grain`, `exchange`, `strength`, `distance`, `length`, `mixing`) |
 | Mixer Brush reservoir | `behaviour.exchange.reservoir` (`load`, `refill`, `loadsColour`) |
 | Wet engine (medium, water, pigment, body…) | `behaviour.surface` `wet` and `behaviour.wet` |

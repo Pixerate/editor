@@ -13,16 +13,18 @@ import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { BRUSH_SLIDERS, brushEngineControls, type SliderControl } from '../paint-editor/brush-controls';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
-import type { BrushLibraryEntry } from './library';
+import { BrushLibraryError, type AddBrushSourceResult, type BrushLibrary, type BrushLibraryEntry, type SaveBrushResult } from './library';
 import { normalizeBrushSpec } from './normalize';
-import { checkBrush, PAINT_PROFILE, type BrushHostProfile } from './profiles';
+import { brushColourKind, checkBrush, checkBrushEdit, degrade, PAINT_PROFILE, type BrushHostProfile, type BrushIssue, type BrushSupport } from './profiles';
 import { BRUSH_FIELDS, getPath, resolveBrush, resolveEngine, setPath } from './resolve';
-import { MAX_BRUSH_PALETTE } from './schema';
+import { MAX_BRUSH_PALETTE, TIP_GRAIN_PATTERNS } from './schema';
+import { brushSourceRef, BrushSourceError, type BrushSource, type BrushSourceChannel } from './sources';
+import { bytesToBase64, isPng } from '../raster/png';
 import { brushColourHex } from './colour';
 import { isDualColor } from '../color/dual';
-import { BRUSH_MEDIA, type Brush, type BrushMedium, type BrushTool } from './types';
+import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_MEDIA, type Brush, type BrushMedium, type BrushTool } from './types';
 
-export type BrushEditorSectionId = 'medium' | 'shape' | 'marks' | 'feel' | 'behaviour' | 'light' | 'motion' | 'colour';
+export type BrushEditorSectionId = 'medium' | 'shape' | 'grain' | 'marks' | 'feel' | 'behaviour' | 'light' | 'motion' | 'colour';
 
 interface ControlBase {
   /** Facet path the control sets (`tip.size`, `behaviour.exchange.pickup`…). */
@@ -47,8 +49,17 @@ export type BrushEditorControl =
   | (ControlBase & { kind: 'colour'; value: string | null; dark: string | null; gradient: boolean })
   /** Suggested colours: solid (#rrggbb) or light / dark pairs; gradient and effect entries are left out. */
   | (ControlBase & { kind: 'palette'; value: Array<string | { light: string; dark: string }>; max: number })
-  /** Stamp refs (`editor:star`…): `options` are the editor's stamps; hosts may offer more refs. */
+  /**
+   * Stamp refs (`editor:star`, `source:<id>`…): `options` are the editor's stamps and the image
+   * sources the host passed (`brushEditorSections`' `sources`); hosts may offer more refs.
+   */
   | (ControlBase & { kind: 'stamps'; value: string[]; max: number; options: ReadonlyArray<{ value: string; label: string }> });
+
+/** What the host knows beyond the brush: the image sources it can paint with. */
+export interface BrushEditorContext {
+  /** The library's image sources (`listSources`), offered as stamps and grain. */
+  sources?: ReadonlyArray<Pick<BrushSource, 'id' | 'name'>>;
+}
 
 export interface BrushEditorSection {
   id: BrushEditorSectionId;
@@ -70,6 +81,10 @@ const RENDER_LABELS: Readonly<Record<string, string>> = { dot: 'Dots', line: 'Li
 const APPLICATOR_LABELS: Readonly<Record<string, string>> = { brush: 'Brush', tube: 'Paint tube', knife: 'Palette knife', roller: 'Roller', gloop: 'Gloop pen' };
 const WET_MEDIUM_LABELS: Readonly<Record<string, string>> = { watercolor: 'Watercolour', gouache: 'Gouache', oil: 'Oil' };
 const STAMP_OPTIONS = STAMP_KINDS.map((k) => ({ value: `editor:${k}`, label: title(k) }));
+const GRAIN_MODE_LABELS: Readonly<Record<string, string>> = { texturised: 'Texturised (stays put)', moving: 'Moving (rolls with the tip)' };
+const FLIP_LABELS: Readonly<Record<string, string>> = { none: 'None', x: 'Across', y: 'Along', xy: 'Both' };
+/** Engines whose dabs take tip grain, several dabs per step and flips (as `BRUSH_FIELDS` maps them). */
+const DAB_ENGINES = new Set(['dab', 'eraser', 'mixer', 'blender', 'smudge']);
 
 /** The ariaLabels the paint panels have always used, by facet path. */
 const ARIA: Readonly<Record<string, string>> = {
@@ -85,15 +100,19 @@ const ARIA: Readonly<Record<string, string>> = {
   'behaviour.wet.medium': 'Wet medium',
   'behaviour.thick.applicator': 'Impasto tool',
   'light.pressure': 'Light follows pressure',
+  'tip.grain.source': 'Tip grain',
+  'dynamics.angleJitter': 'Brush rotation jitter',
 };
 const aria = (path: string, label: string) => ARIA[path] ?? `Brush ${label.toLowerCase()}`;
 
 /**
  * Sections of controls for a brush, in order, as the host `profile` (default the paint editor)
- * can render them: sections and controls it refuses are left out, ones it paints without carry
- * a note. Values are the brush's own, else the defaults of the engine it resolves to.
+ * can render them: only the sections, controls and options the host uses are listed. Facets of
+ * the brush the host can't use (a paint brush's light opened in Canvas) get no control, so an
+ * edit keeps them as they are; `brushEditorScope` names them. Values are the brush's own, else
+ * the defaults of the engine it resolves to.
  */
-export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PAINT_PROFILE): BrushEditorSection[] {
+export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PAINT_PROFILE, context: BrushEditorContext = {}): BrushEditorSection[] {
   const resolved = resolveBrush(brush);
   const engine = resolveEngine(brush);
   const fieldOf = (facet: string) => BRUSH_FIELDS.find((f) => f.facet === facet && f.engines.includes(engine));
@@ -107,7 +126,12 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     const v = getPath(resolved, field.engine);
     return field.map ? field.map.toFacet(v) : v;
   };
-  const warned = new Map(checkBrush(brush, profile).issues.filter((i) => i.severity === 'warning').map((i) => [i.facet, i.reason]));
+  const issues = checkBrush(brush, profile).issues;
+  const warned = new Map(issues.filter((i) => i.severity === 'warning').map((i) => [i.facet, i.reason]));
+  const refused = new Set(issues.filter((i) => i.severity === 'error').map((i) => i.facet));
+  const full = (s: BrushSupport) => s === 'full';
+  // The brush paints with an engine this host has: that engine's own controls apply.
+  const engineOk = !['kind', 'tool', 'tip.shape', 'marks', 'behaviour.surface'].some((f) => refused.has(f));
   const noteFor = (path: string) => [...warned].find(([facet]) => path === facet || path.startsWith(`${facet}.`))?.[1];
   const withNote = <C extends BrushEditorControl>(c: C): C => {
     const note = noteFor(c.path);
@@ -128,26 +152,43 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   };
   const isTool = brush.kind === 'tool';
   const shape = brush.tip.shape;
+  const sourceOptions = (context.sources ?? []).map((x) => ({ value: brushSourceRef(x.id), label: x.name }));
   const marks = brush.marks?.kind ?? 'continuous';
+  // Picking paint up: the Mixer Brush's reservoir carries it where the host has one.
+  const exchangeFull = full(brush.behaviour?.exchange?.reservoir ? profile.reservoir : profile.exchange);
 
   add('medium', 'Medium', [
-    profile.kinds.length > 1 && choice('kind', 'Kind', options(profile.kinds, { mark: 'Lays a material', tool: 'Works on paint' })),
+    profile.kinds.length > 1 && profile.kinds.includes(brush.kind) && choice('kind', 'Kind', options(profile.kinds, { mark: 'Lays a material', tool: 'Works on paint' })),
     !isTool && choice('medium', 'Medium', [{ value: '', label: 'Any' }, ...options(BRUSH_MEDIA, MEDIUM_LABELS)], ''),
     !isTool && withNote({ kind: 'text', path: 'variety', label: 'Variety', ariaLabel: 'Brush variety', value: brush.variety ?? '', placeholder: 'pencil, oil, highlighter…' }),
-    isTool && profile.tools.length > 0 && choice('tool', 'Tool', options(profile.tools, TOOL_LABELS)),
+    isTool && !!brush.tool && profile.tools.includes(brush.tool) && choice('tool', 'Tool', options(profile.tools, TOOL_LABELS)),
   ]);
 
   const engineControls = brushEngineControls(resolved);
   const tipSliders = BRUSH_SLIDERS.filter((c) => c.path.startsWith('tip.') && c.path !== 'tip.smoothing');
   add('shape', 'Shape', [
-    choice('tip.shape', 'Tip', options(profile.tipShapes.filter((s) => !isTool || s !== 'stamp'), SHAPE_LABELS)),
+    !refused.has('tip.shape') && choice('tip.shape', 'Tip', options(profile.tipShapes.filter((s) => !isTool || s !== 'stamp'), SHAPE_LABELS)),
     ...tipSliders.map((c) => slider(c)),
     engine === 'dab' && choice('tip.blend', 'Blend', BLEND_MODES.map((m) => ({ value: m.id, label: m.label })), 'normal'),
-    ...(shape === 'bristle' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('bristle.')).map((c) => slider(c)) : []),
-    shape === 'stamp' && withNote({ kind: 'stamps', path: 'tip.stamps', label: 'Stamps', ariaLabel: 'Brush stamps', value: [...((value('tip.stamps') as string[] | undefined) ?? [])], max: marks === 'particles' ? MAX_DOT_TEXTURES : MAX_STICKER_STAMPS, options: STAMP_OPTIONS }),
+    ...(shape === 'bristle' && engineOk && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('bristle.')).map((c) => slider(c)) : []),
+    shape === 'stamp' && engineOk && withNote({ kind: 'stamps', path: 'tip.stamps', label: 'Stamps', ariaLabel: 'Brush stamps', value: [...((value('tip.stamps') as string[] | undefined) ?? [])], max: marks === 'particles' ? MAX_DOT_TEXTURES : MAX_STICKER_STAMPS, options: marks === 'objects' ? STAMP_OPTIONS : [...STAMP_OPTIONS, ...sourceOptions] }),
   ]);
 
-  if (!isTool && profile.marks.length > 1) {
+  // Tip grain: texture inside each dab, where the host has it and the brush lays dabs.
+  const dabs = DAB_ENGINES.has(engine) && engineOk && shape !== 'bristle' && marks !== 'particles' && marks !== 'objects';
+  const grain = brush.tip.grain;
+  if (dabs && full(profile.tipGrain ?? 'none')) {
+    add('grain', 'Tip grain', [
+      choice('tip.grain.source', 'Texture', [{ value: '', label: 'None' }, ...options(TIP_GRAIN_PATTERNS), ...sourceOptions], ''),
+      !!grain && choice('tip.grain.mode', 'Grain moves', options(BRUSH_GRAIN_MODES, GRAIN_MODE_LABELS), 'texturised'),
+      !!grain && withNote({ kind: 'slider', path: 'tip.grain.scale', label: 'Grain scale', ariaLabel: 'Brush grain scale', min: 0.1, max: 8, step: 0.05, value: grain.scale ?? 1 }),
+      !!grain && withNote({ kind: 'slider', path: 'tip.grain.depth', label: 'Grain depth', ariaLabel: 'Brush grain depth', min: 0, max: 1, step: 0.01, value: grain.depth ?? 0.6 }),
+      !!grain && withNote({ kind: 'slider', path: 'tip.grain.contrast', label: 'Grain contrast', ariaLabel: 'Brush grain contrast', min: 0, max: 3, step: 0.05, value: grain.contrast ?? 1 }),
+      !!grain && toggle('tip.grain.invert', 'Invert grain'),
+    ]);
+  }
+
+  if (!isTool && profile.marks.length > 1 && engineOk) {
     const particles = marks === 'particles' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('particle.') && c.path !== 'particle.waveSpeed') : [];
     const objects = marks === 'objects' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('sticker.')) : [];
     const render = value('marks.render');
@@ -163,29 +204,37 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     ]);
   }
 
-  const feel = BRUSH_SLIDERS.filter((c) => ['tip.smoothing', 'pressureSmoothing', 'dynamics.minSize', 'dynamics.tiltSize', 'dynamics.velocitySize'].includes(c.path)).filter((c) => !(c.path === 'dynamics.tiltSize' && profile.tilt === 'none') && !(c.path === 'dynamics.velocitySize' && profile.velocity === 'none'));
+  const feel = BRUSH_SLIDERS.filter((c) => ['tip.smoothing', 'pressureSmoothing', 'dynamics.minSize', 'dynamics.tiltSize', 'dynamics.velocitySize'].includes(c.path)).filter((c) => !(c.path === 'dynamics.tiltSize' && !full(profile.tilt)) && !(c.path === 'dynamics.velocitySize' && !full(profile.velocity)));
+  // Variety for stamp and image tips: several dabs per step, jitter and flips.
+  const stampDabs = dabs && shape === 'stamp';
+  const jitter = (path: string, label: string, max = 1, step = 0.01) => withNote({ kind: 'slider', path, label, ariaLabel: aria(path, label), min: 0, max, step, value: Number(value(path) ?? 0) });
   add('feel', 'Feel', [
     ...feel.map((c) => slider(c)),
     toggle('dynamics.pressureSize', 'Pressure → size'),
     toggle('dynamics.pressureOpacity', 'Pressure → opacity'),
     choice('dynamics.rotation', 'Rotation', options(BRUSH_ROTATIONS, ROTATION_LABELS)),
+    stampDabs && full(profile.dabCount ?? 'none') && withNote({ kind: 'slider', path: 'dynamics.count', label: 'Count', ariaLabel: 'Brush dab count', min: 1, max: 16, step: 1, value: brush.dynamics?.count ?? 1 }),
+    stampDabs && jitter('dynamics.scatter', 'Scatter', 4),
+    stampDabs && jitter('dynamics.angleJitter', 'Rotation jitter'),
+    stampDabs && jitter('dynamics.sizeJitter', 'Size jitter'),
+    stampDabs && choice('dynamics.flip', 'Flip', options(BRUSH_FLIPS, FLIP_LABELS), 'none'),
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineControls?.sliders ?? []).filter((c) => !/^(bristle|particle|sticker)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
-  const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? profile.reservoir !== 'none' : profile.exchange !== 'none');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
-    !isTool && surfaces.length > 1 && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
-    profile.grain !== 'none' && slider({ path: 'grain', label: 'Grain', min: 0, max: 1, step: 0.01 }, 'behaviour.grain'),
-    engine === 'wet' && !isTool && choice('behaviour.wet.medium', 'Medium', options(WET_MEDIA, WET_MEDIUM_LABELS), 'watercolor'),
-    engine === 'impasto' && choice('behaviour.thick.applicator', 'Tool', options(IMPASTO_TOOLS, APPLICATOR_LABELS), 'brush'),
+    !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
+    full(profile.grain) && slider({ path: 'grain', label: 'Grain', min: 0, max: 1, step: 0.01 }, 'behaviour.grain'),
+    engine === 'wet' && engineOk && !isTool && choice('behaviour.wet.medium', 'Medium', options(WET_MEDIA, WET_MEDIUM_LABELS), 'watercolor'),
+    engine === 'impasto' && engineOk && choice('behaviour.thick.applicator', 'Tool', options(IMPASTO_TOOLS, APPLICATOR_LABELS), 'brush'),
     ...engineSliders.map((c) => (exchangeOk(facetOf(c.path)) ? slider(c) : null)),
-    engineControls?.mixingPath && fieldOf('behaviour.mixing') && choice('behaviour.mixing', 'Mixing', options(['pigment', 'rgb'], { pigment: 'Pigment', rgb: 'RGB' })),
-    engineControls?.dirty && profile.exchange !== 'none' && fieldOf('behaviour.exchange.dirty') && toggle('behaviour.exchange.dirty', 'Dirty brush'),
-    engine === 'mixer' && toggle('behaviour.exchange.reservoir.refill', 'Load each stroke'),
+    engineOk && engineControls?.mixingPath && (engine === 'wet' || exchangeFull) && fieldOf('behaviour.mixing') && choice('behaviour.mixing', 'Mixing', options(['pigment', 'rgb'], { pigment: 'Pigment', rgb: 'RGB' })),
+    engineOk && engineControls?.dirty && exchangeFull && fieldOf('behaviour.exchange.dirty') && toggle('behaviour.exchange.dirty', 'Dirty brush'),
+    engine === 'mixer' && engineOk && full(profile.reservoir) && toggle('behaviour.exchange.reservoir.refill', 'Load each stroke'),
   ]);
 
-  if (!isTool && profile.light !== 'none' && engineControls?.light) {
+  if (!isTool && full(profile.light) && engineOk && engineControls?.light) {
     add('light', 'Light', [
       slider({ path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 }),
       toggle('light.pressure', 'Light follows pressure'),
@@ -195,14 +244,14 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     ]);
   }
 
-  if (profile.motion !== 'none' && marks === 'particles') add('motion', 'Motion', [slider({ path: 'particle.waveSpeed', label: 'Wave speed', min: 0, max: 1, step: 0.01 })]);
+  if (full(profile.motion) && engineOk && marks === 'particles') add('motion', 'Motion', [slider({ path: 'particle.waveSpeed', label: 'Wave speed', min: 0, max: 1, step: 0.01 })]);
 
   if (!isTool) {
     const own = brush.colour?.default;
     const hex = (c: unknown) => (typeof c === 'string' ? (brushColourHex(c, 'light') ?? null) : null);
     const pair = isDualColor(own) ? own : null;
     add('colour', 'Colour', [
-      withNote({ kind: 'colour', path: 'colour.default', label: 'Default colour', ariaLabel: 'Brush default colour', value: pair ? (brushColourHex(pair, 'light') ?? null) : hex(own), dark: pair ? (brushColourHex(pair, 'dark') ?? null) : null, gradient: own !== undefined && typeof own === 'object' && !pair }),
+      !refused.has('colour.default') && withNote({ kind: 'colour', path: 'colour.default', label: 'Default colour', ariaLabel: 'Brush default colour', value: pair ? (brushColourHex(pair, 'light') ?? null) : hex(own), dark: pair ? (brushColourHex(pair, 'dark') ?? null) : null, gradient: own !== undefined && typeof own === 'object' && !pair }),
       withNote({
         kind: 'palette',
         path: 'colour.palette',
@@ -215,6 +264,147 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     ]);
   }
   return sections;
+}
+
+/** What a brush has that the host can't use: one facet, in words. */
+export interface BrushEditorHiddenFacet {
+  facet: string;
+  /** In words, for a sentence: `light`, `wet behaviour`, `a bristle tip`. */
+  label: string;
+}
+
+export interface BrushEditorScope {
+  /** Facets the brush has that the host can't use (refused or painted without): they get no control and an edit keeps them. */
+  hidden: BrushEditorHiddenFacet[];
+  /** A short note naming them ("Also has light and wet behaviour, which Canvas can't use."), or `null`. */
+  note: string | null;
+}
+
+const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', continuous: 'continuous marks' };
+
+function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
+  switch (issue.facet) {
+    case 'kind':
+    case 'tool':
+      return b.kind === 'tool' ? `the ${(TOOL_LABELS[b.tool!] ?? b.tool ?? 'tool').toLowerCase()} tool` : 'its marks';
+    case 'tip.shape':
+      return `a ${b.tip.shape} tip`;
+    case 'marks':
+      return MARKS_WORDS[b.marks?.kind ?? 'continuous'] ?? 'its marks';
+    case 'behaviour.surface':
+      return `${b.behaviour?.surface ?? 'dry'} behaviour`;
+    case 'behaviour.exchange.reservoir':
+      return 'a Mixer Brush reservoir';
+    case 'behaviour.exchange':
+      return 'paint pick-up';
+    case 'behaviour.grain':
+      return 'paper grain';
+    case 'tip.grain':
+      return 'tip grain';
+    case 'dynamics.count':
+      return 'several dabs per step';
+    case 'light':
+      return 'light';
+    case 'motion':
+      return 'motion';
+    case 'dynamics.velocity':
+      return 'velocity dynamics';
+    case 'dynamics.tilt':
+      return 'tilt dynamics';
+    case 'colour.default':
+      return `a ${brushColourKind(b.colour!.default!)} default colour`;
+    default:
+      // Palette colours the host skips keep their control (with a note); sticker refs are checked elsewhere.
+      return null;
+  }
+}
+
+const sentence = (words: readonly string[]) => (words.length < 2 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`);
+
+/**
+ * What the editor leaves out of a brush for this host: the facets the host refuses or paints
+ * without, which `brushEditorSections` gives no control, so saving an edit keeps them unchanged
+ * for the hosts that use them. `note` names them for the editor to show.
+ */
+export function brushEditorScope(brush: Brush, profile: BrushHostProfile = PAINT_PROFILE): BrushEditorScope {
+  const hidden: BrushEditorHiddenFacet[] = [];
+  for (const issue of checkBrush(brush, profile).issues) {
+    const label = hiddenLabel(issue, brush);
+    if (label && !hidden.some((h) => h.label === label)) hidden.push({ facet: issue.facet, label });
+  }
+  return { hidden, note: hidden.length ? `Also has ${sentence(hidden.map((h) => h.label))}, which ${profile.name} can't use.` : null };
+}
+
+/** A brush id from a name: lowercase letters, digits and dashes (`'brush'` when nothing is left). */
+export function brushIdFromName(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'brush'
+  );
+}
+
+/**
+ * A new brush for a host to start editing: `from` (the brush in use) with every facet the host
+ * can't use removed (`degrade` with `ignored`), else a plain round brush. It passes `checkBrush`
+ * for that host, and the editor then offers only what the host uses, so it stays that way.
+ */
+export function newBrushFor(profile: BrushHostProfile, from?: Brush | null, name = 'New brush'): Brush {
+  const id = brushIdFromName(name);
+  const base: Brush = { id, name, kind: profile.kinds.includes('mark') ? 'mark' : profile.kinds[0]!, ...(profile.kinds.includes('mark') ? {} : { tool: profile.tools[0] }), tip: { shape: profile.tipShapes.includes('round') ? 'round' : profile.tipShapes[0]! } };
+  if (from) {
+    const stripped = degrade(from, profile, { ignored: true });
+    if (!stripped.issues.length) return { ...stripped.brush, id, name };
+  }
+  return base;
+}
+
+export interface SaveBrushEditOptions {
+  /** The brush as it was before editing (`null`: a new brush). Facets of it the host can't use are kept. */
+  original: Brush | null;
+  /** The edited brush. */
+  brush: Brush;
+  /** The host the edit was made in. */
+  profile: BrushHostProfile;
+  /**
+   * Save as a new brush with this name (its id made from the name, `-2`… when taken). Without
+   * it the original is changed in place, or a copy is saved when it is built in or new.
+   */
+  name?: string;
+}
+
+/** What `saveBrushEdit` stored, plus the facets kept for other hosts. */
+export interface SaveBrushEditResult extends SaveBrushResult {
+  /** Facets this host can't use that the brush keeps (see `checkBrushEdit`). */
+  kept: BrushIssue[];
+}
+
+/**
+ * Saves a brush edited in a host's editor to the shared library, by the rule the library tools
+ * follow too: the edit may not add what the host can't use (a new brush must pass `checkBrush`),
+ * and what the original had for other hosts is kept. Built-in presets are never changed: the
+ * edit is saved as a copy (`<name> copy`). Refusals are `BrushLibraryError`s with the facet and fix.
+ */
+export async function saveBrushEdit(library: Pick<BrushLibrary, 'get' | 'save' | 'isBuiltin'>, options: SaveBrushEditOptions): Promise<SaveBrushEditResult> {
+  const { original, profile } = options;
+  const check = checkBrushEdit(original, options.brush, profile);
+  if (!check.ok) {
+    const errors = check.issues.filter((i) => i.severity === 'error').map((i) => `${i.facet}: ${i.reason} ${i.fix}`);
+    throw new BrushLibraryError('invalid', `${profile.name} can't use this brush: ${errors.join(' ')} Nothing was saved.`);
+  }
+  const inPlace = !!original && options.name === undefined && !library.isBuiltin(original.id) && original.id === options.brush.id && !!(await library.get(original.id));
+  let brush = options.brush;
+  if (!inPlace) {
+    const name = ((options.name ?? (original ? `${original.name} copy` : brush.name)).trim() || 'Brush').slice(0, 80);
+    const stem = brushIdFromName(name).slice(0, 56);
+    let id = stem;
+    for (let n = 2; library.isBuiltin(id) || (await library.get(id)); n++) id = `${stem}-${n}`;
+    brush = { ...brush, id, name };
+  }
+  const saved = await library.save(brush, { overwrite: inPlace });
+  return { ...saved, kept: check.kept };
 }
 
 /**
@@ -239,6 +429,8 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
     next.marks = value === 'continuous' ? undefined : ({ kind: value } as Brush['marks']);
     if (value !== 'continuous' && next.tip.shape === 'bristle') next.tip = { ...next.tip, shape: 'round', bristle: undefined };
     if (value === 'objects') next.tip = { ...next.tip, shape: 'stamp' };
+  } else if (path === 'tip.grain.source' && (value === undefined || value === '')) {
+    delete next.tip.grain;
   } else if (path === 'tip.shape' && value !== 'stamp') {
     next.tip = { ...next.tip, shape: value as Brush['tip']['shape'], stamps: undefined };
     if (value !== 'bristle') delete next.tip.bristle;
@@ -291,4 +483,43 @@ export function brushLibraryGroups(entries: readonly BrushLibraryEntry[], filter
   }
   const order = ['dry', 'ink', 'paint', 'spray', 'other', 'tools'];
   return [...groups.values()].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+}
+
+/**
+ * A PNG `data:` URL of an image file a person picked, for `BrushLibrary.addSource`: a PNG is kept
+ * as it is; any other image (JPEG, WebP…) is drawn through the browser's `createImageBitmap` and
+ * `OffscreenCanvas`. Rejects, naming PNG, where there is no browser to draw it.
+ */
+export async function imageFileToPngDataUrl(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (isPng(bytes)) return `data:image/png;base64,${bytesToBase64(bytes)}`;
+  const g = globalThis as { createImageBitmap?: (b: Blob) => Promise<ImageBitmap>; OffscreenCanvas?: new (w: number, h: number) => OffscreenCanvas };
+  if (!g.createImageBitmap || !g.OffscreenCanvas) throw new BrushSourceError('Only PNG images can be read here; convert the image to PNG.');
+  const bitmap = await g.createImageBitmap(file);
+  const canvas = new g.OffscreenCanvas(bitmap.width, bitmap.height);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+  const png = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
+  return `data:image/png;base64,${bytesToBase64(png)}`;
+}
+
+/**
+ * Adds an image file to the library as a source (named after the file unless `name` is given),
+ * as the brush editor's "Add image" does. Returns the stored source, its `source:<id>` ref and what
+ * reading it changed.
+ */
+export async function addBrushSourceFromFile(library: Pick<BrushLibrary, 'addSource'>, file: Blob & { name?: string }, options: { name?: string; channel?: BrushSourceChannel } = {}): Promise<AddBrushSourceResult & { ref: string }> {
+  const name = (options.name ?? file.name?.replace(/\.[a-z0-9]+$/i, '') ?? 'Image').trim() || 'Image';
+  const result = await library.addSource({ name, image: await imageFileToPngDataUrl(file), origin: file.name, ...(options.channel ? { channel: options.channel } : {}) });
+  return { ...result, ref: brushSourceRef(result.source.id) };
+}
+
+/**
+ * The brush with an image source as its tip (`as: 'tip'`: a stamp tip laying it) or as its grain
+ * (`as: 'grain'`), normalised, as `setBrushEditorValue` returns it.
+ */
+export function withBrushSource(brush: Brush, ref: string, as: 'tip' | 'grain'): { brush: Brush; problems: string[] } {
+  if (as === 'grain') return setBrushEditorValue(brush, 'tip.grain.source', ref);
+  const stamp = brush.tip.shape === 'stamp' ? { brush, problems: [] as string[] } : setBrushEditorValue(brush, 'tip.shape', 'stamp');
+  const r = setBrushEditorValue(stamp.brush, 'tip.stamps', [ref]);
+  return { brush: r.brush, problems: [...stamp.problems, ...r.problems] };
 }

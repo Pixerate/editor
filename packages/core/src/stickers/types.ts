@@ -24,6 +24,25 @@ export interface StickerLicence {
 
 export type StickerFormat = 'svg' | 'png';
 
+/**
+ * A version of a sticker drawn for a light or a dark background: the same subject, pose and size.
+ * `light` is the default art every sticker has.
+ */
+export type StickerVariant = 'light' | 'dark';
+
+/** The variants there are, in order. */
+export const STICKER_VARIANTS: readonly StickerVariant[] = ['light', 'dark'];
+
+/** A themed set of stickers within one provider (one per brand, say). */
+export interface StickerCollection {
+  /** Unique within the provider; what `StickerSummary.collection` and `StickerSearchOptions.collection` name. */
+  id: string;
+  name: string;
+  description?: string;
+  /** How many stickers it holds. */
+  count: number;
+}
+
 /** A sticker in a list or search result. */
 export interface StickerSummary {
   /** The provider's id (no `:` needed; `combineStickerProviders` prefixes its own). */
@@ -42,6 +61,15 @@ export interface StickerSummary {
   licence: StickerLicence;
   /** Flat, single-colour art: `load(id, { colour })` recolours it (the paint editor's spray colours it). */
   tintable: boolean;
+  /** The art was made by an AI model (absent: not said), so pickers and agents can label it. */
+  aiGenerated?: boolean;
+  /**
+   * The variants `load(id, { variant })` returns, always with `light` (absent: only `light`), so a
+   * picker or brush can pick the dark one for a dark background without calling `describe` first.
+   */
+  variants?: StickerVariant[];
+  /** The collection it belongs to (`collections()`), when the provider groups its stickers. */
+  collection?: string;
 }
 
 /** Everything about one sticker. */
@@ -50,7 +78,6 @@ export interface StickerDescription extends StickerSummary {
   silhouette?: string;
   /** Dominant colours #rrggbb, for matching and recolouring. */
   colours?: string[];
-  variants?: { id: string; name: string }[];
 }
 
 /** A sticker's art. */
@@ -69,6 +96,8 @@ export interface StickerPage {
 
 export interface StickerSearchOptions {
   category?: string;
+  /** Only stickers of this collection (`collections()`). */
+  collection?: string;
   /** Every tag must match. */
   tags?: string[];
   /** Page size (providers cap it; 1..100, default 24). */
@@ -84,6 +113,8 @@ export interface StickerLoadOptions {
   size?: number;
   /** #rrggbb: recolour a tintable sticker. */
   colour?: string;
+  /** The art for a light (default) or dark background; one the sticker doesn't list is refused, naming the ones it has. */
+  variant?: StickerVariant;
 }
 
 export interface StickerProviderCapabilities {
@@ -108,10 +139,14 @@ export interface StickerProvider {
   search(query: string, options?: StickerSearchOptions): MaybePromise<StickerPage>;
   /** A sticker by id, or `undefined`. */
   describe(id: string): MaybePromise<StickerDescription | undefined>;
-  /** The art; rejects with a `StickerError` (`unknown_sticker`, `unsupported_format`) when it can't. */
+  /** The art; rejects with a `StickerError` (`unknown_sticker`, `unsupported_format`, `unsupported_variant`) when it can't. */
   load(id: string, options?: StickerLoadOptions): MaybePromise<StickerAsset>;
   /** Categories with counts, when the provider knows them. */
   categories?(): MaybePromise<Array<{ id: string; name: string; count: number }>>;
+  /** Its collections with counts, when it groups its stickers. Ids stay unique across collections, so `load(id)` needs none. */
+  collections?(): MaybePromise<StickerCollection[]>;
+  /** The older name for `collections()`, still read when a provider has no `collections()`. */
+  listCollections?(): MaybePromise<StickerCollection[]>;
 }
 
 /** `provider:id`, the name of a sticker across providers. A bare editor stamp (`"star"`) means `editor:star`. */

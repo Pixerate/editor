@@ -9,6 +9,7 @@
  */
 
 import { BRUSH_PRESETS } from './presets';
+import { isBrushSourceRef } from './sources';
 import { BRUSH_MARKS_KINDS, BRUSH_TIP_SHAPES, BRUSH_TOOLS, type Brush, type BrushKind, type BrushMarksKind, type BrushPaint, type BrushSurface, type BrushTipShape, type BrushTool } from './types';
 
 export type BrushSupport = 'full' | 'ignored' | 'none';
@@ -40,6 +41,10 @@ export interface BrushHostProfile {
   velocity: BrushSupport;
   /** Tilt dynamics (needs pen tilt). */
   tilt: BrushSupport;
+  /** Texture inside the tip (`tip.grain`); missing: `none`. */
+  tipGrain?: BrushSupport;
+  /** Several dabs per spacing step (`dynamics.count` above 1); missing: `none`. */
+  dabCount?: BrushSupport;
 }
 
 export interface BrushIssue {
@@ -77,6 +82,8 @@ export const PAINT_PROFILE: BrushHostProfile = {
   colours: ALL_COLOURS,
   velocity: 'full',
   tilt: 'full',
+  tipGrain: 'full',
+  dabCount: 'full',
 };
 
 /** The image editor's brush: dry dabs on pixels, its Mixer Brush and the eraser. */
@@ -96,6 +103,8 @@ export const IMAGE_PROFILE: BrushHostProfile = {
   colours: ['solid', 'dual', 'gradient'],
   velocity: 'ignored',
   tilt: 'ignored',
+  tipGrain: 'ignored',
+  dabCount: 'ignored',
 };
 
 /**
@@ -118,10 +127,17 @@ export const CANVAS_PROFILE: BrushHostProfile = {
   colours: ['solid', 'dual', 'gradient'],
   velocity: 'ignored',
   tilt: 'full',
+  tipGrain: 'ignored',
+  dabCount: 'ignored',
 };
 
-/** Vector brushstrokes: dry dab brushes along a path; light brushes paint as plain colour. */
-export const VECTOR_PROFILE: BrushHostProfile = { ...CANVAS_PROFILE, id: 'vector', name: 'Vector editor', light: 'ignored' };
+/**
+ * Vector brushstrokes: dab brushes along a path; light brushes paint as plain colour. Wet paint
+ * settles in its own small wet area and dries to a cached image; the Mixer Brush, smudge and
+ * blender act on the shapes beneath the stroke. The wet tools (water, hair dryer, blow, wet blend,
+ * wet drag, blot) act on wet paint, which a vector document never holds, so they are refused.
+ */
+export const VECTOR_PROFILE: BrushHostProfile = { ...CANVAS_PROFILE, id: 'vector', name: 'Vector editor', kinds: ['mark', 'tool'], tools: ['blender', 'smudge'], surfaces: ['dry', 'wet'], reservoir: 'full', light: 'ignored' };
 
 /** The built-in profiles by id. */
 export const BRUSH_HOST_PROFILES: Readonly<Record<string, BrushHostProfile>> = { paint: PAINT_PROFILE, image: IMAGE_PROFILE, canvas: CANVAS_PROFILE, vector: VECTOR_PROFILE };
@@ -152,7 +168,10 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   else if (brush.kind === 'tool' && brush.tool && !profile.tools.includes(brush.tool)) {
     add('tool', 'error', `${host} has no ${brush.tool} tool.`, profile.tools.length ? `Use one of: ${list(profile.tools)}.` : `${host} has no tools; use a mark brush.`);
   }
-  if (!profile.tipShapes.includes(brush.tip.shape)) add('tip.shape', 'error', `${host} can't lay a ${brush.tip.shape} tip.`, `Set tip.shape to one of: ${list(profile.tipShapes)}.`);
+  if (!profile.tipShapes.includes(brush.tip.shape)) {
+    const image = brush.tip.shape === 'stamp' && (brush.tip.stamps ?? []).some(isBrushSourceRef);
+    add('tip.shape', 'error', `${host} can't lay a ${image ? 'stamp tip (image tips are stamps)' : `${brush.tip.shape} tip`}.`, `Set tip.shape to one of: ${list(profile.tipShapes)}.`);
+  }
   const marks = brush.marks?.kind ?? 'continuous';
   if (!profile.marks.includes(marks)) add('marks', 'error', `${host} can't lay ${marks} marks.`, `Use marks ${list(profile.marks)} (remove marks for continuous dabs).`);
   const surface = brush.behaviour?.surface ?? 'dry';
@@ -166,6 +185,8 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   const m = brush.motion;
   feature(profile.motion, !!m && (!!m.live || nonZero(m.waveSpeed) || m.fps !== undefined), 'motion', 'animation', 'Remove motion.');
   const d = brush.dynamics ?? {};
+  feature(profile.tipGrain ?? 'none', !!brush.tip.grain, 'tip.grain', 'tip grain', 'Remove tip.grain (behaviour.grain textures with the paper instead).');
+  feature(profile.dabCount ?? 'none', (d.count ?? 1) > 1, 'dynamics.count', 'several dabs per step', 'Set dynamics.count to 1.');
   feature(profile.velocity, nonZero(d.velocitySize) || nonZero(d.velocityOpacity), 'dynamics.velocity', 'velocity dynamics (its strokes carry no timing)', 'Set dynamics.velocitySize and velocityOpacity to 0.');
   feature(profile.tilt, nonZero(d.tiltSize) || nonZero(d.tiltRoundness) || nonZero(d.tiltOpacity), 'dynamics.tilt', 'tilt dynamics', 'Set dynamics.tiltSize, tiltRoundness and tiltOpacity to 0.');
 
@@ -178,6 +199,31 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   if (foreign.length) add('colour.palette', 'warning', `${host} skips the palette's ${list(foreign)} colours.`, `Nothing to do; or keep to ${list(profile.colours)} colours.`);
 
   return { ok: !issues.some((i) => i.severity === 'error'), issues };
+}
+
+export interface BrushEditCheck extends BrushCheck {
+  /**
+   * Errors the brush had before the edit: facets this host can't use, kept unchanged for the
+   * hosts that can (a light paint brush edited in Canvas keeps its light). Not in `issues`.
+   */
+  kept: BrushIssue[];
+}
+
+/**
+ * A check of an edit: errors the original brush already had (`before`, its check for the same
+ * host) are kept rather than refused, so a host edits what it renders and leaves the rest alone.
+ * Without `before` (a new brush) every error refuses it.
+ */
+export function withKeptIssues(check: BrushCheck, before: BrushCheck | null): BrushEditCheck {
+  const had = new Set((before?.issues ?? []).filter((i) => i.severity === 'error').map((i) => i.facet));
+  const kept = check.issues.filter((i) => i.severity === 'error' && had.has(i.facet));
+  const issues = check.issues.filter((i) => !kept.includes(i));
+  return { ok: !issues.some((i) => i.severity === 'error'), issues, kept };
+}
+
+/** `checkBrush` for an edit of `original` (`null`: a new brush), keeping facets it already had that the host can't use. */
+export function checkBrushEdit(original: Brush | null, brush: Brush, profile: BrushHostProfile): BrushEditCheck {
+  return withKeptIssues(checkBrush(brush, profile), original ? checkBrush(original, profile) : null);
 }
 
 /** The presets (default: the built-in ones) a host can render, in library order. */
@@ -198,10 +244,12 @@ export interface DegradedBrush {
  * The brush the host can render: facets it refuses are removed (light, motion, a reservoir, a
  * wet or thick surface, particle or object marks, bristle and stamp tips become round, an
  * unsupported default colour), each reported in `dropped`. A tool the host lacks can't be
- * stripped and stays in `issues`.
+ * stripped and stays in `issues`. `ignored: true` also removes what the host paints without
+ * (its warnings: velocity on canvas, grain in the image editor, palette colours it skips), for
+ * a brush made only of what the host uses.
  */
-export function degrade(brush: Brush, profile: BrushHostProfile): DegradedBrush {
-  const before = checkBrush(brush, profile).issues.filter((i) => i.severity === 'error');
+export function degrade(brush: Brush, profile: BrushHostProfile, options: { ignored?: boolean } = {}): DegradedBrush {
+  const before = checkBrush(brush, profile).issues.filter((i) => i.severity === 'error' || options.ignored);
   const b = JSON.parse(JSON.stringify(brush)) as Brush;
   const dropped: BrushIssue[] = [];
   for (const issue of before) {
@@ -232,6 +280,12 @@ export function degrade(brush: Brush, profile: BrushHostProfile): DegradedBrush 
       case 'behaviour.grain':
         delete b.behaviour!.grain;
         break;
+      case 'tip.grain':
+        delete b.tip.grain;
+        break;
+      case 'dynamics.count':
+        delete b.dynamics!.count;
+        break;
       case 'light':
         delete b.light;
         break;
@@ -250,6 +304,10 @@ export function degrade(brush: Brush, profile: BrushHostProfile): DegradedBrush 
       case 'colour.default':
         delete b.colour!.default;
         break;
+      case 'colour.palette':
+        b.colour!.palette = b.colour!.palette!.filter((c) => profile.colours.includes(brushColourKind(c)));
+        if (!b.colour!.palette.length) delete b.colour!.palette;
+        break;
       default:
         continue;
     }
@@ -257,6 +315,7 @@ export function degrade(brush: Brush, profile: BrushHostProfile): DegradedBrush 
   }
   // A Mixer Brush stripped of its reservoir with nothing else to exchange.
   if (b.behaviour?.exchange && !Object.keys(b.behaviour.exchange).length) delete b.behaviour.exchange;
+  if (b.colour && !Object.keys(b.colour).length) delete b.colour;
   // Removing a tip or mark facet can surface a new refusal (a stamp tip once its marks are gone).
   const after = checkBrush(b, profile).issues.filter((i) => i.severity === 'error');
   return { brush: b, dropped, issues: after };

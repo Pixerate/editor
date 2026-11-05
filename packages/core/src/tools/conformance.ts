@@ -28,6 +28,11 @@ export interface ConformanceStep {
 	 */
 	pixels?: boolean | { paper?: boolean; tolerance?: { maxDelta?: number; meanDelta?: number } };
 	/**
+	 * Also compare the render data after this call: what the canvases draw, for editors whose
+	 * picture is data rather than pixels (the vector editor's scene). Normalized like a result.
+	 */
+	render?: boolean;
+	/**
 	 * Parts of the result left out of the comparison because they describe this implementation
 	 * rather than the contract (the wet engine's backend): JSON pointers like `/backend`, where a
 	 * `*` segment stands for every array element or object member.
@@ -42,6 +47,8 @@ export interface ConformanceExpectation {
 	result: unknown;
 	isError?: true;
 	document?: unknown;
+	/** The normalized render data (steps with `render: true`). */
+	render?: unknown;
 	pixels?: ConformancePixels;
 }
 
@@ -76,6 +83,11 @@ export interface ConformanceHost {
 	callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
 	document(): unknown;
 	pixels(options: { paper?: boolean }): { width: number; height: number; data: Uint8Array | Uint8ClampedArray };
+	/**
+	 * What the canvases draw, as plain data (the vector editor's scene render data), for steps with
+	 * `render: true`. Editors without render data leave it out.
+	 */
+	render?(): unknown;
 	/** Whether a string is an id this implementation generated in its own format (default: none). */
 	isGeneratedId?(value: string): boolean;
 	dispose?(): void;
@@ -86,6 +98,7 @@ export interface ConformanceStepOutput {
 	result: unknown;
 	isError: boolean;
 	document?: unknown;
+	render?: unknown;
 	pixels?: { width: number; height: number; data: Uint8Array };
 }
 
@@ -254,6 +267,24 @@ function resultText(result: McpToolResult): string | undefined {
 	return undefined;
 }
 
+/**
+ * Numbers within this relative difference compare equal: maths functions (`Math.sin`, `Math.cos`)
+ * may differ in their last bits between CPUs (x64 and arm64 fuse multiply-adds differently), so a
+ * recording made on one machine is replayed on another. The Swift runner uses the same tolerance.
+ */
+export const CONFORMANCE_NUMBER_TOLERANCE = 1e-9;
+
+/** Whether two normalized values match: the same structure and strings, numbers within tolerance. */
+export function conformanceValuesMatch(a: unknown, b: unknown): boolean {
+	if (typeof a === 'number' && typeof b === 'number') return a === b || Math.abs(a - b) <= CONFORMANCE_NUMBER_TOLERANCE * Math.max(1, Math.abs(a), Math.abs(b));
+	if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => conformanceValuesMatch(x, b[i]));
+	if (a && b && typeof a === 'object' && typeof b === 'object') {
+		const ka = Object.keys(a), kb = Object.keys(b);
+		return ka.length === kb.length && ka.every((k) => k in (b as object) && conformanceValuesMatch((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+	}
+	return a === b;
+}
+
 /** Runs a scenario's calls in order against a fresh host and returns what each step produced. */
 export async function runConformanceScenario(scenario: ConformanceScenario, host: ConformanceHost): Promise<ConformanceStepOutput[]> {
 	const ids = new ConformanceIds();
@@ -266,6 +297,10 @@ export async function runConformanceScenario(scenario: ConformanceScenario, host
 			const result = normalizeConformanceValue(value, ids, isId);
 			const output: ConformanceStepOutput = { result: step.ignore ? omitConformancePaths(result, step.ignore) : result, isError };
 			if (step.document) output.document = normalizeConformanceValue(host.document(), ids, isId);
+			if (step.render) {
+				if (!host.render) throw new Error(`Step ${outputs.length + 1} (${step.tool}) asks for render data, which this host does not have.`);
+				output.render = normalizeConformanceValue(host.render(), ids, isId);
+			}
 			if (step.pixels) {
 				const image = host.pixels({ paper: typeof step.pixels === 'object' ? step.pixels.paper : undefined });
 				output.pixels = { width: image.width, height: image.height, data: new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength) };

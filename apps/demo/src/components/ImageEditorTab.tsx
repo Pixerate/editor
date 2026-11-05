@@ -6,6 +6,10 @@ import { createStickerToolProvider } from '@pixerate/editor/stickers';
 import { StickerInsertPanel } from '@pixerate/editor-react/stickers';
 import { demoStickers } from '../demoStickers';
 import { demoBrushLibrary } from '../demoBrushes';
+import { paintBrushPreviewRenderer } from '@pixerate/editor/paint-editor';
+
+/** The brush editor's preview ("Edit brush…"): the paint engine paints a test stroke, as the image brush does. */
+const IMAGE_BRUSH_PREVIEW = paintBrushPreviewRenderer();
 import { createBrushLibraryToolProvider, IMAGE_PROFILE } from '@pixerate/editor/brushes';
 import { useDemoEffects } from '../demoEffects';
 import { EffectsProviderSwitch } from './EffectsProviderSwitch';
@@ -97,7 +101,7 @@ function ImageEditorView({ image, onPickImage }: { image: string; onPickImage: (
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const openPanel = useOpenPanel();
   // Brush presets come from the demo's shared brush library: a brush saved in the Paint tab shows here.
-  const editor = useImageEditor({ brushLibrary: demoBrushLibrary });
+  const editor = useImageEditor({ brushLibrary: demoBrushLibrary, brushPreview: IMAGE_BRUSH_PREVIEW });
   // The library's tools for the image profile (imagebrushes__*): list_brush_presets lists what set_brush_preset takes.
   const imageBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: IMAGE_PROFILE, id: 'image-brushes', namespace: 'imagebrushes' }), []);
   useAgentToolProvider(demoToolRegistry, imageBrushTools);

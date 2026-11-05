@@ -1,0 +1,1571 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "booleans-and-pathfinder",
+  "description": "Boolean operations (also live), pathfinder, the shape builder and the paint bucket.",
+  "setup": {
+    "width": 300,
+    "height": 200
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 20,
+          "y": 20,
+          "width": 80,
+          "height": 80,
+          "fill": "#2563eb"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 60,
+          "y": 40,
+          "width": 80,
+          "height": 80,
+          "fill": "#e11d48"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.boolean",
+        "params": {
+          "operation": "union",
+          "ids": [
+            "n1",
+            "n2"
+          ]
+        }
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "vector.boolean",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#2563eb",
+                "id": "n3",
+                "name": "Union",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 20,
+                        "y": 20
+                      },
+                      {
+                        "x": 100,
+                        "y": 20
+                      },
+                      {
+                        "out": {
+                          "x": 122.09138999323174,
+                          "y": 40
+                        },
+                        "x": 100,
+                        "y": 40
+                      },
+                      {
+                        "in": {
+                          "x": 140,
+                          "y": 57.90861000676826
+                        },
+                        "out": {
+                          "x": 140,
+                          "y": 102.09138999323174
+                        },
+                        "type": "symmetric",
+                        "x": 140,
+                        "y": 80
+                      },
+                      {
+                        "in": {
+                          "x": 122.09138999323174,
+                          "y": 120
+                        },
+                        "out": {
+                          "x": 85.19435287617077,
+                          "y": 120
+                        },
+                        "type": "smooth",
+                        "x": 100,
+                        "y": 120
+                      },
+                      {
+                        "in": {
+                          "x": 72.26747621891712,
+                          "y": 111.95602740593013
+                        },
+                        "x": 65.35128781044867,
+                        "y": 100
+                      },
+                      {
+                        "x": 20,
+                        "y": 100
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 1
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 100,
+                  "width": 120,
+                  "x": 20,
+                  "y": 20
+                },
+                "d": "M20 20L100 20L100 40C122.09 40 140 57.91 140 80C140 102.09 122.09 120 100 120C85.19 120 72.27 111.96 65.35 100L20 100Z",
+                "depth": 0,
+                "fill": "#2563eb",
+                "id": "n3",
+                "locked": false,
+                "name": "Union",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n3"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 160,
+          "y": 20,
+          "width": 80,
+          "height": 80,
+          "fill": "#16a34a"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 200,
+          "y": 40,
+          "width": 80,
+          "height": 80,
+          "fill": "#f59e0b"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n5"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.boolean",
+        "params": {
+          "operation": "subtract",
+          "ids": [
+            "n4",
+            "n5"
+          ],
+          "live": true
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "vector.boolean",
+          "ok": true,
+          "result": {
+            "id": "n6"
+          }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "children": [
+                {
+                  "d": "M160 20L240 20L240 40C217.909 40 200 57.909 200 80C200 87.286 201.948 94.117 205.351 100L160 100Z",
+                  "fill": "#16a34a",
+                  "fillRule": "nonzero",
+                  "id": "n6~fx0",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n6",
+              "kind": "group",
+              "opacity": 1
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 2
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 20,
+          "y": 120,
+          "width": 60,
+          "height": 60,
+          "fill": "#0ea5e9"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n7"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 50,
+          "y": 130,
+          "width": 60,
+          "height": 60,
+          "fill": "#a855f7"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n8"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.pathfinder",
+        "params": {
+          "operation": "divide",
+          "ids": [
+            "n7",
+            "n8"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.pathfinder",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n9",
+              "n10",
+              "n11"
+            ],
+            "selection": [
+              "n12"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 150,
+          "y": 120,
+          "width": 60,
+          "height": 60,
+          "fill": "#14b8a6"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n13"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 180,
+          "y": 130,
+          "width": 60,
+          "height": 60,
+          "fill": "#f43f5e"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n14"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.shapeBuilderFaces",
+        "params": {
+          "ids": [
+            "n12",
+            "n13"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.shapeBuilderFaces",
+          "ok": true,
+          "result": {
+            "faces": [
+              {
+                "area": 1569.0857781511354,
+                "d": "M80 180L80 130C96.569 130 110 143.431 110 160C110 176.569 96.569 190 80 190C71.115 190 63.132 186.137 57.639 180Z",
+                "index": 0,
+                "point": {
+                  "x": 80.00204180099891,
+                  "y": 182.87081799999999
+                },
+                "sources": [
+                  "n9"
+                ]
+              },
+              {
+                "area": 1259.1393212397206,
+                "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+                "index": 1,
+                "point": {
+                  "x": 65.04171641321994,
+                  "y": 161.559015
+                },
+                "sources": [
+                  "n11"
+                ]
+              },
+              {
+                "area": 2340.860678760279,
+                "d": "M20 120L80 120L80 130C63.431 130 50 143.431 50 160C50 167.684 52.889 174.692 57.639 180L20 180Z",
+                "index": 2,
+                "point": {
+                  "x": 50,
+                  "y": 127.870818
+                },
+                "sources": [
+                  "n10"
+                ]
+              },
+              {
+                "area": 3600,
+                "d": "M150 120L210 120L210 180L150 180Z",
+                "index": 3,
+                "point": {
+                  "x": 180,
+                  "y": 150.37081799999999
+                },
+                "sources": [
+                  "n13"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.shapeBuilder",
+        "params": {
+          "points": [
+            [
+              170,
+              140
+            ],
+            [
+              200,
+              160
+            ]
+          ],
+          "ids": [
+            "n12",
+            "n13"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.shapeBuilder",
+          "ok": true,
+          "result": {
+            "edges": 0,
+            "faces": 1,
+            "lines": 0,
+            "merged": "n15"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.fillRegion",
+        "params": {
+          "point": [
+            55,
+            150
+          ]
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "vector.fillRegion",
+          "ok": true,
+          "result": {
+            "id": "n16"
+          }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "children": [
+                {
+                  "d": "M160 20L240 20L240 40C217.909 40 200 57.909 200 80C200 87.286 201.948 94.117 205.351 100L160 100Z",
+                  "fill": "#16a34a",
+                  "fillRule": "nonzero",
+                  "id": "n6~fx0",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n6",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "children": [
+                {
+                  "d": "M80 180L80 130C96.569 130 110 143.431 110 160C110 176.569 96.569 190 80 190C71.115 190 63.132 186.137 57.639 180Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n9",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M20 120L80 120L80 130C63.431 130 50 143.431 50 160C50 167.684 52.889 174.692 57.639 180L20 180Z",
+                  "fill": "#0ea5e9",
+                  "fillRule": "nonzero",
+                  "id": "n10",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n11",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n12",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n16",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "none",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M150 120L210 120L210 180L150 180Z",
+              "fill": "#14b8a6",
+              "fillRule": "nonzero",
+              "id": "n15",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M210 130C226.569 130 240 143.431 240 160C240 176.569 226.569 190 210 190C193.431 190 180 176.569 180 160C180 143.431 193.431 130 210 130Z",
+              "fill": "#f43f5e",
+              "fillRule": "nonzero",
+              "id": "n14",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 6
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.boolean",
+        "params": {
+          "operation": "intersect",
+          "ids": [
+            "n1"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "There is no node \"n1\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 100,
+                  "width": 120,
+                  "x": 20,
+                  "y": 20
+                },
+                "d": "M20 20L100 20L100 40C122.09 40 140 57.91 140 80C140 102.09 122.09 120 100 120C85.19 120 72.27 111.96 65.35 100L20 100Z",
+                "depth": 0,
+                "fill": "#2563eb",
+                "id": "n3",
+                "locked": false,
+                "name": "Union",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 80,
+                  "x": 160,
+                  "y": 20
+                },
+                "children": 2,
+                "depth": 0,
+                "id": "n6",
+                "liveBoolean": "subtract",
+                "locked": false,
+                "name": "Subtract",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 80,
+                  "x": 160,
+                  "y": 20
+                },
+                "d": "M160 20L240 20L240 100L160 100Z",
+                "depth": 1,
+                "fill": "#16a34a",
+                "id": "n4",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 80,
+                  "x": 200,
+                  "y": 40
+                },
+                "d": "M240 40C262.09 40 280 57.91 280 80C280 102.09 262.09 120 240 120C217.91 120 200 102.09 200 80C200 57.91 217.91 40 240 40Z",
+                "depth": 1,
+                "fill": "#f59e0b",
+                "id": "n5",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 70,
+                  "width": 90,
+                  "x": 20,
+                  "y": 120
+                },
+                "children": 3,
+                "depth": 0,
+                "id": "n12",
+                "locked": false,
+                "name": "Divide",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 60,
+                  "width": 52.36,
+                  "x": 57.64,
+                  "y": 130
+                },
+                "d": "M80 180L80 130C96.57 130 110 143.43 110 160C110 176.57 96.57 190 80 190C71.12 190 63.13 186.14 57.64 180Z",
+                "depth": 1,
+                "fill": "#a855f7",
+                "id": "n9",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 60,
+                  "width": 60,
+                  "x": 20,
+                  "y": 120
+                },
+                "d": "M20 120L80 120L80 130C63.43 130 50 143.43 50 160C50 167.68 52.89 174.69 57.64 180L20 180Z",
+                "depth": 1,
+                "fill": "#0ea5e9",
+                "id": "n10",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 50,
+                  "width": 30,
+                  "x": 50,
+                  "y": 130
+                },
+                "d": "M80 130L80 180L57.64 180C52.89 174.69 50 167.68 50 160C50 143.43 63.43 130 80 130Z",
+                "depth": 1,
+                "fill": "#a855f7",
+                "id": "n11",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 50,
+                  "width": 30,
+                  "x": 50,
+                  "y": 130
+                },
+                "d": "M80 130L80 180L57.64 180C52.89 174.69 50 167.68 50 160C50 143.43 63.43 130 80 130Z",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n16",
+                "locked": false,
+                "name": "Fill",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 60,
+                  "width": 60,
+                  "x": 150,
+                  "y": 120
+                },
+                "d": "M150 120L210 120L210 180L150 180Z",
+                "depth": 0,
+                "fill": "#14b8a6",
+                "id": "n15",
+                "locked": false,
+                "name": "Shape",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 60,
+                  "width": 60,
+                  "x": 180,
+                  "y": 130
+                },
+                "d": "M210 130C226.57 130 240 143.43 240 160C240 176.57 226.57 190 210 190C193.43 190 180 176.57 180 160C180 143.43 193.43 130 210 130Z",
+                "depth": 0,
+                "fill": "#f43f5e",
+                "id": "n14",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n14",
+              "n15"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#2563eb",
+                "id": "n3",
+                "name": "Union",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 20,
+                        "y": 20
+                      },
+                      {
+                        "x": 100,
+                        "y": 20
+                      },
+                      {
+                        "out": {
+                          "x": 122.09138999323174,
+                          "y": 40
+                        },
+                        "x": 100,
+                        "y": 40
+                      },
+                      {
+                        "in": {
+                          "x": 140,
+                          "y": 57.90861000676826
+                        },
+                        "out": {
+                          "x": 140,
+                          "y": 102.09138999323174
+                        },
+                        "type": "symmetric",
+                        "x": 140,
+                        "y": 80
+                      },
+                      {
+                        "in": {
+                          "x": 122.09138999323174,
+                          "y": 120
+                        },
+                        "out": {
+                          "x": 85.19435287617077,
+                          "y": 120
+                        },
+                        "type": "smooth",
+                        "x": 100,
+                        "y": 120
+                      },
+                      {
+                        "in": {
+                          "x": 72.26747621891712,
+                          "y": 111.95602740593013
+                        },
+                        "x": 65.35128781044867,
+                        "y": 100
+                      },
+                      {
+                        "x": 20,
+                        "y": 100
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#16a34a",
+                    "id": "n4",
+                    "name": "Rectangle",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 160,
+                            "y": 20
+                          },
+                          {
+                            "x": 240,
+                            "y": 20
+                          },
+                          {
+                            "x": 240,
+                            "y": 100
+                          },
+                          {
+                            "x": 160,
+                            "y": 100
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#f59e0b",
+                    "id": "n5",
+                    "name": "Ellipse",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 217.90861000676824,
+                              "y": 40
+                            },
+                            "out": {
+                              "x": 262.09138999323176,
+                              "y": 40
+                            },
+                            "type": "symmetric",
+                            "x": 240,
+                            "y": 40
+                          },
+                          {
+                            "in": {
+                              "x": 280,
+                              "y": 57.90861000676826
+                            },
+                            "out": {
+                              "x": 280,
+                              "y": 102.09138999323174
+                            },
+                            "type": "symmetric",
+                            "x": 280,
+                            "y": 80
+                          },
+                          {
+                            "in": {
+                              "x": 262.09138999323176,
+                              "y": 120
+                            },
+                            "out": {
+                              "x": 217.90861000676824,
+                              "y": 120
+                            },
+                            "type": "symmetric",
+                            "x": 240,
+                            "y": 120
+                          },
+                          {
+                            "in": {
+                              "x": 200,
+                              "y": 102.09138999323174
+                            },
+                            "out": {
+                              "x": 200,
+                              "y": 57.90861000676826
+                            },
+                            "type": "symmetric",
+                            "x": 200,
+                            "y": 80
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n6",
+                "liveBoolean": "subtract",
+                "name": "Subtract",
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#a855f7",
+                    "fillRule": "nonzero",
+                    "id": "n9",
+                    "name": "Ellipse",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 80,
+                            "y": 180
+                          },
+                          {
+                            "out": {
+                              "x": 96.5685424949238,
+                              "y": 130
+                            },
+                            "x": 80,
+                            "y": 130
+                          },
+                          {
+                            "in": {
+                              "x": 110,
+                              "y": 143.4314575050762
+                            },
+                            "out": {
+                              "x": 110,
+                              "y": 176.5685424949238
+                            },
+                            "type": "symmetric",
+                            "x": 110,
+                            "y": 160
+                          },
+                          {
+                            "in": {
+                              "x": 96.5685424949238,
+                              "y": 190
+                            },
+                            "out": {
+                              "x": 71.11500187239842,
+                              "y": 190
+                            },
+                            "type": "smooth",
+                            "x": 80,
+                            "y": 190
+                          },
+                          {
+                            "in": {
+                              "x": 63.1321404514754,
+                              "y": 186.13749360354083
+                            },
+                            "x": 57.63893492660853,
+                            "y": 180
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#0ea5e9",
+                    "fillRule": "nonzero",
+                    "id": "n10",
+                    "name": "Rectangle",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 20,
+                            "y": 120
+                          },
+                          {
+                            "x": 80,
+                            "y": 120
+                          },
+                          {
+                            "out": {
+                              "x": 63.431457505076196,
+                              "y": 130
+                            },
+                            "x": 80,
+                            "y": 130
+                          },
+                          {
+                            "in": {
+                              "x": 50,
+                              "y": 143.4314575050762
+                            },
+                            "out": {
+                              "x": 50,
+                              "y": 167.6835443673222
+                            },
+                            "type": "smooth",
+                            "x": 50,
+                            "y": 160
+                          },
+                          {
+                            "in": {
+                              "x": 52.88853568476562,
+                              "y": 174.69243507655167
+                            },
+                            "x": 57.63893492660853,
+                            "y": 180
+                          },
+                          {
+                            "x": 20,
+                            "y": 180
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#a855f7",
+                    "fillRule": "nonzero",
+                    "id": "n11",
+                    "name": "Ellipse",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 63.431457505076196,
+                              "y": 130
+                            },
+                            "x": 80,
+                            "y": 130
+                          },
+                          {
+                            "x": 80,
+                            "y": 180
+                          },
+                          {
+                            "out": {
+                              "x": 52.88853568476562,
+                              "y": 174.69243507655167
+                            },
+                            "x": 57.63893492660853,
+                            "y": 180
+                          },
+                          {
+                            "in": {
+                              "x": 50,
+                              "y": 167.6835443673222
+                            },
+                            "out": {
+                              "x": 50,
+                              "y": 143.4314575050762
+                            },
+                            "type": "smooth",
+                            "x": 50,
+                            "y": 160
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n12",
+                "name": "Divide",
+                "type": "group"
+              },
+              {
+                "fill": "#d4d4d8",
+                "fillRule": "nonzero",
+                "id": "n16",
+                "name": "Fill",
+                "stroke": null,
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "in": {
+                          "x": 63.431457505076196,
+                          "y": 130
+                        },
+                        "x": 80,
+                        "y": 130
+                      },
+                      {
+                        "x": 80,
+                        "y": 180
+                      },
+                      {
+                        "out": {
+                          "x": 52.88853568476562,
+                          "y": 174.69243507655167
+                        },
+                        "x": 57.63893492660853,
+                        "y": 180
+                      },
+                      {
+                        "in": {
+                          "x": 50,
+                          "y": 167.6835443673222
+                        },
+                        "out": {
+                          "x": 50,
+                          "y": 143.4314575050762
+                        },
+                        "type": "smooth",
+                        "x": 50,
+                        "y": 160
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#14b8a6",
+                "fillRule": "nonzero",
+                "id": "n15",
+                "name": "Shape",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 150,
+                        "y": 120
+                      },
+                      {
+                        "x": 210,
+                        "y": 120
+                      },
+                      {
+                        "x": 210,
+                        "y": 180
+                      },
+                      {
+                        "x": 150,
+                        "y": 180
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#f43f5e",
+                "id": "n14",
+                "name": "Ellipse",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "in": {
+                          "x": 193.4314575050762,
+                          "y": 130
+                        },
+                        "out": {
+                          "x": 226.5685424949238,
+                          "y": 130
+                        },
+                        "type": "symmetric",
+                        "x": 210,
+                        "y": 130
+                      },
+                      {
+                        "in": {
+                          "x": 240,
+                          "y": 143.4314575050762
+                        },
+                        "out": {
+                          "x": 240,
+                          "y": 176.5685424949238
+                        },
+                        "type": "symmetric",
+                        "x": 240,
+                        "y": 160
+                      },
+                      {
+                        "in": {
+                          "x": 226.5685424949238,
+                          "y": 190
+                        },
+                        "out": {
+                          "x": 193.4314575050762,
+                          "y": 190
+                        },
+                        "type": "symmetric",
+                        "x": 210,
+                        "y": 190
+                      },
+                      {
+                        "in": {
+                          "x": 180,
+                          "y": 176.5685424949238
+                        },
+                        "out": {
+                          "x": 180,
+                          "y": 143.4314575050762
+                        },
+                        "type": "symmetric",
+                        "x": 180,
+                        "y": 160
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "children": [
+                {
+                  "d": "M160 20L240 20L240 40C217.909 40 200 57.909 200 80C200 87.286 201.948 94.117 205.351 100L160 100Z",
+                  "fill": "#16a34a",
+                  "fillRule": "nonzero",
+                  "id": "n6~fx0",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n6",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "children": [
+                {
+                  "d": "M80 180L80 130C96.569 130 110 143.431 110 160C110 176.569 96.569 190 80 190C71.115 190 63.132 186.137 57.639 180Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n9",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M20 120L80 120L80 130C63.431 130 50 143.431 50 160C50 167.684 52.889 174.692 57.639 180L20 180Z",
+                  "fill": "#0ea5e9",
+                  "fillRule": "nonzero",
+                  "id": "n10",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n11",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n12",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n16",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "none",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M150 120L210 120L210 180L150 180Z",
+              "fill": "#14b8a6",
+              "fillRule": "nonzero",
+              "id": "n15",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M210 130C226.569 130 240 143.431 240 160C240 176.569 226.569 190 210 190C193.431 190 180 176.569 180 160C180 143.431 193.431 130 210 130Z",
+              "fill": "#f43f5e",
+              "fillRule": "nonzero",
+              "id": "n14",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 6
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
+        }
+      }
+    }
+  ]
+}

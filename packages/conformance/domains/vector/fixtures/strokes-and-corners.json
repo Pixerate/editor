@@ -1,0 +1,1315 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "strokes-and-corners",
+  "description": "Strokes: width profiles and points, outlining, corners, arrowheads and brushstrokes.",
+  "setup": {
+    "width": 300,
+    "height": 200
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M20 100 C 80 20 160 180 260 100",
+          "stroke": "#111827",
+          "strokeWidth": 8
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setWidthProfile",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "preset": "taperBoth"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setWidthProfile",
+          "ok": true,
+          "result": {
+            "ok": true,
+            "points": [
+              {
+                "left": 0,
+                "right": 0,
+                "t": 0
+              },
+              {
+                "left": 1,
+                "right": 1,
+                "t": 0.5
+              },
+              {
+                "left": 0,
+                "right": 0,
+                "t": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setWidthPoint",
+        "params": {
+          "id": "n1",
+          "t": 0.5,
+          "left": 10,
+          "right": 4
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setWidthPoint",
+          "ok": true,
+          "result": {
+            "ok": true,
+            "points": [
+              {
+                "left": 0,
+                "right": 0,
+                "t": 0
+              },
+              {
+                "left": 1,
+                "right": 1,
+                "t": 0.5
+              },
+              {
+                "left": 2.5,
+                "right": 1,
+                "t": 0.5
+              },
+              {
+                "left": 0,
+                "right": 0,
+                "t": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setStyle",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "startArrow": "triangle",
+          "endArrow": "circle"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setStyle",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 30,
+          "y": 140,
+          "width": 80,
+          "height": 40,
+          "fill": "#2563eb"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setCorners",
+        "params": {
+          "ids": [
+            "n2"
+          ],
+          "radius": 10,
+          "kind": "chamfer"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setCorners",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.outlineStroke",
+        "params": {
+          "ids": [
+            "n1"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.outlineStroke",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n3"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.listBrushes"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.listBrushes",
+          "ok": true,
+          "result": {
+            "brushes": [
+              {
+                "builtin": true,
+                "category": "pencil",
+                "id": "pencil-hb",
+                "name": "HB pencil",
+                "size": 4
+              },
+              {
+                "builtin": true,
+                "category": "pencil",
+                "id": "pencil-6b",
+                "name": "6B pencil",
+                "size": 7
+              },
+              {
+                "builtin": true,
+                "category": "pastel",
+                "id": "soft-pastel",
+                "name": "Soft pastel",
+                "size": 32
+              },
+              {
+                "builtin": true,
+                "category": "pastel",
+                "id": "oil-pastel",
+                "name": "Oil pastel",
+                "size": 26
+              },
+              {
+                "builtin": true,
+                "category": "charcoal",
+                "id": "charcoal-stick",
+                "name": "Charcoal stick",
+                "size": 26
+              },
+              {
+                "builtin": true,
+                "category": "charcoal",
+                "id": "vine-charcoal",
+                "name": "Vine charcoal",
+                "size": 10
+              },
+              {
+                "builtin": true,
+                "category": "airbrush",
+                "id": "airbrush",
+                "name": "Airbrush",
+                "size": 90
+              },
+              {
+                "builtin": true,
+                "category": "marker",
+                "id": "marker",
+                "name": "Chisel marker",
+                "size": 24
+              },
+              {
+                "builtin": true,
+                "category": "ink",
+                "id": "ink-pen",
+                "name": "Ink pen",
+                "size": 4
+              },
+              {
+                "builtin": true,
+                "category": "ink",
+                "id": "brush-pen",
+                "name": "Brush pen",
+                "size": 14
+              },
+              {
+                "builtin": true,
+                "category": "blender",
+                "id": "blender",
+                "name": "Blender",
+                "size": 34
+              },
+              {
+                "builtin": true,
+                "category": "smudge",
+                "id": "smudge",
+                "name": "Smudge",
+                "size": 26
+              },
+              {
+                "builtin": true,
+                "category": "smudge",
+                "id": "wet-smudge",
+                "name": "Pigment smudge",
+                "size": 30
+              },
+              {
+                "builtin": true,
+                "category": "paint",
+                "id": "dirty-round",
+                "name": "Dirty round",
+                "size": 22
+              },
+              {
+                "builtin": true,
+                "category": "paint",
+                "id": "multicolor-flat",
+                "name": "Multi-colour flat",
+                "size": 30
+              },
+              {
+                "builtin": true,
+                "category": "paint",
+                "id": "palette-dabber",
+                "name": "Palette dabber",
+                "size": 18
+              },
+              {
+                "builtin": true,
+                "category": "paint",
+                "id": "gradient-round",
+                "name": "Gradient round",
+                "size": 24
+              },
+              {
+                "builtin": true,
+                "category": "paint",
+                "id": "pressure-ombre",
+                "name": "Pressure ombré",
+                "size": 26
+              },
+              {
+                "builtin": true,
+                "category": "marker",
+                "id": "rainbow-marker",
+                "name": "Rainbow marker",
+                "size": 18
+              },
+              {
+                "builtin": true,
+                "category": "mixer",
+                "id": "mixer-brush",
+                "name": "Mixer Brush",
+                "size": 30
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "watercolor-round",
+                "name": "Watercolour round",
+                "size": 28
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "watercolor-wash",
+                "name": "Wash brush",
+                "size": 90
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "gradient-wash",
+                "name": "Gradient wash",
+                "size": 80
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "watercolor-detail",
+                "name": "Watercolour rigger",
+                "size": 7
+              },
+              {
+                "builtin": true,
+                "category": "watercolor",
+                "id": "gouache",
+                "name": "Gouache",
+                "size": 26
+              },
+              {
+                "builtin": true,
+                "category": "oil",
+                "id": "oil-round",
+                "name": "Wet oil round",
+                "size": 24
+              },
+              {
+                "builtin": true,
+                "category": "oil",
+                "id": "oil-flat",
+                "name": "Wet oil flat",
+                "size": 40
+              },
+              {
+                "builtin": true,
+                "category": "light",
+                "id": "neon-marker",
+                "name": "Neon marker",
+                "size": 10
+              },
+              {
+                "builtin": true,
+                "category": "light",
+                "id": "light-airbrush",
+                "name": "Light airbrush",
+                "size": 90
+              },
+              {
+                "builtin": true,
+                "category": "light",
+                "id": "glow-wash",
+                "name": "Glow wash",
+                "size": 40
+              },
+              {
+                "builtin": true,
+                "category": "light",
+                "id": "highlighter",
+                "name": "Highlighter",
+                "size": 30
+              },
+              {
+                "builtin": true,
+                "category": "ink",
+                "id": "ballpoint",
+                "name": "Ballpoint",
+                "size": 3
+              },
+              {
+                "builtin": true,
+                "category": "ink",
+                "id": "gel-pen",
+                "name": "Gel pen",
+                "size": 4
+              },
+              {
+                "builtin": true,
+                "category": "ink",
+                "id": "fineliner",
+                "name": "Fineliner",
+                "size": 2
+              },
+              {
+                "builtin": true,
+                "category": "pastel",
+                "id": "crayon",
+                "name": "Crayon",
+                "size": 14
+              },
+              {
+                "builtin": true,
+                "category": "pastel",
+                "id": "chalk",
+                "name": "Chalk",
+                "size": 18
+              }
+            ],
+            "colorLocked": false,
+            "colorScheme": "light"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setColorScheme",
+        "params": {
+          "scheme": "light"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setColorScheme",
+          "ok": true,
+          "result": {
+            "colorLocked": false,
+            "colorScheme": "light"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setColorLocked",
+        "params": {
+          "locked": false
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setColorLocked",
+          "ok": true,
+          "result": {
+            "colorLocked": false,
+            "colorScheme": "light"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M150 150 L280 170",
+          "stroke": "#7c3aed",
+          "strokeWidth": 4
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addBrushstroke",
+        "params": {
+          "brushId": "pencil-hb",
+          "ids": [
+            "n4"
+          ],
+          "size": 6,
+          "seed": 3,
+          "paint": {
+            "type": "gradient",
+            "stops": [
+              {
+                "offset": 0,
+                "color": "#e11d48"
+              },
+              {
+                "offset": 1,
+                "color": "#2563eb"
+              }
+            ],
+            "map": {
+              "by": "distance",
+              "length": 130,
+              "repeat": "clamp"
+            }
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addBrushstroke",
+          "ok": true,
+          "result": {
+            "paths": [
+              {
+                "id": "n4",
+                "strokes": [
+                  {
+                    "paint": "#7c3aed",
+                    "strokeWidth": 4
+                  },
+                  {
+                    "brush": {
+                      "brushId": "pencil-hb",
+                      "paint": {
+                        "map": {
+                          "by": "distance",
+                          "length": 130,
+                          "repeat": "clamp",
+                          "unit": "px"
+                        },
+                        "space": "pigment",
+                        "stops": [
+                          {
+                            "color": "#e11d48",
+                            "offset": 0
+                          },
+                          {
+                            "color": "#2563eb",
+                            "offset": 1
+                          }
+                        ],
+                        "type": "gradient"
+                      },
+                      "seed": 3,
+                      "size": 6
+                    },
+                    "kind": "brushstroke",
+                    "paint": "#7c3aed"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setBrushstroke",
+        "params": {
+          "id": "n4",
+          "index": 1,
+          "size": 9
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setBrushstroke",
+          "ok": true,
+          "result": {
+            "id": "n4",
+            "strokes": [
+              {
+                "paint": "#7c3aed",
+                "strokeWidth": 4
+              },
+              {
+                "brush": {
+                  "brushId": "pencil-hb",
+                  "paint": {
+                    "map": {
+                      "by": "distance",
+                      "length": 130,
+                      "repeat": "clamp",
+                      "unit": "px"
+                    },
+                    "space": "pigment",
+                    "stops": [
+                      {
+                        "color": "#e11d48",
+                        "offset": 0
+                      },
+                      {
+                        "color": "#2563eb",
+                        "offset": 1
+                      }
+                    ],
+                    "type": "gradient"
+                  },
+                  "seed": 3,
+                  "size": 9
+                },
+                "kind": "brushstroke",
+                "paint": "#7c3aed"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setWidthPoint",
+        "params": {
+          "id": "n2",
+          "t": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_params",
+            "details": [
+              {
+                "message": "Must be <= 1.",
+                "path": "/t"
+              }
+            ],
+            "message": "Invalid parameters for command \"vector.setWidthPoint\": /t Must be <= 1."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 46.19,
+                  "width": 240,
+                  "x": 20,
+                  "y": 76.91
+                },
+                "d": "M20 100C80 20 160 180 260 100",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n1",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 50.68,
+                  "width": 265.6,
+                  "x": 10.4,
+                  "y": 75.01
+                },
+                "d": "M30.47 87.85C34.02 84.6 37.98 81.79 42.78 79.39C44.76 78.4 47.3 77.44 49.44 76.86C52.98 75.9 56.02 75.4 59.69 75.12C62.52 74.91 65.81 75.01 68.63 75.33C84.22 77.04 98.85 83.3 112.94 89.88C121.59 93.91 130.12 98.21 138.76 102.28L142.34 97.33C152.73 102.21 163.18 107.21 174 110.91C180.58 113.17 187.42 115.09 194.27 116.13C199.87 116.99 205.74 117.44 211.38 117.16C222.57 116.62 233 114.05 243.24 109.44C244.22 109 245.2 108.54 246.18 108.07C244.8 105.7 244 102.94 244 100C244 91.16 251.16 84 260 84C268.84 84 276 91.16 276 100C276 108.84 268.84 116 260 116C254.78 116 250.15 113.5 247.23 109.64C245.9 110.51 244.55 111.36 243.2 112.19C238.39 115.16 233 117.75 227.72 119.79C199.31 130.73 171.87 125.15 144.71 113.73C131.42 108.15 118.73 101.08 105.93 94.47C91.98 87.27 77.29 79.91 61.39 78.77C59.36 78.62 56.91 78.64 54.88 78.86C52.73 79.08 50.54 79.35 48.45 79.92C41.73 81.72 36.24 84.66 31.35 88.52L42.4 96.8L10.4 112.8L16.8 77.6Z",
+                "depth": 0,
+                "fill": "#111827",
+                "id": "n3",
+                "locked": false,
+                "name": "Path Stroke",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 80,
+                  "x": 30,
+                  "y": 140
+                },
+                "d": "M40 140L100 140L110 150L110 170L100 180L40 180L30 170L30 150Z",
+                "depth": 0,
+                "fill": "#2563eb",
+                "id": "n2",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 20,
+                  "width": 130,
+                  "x": 150,
+                  "y": 150
+                },
+                "d": "M150 150L280 170",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n4",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#7c3aed",
+                "strokeWidth": 1,
+                "strokes": [
+                  {
+                    "paint": "#7c3aed",
+                    "strokeWidth": 4
+                  },
+                  {
+                    "brush": {
+                      "brushId": "pencil-hb",
+                      "paint": {
+                        "map": {
+                          "by": "distance",
+                          "length": 130,
+                          "repeat": "clamp",
+                          "unit": "px"
+                        },
+                        "space": "pigment",
+                        "stops": [
+                          {
+                            "color": "#e11d48",
+                            "offset": 0
+                          },
+                          {
+                            "color": "#2563eb",
+                            "offset": 1
+                          }
+                        ],
+                        "type": "gradient"
+                      },
+                      "seed": 3,
+                      "size": 9
+                    },
+                    "kind": "brushstroke",
+                    "paint": "#7c3aed"
+                  }
+                ],
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n4"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#d4d4d8",
+                "id": "n1",
+                "name": "Path",
+                "stroke": null,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "out": {
+                          "x": 80,
+                          "y": 20
+                        },
+                        "x": 20,
+                        "y": 100
+                      },
+                      {
+                        "in": {
+                          "x": 160,
+                          "y": 180
+                        },
+                        "x": 260,
+                        "y": 100
+                      }
+                    ],
+                    "closed": false
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#111827",
+                "fillRule": "nonzero",
+                "id": "n3",
+                "name": "Path Stroke",
+                "stroke": null,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "out": {
+                          "x": 34.01552332745699,
+                          "y": 84.59821452925088
+                        },
+                        "x": 30.473074839774448,
+                        "y": 87.85480612983082
+                      },
+                      {
+                        "in": {
+                          "x": 37.98458572253507,
+                          "y": 81.78946314290766
+                        },
+                        "out": {
+                          "x": 44.75689221636023,
+                          "y": 78.4022739828314
+                        },
+                        "type": "smooth",
+                        "x": 42.77955305372421,
+                        "y": 79.3912460241266
+                      },
+                      {
+                        "in": {
+                          "x": 47.302135338311274,
+                          "y": 77.43727088085319
+                        },
+                        "out": {
+                          "x": 52.984601839271384,
+                          "y": 75.90438999374877
+                        },
+                        "type": "smooth",
+                        "x": 49.43742877304856,
+                        "y": 76.86126211882788
+                      },
+                      {
+                        "in": {
+                          "x": 56.02359974557978,
+                          "y": 75.39996579859867
+                        },
+                        "out": {
+                          "x": 62.518010176149005,
+                          "y": 74.91110863481099
+                        },
+                        "type": "smooth",
+                        "x": 59.685854216981284,
+                        "y": 75.12429499628364
+                      },
+                      {
+                        "in": {
+                          "x": 65.80943425039203,
+                          "y": 75.01403287785661
+                        },
+                        "out": {
+                          "x": 84.21882356292565,
+                          "y": 77.04290424325023
+                        },
+                        "type": "smooth",
+                        "x": 68.63288241781169,
+                        "y": 75.32520089333504
+                      },
+                      {
+                        "in": {
+                          "x": 98.84684127363008,
+                          "y": 83.30165464366843
+                        },
+                        "out": {
+                          "x": 121.59130914775098,
+                          "y": 93.91395851040855
+                        },
+                        "type": "smooth",
+                        "x": 112.93666621950497,
+                        "y": 89.87580289731619
+                      },
+                      {
+                        "in": {
+                          "x": 130.11987695373713,
+                          "y": 98.21330031640686
+                        },
+                        "x": 138.76109903366725,
+                        "y": 102.27543784386602
+                      },
+                      {
+                        "out": {
+                          "x": 152.73137927375913,
+                          "y": 102.20715337845523
+                        },
+                        "x": 142.3445579506523,
+                        "y": 97.3347101782273
+                      },
+                      {
+                        "in": {
+                          "x": 163.1847249894843,
+                          "y": 107.20589323264116
+                        },
+                        "out": {
+                          "x": 180.57581033854163,
+                          "y": 113.16885670128255
+                        },
+                        "type": "smooth",
+                        "x": 174.00121632660355,
+                        "y": 110.91459463957285
+                      },
+                      {
+                        "in": {
+                          "x": 187.42344362192188,
+                          "y": 115.08743176370854
+                        },
+                        "out": {
+                          "x": 199.87043561826695,
+                          "y": 116.9906002532278
+                        },
+                        "type": "smooth",
+                        "x": 194.2734895909547,
+                        "y": 116.13481667757767
+                      },
+                      {
+                        "in": {
+                          "x": 205.73805050387,
+                          "y": 117.43875841496374
+                        },
+                        "out": {
+                          "x": 222.56527666347444,
+                          "y": 116.62131044200596
+                        },
+                        "type": "smooth",
+                        "x": 211.38403349061517,
+                        "y": 117.16448282705083
+                      },
+                      {
+                        "in": {
+                          "x": 232.99922568531738,
+                          "y": 114.05106027181056
+                        },
+                        "out": {
+                          "x": 244.2169387777338,
+                          "y": 108.99685043163292
+                        },
+                        "type": "smooth",
+                        "x": 243.23959468978163,
+                        "y": 109.4371988400716
+                      },
+                      {
+                        "in": {
+                          "x": 245.20331758496184,
+                          "y": 108.54296442269305
+                        },
+                        "out": {
+                          "x": 244.79512677561226,
+                          "y": 105.70232184515655
+                        },
+                        "x": 246.18234557930262,
+                        "y": 108.0718803064745
+                      },
+                      {
+                        "in": {
+                          "x": 244,
+                          "y": 102.94401682715365
+                        },
+                        "out": {
+                          "x": 244,
+                          "y": 91.16344400270731
+                        },
+                        "type": "smooth",
+                        "x": 244,
+                        "y": 100
+                      },
+                      {
+                        "in": {
+                          "x": 251.1634440027073,
+                          "y": 84
+                        },
+                        "out": {
+                          "x": 268.8365559972927,
+                          "y": 84
+                        },
+                        "type": "symmetric",
+                        "x": 260,
+                        "y": 84
+                      },
+                      {
+                        "in": {
+                          "x": 276,
+                          "y": 91.16344400270731
+                        },
+                        "out": {
+                          "x": 276,
+                          "y": 108.83655599729269
+                        },
+                        "type": "symmetric",
+                        "x": 276,
+                        "y": 100
+                      },
+                      {
+                        "in": {
+                          "x": 268.8365559972927,
+                          "y": 116
+                        },
+                        "out": {
+                          "x": 254.78312171639394,
+                          "y": 116
+                        },
+                        "type": "smooth",
+                        "x": 260,
+                        "y": 116
+                      },
+                      {
+                        "in": {
+                          "x": 250.1493935311775,
+                          "y": 113.5032376263475
+                        },
+                        "out": {
+                          "x": 245.89538021706667,
+                          "y": 110.50968368035122
+                        },
+                        "x": 247.22856354136042,
+                        "y": 109.63946097605219
+                      },
+                      {
+                        "in": {
+                          "x": 244.5474259324823,
+                          "y": 111.35600935150522
+                        },
+                        "out": {
+                          "x": 238.3906262397011,
+                          "y": 115.16229131016304
+                        },
+                        "type": "smooth",
+                        "x": 243.19894231091777,
+                        "y": 112.18967442693796
+                      },
+                      {
+                        "in": {
+                          "x": 232.99660197797832,
+                          "y": 117.75423166669647
+                        },
+                        "out": {
+                          "x": 199.3111262819785,
+                          "y": 130.72764749938648
+                        },
+                        "type": "smooth",
+                        "x": 227.72275519326283,
+                        "y": 119.78536840923427
+                      },
+                      {
+                        "in": {
+                          "x": 171.86616400863548,
+                          "y": 125.14727198116022
+                        },
+                        "out": {
+                          "x": 131.4223079809321,
+                          "y": 108.14507779935313
+                        },
+                        "type": "smooth",
+                        "x": 144.71322482730952,
+                        "y": 113.73244684056353
+                      },
+                      {
+                        "in": {
+                          "x": 118.73180227173421,
+                          "y": 101.07649270068441
+                        },
+                        "out": {
+                          "x": 91.97594897853911,
+                          "y": 87.26948113453432
+                        },
+                        "type": "smooth",
+                        "x": 105.9316269249425,
+                        "y": 94.47112799318502
+                      },
+                      {
+                        "in": {
+                          "x": 77.28588705585197,
+                          "y": 79.91445993095915
+                        },
+                        "out": {
+                          "x": 59.355778332197524,
+                          "y": 78.62488159916492
+                        },
+                        "type": "smooth",
+                        "x": 61.3912287131978,
+                        "y": 78.77127628908208
+                      },
+                      {
+                        "in": {
+                          "x": 56.91167381637122,
+                          "y": 78.64335269598944
+                        },
+                        "out": {
+                          "x": 52.731243975357245,
+                          "y": 79.08220499628051
+                        },
+                        "type": "smooth",
+                        "x": 54.88238018551087,
+                        "y": 78.85638346357507
+                      },
+                      {
+                        "in": {
+                          "x": 50.53877094372187,
+                          "y": 79.3543028692716
+                        },
+                        "out": {
+                          "x": 41.73100179001459,
+                          "y": 81.72469853159613
+                        },
+                        "type": "smooth",
+                        "x": 48.44634232833556,
+                        "y": 79.91742885805252
+                      },
+                      {
+                        "in": {
+                          "x": 36.240580019263916,
+                          "y": 84.66024619798624
+                        },
+                        "x": 31.35457859959685,
+                        "y": 88.51593394969763
+                      },
+                      {
+                        "x": 42.400000000000006,
+                        "y": 96.79999999999998
+                      },
+                      {
+                        "x": 10.4,
+                        "y": 112.8
+                      },
+                      {
+                        "x": 16.8,
+                        "y": 77.6
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#2563eb",
+                "id": "n2",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "corner": {
+                          "kind": "chamfer",
+                          "radius": 10
+                        },
+                        "x": 30,
+                        "y": 140
+                      },
+                      {
+                        "corner": {
+                          "kind": "chamfer",
+                          "radius": 10
+                        },
+                        "x": 110,
+                        "y": 140
+                      },
+                      {
+                        "corner": {
+                          "kind": "chamfer",
+                          "radius": 10
+                        },
+                        "x": 110,
+                        "y": 180
+                      },
+                      {
+                        "corner": {
+                          "kind": "chamfer",
+                          "radius": 10
+                        },
+                        "x": 30,
+                        "y": 180
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n4",
+                "name": "Path",
+                "stroke": "#7c3aed",
+                "strokes": [
+                  {
+                    "paint": "#7c3aed",
+                    "strokeWidth": 4
+                  },
+                  {
+                    "brush": {
+                      "brushId": "pencil-hb",
+                      "paint": {
+                        "map": {
+                          "by": "distance",
+                          "length": 130,
+                          "repeat": "clamp",
+                          "unit": "px"
+                        },
+                        "space": "pigment",
+                        "stops": [
+                          {
+                            "color": "#e11d48",
+                            "offset": 0
+                          },
+                          {
+                            "color": "#2563eb",
+                            "offset": 1
+                          }
+                        ],
+                        "type": "gradient"
+                      },
+                      "seed": 3,
+                      "size": 9
+                    },
+                    "kind": "brushstroke",
+                    "paint": "#7c3aed"
+                  }
+                ],
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 150,
+                        "y": 150
+                      },
+                      {
+                        "x": 280,
+                        "y": 170
+                      }
+                    ],
+                    "closed": false
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import type StylesGalleryComponent from "./StylesGallery.svelte";
 import type ExportDocxButtonComponent from "./ExportDocxButton.svelte";
 
 export * from "./editor.svelte.js";
+export * from "./promptEditor.svelte.js";
 export * from "./navigationGuard.js";
 export * from "./createNavigationGuard.svelte.js";
 export * from "./history/index.js";

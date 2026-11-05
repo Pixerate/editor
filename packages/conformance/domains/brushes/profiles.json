@@ -47,7 +47,9 @@
       "effect"
     ],
     "velocity": "full",
-    "tilt": "full"
+    "tilt": "full",
+    "tipGrain": "full",
+    "dabCount": "full"
   },
   {
     "id": "image",
@@ -81,7 +83,9 @@
       "gradient"
     ],
     "velocity": "ignored",
-    "tilt": "ignored"
+    "tilt": "ignored",
+    "tipGrain": "ignored",
+    "dabCount": "ignored"
   },
   {
     "id": "canvas",
@@ -112,15 +116,21 @@
       "gradient"
     ],
     "velocity": "ignored",
-    "tilt": "full"
+    "tilt": "full",
+    "tipGrain": "ignored",
+    "dabCount": "ignored"
   },
   {
     "id": "vector",
     "name": "Vector editor",
     "kinds": [
-      "mark"
+      "mark",
+      "tool"
     ],
-    "tools": [],
+    "tools": [
+      "blender",
+      "smudge"
+    ],
     "tipShapes": [
       "round",
       "flat",
@@ -130,10 +140,11 @@
       "continuous"
     ],
     "surfaces": [
-      "dry"
+      "dry",
+      "wet"
     ],
     "exchange": "ignored",
-    "reservoir": "none",
+    "reservoir": "full",
     "grain": "full",
     "light": "ignored",
     "motion": "none",
@@ -143,6 +154,8 @@
       "gradient"
     ],
     "velocity": "ignored",
-    "tilt": "full"
+    "tilt": "full",
+    "tipGrain": "ignored",
+    "dabCount": "ignored"
   }
 ]

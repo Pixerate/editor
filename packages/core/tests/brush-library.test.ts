@@ -42,9 +42,24 @@ describe('host profiles', () => {
     expect(ids(listCanvasBrushes())).toEqual([...CANVAS_BEFORE, ...ADDED]);
   });
 
-  it('lets vector use exactly the brushes its hand-written filter allowed', () => {
-    expect(ids(listPresets(VECTOR_PROFILE))).toEqual([...VECTOR_BEFORE, ...ADDED]);
-    expect(ids(vectorBrushstrokeBrushes())).toEqual([...VECTOR_BEFORE, ...ADDED]);
+  // #519: vector brushstrokes also paint wet media, the Mixer Brush, smudge and blender.
+  const VECTOR_MEDIA = ['blender', 'smudge', 'wet-smudge', 'mixer-brush', 'watercolor-round', 'watercolor-wash', 'gradient-wash', 'watercolor-detail', 'gouache', 'oil-round', 'oil-flat', 'glow-wash'];
+
+  it('lets vector use the brushes its hand-written filter allowed, plus wet, mixer, smudge and blender brushes', () => {
+    const order = ids(BRUSH_PRESETS);
+    const expected = [...VECTOR_BEFORE, ...ADDED, ...VECTOR_MEDIA].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    expect(ids(listPresets(VECTOR_PROFILE))).toEqual(expected);
+    expect(ids(vectorBrushstrokeBrushes())).toEqual(expected);
+  });
+
+  it('still refuses the wet tools, thick paint, particles, stickers and erasers on vector, with reasons', () => {
+    for (const id of ['add-water', 'wet-blend', 'blot', 'impasto-brush', 'hair-strands', 'sticker-stars', 'eraser-soft', 'bristle-round']) {
+      const check = checkBrush(preset(id), VECTOR_PROFILE);
+      expect(check.ok, id).toBe(false);
+      for (const issue of check.issues.filter((i) => i.severity === 'error')) expect(issue.fix, id).toBeTruthy();
+    }
+    expect(checkBrush(preset('add-water'), VECTOR_PROFILE).issues[0]).toMatchObject({ facet: 'tool', severity: 'error' });
+    expect(checkBrush(preset('paint-tube'), VECTOR_PROFILE).issues).toContainEqual(expect.objectContaining({ facet: 'behaviour.surface', severity: 'error' }));
   });
 
   it('lets the paint editor use every preset', () => {
@@ -228,9 +243,9 @@ describe('brush library tools', () => {
 
   it('registers the read and write tools, and preview_brush only with a renderer', () => {
     const names = (o?: Parameters<typeof setup>[0]) => setup(o).registry.listTools().tools.map((t) => t.name).sort();
-    expect(names()).toEqual(['check_brush', 'create_brush', 'describe_brush', 'duplicate_brush', 'export_brushes', 'import_brushes', 'list_brush_presets', 'remove_brush', 'update_brush']);
+    expect(names()).toEqual(['add_brush_source', 'check_brush', 'create_brush', 'describe_brush', 'duplicate_brush', 'export_brushes', 'import_brush_pack', 'import_brushes', 'list_brush_presets', 'list_brush_sources', 'remove_brush', 'update_brush']);
     expect(names({ renderPreview: () => ({ data: '', mimeType: 'image/png' }) })).toContain('preview_brush');
-    expect(names({ readOnly: true })).toEqual(['check_brush', 'describe_brush', 'export_brushes', 'list_brush_presets']);
+    expect(names({ readOnly: true })).toEqual(['check_brush', 'describe_brush', 'export_brushes', 'list_brush_presets', 'list_brush_sources']);
   });
 
   it('lists what the host renders, with summaries', async () => {

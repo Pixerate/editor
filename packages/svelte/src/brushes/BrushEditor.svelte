@@ -1,27 +1,44 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { brushEditorSections, PAINT_PROFILE, setBrushEditorValue, type Brush, type BrushHostProfile } from '@pixerate/editor/brushes';
-  import PaintSlider from './PaintSlider.svelte';
-  import PixelCanvas from './PixelCanvas.svelte';
-  import { button, chip } from './paintEditorRune.svelte.js';
+  import { brushEditorScope, brushEditorSections, PAINT_PROFILE, setBrushEditorValue, withBrushSource, type Brush, type BrushHostProfile, type BrushSource } from '@pixerate/editor/brushes';
+  import PaintSlider from '../paint-editor/PaintSlider.svelte';
+  import PixelCanvas from '../paint-editor/PixelCanvas.svelte';
+  import { button, chip } from './styles.js';
 
   interface Props {
     /** The brush being edited, as facets. */
     brush: Brush;
-    /** What the host renders (default the paint editor): other controls are left out. */
+    /**
+     * What the host renders (default the paint editor): only its sections, controls and options
+     * are shown. Facets of the brush it can't use stay as they are, named in a note.
+     */
     profile?: BrushHostProfile;
     /** Called with the whole brush after each change (normalised). */
     onchange: (brush: Brush) => void;
-    /** A live preview stroke of `brush` (e.g. `controller.brushThumbnail`). */
-    preview?: { width: number; height: number; data: Uint8ClampedArray } | null;
+    /** A live preview stroke of `brush`: pixels (e.g. `controller.brushThumbnail`) or an image URL. */
+    preview?: { width: number; height: number; data: Uint8ClampedArray } | string | null;
+    /** The colour behind an image-URL preview, for transparent previews (see `brushPreviewColours`). */
+    previewBackground?: string;
+    /** With it, a "Save" button (labelled `saveLabel`) saves the brush in place. */
+    onsave?: () => unknown;
+    /** The Save button's label (default "Save"; e.g. "Save a copy" for a built-in). */
+    saveLabel?: string;
     /** With it, a name field and "Save brush" save the brush under that name. */
     onsaveas?: (name: string) => unknown;
     /** Extra controls a host adds to a section (e.g. the sticker picker for stamps). */
     extra?: Snippet<[string]>;
+    /** The library's image sources, offered as stamps and as grain. */
+    sources?: ReadonlyArray<Pick<BrushSource, 'id' | 'name'>>;
+    /**
+     * With it, "Add image…" buttons for an image tip and for grain: it stores the picked file as a
+     * source (e.g. `addBrushSourceFromFile`) and returns its `source:<id>` ref.
+     */
+    onaddsource?: (file: File) => Promise<string>;
     class?: string;
   }
-  let { brush, profile = PAINT_PROFILE, onchange, preview, onsaveas, extra, class: className = '' }: Props = $props();
-  const sections = $derived(brushEditorSections(brush, profile));
+  let { brush, profile = PAINT_PROFILE, onchange, preview, previewBackground, onsave, saveLabel = 'Save', onsaveas, extra, sources, onaddsource, class: className = '' }: Props = $props();
+  const sections = $derived(brushEditorSections(brush, profile, { sources }));
+  const scope = $derived(brushEditorScope(brush, profile));
   let problems = $state<string | null>(null);
   let name = $state('');
   const set = (path: string, value: unknown) => {
@@ -29,23 +46,44 @@
     problems = r.problems.length ? r.problems.join(' ') : null;
     if (r.brush !== brush) onchange(r.brush);
   };
+  /** Stores a picked image as a source and makes it the tip or the grain. */
+  const addSource = async (file: File | undefined, as: 'tip' | 'grain') => {
+    if (!file || !onaddsource) return;
+    try {
+      const r = withBrushSource(brush, await onaddsource(file), as);
+      problems = r.problems.length ? r.problems.join(' ') : null;
+      onchange(r.brush);
+    } catch (e) {
+      problems = (e as Error).message;
+    }
+  };
   const setColour = (path: string, light: string, dark: string | null) => set(path, dark === null ? light : { light, dark });
   const setAt = (path: string, list: Array<string | { light: string; dark: string }>, i: number, entry: string | { light: string; dark: string }) => set(path, list.map((x, j) => (j === i ? entry : x)));
-  const save = async () => {
+  const attemptSave = async (fn: () => unknown, after?: () => void) => {
     try {
-      await onsaveas?.(name.trim());
-      name = '';
+      await fn();
+      after?.();
       problems = null;
     } catch (e) {
       problems = (e as Error).message;
     }
   };
+  const save = () => attemptSave(() => onsaveas?.(name.trim()), () => (name = ''));
 </script>
 
-<!-- Edits a brush by its facets (brushEditorSections), with a live preview stroke and "Save as". Only what the host profile renders is shown. -->
+<!--
+  Edits a brush by its facets (brushEditorSections), with a live preview stroke, "Save" and "Save as". It needs no
+  editor controller, so every host that paints uses it. Only what the host profile uses is shown; what the brush has
+  for other hosts is kept and named (brushEditorScope). BrushLibraryEditor wires it to a brush library.
+-->
 <div class={`flex flex-col gap-2 ${className}`} data-testid="brush-editor">
-  {#if preview !== undefined}
+  {#if typeof preview === 'string'}
+    <img src={preview} alt="Brush preview" class="rounded object-contain" style={`width: 100%; aspect-ratio: 4 / 1${previewBackground ? `; background: ${previewBackground}` : ''}`} />
+  {:else if preview !== undefined}
     <PixelCanvas pixels={preview} label="Brush preview" class="rounded" style={`width: 100%; aspect-ratio: ${preview ? `${preview.width} / ${preview.height}` : '4 / 1'}`} />
+  {/if}
+  {#if scope.note}
+    <p class="text-[10px] text-amber-400" data-testid="brush-editor-scope" title={`${profile.name} shows only what it can use; these are kept unchanged when you save.`}>{scope.note}</p>
   {/if}
   {#each sections as s (s.id)}
     <section class="flex flex-col gap-1.5" data-section={s.id} data-testid={s.id === 'behaviour' ? 'brush-engine' : undefined}>
@@ -120,14 +158,34 @@
             {/each}
           </div>
         {/if}
+        {#if onaddsource && (c.path === 'tip.stamps' || c.path === 'tip.grain.source')}
+          {@const label = c.path === 'tip.stamps' ? 'Add image tip…' : 'Add grain image…'}
+          <label class={`${button} cursor-pointer self-start`}>
+            {label}
+            <input
+              type="file"
+              accept="image/*"
+              aria-label={label}
+              class="sr-only"
+              onchange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                e.currentTarget.value = '';
+                void addSource(file, c.path === 'tip.stamps' ? 'tip' : 'grain');
+              }}
+            />
+          </label>
+        {/if}
       {/each}
       {#if extra}{@render extra(s.id)}{/if}
     </section>
   {/each}
-  {#if onsaveas}
+  {#if onsave || onsaveas}
     <div class="flex flex-wrap items-center gap-1">
-      <input bind:value={name} placeholder="Brush name" aria-label="Brush name" class="w-28 rounded bg-slate-800 px-1.5 py-0.5" />
-      <button type="button" class={button} disabled={!name.trim()} onclick={save}>Save brush</button>
+      {#if onsave}<button type="button" class={button} onclick={() => attemptSave(onsave)}>{saveLabel}</button>{/if}
+      {#if onsaveas}
+        <input bind:value={name} placeholder="Brush name" aria-label="Brush name" class="w-28 rounded bg-slate-800 px-1.5 py-0.5" />
+        <button type="button" class={button} disabled={!name.trim()} onclick={save}>Save brush</button>
+      {/if}
     </div>
   {/if}
   {#if problems}<p role="alert" class="text-[11px] text-rose-400">{problems}</p>{/if}

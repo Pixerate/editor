@@ -1,0 +1,690 @@
+{
+  "providers": [
+    {
+      "id": "vector-commands",
+      "title": "Commands",
+      "skill": "pixerate-agent-tools",
+      "tools": [
+        {
+          "name": "list_commands",
+          "title": "List commands",
+          "description": "Lists the commands you can run with run_command: id, label, group, params (JSON Schema), shortcuts, and whether each is enabled now (with the reason when it is not).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Fuzzy filter on label, keywords, group and id."
+              },
+              "enabledOnly": {
+                "type": "boolean",
+                "description": "Only commands that can run now (default false)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List commands",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "run_command",
+          "title": "Run a command",
+          "description": "Runs one command by id with optional params (see list_commands for each command's params schema). Unknown params are rejected.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Command id from list_commands.",
+                "enum": [
+                  "vector.list",
+                  "vector.select",
+                  "vector.addShape",
+                  "vector.addPath",
+                  "vector.setStyle",
+                  "vector.setGradient",
+                  "vector.getAppearance",
+                  "vector.addFill",
+                  "vector.updateFill",
+                  "vector.removeFill",
+                  "vector.moveFill",
+                  "vector.addStroke",
+                  "vector.updateStroke",
+                  "vector.removeStroke",
+                  "vector.moveStroke",
+                  "vector.setBlendMode",
+                  "vector.addFilter",
+                  "vector.updateFilter",
+                  "vector.removeFilter",
+                  "vector.moveFilter",
+                  "vector.makeClippingMask",
+                  "vector.makeOpacityMask",
+                  "vector.setMaskOptions",
+                  "vector.releaseMask",
+                  "vector.listFonts",
+                  "vector.addText",
+                  "vector.getText",
+                  "vector.setText",
+                  "vector.setTextStyle",
+                  "vector.setParagraphStyle",
+                  "vector.setTextFrame",
+                  "vector.setTextOrientation",
+                  "vector.typeOnPath",
+                  "vector.createOutlines",
+                  "vector.listSymbols",
+                  "vector.makeSymbol",
+                  "vector.placeSymbol",
+                  "vector.setInstanceOptions",
+                  "vector.replaceSymbol",
+                  "vector.detachInstance",
+                  "vector.renameSymbol",
+                  "vector.deleteSymbol",
+                  "vector.editSymbol",
+                  "vector.exitSymbolEdit",
+                  "vector.listConstraints",
+                  "vector.addConstraint",
+                  "vector.removeConstraint",
+                  "vector.setConstraintValue",
+                  "vector.autoConstrain",
+                  "vector.listFrames",
+                  "vector.addFrame",
+                  "vector.frameSelection",
+                  "vector.setFrame",
+                  "vector.setResizing",
+                  "vector.exportFrameSvg",
+                  "vector.listPages",
+                  "vector.addPage",
+                  "vector.addMasterPage",
+                  "vector.setPageMaster",
+                  "vector.movePage",
+                  "vector.goToPage",
+                  "vector.listConnectors",
+                  "vector.listConnectionSites",
+                  "vector.connect",
+                  "vector.setConnector",
+                  "vector.getSnapOptions",
+                  "vector.setSnapOptions",
+                  "vector.addPathByDimensions",
+                  "vector.getShading",
+                  "vector.setMeshGradient",
+                  "vector.setMeshPoint",
+                  "vector.setFreeformGradient",
+                  "vector.addFreeformPoint",
+                  "vector.setFreeformPoint",
+                  "vector.removeFreeformPoint",
+                  "vector.setFreeformLines",
+                  "vector.traceImage",
+                  "vector.exportLottie",
+                  "vector.importLottie",
+                  "vector.exportPdf",
+                  "vector.makeSymmetry",
+                  "vector.setSymmetry",
+                  "vector.releaseSymmetry",
+                  "vector.enterSymmetry",
+                  "vector.exitSymmetry",
+                  "vector.listBrushes",
+                  "vector.addBrushstroke",
+                  "vector.setBrushstroke",
+                  "vector.setColorLocked",
+                  "vector.setColorScheme",
+                  "vector.mosaicImage",
+                  "vector.halftoneImage",
+                  "vector.lowPolyImage",
+                  "vector.hatchImage",
+                  "vector.getPerspective",
+                  "vector.setPerspective",
+                  "vector.removePerspective",
+                  "vector.setPerspectivePlane",
+                  "vector.attachToPerspective",
+                  "vector.setLens",
+                  "vector.removeLens",
+                  "vector.setCorners",
+                  "vector.setWidthProfile",
+                  "vector.setWidthPoint",
+                  "vector.outlineStroke",
+                  "vector.distort",
+                  "vector.skew",
+                  "vector.envelope",
+                  "vector.transform",
+                  "vector.delete",
+                  "vector.rename",
+                  "vector.boolean",
+                  "vector.addEffect",
+                  "vector.updateEffect",
+                  "vector.removeEffect",
+                  "vector.expandAppearance",
+                  "vector.blend",
+                  "vector.blendOptions",
+                  "vector.expandBlend",
+                  "vector.releaseBlend",
+                  "vector.replaceSpine",
+                  "vector.pathfinder",
+                  "vector.shapeBuilderFaces",
+                  "vector.shapeBuilder",
+                  "vector.fillRegion",
+                  "vector.align",
+                  "vector.distribute",
+                  "vector.arrange",
+                  "vector.moveLayer",
+                  "vector.group",
+                  "vector.ungroup",
+                  "vector.deleteAnchors",
+                  "vector.moveAnchor",
+                  "vector.bendSegment",
+                  "vector.join",
+                  "vector.average",
+                  "vector.removeRedundantPoints",
+                  "vector.smooth",
+                  "vector.cut",
+                  "vector.knife",
+                  "vector.erase",
+                  "vector.smudgeBrush",
+                  "vector.twirlBrush",
+                  "vector.attractBrush",
+                  "vector.repelBrush",
+                  "vector.roughenBrush",
+                  "vector.setEditing",
+                  "vector.setTool",
+                  "vector.exportSvg",
+                  "vector.importSvg"
+                ]
+              },
+              "params": {
+                "type": "object",
+                "description": "Command parameters."
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Run a command",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "run_commands",
+          "title": "Run several commands",
+          "description": "Runs several commands in order: {steps: [{id, params?}], stopOnError?: true, atomic?: false, label?}. A param string \"$0.id\" or \"$last.id\" is replaced by that path of an earlier step's result, so you can use an id a step created without another round trip. Not atomic by default (each step is its own undo step and steps before a failure stay applied); atomic: true makes the batch one undo step named label and takes everything back if a step fails. Returns {completed, failed, skipped, results: [{id, ok, result | code, message}]}.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 256,
+                "description": "Commands to run in order (at most 256).",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Command id."
+                    },
+                    "params": {
+                      "type": "object",
+                      "description": "Command parameters; strings like \"$0.id\" or \"$last.series[0]\" refer to earlier results."
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "stopOnError": {
+                "type": "boolean",
+                "description": "Stop at the first failing step (default true). Ignored when atomic."
+              },
+              "atomic": {
+                "type": "boolean",
+                "description": "Run every step as one undo step, all or nothing (default false). Needs a registry created with a history."
+              },
+              "label": {
+                "type": "string",
+                "description": "Undo step name for an atomic batch (default \"Run commands\")."
+              }
+            },
+            "required": [
+              "steps"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Run several commands",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "vector-effects",
+      "title": "Vector effects",
+      "skill": "pixerate-vector",
+      "tools": [
+        {
+          "name": "search_effects",
+          "title": "Search effects",
+          "description": "Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera, timing), category, use (filter, transition, generator, overlay, title, motion, interactive, camera, timing) or tags (effects carrying every one), and accepts [\"path\"] for effects that draw along a path you give. For this editor, apply_effect takes uses title or overlay or generator or interactive. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts }] (timing effects, kind timing, retime video footage and have no duration: their length depends on the footage), total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Words to match (default: every effect)."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "shader",
+                  "vector",
+                  "motion",
+                  "camera",
+                  "timing"
+                ],
+                "description": "shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels) or timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own)."
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The provider's category, e.g. \"gradient\", \"light\", \"transition\"."
+              },
+              "use": {
+                "type": "string",
+                "enum": [
+                  "filter",
+                  "transition",
+                  "generator",
+                  "overlay",
+                  "title",
+                  "motion",
+                  "interactive",
+                  "camera",
+                  "timing"
+                ],
+                "description": "What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene's camera, timing retimes video footage."
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Only effects carrying every one of these tags, as search_effects lists them (any case; spaces count as hyphens)."
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "description": "Most effects to return (default 20)."
+              },
+              "accepts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "path"
+                  ],
+                  "description": "path: the effect has a control that draws along a path given at run time."
+                },
+                "description": "Only effects that take every one of these (path: effects that draw along a path you give; describe_effect names the controls in pathControls)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Search effects",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "describe_effect",
+          "title": "Describe an effect",
+          "description": "Returns one effect's controls as a strict JSON Schema (each control described, with its type, range and units), its defaults, presets (named sets of values) and inputs, plus its summary (for a camera move, camera: { role transition or hold, durationMs, cut 0–1 where the view jumps }). Use the control names and ranges for apply_effect and update_effect values. With no provider registered it returns available: false and the reason.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "effect": {
+                "type": "string",
+                "minLength": 1,
+                "description": "An effect id from search_effects or list_applied_effects."
+              }
+            },
+            "required": [
+              "effect"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Describe an effect",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "list_applied_effects",
+          "title": "List applied effects",
+          "description": "Lists the effects in the document: for each group that has any (or the one given), its effects in order with id, effect id, name, role, enabled, opacity and saved values. available is false for an effect the current provider does not have, or that was saved from another provider (reason says which and what to do), or when none is registered: it is kept and drawn as a placeholder, and can still be removed. Works without a provider.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For apply_effect: \"document\" for the top level, or a group id to put the picture in. For update_effect and remove_effect: the effect group's id from list_applied_effects. Leave out to list every group with effects."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List applied effects",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "apply_effect",
+          "title": "Apply an effect",
+          "description": "Adds a provider effect to a group. Only vector effects (kind vector: lower thirds, stickers, loaders, badges) can be added: the effect's SVG at rest becomes a group of editable shapes, fitted into the middle half of the document and selected; move or scale it like any group. Its motion plays in the animation editor (add_vector_effect there). update_effect with effect \"picture\" draws it again with new values; remove_effect keeps the shapes as a plain group. index, enabled and opacity do not apply. values are checked against describe_effect's controls first; nothing changes if any is wrong. One undo step. Returns the effect with its new id (for update_effect and remove_effect) and the group's effects. Refused when no provider is registered.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For apply_effect: \"document\" for the top level, or a group id to put the picture in. For update_effect and remove_effect: the effect group's id from list_applied_effects."
+              },
+              "effect": {
+                "type": "string",
+                "minLength": 1,
+                "description": "An effect id from search_effects (use \"title\" or \"overlay\" or \"generator\" or \"interactive\")."
+              },
+              "values": {
+                "type": "object",
+                "description": "Control values over the effect's defaults: control name → value, as listed by describe_effect (its \"controls\" schema: types, ranges, units and defaults). Only the given controls change; colours are \"#rrggbb\". A number control may instead be keyframes { keys: [{ t: ms from the start, v, ease }] }. Unknown controls and out-of-range values are refused with the valid ones."
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Place in the group's effect stack: 0 is applied first (default: the end, applied last)."
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "false turns the effect off but keeps it (default true)."
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much of the effect shows over its input, 0–1 (default 1)."
+              }
+            },
+            "required": [
+              "target",
+              "effect"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Apply an effect",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "update_effect",
+          "title": "Change an applied effect",
+          "description": "Changes one applied effect on a group: its values (merged over the current ones; null resets a control to its default), enabled, opacity or place in the stack. Values are checked against describe_effect's controls first. One undo step. Returns the effect as it is now and the group's effects. Refused when no provider is registered.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For apply_effect: \"document\" for the top level, or a group id to put the picture in. For update_effect and remove_effect: the effect group's id from list_applied_effects."
+              },
+              "effect": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The effect's id on the group, from list_applied_effects or apply_effect."
+              },
+              "values": {
+                "type": "object",
+                "description": "Control values to change: control name → value, as listed by describe_effect (its \"controls\" schema: types, ranges, units and defaults). Only the given controls change; colours are \"#rrggbb\". A number control may instead be keyframes { keys: [{ t: ms from the start, v, ease }] }. Unknown controls and out-of-range values are refused with the valid ones. null resets a control to its default."
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "false turns the effect off but keeps it (default true)."
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much of the effect shows over its input, 0–1 (default 1)."
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Move it to this place in the group's stack (0 = applied first)."
+              }
+            },
+            "required": [
+              "target",
+              "effect"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Change an applied effect",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_effect",
+          "title": "Remove an applied effect",
+          "description": "Removes one applied effect from a group (an effect the provider no longer has included). One undo step. Returns what was removed and the group's remaining effects. Refused when no provider is registered.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For apply_effect: \"document\" for the top level, or a group id to put the picture in. For update_effect and remove_effect: the effect group's id from list_applied_effects."
+              },
+              "effect": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The effect's id on the group, from list_applied_effects or apply_effect."
+              }
+            },
+            "required": [
+              "target",
+              "effect"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Remove an applied effect",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "vector-generation",
+      "title": "Vector generation",
+      "skill": "pixerate-vector",
+      "tools": [
+        {
+          "name": "list_vector_art_models",
+          "title": "List vector art models",
+          "description": "Lists the models generate_vector_art can use: { models: [{ id, name, media, aspectRatios, seed }] }. Image models give pictures that are traced or stylised; text models write SVG.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List vector art models",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "generate_vector_art",
+          "title": "Generate vector art",
+          "description": "Generates vector art from a text prompt with a model (list_vector_art_models) and adds it as one editable group fitted into a box on the artboard (one undo step). The request is adjusted to what the model supports. Costs money: pass a unique idempotencyKey; a retry with the same key and arguments returns the first result. Returns { id (the group), ids (its paths), model, adjustments }.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What to draw, e.g. \"a flat-style rocket, three colours\"."
+              },
+              "model": {
+                "type": "string",
+                "description": "Model id from list_vector_art_models (default: the first)."
+              },
+              "negativePrompt": {
+                "type": "string",
+                "description": "What to avoid, for models that support it."
+              },
+              "seed": {
+                "type": "integer",
+                "description": "Seed for repeatable results, for models that support it."
+              },
+              "x": {
+                "type": "number",
+                "description": "Left of the box, document units (default: centred)."
+              },
+              "y": {
+                "type": "number",
+                "description": "Top of the box, document units (default: centred)."
+              },
+              "width": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Box width, document units (default 60% of the artboard's smaller side)."
+              },
+              "height": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Box height, document units (default: the width). The art keeps its proportions inside."
+              },
+              "as": {
+                "type": "string",
+                "enum": [
+                  "color",
+                  "threshold",
+                  "mosaic",
+                  "halftone",
+                  "lowPoly",
+                  "hatch"
+                ],
+                "description": "How an image result becomes vectors: color (traced, a path per colour; default), threshold (one colour), or stylised as mosaic, halftone, lowPoly or hatch. Ignored for SVG results."
+              },
+              "colors": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 32,
+                "description": "Palette size when tracing or stylising in colour (default 8)."
+              },
+              "name": {
+                "type": "string",
+                "description": "Group name (default: the start of the prompt)."
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A unique string per request; reuse it only to retry the same request."
+              }
+            },
+            "required": [
+              "prompt",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Generate vector art",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "regenerate_vector_art",
+          "title": "Regenerate vector art",
+          "description": "Generates a generated group's art again (same model and settings, from its provenance) with a new seed (default random) and optionally a new prompt, replacing its paths in place (one undo step). Costs money: pass a unique idempotencyKey. Returns { id, ids, model, adjustments }.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "A group generate_vector_art made."
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A new prompt (default: the one it was made with)."
+              },
+              "seed": {
+                "type": "integer",
+                "description": "Seed (default: a random one)."
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A unique string per request; reuse it only to retry the same request."
+              }
+            },
+            "required": [
+              "id",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Regenerate vector art",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": true
+          }
+        }
+      ]
+    }
+  ]
+}

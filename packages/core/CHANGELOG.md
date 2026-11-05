@@ -1,5 +1,201 @@
 # @pixerate/editor
 
+## 0.270.0
+
+### Minor Changes
+
+- 320fd4d: **History: remove stale steps with `dropSteps`.**
+
+  - `HistoryManager.dropSteps(match)` removes the undo and redo steps `match` picks without running them, for steps whose changes no longer apply (remote content replaced what they change, a layer was reloaded). The other steps keep their order, a gesture merging into a removed step ends, and a mark on a removed step is no longer valid. It reports a `drop` commit event and returns how many steps were removed. Until now, integrators had to skip such steps by hand or reach into private fields.
+  - History entries (`getEntries`, commit events) now carry the step's `tag`.
+  - React `useHistory().dropSteps`, Svelte `createHistory().dropSteps` and Swift `HistoryManager.dropSteps` match.
+
+  **Canvas: gesture undo keeps work done since.**
+
+  - `createCanvasGestureRecorder` undo and redo now put back only the nodes and edges the gesture changed. Before, they restored the whole canvas from before the drag, which removed nodes and edges a collaborator or an agent had added since and undid their moves. A node the gesture changed is replaced only if it is still there (undoing a move does not bring back a node deleted since), and one the gesture added or removed is removed or put back at its index.
+
+## 0.269.2
+
+### Patch Changes
+
+- b1acb12: **Swift vector editor: the controller and its commands (#622).**
+
+  - `VectorEditorController` in `PixerateVector`: the document, selection, tool, editing options and defaults, with one undo step per change on its `HistoryManager`. Transforms (move, scale, rotate, set rotation), skew, Free Distort, align, distribute, arrange, group, ungroup, layer moves, booleans and live booleans, Pathfinder, the Shape Builder, the paint bucket, anchor edits (move, bend, delete keeping the shape), Join, Average, Smooth, Remove Redundant Points, Scissors, Knife, Eraser, the distortion brushes (smudge, twirl, attract, repel, roughen), drawing by dimensions, and SVG export of plain paths and groups.
+  - `createVectorCommands`: all 150 vector commands, with their label, group, keywords, description, params schema and shortcut read from the contract (`commands.json`) and their TS enablement. The commands the controller does not have yet fail with "not ported to Swift yet (#624)".
+  - `VectorConformanceHost` and `VectorConformanceTests`: the `shapes-and-paths`, `arrange-and-transform`, `booleans-and-pathfinder` and `path-editing` scenarios pass; the other ten are skipped (#624).
+  - Live boolean groups now draw and are bounded as their folded operands (`expandVectorAppearance`, `vectorAppearanceShapes`).
+
+  **Core:** `vectorContracts()` now writes each command's own `undoable` and `readOnly` flags, and `params` only for commands that take some. Before, 31 commands that run outside history were listed as undoable, and `vector.list` had an empty params schema.
+
+- ac58b3b: **Swift vector editor: scene render data and SVG (#623).**
+
+  - `getVectorSceneRenderData` / `VectorEditorController.sceneRenderData` in `PixerateVector`: the document-space paths, groups and paint servers the canvases draw, as the TS returns them, for paths and groups, transforms, opacity, blend modes, linear and radial gradients, paint stacks and live booleans.
+  - Paint stacks (`vectorFills`, `vectorStrokes`, `withVectorFills`, `withVectorStrokes`, `normalizeVectorPaintStacks`, `vectorPaintLayerNodes`, the sanitizers) and gradient paint servers (`vectorPaintToSvg`, `vectorGradientSvgDefs`, `sanitizeVectorGradient`).
+  - `vectorDocumentToSvg` now writes gradients (with `data-vector-gradient`), paint stacks (`<g data-vector-path>`), blend modes, filter stacks whose filters draw nothing, and live booleans (drawn shapes plus the hidden source) as the TS does.
+  - SVG import: `parseVectorSvg` and the `vector.importSvg` command (add or replace): shapes, groups, transforms, `viewBox`, presentation attributes, `<style>` rules and `style` declarations, fill and stroke opacity, gradients through `href` chains, clip paths and masks as mask groups, and this editor's own export. Features not ported yet throw "not ported to Swift yet (#624)".
+  - The conformance runner reads the `render` step flag and compares `render()` of the host. The new `svg-round-trip` scenario passes, with the four ported scenarios' render steps; the SVG steps of `import-export` replay on their own.
+  - `String.jsParseFloat` and `String.jsToNumber` in `PixerateCore`: `parseFloat` and `Number` of strings as V8 reads them.
+
+  **Core:** conformance steps take an optional `render: true`: the recorder writes `expect.render` from the host's new optional `render()`, and the replay tests compare it like a result. The vector conformance host renders `getVectorSceneRenderData` of its controller's state. New vector scenario `svg-round-trip`.
+
+## 0.269.1
+
+### Patch Changes
+
+- 5a619e0: The selection and masking skill now tells agents to apply a rough result early and refine it afterwards, and to stop once verification passes.
+
+## 0.269.0
+
+### Minor Changes
+
+- 88bc003: Import the brush packs people already own (#569).
+
+  - `import_brush_pack` agent tool, `importBrushPack(library, bytes, options)`, `readBrushPack` and `importBrushFile` (a `.json` library file or a pack, by name).
+  - Photoshop `.abr` (versions 1, 2, 6, 7 and 10, `readAbr`): sampled tips become image sources and stamp-tip brushes, computed tips round or flat brushes, with preset names and spacing where the file has them.
+  - Procreate `.brush` and `.brushset`: each brush's shape becomes its image tip and its grain its tip grain, with its name and spacing.
+  - Licence and terms files in a pack, and the licence passed in, are kept on every source and returned as `licence`; what isn't mapped (dynamics, pencil curves, patterns, dual brushes, wet settings) is returned as `unsupported`. Packs are read defensively, with size limits.
+  - React and Svelte `BrushPanel` Import… also takes `.abr`, `.brush` and `.brushset` files.
+
+- e7c25db: Add `usePromptEditor` (and alias `createPromptEditor`) to `@pixerate/editor-svelte`: the Svelte 5 counterpart of React's `usePromptEditor`, with the same options, milestones, slash-command keys, plain-text clipboard handling, `loadingIndicator` and echo-safe controlled `content` (#500).
+
+  The prompt editor itself now lives in `@pixerate/editor` (`createPromptEditorOptions`, `syncPromptEditor`, `promptEditorConfigKey`, `promptMilestones`, `resolvePromptTemplateColorMap`, `PromptEditorConfig`), and both framework hooks are thin wrappers over it. React's `usePromptEditor` behaves as before.
+
+## 0.268.2
+
+### Patch Changes
+
+- fcae5ae: Add complete `typesVersions` subpath mappings across `@pixerate/editor`, `@pixerate/editor-react`, and `@pixerate/editor-svelte` for `moduleResolution: "node"` (`node10`) compatibility (#501).
+
+## 0.268.1
+
+### Patch Changes
+
+- f821bc2: `add_adjustment_layer` and `apply_selection_as_mask` now refuse `params` that would be dropped, naming each unknown or mistyped key and listing the accepted shape. An agent that passed `{ "master.gamma": 1.18 }` used to get a Levels layer that changed nothing and no error.
+
+## 0.268.0
+
+### Minor Changes
+
+- 87a74c0: Image brush tips and tip grain, like Procreate's shape and grain sources (#569).
+
+  - Brush image sources: `BrushLibrary.addSource`, `listSources` and `getSource` keep images (a PNG read from its transparency, dark or light parts, stored as a grey mask of at most 512 px with its licence and origin). Library files carry the sources their brushes name. `makeBrushSource`, `readBrushSource`, `decodeBrushSource`, `brushSourceRef`, `addBrushSourceFromFile`, `imageFileToPngDataUrl` and `withBrushSource`.
+  - A stamp tip lays an image source with `tip.stamps: ['source:<id>']` (continuous dabs, sprays and particle dots); its hardness fades it towards its edges. Objects marks still take stickers only.
+  - `tip.grain`: texture inside each dab, a built-in pattern or an image source, `texturised` (fixed to the canvas) or `moving` (rolls with the tip), with `scale`, `depth`, `contrast` and `invert`.
+  - `dynamics.count` (dabs per spacing step) and `dynamics.flip` (random mirroring).
+  - The paint engine's `PaintBrush` gains optional `tipGrain`, `dynamics.count` and `dynamics.flip`; brushes without them resolve as before. Recorded strokes keep the source refs and saved paintings carry the sources (`brushSources`), so replays, time-lapses and high-resolution exports match. `PaintEditorController.brushSources` and `stampArt`; `paintBrushPreviewRenderer(paper, { library })` draws image tips in previews.
+  - Host profiles gain `tipGrain` and `dabCount`: the paint editor paints both; the image editor, canvas and vector strokes paint without them (a warning). `brushEditorSections` adds a Grain section and, for stamp tips, count, scatter, rotation and size jitter and flip, and offers the library's sources.
+  - Agent tools `add_brush_source` and `list_brush_sources`; `create_brush`, `update_brush` and `set_brush` take the new facets, and image sources the library doesn't have are refused with the closest ids.
+  - React and Svelte `BrushEditor`: `sources` and `onAddSource` / `onaddsource`, with "Add image tip…" and "Add grain image…"; `BrushLibraryEditor` and the paint `BrushPanel` store picked images in the library.
+
+## 0.267.0
+
+### Minor Changes
+
+- aeedd05: Add path-node and words controls to `AnimationEffectsPanel` in React and Svelte, plus `AnimationEditorController.setVectorEffectPath` and its `set_vector_effect_path` agent tool in core, so an applied vector effect can be run along a path node (landing on it) or words in place, in one undo step (#496).
+- 3155b37: Canvas and vector get the paint editor's "Keep my colour" lock, and a canvas colour taken from a brush's light / dark default follows the colour scheme (#589).
+
+  - Canvas draw controller: `setColorLocked` / `colorLocked` (and a `colorLocked` option), which `selectBrush` respects; a colour taken from a light / dark default resolves again on `setColorScheme` until another colour is set; `colorScheme` and `brushSettings()`. Agents get `canvas.selectBrush`, `canvas.setColorLocked` and `canvas.setColorScheme` from `createDrawCommands`.
+  - Vector controller: `setColorLocked`, a `colorLocked` option, and `colorScheme` / `colorLocked` in the state; `addBrushstroke` and `setBrushstroke` keep the colour while locked. Strokes already made never change. Agents get `vector.setColorLocked` and `vector.setColorScheme`, and `vector.listBrushes` reports both.
+  - React `useCanvasDraw`: `colorLocked`, `setColorLocked`, `brushSettings` and an `initialColorLocked` option. Svelte `createCanvasDraw`: `colorLocked`, `setColorLocked`, `colorScheme` and `brushSettings`.
+  - `<VectorAppearancePanel>` (React and Svelte) has a "Keep my colour" toggle under brushstrokes.
+
+- 365d86e: **Stickers:** `StickerProvider` takes the optional `collections()` named in #614. `listCollections()` stays as its older name: the conformance checker, `combineStickerProviders`, `StickerBrowser` and `find_stickers` read `collections()` first, then `listCollections()`, through the new `providerCollections(provider)` helper. Combined and fake providers have both. Conformance messages now name `collections()`.
+- de3ed2e: Play `stroke_path` through `PaintDirector` when a director is passed (`{ kind: 'strokes' }`), pacing each subpath with the agent cursor and committing all subpaths as one undo step, `PaintEditorController.group` now accepts an async function (the step stays open, refusing other changes, until it settles; changes after an `await` go through its `within` argument), and add `speed` (`0.01..100` px/ms) to `samplePath` and `stroke_path` (#587).
+- b5b703d: Vector brushstrokes paint with wet, mixer, smudge and blender brushes and with gradient paint (#519). Wet paint (watercolour, gouache, wet oils) runs the wet simulation in the stroke's own area for a fixed number of steps and dries, so the result is the same on every render; the scene shows the paint as laid while it settles in the background (`onVectorBrushstrokesSettled`, `settleVectorBrushstrokes`), and SVG and PDF exports wait for it. The Mixer Brush, smudge and blender act on a CPU backdrop of the fills, strokes and brushstrokes beneath the stroke (`rasterizeVectorBackdrop`), re-rendered when anything beneath changes. Gradient paint is sampled dab by dab along the path: the new `brush.paint` on a brushstroke (`vector.addBrushstroke` / `vector.setBrushstroke` `paint`; `velocity` and `time` mappings are refused), a gradient layer paint laid along, across or within the stroke, or a brush's own gradient. `VECTOR_PROFILE` now admits wet surfaces, the Mixer Brush reservoir and the blender and smudge tools.
+
+  Swift: `VECTOR_PROFILE` matches (wet surfaces, the reservoir, blender and smudge tools).
+
+### Patch Changes
+
+- f6b0b95: Update image, paint, and vector agent skills documentation for 16/32-bit colour management, PSD export colour modes and bit depths, painterly PSD blend modes, wet-media tile and cross-origin isolation limits, and vector brushstrokes (#523). The image editor's `export_psd` tool description no longer says it writes only RGB: it names the CMYK / Lab modes, their 8 / 16-bit limit and how pigment and painterly blends are written.
+
+## 0.266.2
+
+### Patch Changes
+
+- b2acbe5: **Conformance:** `conformanceValuesMatch` and `CONFORMANCE_NUMBER_TOLERANCE` compare recorded scenario values as the Swift runner does, with numbers equal within a relative 1e-9. Maths functions can differ in their last bits between CPUs. Also adds the vector conformance scenarios (#620).
+
+## 0.266.1
+
+### Patch Changes
+
+- 69c6c8e: The paint editor's `BUILTIN_BRUSHES` is now derived from the facet presets (`BRUSH_PRESETS`) instead of a hand-written copy, so a built-in brush is defined once. The brushes, their order, ids and categories are unchanged.
+
+## 0.266.0
+
+### Minor Changes
+
+- 4df5a1a: **Vector:** the vector editor's contracts are now exported to `@pixerate/conformance` (`domains/vector`), the first step of its Swift port (#619). They cover:
+
+  - **Commands:** all 148 commands with their params schemas.
+  - **Tools:** the command, effect and generation tools.
+  - **UI tables:** the tool bar, menus, control specs and labels.
+  - **Documents:** a JSON Schema of a saved drawing.
+
+  New exports:
+
+  - **`vectorContracts()`:** the contract files.
+  - **`createVectorConformanceHost()`:** an editor for replaying recorded scenarios, with counter node ids and the metric text shaper.
+  - **`FAKE_VECTOR_ART_MODELS` / `fakeVectorArtGenerator`:** offline generation for contracts and tests.
+
+## 0.265.0
+
+### Minor Changes
+
+- f0f8598: Brush previews read on what they are drawn on.
+
+  - `brushPreviewColours(brush, { paper, profile })` gives a preview's background and a stroke colour with at least 3:1 contrast against it: the brush's default for that background (a light / dark pair takes its side), else a colour for the medium. `brushPreviewsOnDark`: light paint previews on dark paper, but a multiply highlighter previews on its paper.
+  - `BrushPreviewRenderer` can say what it draws on (`paper`; `paintBrushPreviewRenderer` does). Canvas brush swatches take a `background` and colour each brush for it.
+  - `BrushLibraryEditor` takes `previewPaper` (the box behind transparent previews) and chooses its preview colour with `brushPreviewColours`; `previewColor` is now only an override. `BrushEditor` takes `previewBackground`. Paint `BrushPanel` thumbnails colour each brush for the paper.
+  - The ballpoint, gel pen and fineliner defaults are light / dark pairs, so they stay visible in dark-scheme editors.
+
+## 0.264.1
+
+### Patch Changes
+
+- c4ecc8d: **Paint editor (TypeScript core and Swift):**
+
+  - **`set_effect_playback` keeps the setting a call leaves out.** `{ playing: false }` keeps the frame rate, and `{ fps: 12 }` keeps the play state. Before, the setting left out was unset (#602).
+  - **`export_high_res` works on paintings with stroke-mapped effect paint.** The replay now renders the effect paint the scaled strokes ask for, so a 2× export no longer fails with "is not rendered at this canvas size" (#603).
+
+## 0.264.0
+
+### Minor Changes
+
+- ea91a07: One brush editor for every editor that paints, scoped to what each host can use.
+
+  - `BrushEditor` moved to `@pixerate/editor-react/brushes` and `@pixerate/editor-svelte/brushes` (still exported from `paint-editor`). It takes a brush, a host profile, a preview (pixels or an image URL) and `onSave` / `onSaveAs`, and names what the brush has that the host can't use.
+  - New `BrushLibraryEditor` on a brush library: edits a saved brush in place, saves built-ins as a copy, and starts new brushes for the host.
+  - `brushEditorSections` now lists only the sections, controls and options a host profile uses (no velocity on canvas, no grain or pick-up in the image editor, no engine controls for an engine the host lacks).
+  - Core: `brushEditorScope`, `checkBrushEdit`, `withKeptIssues`, `newBrushFor`, `saveBrushEdit`, `brushIdFromName`, `isBrushLibrary`, `degrade(…, { ignored })`, `paintBrushPreviewRenderer`, and vector `brushLibrary` / `refreshBrushes`.
+  - `update_brush` keeps facets the host can't use that the brush already had (returned as `kept`) and refuses only changes that add them.
+  - `vector.setBrushstroke` / `setBrushstroke` with the same `brushId` takes the saved brush as the library has it now.
+  - "Edit brush…" in the image `BrushOptionsBar`, and a library picker plus "Edit brush…" on vector brushstrokes in `VectorAppearancePanel`. Their previews come from a new `brushPreview` option on the image and vector controllers (or a `renderBrushPreview` prop).
+
+## 0.263.0
+
+### Minor Changes
+
+- af0e180: Sticker provider contract additions (#488):
+
+  - **AI-generated art.** `StickerSummary.aiGenerated?: boolean`; `checkStickerProvider` rejects a value that isn't a boolean. `find_stickers` and `describe_sticker` return it, and the React and Svelte `StickerLibraryPicker` label such art "AI".
+  - **Light / dark variants.** `StickerSummary.variants?: ("light" | "dark")[]` (always with `light`) and `load(id, { variant })`, defaulting to `light`. A variant the sticker lacks is refused with an `unsupported_variant` `StickerError` that names the ones it has (`checkStickerVariant` does it for providers). The old, unused `StickerDescription.variants` (`{ id, name }[]`) is replaced by this field. `insert_sticker` takes `variant` and otherwise uses the dark art when the host's background is dark (`dark` option on `createVectorStickerHost`, `createImageStickerHost` and `createCanvasStickerHost`), and returns the variant used. The paint editor's sticker brush sprays dark variants on a dark colour scheme, and each sticker keeps the variant it was drawn in (`Sticker.variant`).
+  - **Collections.** `StickerSummary.collection`, `StickerSearchOptions.collection` and an optional `listCollections()`. `combineStickerProviders` namespaces collection ids as `provider:collection`. `find_stickers` filters by `collection` and returns the collections, the `StickerBrowser` has `setCollection`, and the pickers show a collection filter.
+  - The fake provider has AI-generated stickers, dark variants and collections to test against.
+  - Swift: `find_stickers` takes `collection` (from the regenerated contract) and refuses it, as the editor's own stickers are in no collection.
+
+## 0.262.1
+
+### Patch Changes
+
+- 9347e94: **Swift:** Metal now shades the display of large wet areas (#604). With `set_wet_engine` `auto` (the default) and at least `minTiles` live tiles (16), `WetMetalEngine` shades every stale wet tile in one command buffer. It reads the CPU engine's tiles in place on shared memory, so nothing is uploaded. A fully wet 2048² canvas shades in 10 ms instead of 119 ms on an M4 Pro.
+
+  - **Results are unchanged.** The CPU engine stays the authority, so drying, saving, export and replay are byte-identical with the GPU on or off. The display stays within 1/255 of the CPU's.
+  - **Engine reports:** `set_wet_engine` and `get_wet_paint` now report the engine's real state (`not-started`, `standby`, `active`, `unavailable`, `failed`, `off`) and the GPU's name.
+  - **Shader source:** the kernel is the core's `WGSL_SHADE`, translated to Metal by `pnpm gen:msl` (naga).
+
+  **Core:** the `set_wet_engine` and `get_wet_paint` descriptions now say that Engine B is WebGPU in browsers and Metal in the Swift editors.
+
 ## 0.262.0
 
 ### Minor Changes

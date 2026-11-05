@@ -16,6 +16,8 @@ public typealias Brush = JSONObject
 private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker"]
 /// Engines that pick up and mix paint dab by dab (the exchange ratios apply).
 private let EXCHANGE = ["dab", "wet", "impasto"]
+/// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
+private let DABS = ["dab", "eraser", "mixer", "blender", "smudge"]
 
 /// One facet field and the engine field it sets.
 struct BrushField: Sendable {
@@ -74,6 +76,9 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("dynamics.pressureSmoothing", "pressureSmoothing"))
     out.append(f("dynamics.rotation", "rotation"))
     out += each("dynamics", "dynamics", ["minSize", "pressureFlow", "tiltSize", "tiltRoundness", "tiltOpacity", "velocitySize", "velocityOpacity", "sizeJitter", "angleJitter", "opacityJitter", "scatter"])
+    out.append(f("dynamics.count", "dynamics.count", DABS))
+    out.append(f("dynamics.flip", "dynamics.flip", DABS))
+    out.append(f("tip.grain", "tipGrain", DABS))
     out.append(f("behaviour.grain", "grain"))
     out += each("light", "light", ["amount", "pressure"])
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))

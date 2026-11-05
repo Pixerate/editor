@@ -338,3 +338,108 @@ describe("SpreadsheetController history byte cap", () => {
     expect(sheet.getHistoryByteSize()).toBeGreaterThan(0);
   });
 });
+
+describe("HistoryManager dropSteps", () => {
+  /** A list document whose commands append a letter, tagged by its kind. */
+  function letters() {
+    const doc: string[] = [];
+    const add = (letter: string, tag: string): Command => ({
+      name: `Add ${letter}`,
+      tag,
+      execute: () => {
+        doc.push(letter);
+      },
+      undo: () => {
+        doc.splice(doc.lastIndexOf(letter), 1);
+      },
+    });
+    return { doc, add, history: new HistoryManager() };
+  }
+
+  it("removes matching undo and redo steps without running them, keeping the others in order", () => {
+    const { doc, add, history } = letters();
+    history.execute(add("a", "paint"));
+    history.execute(add("b", "node"));
+    history.execute(add("c", "paint"));
+    history.execute(add("d", "node"));
+    history.undo();
+    expect(doc).toEqual(["a", "b", "c"]);
+
+    const removed = history.dropSteps((step) => step.tag === "paint");
+    expect(removed).toBe(2);
+    // Nothing was undone or redone by the drop itself.
+    expect(doc).toEqual(["a", "b", "c"]);
+    expect(history.getEntries().map((e) => [e.label, e.tag, e.undone])).toEqual([
+      ["Add b", "node", false],
+      ["Add d", "node", true],
+    ]);
+
+    history.redo();
+    expect(doc).toEqual(["a", "b", "c", "d"]);
+    history.undo();
+    history.undo();
+    expect(doc).toEqual(["a", "c"]);
+    expect(history.getState().canUndo).toBe(false);
+  });
+
+  it("returns 0 and changes nothing when no step matches", () => {
+    const { add, history } = letters();
+    history.execute(add("a", "node"));
+    const revision = history.getRevision();
+    const listener = vi.fn();
+    history.onCommit(listener);
+    expect(history.dropSteps(() => false)).toBe(0);
+    expect(history.getRevision()).toBe(revision);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("reports a drop, updates the state and ends a gesture merging into a removed step", () => {
+    const { add, history } = letters();
+    const states: number[] = [];
+    history.subscribe((s) => states.push(s.undoCount));
+    const kinds: string[] = [];
+    history.onCommit((e) => kinds.push(e.kind));
+
+    history.executeMerged(add("a", "paint"), { key: "drag" });
+    history.dropSteps((step) => step.tag === "paint");
+    expect(kinds).toEqual(["execute", "drop"]);
+    expect(states.at(-1)).toBe(0);
+
+    // The next merged execute under the same key starts a new step, not a removed one.
+    history.executeMerged(add("b", "paint"), { key: "drag" });
+    expect(history.getState().undoCount).toBe(1);
+  });
+
+  it("invalidates a mark whose step was removed", () => {
+    const { add, history } = letters();
+    history.execute(add("a", "paint"));
+    const mark = history.mark();
+    history.execute(add("b", "node"));
+    history.dropSteps((step) => step.tag === "paint");
+    expect(history.isMarkValid(mark)).toBe(false);
+    expect(history.revertTo(mark)).toBe(0);
+  });
+
+  it("does nothing inside a batch or while a step is applied", () => {
+    const { add, history } = letters();
+    history.execute(add("a", "paint"));
+    let inBatch = -1;
+    history.batch("Batch", () => {
+      history.execute(add("b", "node"));
+      inBatch = history.dropSteps(() => true);
+    });
+    expect(inBatch).toBe(0);
+
+    let whileApplying = -1;
+    history.execute({
+      name: "Probe",
+      execute: () => {},
+      undo: () => {
+        whileApplying = history.dropSteps(() => true);
+      },
+    });
+    history.undo();
+    expect(whileApplying).toBe(0);
+    expect(history.getEntries()).toHaveLength(3);
+  });
+});

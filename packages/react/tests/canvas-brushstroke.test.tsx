@@ -86,6 +86,45 @@ describe('brushed freehand strokes (react)', () => {
 		expect(ref.draw!.style).toMatchObject({ brush: 'ballpoint', color: '#f8fafc' });
 	});
 
+	it('a colour taken from a light / dark default follows the colorScheme prop; colorLocked keeps the colour', async () => {
+		const ref: { draw: CanvasDraw | null; setScheme: ((s: 'light' | 'dark') => void) | null } = { draw: null, setScheme: null };
+		function Test() {
+			const [nodes, setNodes] = useState<CanvasNode[]>([]);
+			const [scheme, setScheme] = useState<'light' | 'dark'>('dark');
+			ref.setScheme = setScheme;
+			ref.draw = useCanvasDraw({ nodes, setNodes, initialTool: 'pen', colorScheme: scheme });
+			return null;
+		}
+		await act(async () => root.render(<Test />));
+		await act(async () => void (await ref.draw!.selectBrush('chalk')));
+		expect(ref.draw!.style.color).toBe('#f8fafc');
+		await act(async () => ref.setScheme!('light'));
+		expect(ref.draw!.style.color).toBe('#475569');
+		expect(ref.draw!.brushSettings()).toMatchObject({ brush: 'chalk', colorScheme: 'light', colorFollowsScheme: true });
+		expect(ref.draw!.colorLocked).toBe(false);
+		await act(async () => ref.draw!.setColorLocked(true));
+		expect(ref.draw!.colorLocked).toBe(true);
+		await act(async () => ref.draw!.setStyle({ color: '#16a34a' }));
+		await act(async () => void (await ref.draw!.selectBrush('ballpoint')));
+		expect(ref.draw!.style).toMatchObject({ brush: 'ballpoint', color: '#16a34a' });
+		await act(async () => ref.setScheme!('dark'));
+		expect(ref.draw!.style.color).toBe('#16a34a');
+	});
+
+	it('starts locked with initialColorLocked', async () => {
+		const ref: { draw: CanvasDraw | null } = { draw: null };
+		function Test() {
+			const [nodes, setNodes] = useState<CanvasNode[]>([]);
+			ref.draw = useCanvasDraw({ nodes, setNodes, initialTool: 'pen', initialColorLocked: true });
+			return null;
+		}
+		await act(async () => root.render(<Test />));
+		expect(ref.draw!.colorLocked).toBe(true);
+		const before = ref.draw!.style.color;
+		await act(async () => void (await ref.draw!.selectBrush('chalk')));
+		expect(ref.draw!.style.color).toBe(before);
+	});
+
 	it('exposes nodeBounds, so gesture commands can circle a node by id', async () => {
 		const card: CanvasNode = { id: 'card', position: { x: 100, y: 80 }, width: 160, height: 40, data: {} };
 		const ref: { draw: CanvasDraw | null; nodes: CanvasNode[] } = { draw: null, nodes: [] };

@@ -25,6 +25,8 @@ export interface SvelteHistory extends HistoryState {
   mark(): HistoryMark;
   /** Takes back every step since `mark` without leaving redo (Escape-cancel). */
   revertTo(mark: HistoryMark): number;
+  /** Removes the steps `match` picks without running them (stale steps). */
+  dropSteps(match: (step: HistoryEntry) => boolean): number;
   /** Joins every merged execute into one step until `endGesture`. */
   beginGesture(key: string): void;
   endGesture(): void;
@@ -85,6 +87,7 @@ export function createHistory(
     goTo: (index: number) => manager.goTo(index),
     mark: () => manager.mark(),
     revertTo: (m: HistoryMark) => manager.revertTo(m),
+    dropSteps: (match: (step: HistoryEntry) => boolean) => manager.dropSteps(match),
     beginGesture: (key: string) => manager.beginGesture(key),
     endGesture: () => manager.endGesture(),
     subscribe: (run: (value: HistoryState) => void) => manager.subscribe(run),

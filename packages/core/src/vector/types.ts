@@ -1,5 +1,6 @@
 import type { GenerationProvenance } from '../generation/provenance.js';
 import type { CanvasGradientDef } from '../canvas/gradient.js';
+import type { CanvasBrushPaint } from '../canvas/brushTypes.js';
 import type { WarpMesh, WarpStyle } from '../geom/types.js';
 import type { GrainPattern } from '../paint/grain.js';
 import type { Brush } from '../brushes/types.js';
@@ -357,7 +358,21 @@ export interface VectorBrushstroke {
 	seed?: number;
 	/** The paper the grain comes from (with `seed`); `null` for no grain. */
 	paper?: VectorBrushstrokePaper | null;
+	/**
+	 * Gradient paint sampled dab by dab along the path, instead of the layer's colour (which still
+	 * gives the alpha and fills `paint` stops): by distance travelled (document units), pressure,
+	 * tilt, direction, across the tip or at random. Without it, a gradient layer paint is laid
+	 * along, across or within the stroke (its `strokeMode`), and a brush with its own gradient
+	 * paints that.
+	 */
+	paint?: VectorBrushstrokePaint;
 }
+
+/**
+ * A brushstroke's gradient paint (the paint engine's `PaintSource`, as canvas brushed strokes take
+ * it: `CanvasBrushPaint`). The `velocity` and `time` mappings are not allowed: paths have no timing.
+ */
+export type VectorBrushstrokePaint = CanvasBrushPaint;
 
 /** One stroke of a path's stroke stack (`VectorStyle.strokes`): a paint plus its own stroke settings. */
 export interface VectorStrokeLayer extends VectorPaintLayer, VectorStrokeSettings {

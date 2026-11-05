@@ -1,3 +1,4 @@
+import { providerCollections } from './helpers';
 import type { StickerProvider, StickerSummary } from './types';
 
 export interface StickerConformanceIssue {
@@ -29,12 +30,20 @@ function checkSummary(s: StickerSummary, provider: StickerProvider, issues: Stic
   if (typeof s.licence?.commercial !== 'boolean') at('licence.commercial is not a boolean');
   if (typeof s.tintable !== 'boolean') at('tintable is not a boolean');
   if (s.thumbnail !== undefined && !/^(data:|https:)/.test(s.thumbnail)) at('thumbnail must be a data: or https: URL');
+  if (s.aiGenerated !== undefined && typeof s.aiGenerated !== 'boolean') at('aiGenerated must be a boolean when present');
+  if (s.variants !== undefined) {
+    const v = s.variants as unknown;
+    if (!Array.isArray(v) || v.some((x) => x !== 'light' && x !== 'dark') || new Set(v).size !== v.length) at('variants must list light and / or dark, each once');
+    else if (!v.includes('light')) at('variants must include light (every sticker has its light art)');
+  }
+  if (s.collection !== undefined && (typeof s.collection !== 'string' || !s.collection)) at('collection must be a non-empty string when present');
+  if (s.collection !== undefined && !provider.collections && !provider.listCollections) at(`is in collection "${s.collection}" but the provider has no collections()`);
 }
 
 /**
  * Checks a sticker provider against the contract: capabilities, every listed sticker (walking the
  * pages), search and list agreeing, paging limits, describe and load for known and unknown ids,
- * and tinting. Returns the problems found (empty when it conforms).
+ * collections, light / dark variants and tinting. Returns the problems found (empty when it conforms).
  */
 export async function checkStickerProvider(provider: StickerProvider, options: StickerConformanceOptions = {}): Promise<StickerConformanceIssue[]> {
   const issues: StickerConformanceIssue[] = [];
@@ -94,6 +103,26 @@ export async function checkStickerProvider(provider: StickerProvider, options: S
     if (d?.colours?.some((c) => !HEX.test(c))) top(`describe("${first.id}").colours must be #rrggbb`);
   }
   if ((await provider.describe('__no_such_sticker__')) !== undefined) top('describe of an unknown id returned a sticker');
+  if (provider.collections || provider.listCollections) {
+    try {
+      const collections = (await providerCollections(provider)) ?? [];
+      const known = new Set<string>();
+      for (const c of collections) {
+        if (typeof c?.id !== 'string' || !c.id || typeof c.name !== 'string' || !c.name || !(Number.isInteger(c.count) && c.count >= 0)) {
+          top(`collections() returned ${JSON.stringify(c)}; each needs id, name and a count`);
+          continue;
+        }
+        if (known.has(c.id)) top(`collections() lists "${c.id}" twice`);
+        known.add(c.id);
+        const page = await provider.list({ collection: c.id, limit: 100 });
+        if (page.total !== c.count) top(`collection "${c.id}" says count ${c.count} but list({ collection }) has ${page.total}`);
+        if (page.items.some((x) => x.collection !== c.id)) top(`list({ collection: "${c.id}" }) returned stickers of other collections`);
+      }
+      for (const x of all) if (x.collection !== undefined && !known.has(x.collection)) issues.push({ stickerId: x.id, message: `collection "${x.collection}" is not in collections()` });
+    } catch (e) {
+      top(`collections() rejected: ${(e as Error).message}`);
+    }
+  }
   let rejected = false;
   try {
     await provider.load('__no_such_sticker__');
@@ -112,6 +141,24 @@ export async function checkStickerProvider(provider: StickerProvider, options: S
         issues.push({ stickerId: s.id, message: `load({ format: "${format}" }) rejected: ${(e as Error).message}` });
       }
     }
+  }
+  const dark = all.find((s) => s.variants?.includes('dark'));
+  if (dark) {
+    try {
+      await provider.load(dark.id, { format: dark.formats[0], variant: 'dark', size: 32 });
+    } catch (e) {
+      issues.push({ stickerId: dark.id, message: `load({ variant: "dark" }) rejected for a sticker that lists it: ${(e as Error).message}` });
+    }
+  }
+  const lightOnly = all.find((s) => !s.variants?.includes('dark'));
+  if (lightOnly) {
+    let refused = false;
+    try {
+      await provider.load(lightOnly.id, { format: lightOnly.formats[0], variant: 'dark', size: 32 });
+    } catch {
+      refused = true;
+    }
+    if (!refused) issues.push({ stickerId: lightOnly.id, message: 'load({ variant: "dark" }) did not reject for a sticker without a dark variant (checkStickerVariant does it)' });
   }
   const tintable = all.find((s) => s.tintable);
   if (tintable) {

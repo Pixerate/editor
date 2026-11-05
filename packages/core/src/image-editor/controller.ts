@@ -387,6 +387,7 @@ import { applyMatrix, multiplyMatrices, rotateMatrix, translateMatrix } from '..
 import type { EffectPattern } from '../raster/effects/patterns';
 import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
 import { closest, createBrushLibrary, type BrushLibrary, type BrushLibraryEntry } from '../brushes/library';
+import type { BrushPreviewRenderer } from '../brushes/tools';
 import { IMAGE_PROFILE } from '../brushes/profiles';
 import { imageBrushPreset, type ImageBrushPreset } from './brush-presets';
 
@@ -1604,6 +1605,7 @@ export class ImageEditorController {
 
   constructor(options: ImageEditorOptions = {}) {
     this.brushLibrary = options.brushLibrary ?? createBrushLibrary();
+    this.brushPreview = options.brushPreview ?? null;
     // A new provider redraws every effect filter (after construction, for one given here); a
     // finished render redraws the surfaces waiting for it.
     this.effects.subscribe(() => this.queueEffectRefresh('all'));
@@ -4709,6 +4711,8 @@ export class ImageEditorController {
 
   /** The brush library the brush presets come from (shared with other editors when the host passes one). */
   public readonly brushLibrary: BrushLibrary;
+  /** The `brushPreview` option: draws the brush editor's preview stroke, or `null`. */
+  public readonly brushPreview: BrushPreviewRenderer | null;
 
   /** The brushes this editor can paint with (`IMAGE_PROFILE`): built-in presets, then saved brushes. */
   public async listBrushPresets(): Promise<BrushLibraryEntry[]> {
@@ -8492,7 +8496,7 @@ export class ImageEditorController {
   }
 
   /**
-   * The document as an RGB PSD at its bit depth (8, 16 or 32) (PSB above 30 000 px) with real layers, groups, adjustment
+   * The document as a PSD in its colour mode (RGB, CMYK or Lab) at its bit depth (PSB above 30 000 px) with real layers, groups, adjustment
    * layers and masks, in the source frame. Layer filters and parametric (depth) masks are baked
    * into pixels and masks, annotation layers are rasterized (in a browser; elsewhere they are left
    * out), and the merged image is our composite. `warnings` lists every such change.

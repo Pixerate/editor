@@ -144,6 +144,8 @@ struct PenDab {
     var time: Double?
     var lean: Double
     var speed: Double?
+    /// Mirrored across the tip's x axis (bit 1) and y axis (bit 2), from `dynamics.flip`; 0: not mirrored.
+    var flip = 0
 
     var params: PaintDabParams { PaintDabParams(travel: travel, index: index, pressure: pressure, lean: lean, speed: speed, direction: direction, time: time) }
 }
@@ -153,6 +155,8 @@ private enum Stream {
     static let angle = 2
     static let opacity = 3
     static let scatter = 4
+    static let flipX = 5
+    static let flipY = 6
 }
 
 private struct Sample {
@@ -254,8 +258,13 @@ final class PenDabWalker {
             x += JS.sin(dir) * off
             y += JS.cos(dir) * off
         }
+        var flip = 0
+        if let f = dyn.flip, f != "none" {
+            if f != "y" && PixerateRandom.rand01(seed, i, Stream.flipX) < 0.5 { flip |= 1 }
+            if f != "x" && PixerateRandom.rand01(seed, i, Stream.flipY) < 0.5 { flip |= 2 }
+        }
         let d = Dab(x: x, y: y, radius: Swift.max(0.5, diameter / 2), alpha: Swift.min(1, Swift.max(0, flow)), opacity: Swift.min(1, Swift.max(0, opacity)), angle: angle, roundness: Swift.min(1, Swift.max(0.01, tip.roundness * (1 - dyn.tiltRoundness * s.lean * 0.8))))
-        return PenDab(dab: d, pressure: s.pressure, direction: dir, index: i, travel: s.travel, time: s.time, lean: s.lean, speed: s.speed)
+        return PenDab(dab: d, pressure: s.pressure, direction: dir, index: i, travel: s.travel, time: s.time, lean: s.lean, speed: s.speed, flip: flip)
     }
 
     func push(_ p: PenPoint, _ out: inout [PenDab]) {
@@ -272,7 +281,7 @@ final class PenDabWalker {
         let len = JS.hypot(dx, dy)
         if len > 1e-9 { dir = JS.atan2(-dy, dx) }
         if let pf = pendingFirst {
-            out.append(dab(pf))
+            lay(pf, &out)
             pendingFirst = nil
         }
         if len > 1e-9 {
@@ -290,7 +299,7 @@ final class PenDabWalker {
                     travel: a.travel + nextAt,
                     time: a.time != nil && s.time != nil ? lerp(a.time!, s.time!) : s.time
                 )
-                out.append(dab(q))
+                lay(q, &out)
                 nextAt += stepLen(q)
             }
             nextAt -= len
@@ -300,9 +309,14 @@ final class PenDabWalker {
 
     func finish(_ out: inout [PenDab]) {
         if let pf = pendingFirst {
-            out.append(dab(pf))
+            lay(pf, &out)
             pendingFirst = nil
         }
+    }
+
+    /// The dabs of one spacing step: `dynamics.count` of them, each with its own index and so its own jitter.
+    private func lay(_ s: Sample, _ out: inout [PenDab]) {
+        for _ in 0..<(brush.dynamics.count ?? 1) { out.append(dab(s)) }
     }
 }
 
@@ -344,7 +358,7 @@ func sprayDroplets(_ d: PenDab, _ spray: SpraySettings, _ seed: Int) -> [PenDab]
     return out
 }
 
-/// Refuses brushes whose marks this port does not draw yet (stamp tips need the sticker art).
+/// Refuses brushes whose marks this port does not draw yet (provider stickers have no art here).
 struct UnportedBrushError: Error, LocalizedError {
     let message: String
     var errorDescription: String? { message }
@@ -370,10 +384,17 @@ final class DryStroke {
     /// Effect paint: each pixel's colour (and alpha) from these pixels.
     private let effect: EffectPaintPixels?
     private var field: [Float] = []
+    /// The stamp tip's shape, or nil for the round computed tip.
+    private let stamp: StampSampler?
+    /// The tip's own grain, or nil.
+    private let tipGrain: TipGrain?
 
-    init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], effect: EffectPaintPixels? = nil) {
+    /// `stampArt`: the art of image sources (stamp tips and tip grain); without it such a tip paints round, and the grain is left out.
+    init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], effect: EffectPaintPixels? = nil, stampArt: StampArtLookup? = nil) {
         self.brush = brush
         self.effect = effect
+        stamp = brush.stamp.flatMap { stampSampler($0, stampArt, brush.tip.hardness) }
+        tipGrain = TipGrain.create(brush.tipGrain, stampArt)
         self.grain = grain
         self.seed = seed
         smoother = PenSmoother(brush.tip.smoothing, brush.pressureSmoothing)
@@ -419,13 +440,15 @@ final class DryStroke {
         return rects
     }
 
-    /// Lays one mark (a dab, or a spray droplet of dab `d`): the round tip and the paper grain.
+    /// Lays one mark (a dab, or a spray droplet of dab `d`): the round tip or the stamp, the tip grain, the paper grain, effect paint.
     private func mark(_ m: Dab, _ d: PenDab, _ rects: inout [RasterRect]) {
         let hardness = brush.tip.hardness
-        let rect = dabRect(m, hardness)
+        let rect = stamp != nil ? stampDabRect(m) : dabRect(m, hardness)
         let n = rect.width * rect.height
         if buf.count < n { buf = [Float](repeating: 0, count: n) }
-        rasterizeDab(m, hardness, rect, &buf)
+        if let stamp { rasterizeStampDab(m, d.flip, stamp, d.index, rect, &buf) } else { rasterizeDab(m, hardness, rect, &buf) }
+        // The tip's grain turns with the mark (a spray droplet's own angle) and rolls with the dab's travel.
+        tipGrain?.apply(&buf, rect, x: m.x, y: m.y, angle: m.angle, travel: d.travel)
         if depth > 0, let grain {
             var k = 0
             for yy in 0..<rect.height {

@@ -1,9 +1,9 @@
 <script lang="ts">
   import StickerPicker from './StickerPicker.svelte';
   import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-  import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+  import { addBrushSourceFromFile, importBrushFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
-  import BrushEditor from './BrushEditor.svelte';
+  import BrushEditor from '../brushes/BrushEditor.svelte';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
   import PaintGradientEditor from './PaintGradientEditor.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
@@ -28,7 +28,7 @@
   const thumbs = $derived.by(() => {
     const list = library;
     void paper;
-    return untrack(() => new Map(list.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: '#26324a' })])));
+    return untrack(() => new Map(list.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: brushPreviewColours(controller.getBrushSpec(b.id)!, { paper: controller.getState().document.paper.color }).color })])));
   });
   const entries = $derived.by<BrushLibraryEntry[]>(() => {
     const list = library;
@@ -38,6 +38,11 @@
   const spec = $derived.by<Brush>(() => {
     void brush;
     return untrack(() => controller.getBrushSpec()!);
+  });
+  // The image sources the editor paints with, read again after every change (sources added to the library).
+  const sources = $derived.by(() => {
+    void snap;
+    return untrack(() => controller.brushSources.all());
   });
   // Previewed in the brush's own default colour when it has one, else the paint colour.
   const own = $derived(typeof spec.colour?.default === 'string' && /^#[0-9a-f]{6}/i.test(spec.colour.default) ? spec.colour.default.slice(0, 7) : undefined);
@@ -92,24 +97,33 @@
   {/if}
 {/snippet}
 
-<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. -->
+<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. Images picked for an image tip or grain go into the brush library as sources; Import also reads brush packs (.abr, .brush, .brushset). -->
 <div class={`${panel} ${className}`} data-testid="brush-panel">
   <BrushLibraryBrowser {entries} activeId={brush.id} onselect={(id) => controller.setBrush({ id })} thumbnail={(id) => thumbs.get(id) ?? null} {thumbnailWidth} {thumbnailHeight} />
-  <BrushEditor brush={spec} profile={PAINT_PROFILE} {preview} onchange={(next) => run(() => controller.setBrushSpec(next))} onsaveas={(name) => controller.saveBrush({ id: slug(name), name })} {extra} />
+  <BrushEditor
+    brush={spec}
+    profile={PAINT_PROFILE}
+    {preview}
+    onchange={(next) => run(() => controller.setBrushSpec(next))}
+    onsaveas={(name) => controller.saveBrush({ id: slug(name), name })}
+    sources={sources}
+    onaddsource={async (file) => (await addBrushSourceFromFile(controller.brushLibrary, file)).ref}
+    {extra}
+  />
   <div class="flex flex-wrap items-center gap-1">
     <button type="button" class={button} onclick={() => run(async () => downloadBytes(JSON.stringify(await controller.exportBrushes(), null, 2), 'brushes.json', 'application/json'))}>Export</button>
     <button type="button" class={button} onclick={() => fileInput?.click()}>Import…</button>
     <input
       bind:this={fileInput}
       type="file"
-      accept=".json,application/json"
+      accept=".json,.abr,.brush,.brushset,application/json"
       aria-label="Import brushes"
       class="hidden"
       onchange={(e) => {
         const input = e.currentTarget;
         const f = input.files?.[0];
         input.value = '';
-        if (f) run(async () => controller.importBrushes(JSON.parse(await f.text())));
+        if (f) run(async () => (/\.json$/i.test(f.name) ? controller.importBrushes(JSON.parse(await f.text())) : importBrushFile(controller.brushLibrary, f)));
       }}
     />
   </div>

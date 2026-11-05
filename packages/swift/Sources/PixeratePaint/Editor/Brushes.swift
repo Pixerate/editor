@@ -175,9 +175,16 @@ public struct BrushDynamics: Equatable, Sendable {
     public var angleJitter: Double
     public var opacityJitter: Double
     public var scatter: Double
+    /// Dabs laid at each spacing step, 2..16, each with its own jitter (nil: one).
+    public var count: Int? = nil
+    /// Mirror each dab at random across `x`, `y` or both (nil: none).
+    public var flip: String? = nil
 
     var json: JSONValue {
-        ["minSize": .number(minSize), "pressureFlow": .number(pressureFlow), "tiltSize": .number(tiltSize), "tiltRoundness": .number(tiltRoundness), "tiltOpacity": .number(tiltOpacity), "velocitySize": .number(velocitySize), "velocityOpacity": .number(velocityOpacity), "sizeJitter": .number(sizeJitter), "angleJitter": .number(angleJitter), "opacityJitter": .number(opacityJitter), "scatter": .number(scatter)]
+        var o: JSONObject = ["minSize": .number(minSize), "pressureFlow": .number(pressureFlow), "tiltSize": .number(tiltSize), "tiltRoundness": .number(tiltRoundness), "tiltOpacity": .number(tiltOpacity), "velocitySize": .number(velocitySize), "velocityOpacity": .number(velocityOpacity), "sizeJitter": .number(sizeJitter), "angleJitter": .number(angleJitter), "opacityJitter": .number(opacityJitter), "scatter": .number(scatter)]
+        if let count { o["count"] = .number(Double(count)) }
+        if let flip { o["flip"] = .string(flip) }
+        return .object(o)
     }
 }
 
@@ -195,7 +202,10 @@ func normalizeDynamics(_ raw: JSONObject, _ base: BrushDynamics) -> BrushDynamic
         sizeJitter: unitValue(raw["sizeJitter"], base.sizeJitter),
         angleJitter: unitValue(raw["angleJitter"], base.angleJitter),
         opacityJitter: unitValue(raw["opacityJitter"], base.opacityJitter),
-        scatter: rangeValue(raw["scatter"], 0, 4, base.scatter)
+        scatter: rangeValue(raw["scatter"], 0, 4, base.scatter),
+        // Kept only when they are not the defaults (one dab, no flip), so brushes that don't use them read as before.
+        count: { let n = raw["count"]?.finite.map { Int(Swift.min(16, Swift.max(1, JS.round($0)))) } ?? base.count ?? 1; return n > 1 ? n : nil }(),
+        flip: { let f = raw["flip"]?.stringValue.flatMap { DAB_FLIPS.contains($0) ? $0 : nil } ?? base.flip ?? "none"; return f != "none" ? f : nil }()
     )
 }
 
@@ -337,6 +347,8 @@ public struct PaintBrush: Equatable, Sendable {
     public var light: LightSettings
     public var stamp: String?
     public var spray: SpraySettings?
+    /// Dab engines: texture inside the tip (nil: none).
+    public var tipGrain: TipGrainSettings? = nil
     public var paint: PaintGradientSource?
     public var builtin: Bool?
 
@@ -355,8 +367,9 @@ public struct PaintBrush: Equatable, Sendable {
             "light": light.json,
             "stamp": stamp.map { .string($0) } ?? .null,
             "spray": spray?.json ?? .null,
-            "paint": paint?.json ?? .null,
         ]
+        if let tipGrain { o["tipGrain"] = tipGrain.json }
+        o["paint"] = paint?.json ?? .null
         if withBuiltin, builtin == true { o["builtin"] = true }
         return o
     }
@@ -521,6 +534,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         light: LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
+        tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),
         paint: paint,
         builtin: raw["builtin"]?.boolValue == true ? true : nil
     )

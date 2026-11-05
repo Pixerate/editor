@@ -6,8 +6,8 @@
 
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { StickerError } from './errors';
-import { closestStickerRefs, MAX_STICKER_PAGE, parseStickerRef, stickerIdFor, stickerRefOf } from './helpers';
-import type { MaybePromise, StickerAsset, StickerDescription, StickerFormat, StickerProvider, StickerRef, StickerSummary } from './types';
+import { closestStickerRefs, MAX_STICKER_PAGE, parseStickerRef, providerCollections, stickerIdFor, stickerRefOf, stickerVariantFor, stickerVariantsOf } from './helpers';
+import { STICKER_VARIANTS, type MaybePromise, type StickerAsset, type StickerDescription, type StickerFormat, type StickerProvider, type StickerRef, type StickerSummary, type StickerVariant } from './types';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -25,6 +25,8 @@ export interface StickerPlacement {
   height: number;
   /** #rrggbb it was tinted to, when tintable and asked for. */
   colour?: string;
+  /** The variant its art is (`dark` for a dark background, when the sticker has it). */
+  variant: StickerVariant;
 }
 
 /**
@@ -38,6 +40,8 @@ export interface StickerInsertHost {
   format: StickerFormat;
   /** The default centre when the call gives none (the middle of the view or document). */
   defaultCentre(): { x: number; y: number };
+  /** The background is dark (a dark canvas or theme): stickers with a dark variant use it unless the call names one. */
+  dark?(): boolean;
   /** Adds the sticker as one undo step; returns what it made (its id at least) for later tools. */
   insert(placement: StickerPlacement): MaybePromise<{ id: string } & Record<string, unknown>>;
 }
@@ -89,12 +93,13 @@ export function createStickerTools(options: StickerToolsOptions): AgentTool[] {
     name: 'find_stickers',
     title: 'Find stickers',
     description:
-      'Searches the sticker library (the editor\'s own stamps unless the host plugged in its own): words in the name, tags, category or description, filtered by category, tags and commercial licence, a small page at a time. Returns each sticker\'s ref (provider:id, for the tools that spray or place stickers), name, category, tags, natural width and height, formats, whether it is tintable (recoloured to the paint colour) and its licence, plus total and next (pass as after for the next page) and the categories. Changes nothing.',
+      'Searches the sticker library (the editor\'s own stamps unless the host plugged in its own): words in the name, tags, category or description, filtered by category, collection, tags and commercial licence, a small page at a time. Returns each sticker\'s ref (provider:id, for the tools that spray or place stickers), name, category, tags, natural width and height, formats, whether it is tintable (recoloured to the paint colour), its licence, aiGenerated when the provider says whether AI made the art, variants (light, and dark when it has art for dark backgrounds) and its collection, plus total and next (pass as after for the next page), the categories and the collections. Changes nothing.',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', maxLength: 200, description: 'Words to match (default: list everything).' },
         category: { type: 'string', description: 'Only this category (the result lists them).' },
+        collection: { type: 'string', minLength: 1, description: 'Only this collection id (the result lists them; default every collection).' },
         tags: { type: 'array', maxItems: 10, items: { type: 'string', description: 'A tag.' }, description: 'Only stickers with every one of these tags.' },
         commercial: { type: 'boolean', description: 'true: only stickers whose licence allows commercial use.' },
         limit: { type: 'integer', minimum: 1, maximum: MAX_STICKER_PAGE, description: 'Page size (default 24).' },
@@ -103,24 +108,28 @@ export function createStickerTools(options: StickerToolsOptions): AgentTool[] {
       additionalProperties: false,
     },
     annotations: { title: 'Find stickers', ...READ },
-    handler: async ({ query, category, tags, commercial, limit, after }) => {
+    handler: async ({ query, category, collection, tags, commercial, limit, after }) => {
       const p = options.provider();
       const categories = (await p.categories?.()) ?? null;
       if (category !== undefined && categories && !categories.some((c) => c.id === category)) {
         throw new StickerError('invalid_argument', `No category "${category}" in "${p.name}"; categories: ${categories.map((c) => c.id).join(', ')}.`);
       }
-      const o = { ...(category !== undefined ? { category: category as string } : {}), ...(tags ? { tags: tags as string[] } : {}), ...(commercial ? { licence: { commercial: true } } : {}), ...(limit !== undefined ? { limit: limit as number } : {}), ...(after !== undefined ? { after: after as string } : {}) };
+      const collections = (await providerCollections(p)) ?? null;
+      if (collection !== undefined && !collections?.some((c) => c.id === collection)) {
+        throw new StickerError('invalid_argument', collections?.length ? `No collection "${collection}" in "${p.name}"; collections: ${collections.map((c) => c.id).join(', ')}.` : `"${p.name}" has no collections; leave collection out.`);
+      }
+      const o = { ...(category !== undefined ? { category: category as string } : {}), ...(collection !== undefined ? { collection: collection as string } : {}), ...(tags ? { tags: tags as string[] } : {}), ...(commercial ? { licence: { commercial: true } } : {}), ...(limit !== undefined ? { limit: limit as number } : {}), ...(after !== undefined ? { after: after as string } : {}) };
       const q = typeof query === 'string' ? query.trim() : '';
       if (q && !p.capabilities.supportsSearch) throw new StickerError('invalid_argument', `"${p.name}" can't search; leave query out and filter by category instead.`);
       const page = q ? await p.search(q, o) : await p.list(o);
-      return { provider: p.id, items: page.items.map((s) => stickerForAgent(p, s)), total: page.total, ...(page.next ? { next: page.next } : {}), ...(categories ? { categories } : {}) };
+      return { provider: p.id, items: page.items.map((s) => stickerForAgent(p, s)), total: page.total, ...(page.next ? { next: page.next } : {}), ...(categories ? { categories } : {}), ...(collections?.length ? { collections } : {}) };
     },
   };
   const describe: AgentTool = {
     name: 'describe_sticker',
     title: 'Describe a sticker',
     description:
-      'Everything about one sticker by ref (from find_stickers): name, category, tags, natural size, formats, tintable, licence (with any attribution it asks for), dominant colours, variants and its outline as SVG path data (silhouette). An unknown ref is refused with the closest refs. Changes nothing.',
+      'Everything about one sticker by ref (from find_stickers): name, category, collection, tags, natural size, formats, tintable, licence (with any attribution it asks for), aiGenerated, variants (light / dark), dominant colours and its outline as SVG path data (silhouette). An unknown ref is refused with the closest refs. Changes nothing.',
     inputSchema: { type: 'object', properties: { ref: { type: 'string', description: 'Sticker ref provider:id from find_stickers (e.g. editor:star).' } }, required: ['ref'], additionalProperties: false },
     annotations: { title: 'Describe a sticker', ...READ },
     handler: async ({ ref }) => {
@@ -134,29 +143,33 @@ export function createStickerTools(options: StickerToolsOptions): AgentTool[] {
 }
 
 /** Loads a sticker's art in the host's format (or the other one it has), tinted when asked and tintable. */
-async function loadForHost(provider: StickerProvider, ref: StickerRef, d: StickerDescription, host: StickerInsertHost, colour: string | undefined, size: number): Promise<StickerAsset> {
+async function loadForHost(provider: StickerProvider, ref: StickerRef, d: StickerDescription, host: StickerInsertHost, colour: string | undefined, size: number, variant: StickerVariant): Promise<StickerAsset> {
   const id = stickerIdFor(provider, ref)!;
   const format: StickerFormat = d.formats.includes(host.format) ? host.format : (d.formats[0] ?? host.format);
-  return provider.load(id, { format, ...(format === 'png' ? { size: Math.max(8, Math.min(provider.capabilities.maxSize ?? 1024, Math.round(size))) } : {}), ...(colour && d.tintable ? { colour } : {}) });
+  return provider.load(id, { format, ...(format === 'png' ? { size: Math.max(8, Math.min(provider.capabilities.maxSize ?? 1024, Math.round(size))) } : {}), ...(colour && d.tintable ? { colour } : {}), ...(variant !== 'light' ? { variant } : {}) });
 }
 
 /**
  * Puts one sticker into an editor through its host (the panels and `insert_sticker` both use it):
  * checks the ref, loads the art in the host's format, tinted when asked and tintable, and places
  * it centred at (`x`, `y`) (default the host's centre), `width` wide (default its natural width).
- * Returns what the host made, the ref, the size and the licence.
+ * The art is the `variant` asked for, else the dark one when the host's background is dark and
+ * the sticker has it. Returns what the host made, the ref, the size, the variant and the licence.
  */
-export async function insertSticker(provider: StickerProvider, host: StickerInsertHost, options: { ref: StickerRef; x?: number; y?: number; width?: number; color?: string }): Promise<{ id: string; ref: StickerRef; width: number; height: number; licence: StickerDescription['licence'] } & Record<string, unknown>> {
+export async function insertSticker(provider: StickerProvider, host: StickerInsertHost, options: { ref: StickerRef; x?: number; y?: number; width?: number; color?: string; variant?: StickerVariant }): Promise<{ id: string; ref: StickerRef; width: number; height: number; variant: StickerVariant; licence: StickerDescription['licence'] } & Record<string, unknown>> {
   const d = await describeStickerRef(provider, options.ref);
+  const has = stickerVariantsOf(d);
+  if (options.variant !== undefined && !has.includes(options.variant)) throw new StickerError('unsupported_variant', `"${options.ref}" has no ${JSON.stringify(options.variant)} variant; it has ${has.join(', ')}. Leave variant out to pick for the background.`);
+  const variant = options.variant ?? stickerVariantFor(d, host.dark?.() ?? false);
   if (options.color !== undefined && !d.tintable) throw new StickerError('invalid_argument', `"${options.ref}" is not tintable (its art has its own colours); leave color out, or pick a tintable sticker (find_stickers lists tintable).`);
   if (options.width !== undefined && !(options.width > 0)) throw new StickerError('invalid_argument', `width must be a positive size, got ${options.width}.`);
   const w = options.width ?? d.width;
   const h = (w * d.height) / d.width;
   const centre = host.defaultCentre();
-  const asset = await loadForHost(provider, options.ref, d, host, options.color, Math.max(w, h));
+  const asset = await loadForHost(provider, options.ref, d, host, options.color, Math.max(w, h), variant);
   const ref = stickerRefOf(provider, d.id);
-  const made = await host.insert({ ref, description: d, asset, x: options.x ?? centre.x, y: options.y ?? centre.y, width: w, height: h, ...(options.color ? { colour: options.color.toLowerCase() } : {}) });
-  return { ...made, ref, width: w, height: h, licence: d.licence };
+  const made = await host.insert({ ref, description: d, asset, variant, x: options.x ?? centre.x, y: options.y ?? centre.y, width: w, height: h, ...(options.color ? { colour: options.color.toLowerCase() } : {}) });
+  return { ...made, ref, width: w, height: h, variant, licence: d.licence };
 }
 
 /** `insert_sticker`: one sticker by ref into an editor, at a place and size, as one undo step. */
@@ -164,7 +177,7 @@ export function createInsertStickerTool(provider: () => StickerProvider, host: S
   return {
     name: 'insert_sticker',
     title: 'Insert a sticker',
-    description: `Puts one sticker from the sticker library (ref from find_stickers) into the document as a new ${host.noun}, centred at x, y and width wide (its natural aspect kept; default its natural size), tinted to color when the sticker is tintable. Its art is loaded first; an unknown ref is refused with the closest ones. One undo step. Returns the new ${host.noun}'s id (for the editor's own tools, such as effects on it), the ref and its licence (credit any attribution it asks for).`,
+    description: `Puts one sticker from the sticker library (ref from find_stickers) into the document as a new ${host.noun}, centred at x, y and width wide (its natural aspect kept; default its natural size), tinted to color when the sticker is tintable, in its dark variant when the background is dark and it has one (or the variant asked for). Its art is loaded first; an unknown ref is refused with the closest ones. One undo step. Returns the new ${host.noun}'s id (for the editor's own tools, such as effects on it), the ref, the variant used and its licence (credit any attribution it asks for).`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -173,12 +186,13 @@ export function createInsertStickerTool(provider: () => StickerProvider, host: S
         y: { type: 'number', description: 'Centre y in document units (default the middle of the view or document).' },
         width: { type: 'number', exclusiveMinimum: 0, maximum: 10000, description: 'Width in document units (default the natural width); the height follows the aspect.' },
         color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Tint #rrggbb for tintable stickers (default the sticker\'s own colour); refused for stickers that are not tintable.' },
+        variant: { type: 'string', enum: [...STICKER_VARIANTS], description: 'light or dark art (default: dark on a dark background when the sticker has it, else light); one the sticker does not list (find_stickers variants) is refused.' },
       },
       required: ['ref'],
       additionalProperties: false,
     },
     annotations: { title: 'Insert a sticker', ...WRITE },
-    handler: ({ ref, x, y, width, color }) => insertSticker(provider(), host, { ref: ref as string, x: x as number | undefined, y: y as number | undefined, width: width as number | undefined, color: color as string | undefined }),
+    handler: ({ ref, x, y, width, color, variant }) => insertSticker(provider(), host, { ref: ref as string, x: x as number | undefined, y: y as number | undefined, width: width as number | undefined, color: color as string | undefined, variant: variant as StickerVariant | undefined }),
   };
 }
 

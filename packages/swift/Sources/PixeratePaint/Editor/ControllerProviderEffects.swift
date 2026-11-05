@@ -478,18 +478,14 @@ extension PaintEditorController {
     }
 
     /**
-     * Plays or pauses live effect paint and caps its frame rate (1..60). Editor state, not an undo
-     * step. As in the TS core, both settings are replaced by what is given (a missing one is unset).
+     * Plays or pauses live effect paint and caps its frame rate (1..60); a setting left out keeps
+     * its value. Editor state, not an undo step.
      */
     public func setEffectPlayback(playing: Bool? = nil, fps: Double? = nil) throws -> JSONObject {
         if let fps, !(fps == fps.rounded() && fps >= 1 && fps <= 60) { throw PaintEditorError("fps \(jsText(fps)) is out of range; use a whole number 1..60.") }
-        effectPlayback = (playing, fps.map { Int($0) })
+        effectPlayback = (playing ?? effectPlayback.playing, fps.map { Int($0) } ?? effectPlayback.fps)
         emit()
-        var o = JSONObject()
-        if let p = effectPlayback.playing { o["playing"] = .bool(p) }
-        if let f = effectPlayback.fps { o["fps"] = .number(Double(f)) }
-        o["time"] = .number(effectTime)
-        return o
+        return ["playing": .bool(effectPlayback.playing), "fps": .number(Double(effectPlayback.fps)), "time": .number(effectTime)]
     }
 
     // MARK: - Saving

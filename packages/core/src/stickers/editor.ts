@@ -7,7 +7,7 @@
 
 import { pngDataUrl } from '../raster/png';
 import { StickerError } from './errors';
-import { EDITOR_STICKERS_ID, stickerPage } from './helpers';
+import { checkStickerVariant, EDITOR_STICKERS_ID, stickerPage } from './helpers';
 import { STAMP_KINDS, stampCoverage, type StampKind } from './stamps';
 import type { StickerAsset, StickerDescription, StickerLoadOptions, StickerProvider, StickerSummary } from './types';
 
@@ -182,6 +182,7 @@ export function editorStickers(): StickerProvider {
     categories: () => [...new Set(STAMP_KINDS.map((k) => META[k].category))].map((c) => ({ id: c, name: c[0].toUpperCase() + c.slice(1), count: STAMP_KINDS.filter((k) => META[k].category === c).length })),
     load(id, options: StickerLoadOptions = {}): StickerAsset {
       const k = kind(id);
+      checkStickerVariant({ id: k }, options.variant);
       const colour = options.colour ?? META[k].colour;
       if (!HEX.test(colour)) throw new StickerError('invalid_argument', `colour ${JSON.stringify(colour)} must be #rrggbb.`);
       if (options.format === 'png') {

@@ -1,0 +1,2082 @@
+{
+  "tools": {
+    "order": [
+      "select",
+      "direct",
+      "pen",
+      "pencil",
+      "rect",
+      "ellipse",
+      "polygon",
+      "star",
+      "line",
+      "scissors",
+      "knife",
+      "eraser",
+      "width",
+      "shapeBuilder",
+      "paintBucket",
+      "blend",
+      "gradient",
+      "envelope",
+      "type",
+      "typePath",
+      "frame",
+      "connector",
+      "distort"
+    ],
+    "groups": [
+      {
+        "id": "select",
+        "label": "Select",
+        "tools": [
+          "select"
+        ]
+      },
+      {
+        "id": "direct",
+        "label": "Direct Select",
+        "tools": [
+          "direct"
+        ]
+      },
+      {
+        "id": "draw",
+        "label": "Draw",
+        "tools": [
+          "pen",
+          "pencil",
+          "width"
+        ]
+      },
+      {
+        "id": "shape",
+        "label": "Shapes",
+        "tools": [
+          "rect",
+          "ellipse",
+          "polygon",
+          "star",
+          "line"
+        ]
+      },
+      {
+        "id": "frame",
+        "label": "Frame",
+        "tools": [
+          "frame"
+        ]
+      },
+      {
+        "id": "type",
+        "label": "Type",
+        "tools": [
+          "type",
+          "typePath"
+        ]
+      },
+      {
+        "id": "build",
+        "label": "Build",
+        "tools": [
+          "shapeBuilder",
+          "paintBucket"
+        ]
+      },
+      {
+        "id": "cut",
+        "label": "Cut",
+        "tools": [
+          "eraser",
+          "scissors",
+          "knife"
+        ]
+      },
+      {
+        "id": "gradient",
+        "label": "Gradient",
+        "tools": [
+          "gradient"
+        ]
+      },
+      {
+        "id": "blend",
+        "label": "Blend",
+        "tools": [
+          "blend"
+        ]
+      },
+      {
+        "id": "reshape",
+        "label": "Reshape",
+        "tools": [
+          "envelope",
+          "distort"
+        ]
+      },
+      {
+        "id": "connector",
+        "label": "Connector",
+        "tools": [
+          "connector"
+        ]
+      }
+    ],
+    "glyphs": {
+      "select": "↖",
+      "direct": "⌖",
+      "pen": "✒",
+      "pencil": "✎",
+      "rect": "▭",
+      "ellipse": "◯",
+      "polygon": "⬡",
+      "star": "☆",
+      "line": "╱",
+      "scissors": "✂",
+      "knife": "⟋",
+      "eraser": "⌫",
+      "width": "⇹",
+      "shapeBuilder": "⊕",
+      "paintBucket": "◍",
+      "blend": "⧓",
+      "gradient": "◐",
+      "envelope": "⌗",
+      "type": "T",
+      "typePath": "𝒯",
+      "frame": "⬚",
+      "connector": "⤳",
+      "distort": "≈"
+    },
+    "shortcuts": {
+      "select": "V",
+      "direct": "A",
+      "pen": "P",
+      "pencil": "N",
+      "rect": "R",
+      "ellipse": "O",
+      "polygon": "Y",
+      "star": "S",
+      "line": "L",
+      "scissors": "C",
+      "knife": "K",
+      "eraser": "E",
+      "width": "W",
+      "shapeBuilder": "M",
+      "paintBucket": "B",
+      "blend": "J",
+      "gradient": "G",
+      "envelope": "U",
+      "type": "T",
+      "typePath": "Q",
+      "frame": "F",
+      "connector": "X",
+      "distort": "D"
+    }
+  },
+  "menus": {
+    "blendModes": [
+      {
+        "mode": "normal",
+        "label": "Normal"
+      },
+      {
+        "mode": "darken",
+        "label": "Darken"
+      },
+      {
+        "mode": "multiply",
+        "label": "Multiply"
+      },
+      {
+        "mode": "color-burn",
+        "label": "Color Burn"
+      },
+      {
+        "mode": "lighten",
+        "label": "Lighten"
+      },
+      {
+        "mode": "screen",
+        "label": "Screen"
+      },
+      {
+        "mode": "color-dodge",
+        "label": "Color Dodge"
+      },
+      {
+        "mode": "linear-dodge",
+        "label": "Linear Dodge (Add)"
+      },
+      {
+        "mode": "overlay",
+        "label": "Overlay"
+      },
+      {
+        "mode": "soft-light",
+        "label": "Soft Light"
+      },
+      {
+        "mode": "hard-light",
+        "label": "Hard Light"
+      },
+      {
+        "mode": "difference",
+        "label": "Difference"
+      },
+      {
+        "mode": "exclusion",
+        "label": "Exclusion"
+      },
+      {
+        "mode": "hue",
+        "label": "Hue"
+      },
+      {
+        "mode": "saturation",
+        "label": "Saturation"
+      },
+      {
+        "mode": "color",
+        "label": "Color"
+      },
+      {
+        "mode": "luminosity",
+        "label": "Luminosity"
+      }
+    ],
+    "effects": [
+      {
+        "type": "trim",
+        "label": "Trim Paths"
+      },
+      {
+        "type": "roundCorners",
+        "label": "Round Corners"
+      },
+      {
+        "type": "puckerBloat",
+        "label": "Pucker & Bloat"
+      },
+      {
+        "type": "twist",
+        "label": "Twist"
+      },
+      {
+        "type": "zigzag",
+        "label": "Zig Zag"
+      },
+      {
+        "type": "wiggle",
+        "label": "Wiggle Paths"
+      },
+      {
+        "type": "offset",
+        "label": "Offset Paths"
+      },
+      {
+        "type": "merge",
+        "label": "Merge Paths"
+      },
+      {
+        "type": "repeater",
+        "label": "Repeater"
+      },
+      {
+        "type": "envelope",
+        "label": "Envelope"
+      },
+      {
+        "type": "contour",
+        "label": "Contour"
+      },
+      {
+        "type": "blockShadow",
+        "label": "Block Shadow"
+      },
+      {
+        "type": "extrude",
+        "label": "Extrude"
+      },
+      {
+        "type": "bevel",
+        "label": "Bevel"
+      }
+    ],
+    "filters": [
+      {
+        "type": "dropShadow",
+        "label": "Drop Shadow"
+      },
+      {
+        "type": "innerShadow",
+        "label": "Inner Shadow"
+      },
+      {
+        "type": "outerGlow",
+        "label": "Outer Glow"
+      },
+      {
+        "type": "innerGlow",
+        "label": "Inner Glow"
+      },
+      {
+        "type": "layerBlur",
+        "label": "Layer Blur"
+      },
+      {
+        "type": "feather",
+        "label": "Feather"
+      }
+    ],
+    "pathActions": [
+      {
+        "id": "join",
+        "label": "⋈",
+        "title": "Join",
+        "shortcut": "J"
+      },
+      {
+        "id": "average",
+        "label": "⊹",
+        "title": "Average Points",
+        "shortcut": "Alt+J"
+      },
+      {
+        "id": "cut",
+        "label": "✂·",
+        "title": "Cut at Points"
+      },
+      {
+        "id": "clean",
+        "label": "⌁",
+        "title": "Remove Redundant Points"
+      },
+      {
+        "id": "smooth",
+        "label": "∿",
+        "title": "Smooth"
+      },
+      {
+        "id": "outline",
+        "label": "⊡",
+        "title": "Outline Stroke"
+      }
+    ],
+    "pathfinderActions": [
+      {
+        "id": "divide",
+        "label": "⊞",
+        "title": "Divide",
+        "min": 1
+      },
+      {
+        "id": "trim",
+        "label": "⧉",
+        "title": "Trim",
+        "min": 2
+      },
+      {
+        "id": "merge",
+        "label": "⧈",
+        "title": "Merge",
+        "min": 2
+      },
+      {
+        "id": "crop",
+        "label": "⌗",
+        "title": "Crop",
+        "min": 2
+      },
+      {
+        "id": "outline",
+        "label": "⬚",
+        "title": "Outline",
+        "min": 1
+      },
+      {
+        "id": "minusBack",
+        "label": "⊖",
+        "title": "Minus Back",
+        "min": 2
+      }
+    ],
+    "editToggles": [
+      {
+        "key": "keepShapeOnDelete",
+        "label": "Keep",
+        "title": "Keep shape when deleting points"
+      },
+      {
+        "key": "curvatureMoves",
+        "label": "Curv",
+        "title": "Curvature point moves (Alt flips while dragging)"
+      },
+      {
+        "key": "recognizeShapes",
+        "label": "Shapes",
+        "title": "Turn pencil scribbles into shapes"
+      }
+    ],
+    "envelopeStyles": [
+      {
+        "value": "arc",
+        "label": "Arc"
+      },
+      {
+        "value": "arcLower",
+        "label": "Arc Lower"
+      },
+      {
+        "value": "arcUpper",
+        "label": "Arc Upper"
+      },
+      {
+        "value": "arch",
+        "label": "Arch"
+      },
+      {
+        "value": "bulge",
+        "label": "Bulge"
+      },
+      {
+        "value": "shellLower",
+        "label": "Shell Lower"
+      },
+      {
+        "value": "shellUpper",
+        "label": "Shell Upper"
+      },
+      {
+        "value": "flag",
+        "label": "Flag"
+      },
+      {
+        "value": "wave",
+        "label": "Wave"
+      },
+      {
+        "value": "fish",
+        "label": "Fish"
+      },
+      {
+        "value": "rise",
+        "label": "Rise"
+      },
+      {
+        "value": "fisheye",
+        "label": "Fisheye"
+      },
+      {
+        "value": "inflate",
+        "label": "Inflate"
+      },
+      {
+        "value": "squeeze",
+        "label": "Squeeze"
+      },
+      {
+        "value": "twist",
+        "label": "Twist"
+      },
+      {
+        "value": "mesh",
+        "label": "Mesh"
+      }
+    ],
+    "maskTypes": [
+      {
+        "value": "clip",
+        "label": "Clip",
+        "title": "Clipping mask: the contents show inside the mask's outline"
+      },
+      {
+        "value": "luminance",
+        "label": "Luminance",
+        "title": "Opacity mask by brightness: white shows, black hides"
+      },
+      {
+        "value": "alpha",
+        "label": "Alpha",
+        "title": "Opacity mask by opacity: opaque shows, transparent hides"
+      }
+    ],
+    "textAligns": [
+      {
+        "value": "left",
+        "label": "Left"
+      },
+      {
+        "value": "center",
+        "label": "Centre"
+      },
+      {
+        "value": "right",
+        "label": "Right"
+      },
+      {
+        "value": "justify",
+        "label": "Justify"
+      }
+    ],
+    "fontWeights": [
+      {
+        "value": 100,
+        "label": "Thin"
+      },
+      {
+        "value": 300,
+        "label": "Light"
+      },
+      {
+        "value": 400,
+        "label": "Regular"
+      },
+      {
+        "value": 500,
+        "label": "Medium"
+      },
+      {
+        "value": 600,
+        "label": "Semibold"
+      },
+      {
+        "value": 700,
+        "label": "Bold"
+      },
+      {
+        "value": 900,
+        "label": "Black"
+      }
+    ]
+  },
+  "specs": {
+    "effects": {
+      "defaults": {
+        "trim": {
+          "start": 0,
+          "end": 50,
+          "offset": 0,
+          "mode": "simultaneous"
+        },
+        "roundCorners": {
+          "radius": 10
+        },
+        "puckerBloat": {
+          "amount": 30
+        },
+        "twist": {
+          "angle": 45,
+          "center": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "zigzag": {
+          "size": 5,
+          "ridges": 4,
+          "smooth": false
+        },
+        "wiggle": {
+          "size": 5,
+          "detail": 6,
+          "smooth": true,
+          "speed": 2,
+          "correlation": 50,
+          "phase": 0,
+          "seed": 1,
+          "time": 0
+        },
+        "offset": {
+          "amount": 5,
+          "join": "miter",
+          "miterLimit": 4,
+          "copies": 1,
+          "copyOffset": 0
+        },
+        "merge": {
+          "mode": "add"
+        },
+        "repeater": {
+          "copies": 3,
+          "offset": 0,
+          "position": {
+            "x": 100,
+            "y": 0
+          },
+          "anchor": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 100,
+            "y": 100
+          },
+          "startOpacity": 100,
+          "endOpacity": 100,
+          "composite": "below"
+        },
+        "envelope": {
+          "style": "arc",
+          "bend": 50,
+          "horizontal": 0,
+          "vertical": 0,
+          "orientation": "horizontal",
+          "rows": 2,
+          "columns": 2,
+          "mesh": null
+        },
+        "contour": {
+          "direction": "inside",
+          "steps": 4,
+          "offset": 6,
+          "join": "round",
+          "miterLimit": 4,
+          "fillColor": "#ffffff",
+          "strokeColor": null,
+          "acceleration": 0
+        },
+        "blockShadow": {
+          "angle": 45,
+          "distance": 20,
+          "color": "#1e293b",
+          "opacity": 100,
+          "endOpacity": 100
+        },
+        "extrude": {
+          "mode": "parallel",
+          "angle": 45,
+          "depth": 30,
+          "vanishingPoint": {
+            "x": 0,
+            "y": -300
+          },
+          "toward": 30,
+          "color": null,
+          "lightAngle": -135,
+          "shading": 60
+        },
+        "bevel": {
+          "width": 8,
+          "lightAngle": -135,
+          "shading": 60,
+          "color": null
+        }
+      },
+      "params": {
+        "trim": [
+          {
+            "key": "start",
+            "label": "Start %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "end",
+            "label": "End %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "offset",
+            "label": "Offset °",
+            "kind": "number",
+            "min": -360,
+            "max": 360,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "mode",
+            "label": "Paths",
+            "kind": "select",
+            "options": [
+              {
+                "value": "simultaneous",
+                "label": "Simultaneously"
+              },
+              {
+                "value": "individual",
+                "label": "Individually"
+              }
+            ]
+          }
+        ],
+        "roundCorners": [
+          {
+            "key": "radius",
+            "label": "Radius",
+            "kind": "number",
+            "min": 0,
+            "max": 200,
+            "step": 1,
+            "slider": true
+          }
+        ],
+        "puckerBloat": [
+          {
+            "key": "amount",
+            "label": "Amount %",
+            "kind": "number",
+            "min": -100,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          }
+        ],
+        "twist": [
+          {
+            "key": "angle",
+            "label": "Angle °",
+            "kind": "number",
+            "min": -720,
+            "max": 720,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "center",
+            "label": "Centre",
+            "kind": "vec2",
+            "step": 1
+          }
+        ],
+        "zigzag": [
+          {
+            "key": "size",
+            "label": "Size",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 0.5,
+            "slider": true
+          },
+          {
+            "key": "ridges",
+            "label": "Ridges",
+            "kind": "number",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "smooth",
+            "label": "Smooth",
+            "kind": "boolean"
+          }
+        ],
+        "wiggle": [
+          {
+            "key": "size",
+            "label": "Size",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 0.5,
+            "slider": true
+          },
+          {
+            "key": "detail",
+            "label": "Detail",
+            "kind": "number",
+            "min": 0,
+            "max": 50,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "smooth",
+            "label": "Smooth",
+            "kind": "boolean"
+          },
+          {
+            "key": "correlation",
+            "label": "Correlation %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "speed",
+            "label": "Speed",
+            "kind": "number",
+            "min": 0,
+            "step": 0.1
+          },
+          {
+            "key": "phase",
+            "label": "Phase °",
+            "kind": "number",
+            "step": 1
+          },
+          {
+            "key": "time",
+            "label": "Time (s)",
+            "kind": "number",
+            "min": 0,
+            "max": 10,
+            "step": 0.05,
+            "slider": true
+          },
+          {
+            "key": "seed",
+            "label": "Seed",
+            "kind": "number",
+            "step": 1
+          }
+        ],
+        "offset": [
+          {
+            "key": "amount",
+            "label": "Amount",
+            "kind": "number",
+            "min": -100,
+            "max": 100,
+            "step": 0.5,
+            "slider": true
+          },
+          {
+            "key": "join",
+            "label": "Join",
+            "kind": "select",
+            "options": [
+              {
+                "value": "miter",
+                "label": "Miter"
+              },
+              {
+                "value": "round",
+                "label": "Round"
+              },
+              {
+                "value": "bevel",
+                "label": "Bevel"
+              }
+            ]
+          },
+          {
+            "key": "miterLimit",
+            "label": "Miter limit",
+            "kind": "number",
+            "min": 1,
+            "step": 0.5
+          },
+          {
+            "key": "copies",
+            "label": "Copies",
+            "kind": "number",
+            "min": 1,
+            "max": 20,
+            "step": 1
+          },
+          {
+            "key": "copyOffset",
+            "label": "Copy offset",
+            "kind": "number",
+            "step": 0.5
+          }
+        ],
+        "merge": [
+          {
+            "key": "mode",
+            "label": "Mode",
+            "kind": "select",
+            "options": [
+              {
+                "value": "merge",
+                "label": "Merge"
+              },
+              {
+                "value": "add",
+                "label": "Add"
+              },
+              {
+                "value": "subtract",
+                "label": "Subtract"
+              },
+              {
+                "value": "intersect",
+                "label": "Intersect"
+              },
+              {
+                "value": "exclude",
+                "label": "Exclude"
+              }
+            ]
+          }
+        ],
+        "contour": [
+          {
+            "key": "direction",
+            "label": "Direction",
+            "kind": "select",
+            "options": [
+              {
+                "value": "inside",
+                "label": "Inside"
+              },
+              {
+                "value": "outside",
+                "label": "Outside"
+              },
+              {
+                "value": "center",
+                "label": "To centre"
+              }
+            ]
+          },
+          {
+            "key": "steps",
+            "label": "Steps",
+            "kind": "number",
+            "min": 1,
+            "max": 200,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "offset",
+            "label": "Offset",
+            "kind": "number",
+            "min": 0.1,
+            "max": 200,
+            "step": 0.5,
+            "slider": true
+          },
+          {
+            "key": "fillColor",
+            "label": "Fill to",
+            "kind": "color"
+          },
+          {
+            "key": "strokeColor",
+            "label": "Stroke to",
+            "kind": "color"
+          },
+          {
+            "key": "acceleration",
+            "label": "Acceleration",
+            "kind": "number",
+            "min": -100,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "join",
+            "label": "Join",
+            "kind": "select",
+            "options": [
+              {
+                "value": "miter",
+                "label": "Miter"
+              },
+              {
+                "value": "round",
+                "label": "Round"
+              },
+              {
+                "value": "bevel",
+                "label": "Bevel"
+              }
+            ]
+          }
+        ],
+        "blockShadow": [
+          {
+            "key": "angle",
+            "label": "Angle °",
+            "kind": "number",
+            "min": -360,
+            "max": 360,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "distance",
+            "label": "Distance",
+            "kind": "number",
+            "min": 0,
+            "max": 2000,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "color",
+            "label": "Colour",
+            "kind": "color"
+          },
+          {
+            "key": "opacity",
+            "label": "Opacity %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "endOpacity",
+            "label": "End opacity %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          }
+        ],
+        "extrude": [
+          {
+            "key": "mode",
+            "label": "Mode",
+            "kind": "select",
+            "options": [
+              {
+                "value": "parallel",
+                "label": "Parallel"
+              },
+              {
+                "value": "perspective",
+                "label": "Perspective"
+              }
+            ]
+          },
+          {
+            "key": "angle",
+            "label": "Angle °",
+            "kind": "number",
+            "min": -360,
+            "max": 360,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "depth",
+            "label": "Depth",
+            "kind": "number",
+            "min": 0,
+            "max": 2000,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "vanishingPoint",
+            "label": "Vanishing point",
+            "kind": "vec2",
+            "step": 1
+          },
+          {
+            "key": "toward",
+            "label": "Toward VP %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "color",
+            "label": "Colour",
+            "kind": "color"
+          },
+          {
+            "key": "lightAngle",
+            "label": "Light °",
+            "kind": "number",
+            "min": -360,
+            "max": 360,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "shading",
+            "label": "Shading %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          }
+        ],
+        "bevel": [
+          {
+            "key": "width",
+            "label": "Width",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 0.5,
+            "slider": true
+          },
+          {
+            "key": "lightAngle",
+            "label": "Light °",
+            "kind": "number",
+            "min": -360,
+            "max": 360,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "shading",
+            "label": "Shading %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "color",
+            "label": "Colour",
+            "kind": "color"
+          }
+        ],
+        "repeater": [
+          {
+            "key": "copies",
+            "label": "Copies",
+            "kind": "number",
+            "min": 0,
+            "max": 50,
+            "step": 0.1,
+            "slider": true
+          },
+          {
+            "key": "offset",
+            "label": "Offset",
+            "kind": "number",
+            "min": -10,
+            "max": 10,
+            "step": 0.1,
+            "slider": true
+          },
+          {
+            "key": "position",
+            "label": "Position",
+            "kind": "vec2",
+            "step": 1
+          },
+          {
+            "key": "anchor",
+            "label": "Anchor",
+            "kind": "vec2",
+            "step": 1
+          },
+          {
+            "key": "rotation",
+            "label": "Rotation °",
+            "kind": "number",
+            "min": -360,
+            "max": 360,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "scale",
+            "label": "Scale %",
+            "kind": "vec2",
+            "step": 1
+          },
+          {
+            "key": "startOpacity",
+            "label": "Start opacity %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "endOpacity",
+            "label": "End opacity %",
+            "kind": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "composite",
+            "label": "Copies",
+            "kind": "select",
+            "options": [
+              {
+                "value": "below",
+                "label": "Below"
+              },
+              {
+                "value": "above",
+                "label": "Above"
+              }
+            ]
+          }
+        ],
+        "envelope": [
+          {
+            "key": "style",
+            "label": "Warp",
+            "kind": "select",
+            "options": [
+              {
+                "value": "arc",
+                "label": "Arc"
+              },
+              {
+                "value": "arcLower",
+                "label": "Arc Lower"
+              },
+              {
+                "value": "arcUpper",
+                "label": "Arc Upper"
+              },
+              {
+                "value": "arch",
+                "label": "Arch"
+              },
+              {
+                "value": "bulge",
+                "label": "Bulge"
+              },
+              {
+                "value": "shellLower",
+                "label": "Shell Lower"
+              },
+              {
+                "value": "shellUpper",
+                "label": "Shell Upper"
+              },
+              {
+                "value": "flag",
+                "label": "Flag"
+              },
+              {
+                "value": "wave",
+                "label": "Wave"
+              },
+              {
+                "value": "fish",
+                "label": "Fish"
+              },
+              {
+                "value": "rise",
+                "label": "Rise"
+              },
+              {
+                "value": "fisheye",
+                "label": "Fisheye"
+              },
+              {
+                "value": "inflate",
+                "label": "Inflate"
+              },
+              {
+                "value": "squeeze",
+                "label": "Squeeze"
+              },
+              {
+                "value": "twist",
+                "label": "Twist"
+              },
+              {
+                "value": "mesh",
+                "label": "Mesh"
+              }
+            ]
+          },
+          {
+            "key": "bend",
+            "label": "Bend %",
+            "kind": "number",
+            "min": -100,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "horizontal",
+            "label": "Horizontal distortion %",
+            "kind": "number",
+            "min": -100,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "vertical",
+            "label": "Vertical distortion %",
+            "kind": "number",
+            "min": -100,
+            "max": 100,
+            "step": 1,
+            "slider": true
+          },
+          {
+            "key": "orientation",
+            "label": "Orientation",
+            "kind": "select",
+            "options": [
+              {
+                "value": "horizontal",
+                "label": "Horizontal"
+              },
+              {
+                "value": "vertical",
+                "label": "Vertical"
+              }
+            ]
+          },
+          {
+            "key": "rows",
+            "label": "Mesh rows",
+            "kind": "number",
+            "min": 1,
+            "max": 16,
+            "step": 1
+          },
+          {
+            "key": "columns",
+            "label": "Mesh columns",
+            "kind": "number",
+            "min": 1,
+            "max": 16,
+            "step": 1
+          }
+        ]
+      }
+    },
+    "filters": {
+      "defaults": {
+        "dropShadow": {
+          "color": "#000000",
+          "opacity": 0.25,
+          "offsetX": 0,
+          "offsetY": 4,
+          "blur": 4,
+          "spread": 0
+        },
+        "innerShadow": {
+          "color": "#000000",
+          "opacity": 0.25,
+          "offsetX": 0,
+          "offsetY": 4,
+          "blur": 4,
+          "spread": 0
+        },
+        "outerGlow": {
+          "color": "#ffffbe",
+          "opacity": 0.75,
+          "blur": 10,
+          "spread": 0
+        },
+        "innerGlow": {
+          "color": "#ffffbe",
+          "opacity": 0.75,
+          "blur": 10,
+          "spread": 0
+        },
+        "layerBlur": {
+          "radius": 4
+        },
+        "feather": {
+          "radius": 8
+        }
+      },
+      "params": {
+        "dropShadow": [
+          {
+            "key": "color",
+            "label": "Color",
+            "kind": "color"
+          },
+          {
+            "key": "opacity",
+            "label": "Opacity",
+            "kind": "number",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "slider": true
+          },
+          {
+            "key": "offsetX",
+            "label": "X",
+            "kind": "number",
+            "min": -1000,
+            "max": 1000,
+            "step": 1
+          },
+          {
+            "key": "offsetY",
+            "label": "Y",
+            "kind": "number",
+            "min": -1000,
+            "max": 1000,
+            "step": 1
+          },
+          {
+            "key": "blur",
+            "label": "Blur",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          },
+          {
+            "key": "spread",
+            "label": "Spread",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          }
+        ],
+        "innerShadow": [
+          {
+            "key": "color",
+            "label": "Color",
+            "kind": "color"
+          },
+          {
+            "key": "opacity",
+            "label": "Opacity",
+            "kind": "number",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "slider": true
+          },
+          {
+            "key": "offsetX",
+            "label": "X",
+            "kind": "number",
+            "min": -1000,
+            "max": 1000,
+            "step": 1
+          },
+          {
+            "key": "offsetY",
+            "label": "Y",
+            "kind": "number",
+            "min": -1000,
+            "max": 1000,
+            "step": 1
+          },
+          {
+            "key": "blur",
+            "label": "Blur",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          },
+          {
+            "key": "spread",
+            "label": "Choke",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          }
+        ],
+        "outerGlow": [
+          {
+            "key": "color",
+            "label": "Color",
+            "kind": "color"
+          },
+          {
+            "key": "opacity",
+            "label": "Opacity",
+            "kind": "number",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "slider": true
+          },
+          {
+            "key": "blur",
+            "label": "Blur",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          },
+          {
+            "key": "spread",
+            "label": "Spread",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          }
+        ],
+        "innerGlow": [
+          {
+            "key": "color",
+            "label": "Color",
+            "kind": "color"
+          },
+          {
+            "key": "opacity",
+            "label": "Opacity",
+            "kind": "number",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "slider": true
+          },
+          {
+            "key": "blur",
+            "label": "Blur",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          },
+          {
+            "key": "spread",
+            "label": "Choke",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1
+          }
+        ],
+        "layerBlur": [
+          {
+            "key": "radius",
+            "label": "Radius",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1,
+            "slider": true
+          }
+        ],
+        "feather": [
+          {
+            "key": "radius",
+            "label": "Radius",
+            "kind": "number",
+            "min": 0,
+            "max": 500,
+            "step": 1,
+            "slider": true
+          }
+        ]
+      }
+    },
+    "lenses": {
+      "transparency": {
+        "min": 0,
+        "max": 100,
+        "amount": 50,
+        "color": null,
+        "unit": "percent see-through"
+      },
+      "magnify": {
+        "min": 1,
+        "max": 20,
+        "amount": 2,
+        "color": null,
+        "unit": "times"
+      },
+      "fisheye": {
+        "min": -100,
+        "max": 100,
+        "amount": 50,
+        "color": null,
+        "unit": "percent, negative pinches"
+      },
+      "brighten": {
+        "min": -100,
+        "max": 100,
+        "amount": 40,
+        "color": null,
+        "unit": "percent, negative darkens"
+      },
+      "invert": {
+        "min": 0,
+        "max": 100,
+        "amount": 100,
+        "color": null,
+        "unit": "percent strength"
+      },
+      "tintedGrayscale": {
+        "min": 0,
+        "max": 100,
+        "amount": 100,
+        "color": "#b45309",
+        "unit": "percent strength"
+      },
+      "colorAdd": {
+        "min": 0,
+        "max": 100,
+        "amount": 50,
+        "color": "#ff0000",
+        "unit": "percent of the colour added"
+      },
+      "colorLimit": {
+        "min": 0,
+        "max": 100,
+        "amount": 100,
+        "color": "#22c55e",
+        "unit": "percent strength"
+      },
+      "heatMap": {
+        "min": 0,
+        "max": 100,
+        "amount": 0,
+        "color": null,
+        "unit": "percent the palette is turned"
+      },
+      "wireframe": {
+        "min": 0,
+        "max": 100,
+        "amount": 100,
+        "color": "#0f172a",
+        "unit": "percent outline opacity"
+      }
+    },
+    "widthPresets": [
+      {
+        "id": "uniform",
+        "label": "Uniform",
+        "points": []
+      },
+      {
+        "id": "taperStart",
+        "label": "Taper start",
+        "points": [
+          {
+            "t": 0,
+            "left": 0,
+            "right": 0
+          },
+          {
+            "t": 1,
+            "left": 1,
+            "right": 1
+          }
+        ]
+      },
+      {
+        "id": "taperEnd",
+        "label": "Taper end",
+        "points": [
+          {
+            "t": 0,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 1,
+            "left": 0,
+            "right": 0
+          }
+        ]
+      },
+      {
+        "id": "taperBoth",
+        "label": "Taper both",
+        "points": [
+          {
+            "t": 0,
+            "left": 0,
+            "right": 0
+          },
+          {
+            "t": 0.5,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 1,
+            "left": 0,
+            "right": 0
+          }
+        ]
+      },
+      {
+        "id": "bulge",
+        "label": "Bulge",
+        "points": [
+          {
+            "t": 0,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 0.5,
+            "left": 2,
+            "right": 2
+          },
+          {
+            "t": 1,
+            "left": 1,
+            "right": 1
+          }
+        ]
+      },
+      {
+        "id": "pinch",
+        "label": "Pinch",
+        "points": [
+          {
+            "t": 0,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 0.5,
+            "left": 0.25,
+            "right": 0.25
+          },
+          {
+            "t": 1,
+            "left": 1,
+            "right": 1
+          }
+        ]
+      },
+      {
+        "id": "teardrop",
+        "label": "Teardrop",
+        "points": [
+          {
+            "t": 0,
+            "left": 0,
+            "right": 0
+          },
+          {
+            "t": 0.2,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 1,
+            "left": 0,
+            "right": 0
+          }
+        ]
+      },
+      {
+        "id": "wave",
+        "label": "Wave",
+        "points": [
+          {
+            "t": 0,
+            "left": 0.3,
+            "right": 0.3
+          },
+          {
+            "t": 0.25,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 0.5,
+            "left": 0.3,
+            "right": 0.3
+          },
+          {
+            "t": 0.75,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 1,
+            "left": 0.3,
+            "right": 0.3
+          }
+        ]
+      },
+      {
+        "id": "pressure",
+        "label": "Pressure",
+        "points": [
+          {
+            "t": 0,
+            "left": 0.15,
+            "right": 0.15
+          },
+          {
+            "t": 0.12,
+            "left": 0.85,
+            "right": 0.85
+          },
+          {
+            "t": 0.45,
+            "left": 1,
+            "right": 1
+          },
+          {
+            "t": 0.8,
+            "left": 0.7,
+            "right": 0.7
+          },
+          {
+            "t": 1,
+            "left": 0.05,
+            "right": 0.05
+          }
+        ]
+      }
+    ]
+  },
+  "labels": {
+    "arrowheads": {
+      "triangle": "Triangle",
+      "arrow": "Arrow",
+      "open": "Open arrow",
+      "circle": "Circle",
+      "square": "Square",
+      "bar": "Bar"
+    },
+    "blendModes": {
+      "normal": "Normal",
+      "darken": "Darken",
+      "multiply": "Multiply",
+      "color-burn": "Color Burn",
+      "lighten": "Lighten",
+      "screen": "Screen",
+      "color-dodge": "Color Dodge",
+      "linear-dodge": "Linear Dodge (Add)",
+      "overlay": "Overlay",
+      "soft-light": "Soft Light",
+      "hard-light": "Hard Light",
+      "difference": "Difference",
+      "exclusion": "Exclusion",
+      "hue": "Hue",
+      "saturation": "Saturation",
+      "color": "Color",
+      "luminosity": "Luminosity"
+    },
+    "blendSpacings": {
+      "steps": "Specified Steps",
+      "distance": "Specified Distance",
+      "smoothColor": "Smooth Color"
+    },
+    "connectorRoutes": {
+      "straight": "Straight",
+      "elbow": "Elbow",
+      "curved": "Curved"
+    },
+    "connectorSides": {
+      "auto": "Auto",
+      "top": "Top",
+      "right": "Right",
+      "bottom": "Bottom",
+      "left": "Left",
+      "center": "Centre"
+    },
+    "constraints": {
+      "coincident": "Coincident",
+      "collinear": "Collinear",
+      "concentric": "Concentric",
+      "fix": "Fix",
+      "parallel": "Parallel",
+      "perpendicular": "Perpendicular",
+      "horizontal": "Horizontal",
+      "vertical": "Vertical",
+      "tangent": "Tangent",
+      "smooth": "Smooth (G2)",
+      "symmetric": "Symmetric",
+      "equal": "Equal",
+      "distance": "Distance",
+      "angle": "Angle",
+      "radius": "Radius",
+      "diameter": "Diameter"
+    },
+    "constraintGlyphs": {
+      "coincident": "●",
+      "collinear": "≡",
+      "concentric": "◎",
+      "fix": "⚓",
+      "parallel": "∥",
+      "perpendicular": "⊥",
+      "horizontal": "H",
+      "vertical": "V",
+      "tangent": "T",
+      "smooth": "G2",
+      "symmetric": "⇹",
+      "equal": "=",
+      "distance": "↔",
+      "angle": "∠",
+      "radius": "R",
+      "diameter": "Ø"
+    },
+    "cornerKinds": {
+      "round": "Round",
+      "inverted": "Inverted",
+      "chamfer": "Chamfer"
+    },
+    "effects": {
+      "trim": "Trim Paths",
+      "roundCorners": "Round Corners",
+      "puckerBloat": "Pucker & Bloat",
+      "twist": "Twist",
+      "zigzag": "Zig Zag",
+      "wiggle": "Wiggle Paths",
+      "offset": "Offset Paths",
+      "merge": "Merge Paths",
+      "repeater": "Repeater",
+      "envelope": "Envelope",
+      "contour": "Contour",
+      "blockShadow": "Block Shadow",
+      "extrude": "Extrude",
+      "bevel": "Bevel"
+    },
+    "filters": {
+      "dropShadow": "Drop Shadow",
+      "innerShadow": "Inner Shadow",
+      "outerGlow": "Outer Glow",
+      "innerGlow": "Inner Glow",
+      "layerBlur": "Layer Blur",
+      "feather": "Feather"
+    },
+    "gradientInterpolations": {
+      "srgb": "sRGB",
+      "linear": "Linear light",
+      "oklab": "Oklab"
+    },
+    "gradientSpreads": {
+      "pad": "Pad",
+      "reflect": "Reflect",
+      "repeat": "Repeat"
+    },
+    "gradientTypes": {
+      "linear": "Linear",
+      "radial": "Radial",
+      "conic": "Conic",
+      "reflected": "Reflected",
+      "diamond": "Diamond"
+    },
+    "horizontalResizing": {
+      "left": "Left",
+      "right": "Right",
+      "leftRight": "Left & right",
+      "center": "Centre",
+      "scale": "Scale"
+    },
+    "verticalResizing": {
+      "top": "Top",
+      "bottom": "Bottom",
+      "topBottom": "Top & bottom",
+      "center": "Centre",
+      "scale": "Scale"
+    },
+    "layerKinds": {
+      "path": "Path",
+      "connector": "Connector",
+      "lens": "Lens",
+      "text": "Text",
+      "instance": "Symbol",
+      "group": "Group",
+      "frame": "Frame",
+      "mask": "Clipping Group",
+      "blend": "Blend",
+      "boolean": "Live Boolean",
+      "symmetry": "Symmetry"
+    },
+    "lenses": {
+      "transparency": "Transparency",
+      "magnify": "Magnify",
+      "fisheye": "Fish Eye",
+      "brighten": "Brighten",
+      "invert": "Invert",
+      "tintedGrayscale": "Tinted Grayscale",
+      "colorAdd": "Color Add",
+      "colorLimit": "Color Limit",
+      "heatMap": "Heat Map",
+      "wireframe": "Wireframe"
+    },
+    "maskTypes": {
+      "clip": "Clip",
+      "alpha": "Alpha",
+      "luminance": "Luminance"
+    },
+    "pathfinder": {
+      "divide": "Divide",
+      "trim": "Trim",
+      "merge": "Merge",
+      "crop": "Crop",
+      "outline": "Outline",
+      "minusBack": "Minus Back"
+    },
+    "strokeAligns": {
+      "center": "Center",
+      "inside": "Inside",
+      "outside": "Outside"
+    },
+    "strokeGradientModes": {
+      "within": "Within stroke",
+      "along": "Along stroke",
+      "across": "Across stroke"
+    },
+    "stylize": {
+      "mosaic": "Mosaic",
+      "halftone": "Halftone",
+      "lowPoly": "Low Poly",
+      "hatch": "Engraving"
+    },
+    "symmetryModes": {
+      "vertical": "Mirror left / right",
+      "horizontal": "Mirror top / bottom",
+      "dual": "Four quarters",
+      "diagonal": "Mirror diagonally",
+      "radial": "Radial"
+    },
+    "textAligns": {
+      "left": "Left",
+      "center": "Centre",
+      "right": "Right",
+      "justify": "Justify"
+    },
+    "warpStyles": {
+      "arc": "Arc",
+      "arcLower": "Arc Lower",
+      "arcUpper": "Arc Upper",
+      "arch": "Arch",
+      "bulge": "Bulge",
+      "shellLower": "Shell Lower",
+      "shellUpper": "Shell Upper",
+      "flag": "Flag",
+      "wave": "Wave",
+      "fish": "Fish",
+      "rise": "Rise",
+      "fisheye": "Fisheye",
+      "inflate": "Inflate",
+      "squeeze": "Squeeze",
+      "twist": "Twist"
+    }
+  },
+  "overlayTheme": {
+    "accent": "#0ea5e9",
+    "guide": "#ff3dfc",
+    "handleFill": "#ffffff",
+    "marqueeFill": "rgba(14, 165, 233, 0.08)",
+    "eraserFill": "rgba(239, 68, 68, 0.25)",
+    "transformHandleSize": 8,
+    "anchorSize": 7,
+    "handleRadius": 3.5,
+    "cornerWidgetRadius": 4,
+    "widthPointSize": 5,
+    "builderFill": "rgba(14, 165, 233, 0.22)",
+    "builderErase": "#ef4444",
+    "builderEraseFill": "rgba(239, 68, 68, 0.22)",
+    "builderHatchOpacity": 0.6,
+    "mask": "#8b5cf6",
+    "maskDash": "5 3"
+  }
+}

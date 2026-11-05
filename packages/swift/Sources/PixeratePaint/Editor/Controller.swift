@@ -188,6 +188,10 @@ public final class PaintEditorController {
     var redoStack: [HistoryEntry] = []
     let historyLimit: Int
     public let brushLibrary: BrushLibrary
+    /// Image sources strokes draw with: the brush library's and the open painting's (saved with it).
+    public let brushSources = BrushSourceArtCache()
+    /// Art for stamp tips and tip grain: image sources from `brushSources` (editor stamps need none).
+    public var stampArt: StampArtLookup { { [brushSources] ref in brushSources.get(ref) } }
     public internal(set) var brush: PaintBrush { didSet { emit() } }
     /// The active brush as facets (what `get_brush` and the brush editor show).
     var brushSpec: Brush
@@ -246,7 +250,7 @@ public final class PaintEditorController {
     /// Bumped whenever the paint changes, so a slow `setEffectPaint` can tell it was overtaken.
     var paintEpoch = 0
     /// Live effect paint playback (`setEffectPlayback`) and the time the view shows.
-    var effectPlayback: (playing: Bool?, fps: Int?) = (true, 30)
+    var effectPlayback: (playing: Bool, fps: Int) = (true, 30)
     var effectTime = 0.0
     /// Wet media: the simulation, its settings and time.
     public private(set) var wet: PaintWetLayers!
@@ -896,6 +900,7 @@ public final class PaintEditorController {
 
     /// Reads the library again (after a change anywhere it is shared).
     func refreshBrushes() {
+        brushSources.set(brushLibrary.listSources())
         brushEntries = brushLibrary.list().map { libraryBrush($0.brush, $0.builtin) }
     }
 
@@ -1199,6 +1204,7 @@ public final class PaintEditorController {
         withLight.wet = wetInit
         if brush.engine == "impasto" { withLight.thick = d.thick?.get(layer.id) ?? emptyThickChannels() }
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
+        withLight.stampArt = stampArt
         if wetInit == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
         let session = try PaintStrokeSession(withLight)
         session.maskStencils = i.maskStencils
@@ -1425,6 +1431,11 @@ public final class PaintEditorController {
             for (id, list) in live where findLayer(d.layers, id) != nil { ext[id] = .array(list.map(strokeToJSON)) }
             if !ext.isEmpty { out["liveStrokes"] = .object(ext) }
         }
+        // The image sources the strokes draw with, bytes included, so replays and repaints match anywhere.
+        var sourceIds: [String] = []
+        for st in d.strokes + (d.liveStrokes?.values.flatMap { $0 } ?? []) { for id in engineBrushSourceIds(st.brush) where !sourceIds.contains(id) { sourceIds.append(id) } }
+        let sources = sourceIds.compactMap { brushSources.source($0) }
+        if !sources.isEmpty { out["brushSources"] = .array(sources.map(\.json)) }
         for (k, v) in providerEffectsJSON(d) { out[k] = v }
         for (k, v) in stickersJSON(d) { out[k] = v }
         // Wet paint is dried where it is on save (deterministically).
@@ -1442,7 +1453,7 @@ public final class PaintEditorController {
 }
 
 /// A brush's default colour as #rrggbb for a colour scheme, or nil when it is not a solid colour.
-func brushColourHex(_ value: JSONValue, _ scheme: String) -> String? {
+public func brushColourHex(_ value: JSONValue, _ scheme: String) -> String? {
     var v = value
     if let o = value.objectValue, o["type"] == nil, let side = o[scheme == "dark" ? "dark" : "light"] { v = side }
     guard let s = v.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else { return nil }

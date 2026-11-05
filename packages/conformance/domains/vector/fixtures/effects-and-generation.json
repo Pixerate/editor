@@ -1,0 +1,732 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "effects-and-generation",
+  "description": "Provider effects on nodes, and generated vector art from the fake generator.",
+  "setup": {
+    "width": 300,
+    "height": 200
+  },
+  "skip": {
+    "swift": "The vector effect and generation tools are not ported yet (#624)."
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 20,
+          "y": 20,
+          "width": 100,
+          "height": 80,
+          "fill": "#2563eb"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "kind": "vector"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [
+            {
+              "category": "sticker",
+              "description": "A coloured disc that fades in: a vector effect that brings its own picture.",
+              "duration": 500,
+              "id": "fake.badge",
+              "kind": "vector",
+              "loop": false,
+              "name": "Badge",
+              "tags": [
+                "sticker",
+                "disc"
+              ],
+              "transparent": true,
+              "uses": [
+                "title"
+              ]
+            },
+            {
+              "accepts": [
+                "path"
+              ],
+              "category": "path",
+              "description": "A vector line along its path control, its picture fitted to the path (viewBox = the path bounds); with no path, a short wave.",
+              "duration": 400,
+              "id": "fake.route",
+              "kind": "vector",
+              "loop": false,
+              "name": "Route",
+              "tags": [
+                "path",
+                "route"
+              ],
+              "transparent": true,
+              "uses": [
+                "title"
+              ]
+            }
+          ],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [
+            {
+              "count": 1,
+              "tag": "disc"
+            },
+            {
+              "count": 1,
+              "tag": "path"
+            },
+            {
+              "count": 1,
+              "tag": "route"
+            },
+            {
+              "count": 1,
+              "tag": "sticker"
+            }
+          ],
+          "total": 2
+        }
+      }
+    },
+    {
+      "tool": "describe_effect",
+      "arguments": {
+        "effect": "fake.badge"
+      },
+      "expect": {
+        "result": {
+          "appliesHere": true,
+          "available": true,
+          "category": "sticker",
+          "controls": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "description": "Disc colour as #rrggbb. Default #f43f5e.",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              },
+              "ms": {
+                "description": "Fade-in time (ms). Default 500.",
+                "maximum": 10000,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "defaults": {
+            "color": "#f43f5e",
+            "ms": 500
+          },
+          "description": "A coloured disc that fades in: a vector effect that brings its own picture.",
+          "duration": 500,
+          "id": "fake.badge",
+          "inputs": [],
+          "kind": "vector",
+          "loop": false,
+          "name": "Badge",
+          "presets": [],
+          "tags": [
+            "sticker",
+            "disc"
+          ],
+          "transparent": true,
+          "uses": [
+            "title"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "apply_effect",
+      "arguments": {
+        "target": "document",
+        "effect": "fake.badge"
+      },
+      "expect": {
+        "result": {
+          "effect": {
+            "effect": "fake.badge",
+            "enabled": true,
+            "id": "picture",
+            "name": "Badge",
+            "provider": "fake",
+            "role": "vector picture",
+            "values": {
+              "color": "#f43f5e",
+              "ms": 500
+            }
+          },
+          "effects": [
+            {
+              "effect": "fake.badge",
+              "enabled": true,
+              "id": "picture",
+              "name": "Badge",
+              "provider": "fake",
+              "role": "vector picture",
+              "values": {
+                "color": "#f43f5e",
+                "ms": 500
+              }
+            }
+          ],
+          "group": "n3",
+          "target": "n3"
+        }
+      }
+    },
+    {
+      "tool": "list_applied_effects",
+      "expect": {
+        "result": {
+          "provider": {
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "targets": [
+            {
+              "effects": [
+                {
+                  "available": true,
+                  "effect": "fake.badge",
+                  "enabled": true,
+                  "id": "picture",
+                  "name": "Badge",
+                  "provider": "fake",
+                  "role": "vector picture",
+                  "values": {
+                    "color": "#f43f5e",
+                    "ms": 500
+                  }
+                }
+              ],
+              "name": "Badge",
+              "target": "n3"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_effect",
+      "arguments": {
+        "target": "n3",
+        "effect": "picture",
+        "values": {
+          "color": "#16a34a"
+        }
+      },
+      "expect": {
+        "result": {
+          "effect": {
+            "effect": "fake.badge",
+            "enabled": true,
+            "id": "picture",
+            "name": "Badge",
+            "provider": "fake",
+            "role": "vector picture",
+            "values": {
+              "color": "#16a34a",
+              "ms": 500
+            }
+          },
+          "effects": [
+            {
+              "effect": "fake.badge",
+              "enabled": true,
+              "id": "picture",
+              "name": "Badge",
+              "provider": "fake",
+              "role": "vector picture",
+              "values": {
+                "color": "#16a34a",
+                "ms": 500
+              }
+            }
+          ],
+          "target": "n3"
+        }
+      }
+    },
+    {
+      "tool": "remove_effect",
+      "arguments": {
+        "target": "n3",
+        "effect": "picture"
+      },
+      "expect": {
+        "result": {
+          "effect": {
+            "effect": "fake.badge",
+            "enabled": true,
+            "id": "picture",
+            "name": "Badge",
+            "provider": "fake",
+            "role": "vector picture",
+            "values": {
+              "color": "#16a34a",
+              "ms": 500
+            }
+          },
+          "effects": [],
+          "target": "n3"
+        }
+      }
+    },
+    {
+      "tool": "list_vector_art_models",
+      "expect": {
+        "result": {
+          "models": [
+            {
+              "id": "fake-svg",
+              "media": "text",
+              "name": "Fake SVG",
+              "seed": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "generate_vector_art",
+      "arguments": {
+        "prompt": "a small sun",
+        "idempotencyKey": "gen-1",
+        "seed": 7,
+        "x": 150,
+        "y": 50,
+        "width": 100
+      },
+      "expect": {
+        "result": {
+          "adjustments": [
+            {
+              "field": "aspectRatio",
+              "from": "1:1",
+              "kind": "dropped",
+              "reason": "The model does not take a aspect ratio."
+            }
+          ],
+          "id": "generated",
+          "ids": [
+            "node-1"
+          ],
+          "model": "fake-svg"
+        }
+      }
+    },
+    {
+      "tool": "regenerate_vector_art",
+      "arguments": {
+        "id": "generated",
+        "prompt": "a bigger sun",
+        "seed": 8,
+        "idempotencyKey": "gen-2"
+      },
+      "expect": {
+        "result": {
+          "adjustments": [],
+          "id": "generated",
+          "ids": [
+            "n5"
+          ],
+          "model": "fake-svg"
+        }
+      }
+    },
+    {
+      "tool": "generate_vector_art",
+      "arguments": {
+        "prompt": "x",
+        "model": "nope",
+        "idempotencyKey": "gen-3"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown model \"nope\": use one of fake-svg."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 100,
+                  "x": 20,
+                  "y": 20
+                },
+                "d": "M20 20L120 20L120 100L20 100Z",
+                "depth": 0,
+                "fill": "#2563eb",
+                "id": "n1",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 80,
+                  "x": 110,
+                  "y": 60
+                },
+                "children": 1,
+                "depth": 0,
+                "id": "n3",
+                "locked": false,
+                "name": "Badge",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 80,
+                  "x": 110,
+                  "y": 60
+                },
+                "d": "M50 10C72.09 10 90 27.91 90 50C90 72.09 72.09 90 50 90C27.91 90 10 72.09 10 50C10 27.91 27.91 10 50 10Z",
+                "depth": 1,
+                "fill": "#16a34a",
+                "id": "n4",
+                "locked": false,
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 18.48,
+                  "width": 18.48,
+                  "x": 190.76,
+                  "y": 90.76
+                },
+                "children": 1,
+                "depth": 0,
+                "id": "generated",
+                "locked": false,
+                "name": "a small sun",
+                "rotation": 0,
+                "selected": true,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 18.48,
+                  "width": 18.48,
+                  "x": 190.76,
+                  "y": 90.76
+                },
+                "d": "M200 90.76C205.1 90.76 209.24 94.9 209.24 100C209.24 105.1 205.1 109.24 200 109.24C194.9 109.24 190.76 105.1 190.76 100C190.76 94.9 194.9 90.76 200 90.76Z",
+                "depth": 1,
+                "fill": "#e11d48",
+                "id": "n5",
+                "locked": false,
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "generated"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#2563eb",
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 20,
+                        "y": 20
+                      },
+                      {
+                        "x": 120,
+                        "y": 20
+                      },
+                      {
+                        "x": 120,
+                        "y": 100
+                      },
+                      {
+                        "x": 20,
+                        "y": 100
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#16a34a",
+                    "id": "n4",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 27.908610006768257,
+                              "y": 10
+                            },
+                            "out": {
+                              "x": 72.09138999323174,
+                              "y": 10
+                            },
+                            "type": "symmetric",
+                            "x": 50,
+                            "y": 10
+                          },
+                          {
+                            "in": {
+                              "x": 90,
+                              "y": 27.908610006768257
+                            },
+                            "out": {
+                              "x": 90,
+                              "y": 72.09138999323174
+                            },
+                            "type": "symmetric",
+                            "x": 90,
+                            "y": 50
+                          },
+                          {
+                            "in": {
+                              "x": 72.09138999323174,
+                              "y": 90
+                            },
+                            "out": {
+                              "x": 27.908610006768257,
+                              "y": 90
+                            },
+                            "type": "symmetric",
+                            "x": 50,
+                            "y": 90
+                          },
+                          {
+                            "in": {
+                              "x": 10,
+                              "y": 72.09138999323174
+                            },
+                            "out": {
+                              "x": 10,
+                              "y": 27.908610006768257
+                            },
+                            "type": "symmetric",
+                            "x": 10,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n3",
+                "name": "Badge",
+                "transform": [
+                  1,
+                  0,
+                  0,
+                  1,
+                  100,
+                  50
+                ],
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#e11d48",
+                    "id": "n5",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 194.89688891156348,
+                              "y": 90.76
+                            },
+                            "out": {
+                              "x": 205.10311108843652,
+                              "y": 90.76
+                            },
+                            "type": "symmetric",
+                            "x": 200,
+                            "y": 90.76
+                          },
+                          {
+                            "in": {
+                              "x": 209.24,
+                              "y": 94.89688891156347
+                            },
+                            "out": {
+                              "x": 209.24,
+                              "y": 105.10311108843653
+                            },
+                            "type": "symmetric",
+                            "x": 209.24,
+                            "y": 100
+                          },
+                          {
+                            "in": {
+                              "x": 205.10311108843652,
+                              "y": 109.24
+                            },
+                            "out": {
+                              "x": 194.89688891156348,
+                              "y": 109.24
+                            },
+                            "type": "symmetric",
+                            "x": 200,
+                            "y": 109.24
+                          },
+                          {
+                            "in": {
+                              "x": 190.76,
+                              "y": 105.10311108843653
+                            },
+                            "out": {
+                              "x": 190.76,
+                              "y": 94.89688891156347
+                            },
+                            "type": "symmetric",
+                            "x": 190.76,
+                            "y": 100
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "generation": {
+                  "adjustments": [],
+                  "bindings": {},
+                  "createdAt": "<time>",
+                  "format": "pixerate.generation-provenance",
+                  "meta": {
+                    "as": "color",
+                    "box": {
+                      "height": 42,
+                      "width": 42,
+                      "x": 179,
+                      "y": 79
+                    },
+                    "colors": 8
+                  },
+                  "modelId": "fake-svg",
+                  "rawPrompt": "a bigger sun",
+                  "references": [],
+                  "request": {
+                    "mode": "generate",
+                    "model": "fake-svg",
+                    "prompt": "a bigger sun",
+                    "seed": 8
+                  },
+                  "resolvedPrompt": "a bigger sun",
+                  "sourceMap": [
+                    {
+                      "rawEnd": 12,
+                      "rawStart": 0,
+                      "resolvedEnd": 12,
+                      "resolvedStart": 0,
+                      "source": "raw"
+                    }
+                  ],
+                  "templates": [],
+                  "values": null,
+                  "version": 1
+                },
+                "id": "generated",
+                "name": "a small sun",
+                "type": "group"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

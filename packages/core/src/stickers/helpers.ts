@@ -5,7 +5,7 @@
 
 import { StickerError } from './errors';
 import { STAMP_KINDS, type StampKind } from './stamps';
-import type { StickerPage, StickerProvider, StickerRef, StickerSearchOptions, StickerSummary } from './types';
+import { STICKER_VARIANTS, type StickerCollection, type StickerPage, type StickerProvider, type StickerRef, type StickerSearchOptions, type StickerSummary, type StickerVariant } from './types';
 
 /** Default and largest page size. */
 export const DEFAULT_STICKER_PAGE = 24;
@@ -25,7 +25,7 @@ export function checkStickerSearchOptions(options: StickerSearchOptions = {}): v
 const words = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
 /**
- * One page of `items` filtered by `options` (category, every tag, commercial licence) and, when
+ * One page of `items` filtered by `options` (category, collection, every tag, commercial licence) and, when
  * `query` has words, by every word appearing in the name, tags, category or description. Cursors
  * are offsets as strings.
  */
@@ -35,6 +35,7 @@ export function stickerPage(items: readonly StickerSummary[], options: StickerSe
   const tags = (options.tags ?? []).map((t) => t.toLowerCase());
   const matches = items.filter((s) => {
     if (options.category && s.category !== options.category) return false;
+    if (options.collection && s.collection !== options.collection) return false;
     if (tags.length && !tags.every((t) => (s.tags ?? []).some((x) => x.toLowerCase() === t))) return false;
     if (options.licence?.commercial === true && !s.licence.commercial) return false;
     if (!q.length) return true;
@@ -45,6 +46,44 @@ export function stickerPage(items: readonly StickerSummary[], options: StickerSe
   const limit = options.limit ?? DEFAULT_STICKER_PAGE;
   const page = matches.slice(start, start + limit);
   return { items: page, total: matches.length, ...(start + limit < matches.length ? { next: String(start + limit) } : {}) };
+}
+
+/** The variants a sticker has (`light` always, first). */
+export function stickerVariantsOf(s: Pick<StickerSummary, 'variants'>): StickerVariant[] {
+  return STICKER_VARIANTS.filter((v) => v === 'light' || s.variants?.includes(v));
+}
+
+/**
+ * Checks `load`'s variant against the sticker's, throwing an `unsupported_variant` `StickerError`
+ * that names the ones it has. Providers call it at the top of `load`; returns the variant to draw.
+ */
+export function checkStickerVariant(s: Pick<StickerSummary, 'id' | 'variants'>, variant: StickerVariant | undefined): StickerVariant {
+  const v = variant ?? 'light';
+  const has = stickerVariantsOf(s);
+  if (!has.includes(v)) throw new StickerError('unsupported_variant', `Sticker "${s.id}" has no ${JSON.stringify(v)} variant; it has ${has.join(', ')}.`);
+  return v;
+}
+
+/** The variant to show on a dark or light background: `dark` when the background is dark and the sticker has it, else `light`. */
+export function stickerVariantFor(s: Pick<StickerSummary, 'variants'>, dark: boolean): StickerVariant {
+  return dark && s.variants?.includes('dark') ? 'dark' : 'light';
+}
+
+/** The collections of an in-memory catalogue with their counts, in first-seen order; `names` gives names and descriptions by id. */
+export function stickerCollections(items: readonly StickerSummary[], names: Record<string, { name: string; description?: string }> = {}): StickerCollection[] {
+  const out = new Map<string, StickerCollection>();
+  for (const s of items) {
+    if (!s.collection) continue;
+    const c = out.get(s.collection) ?? { id: s.collection, ...(names[s.collection] ?? { name: s.collection }), count: 0 };
+    c.count++;
+    out.set(s.collection, c);
+  }
+  return [...out.values()];
+}
+
+/** Calls `provider.collections()` or `provider.listCollections()` when the provider defines either. */
+export function providerCollections(provider: StickerProvider): ReturnType<NonNullable<StickerProvider['collections']>> | undefined {
+  return provider.collections ? provider.collections() : provider.listCollections?.();
 }
 
 /** A ref split into provider and id. A bare editor stamp (`"star"`) is `editor:star`; any other bare id is refused. */

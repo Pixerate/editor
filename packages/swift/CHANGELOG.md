@@ -1,5 +1,215 @@
 # @pixerate/swift
 
+## 0.19.0
+
+### Minor Changes
+
+- 1803639: **Swift vector editor: constraints (#624).**
+
+  - The constraint solver (`ConstraintSolve.swift`, `ConstraintLM.swift`): every constraint kind (coincident, collinear, concentric, fix, parallel, perpendicular, horizontal, vertical, tangent, smooth, symmetric, equal) and dimension (distance aligned / horizontal / vertical, angle, radius, diameter) over anchors by stable id, handles, segments and round paths, solved per connected component by the damped minimum-norm Gauss–Newton solver, with what was just edited moving least. Ported operation for operation, so solves take the same iterations and land on the same coordinates as the TS core.
+  - Values are expressions over named parameters (`ConstraintExpr.swift`: `VectorExprEnv`, `evalVectorExpression`, `formatVectorValue`). `addVectorConstraint` names and measures new dimensions and refuses conflicting or redundant constraints, naming the ones involved; `vectorConstraintDof` reports the degrees of freedom left per drawing and per path; `purgeVectorConstraints` drops constraints whose anchors are gone.
+  - Auto Constrain (`ConstraintAuto.swift`: `inferVectorConstraints`, `autoConstrainVector`, `withVectorAnchorIds`) and the glyph, action and panel data (`ConstraintGlyphs.swift`).
+  - The controller solves the constraints after every edit and has `addConstraint`, `removeConstraints`, `setConstraintValue`, `autoConstrain`, `getConstraints`, `getParameters`, `getConstraintDof`, `constraintIssues` and `constraintPanel`. The 5 constraint commands run, and the `constraints` scenario passes (11 of 15 vector scenarios).
+
+- da5e4d2: **Swift vector editor: frames, pages, connectors, snapping options and perspective grids (#624).**
+
+  - Frames (`Frames.swift`): `vectorFrameDrawn` (a frame as its clip group of fill, master art and children), `sanitizeVectorFrame`, `sanitizeVectorResizing`, `vectorBoundsInside`, `vectorFrameDocument`; frames now draw, bound and mask through it in appearance, masks, render data (a clip mask in render data) and SVG export (a `<g data-vector-frame>` with its clip path) and import.
+  - Pages and master pages (`Pages.swift`): `vectorPages`, `vectorMasterPages`, `vectorMasterArt` (laid out by resizing constraints, `{page}` / `{pages}` filled in) and `resolveVectorMasterPages`, run after every edit and stripped from saved documents.
+  - Connectors (`Connectors.swift`): connection sites, straight / elbow / curved routes, `routeVectorConnector` and `rerouteVectorConnectors` after every edit (after the constraint solve), glue to deleted objects dropped; `data-vector-connector` and `data-vector-resizing` in the SVG round trip.
+  - Perspective grids (`Perspective.swift`): planes, plane maps, flat-to-plane and back, projected paths, grid lines and presets; `vectorPolarAngles` (`Snap.swift`) and the TS snap defaults.
+  - The controller has `addFrame`, `frameSelection`, `setFrame`, `setResizing`, `getFrames`, `frameToSvg`, `addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`, `addConnector`, `setConnector`, `getConnectors`, `getConnectionSites`, `setConnectorRoute`, `setSnap`, `setPerspective`, `setPerspectivePlane`, `attachToPerspective`, and a `viewport` that `goToPage`, `setViewport` and `zoomToFit` move. The 23 frame, page, connector, snapping and perspective commands run, and the `frames-pages-connectors` scenario passes (12 of 15 vector scenarios).
+
+- c514aa5: **Swift vector editor: symbols and instances (#624).**
+
+  - Symbols (`Symbols.swift`): instances carry their symbol's art (`resolveVectorSymbols` after every change, `stripVectorSymbolArt` for saved documents) and draw it as a plain group (`vectorInstanceDrawn`): the rotation on the group, scale and skew baked into the art, strokes scaled with the instance unless `scaleStrokes` is off, fill / stroke tints and hidden art nodes applied. Nested symbols resolve through each other, and a symbol that would contain itself draws nothing (`vectorSymbolUses`).
+  - Instances take part in bounds, appearance, Expand Appearance, blends (instance keys blend as their art), render data and SVG export, as a `<use>` of a `<symbol>` in `defs` or, where `<use>` cannot draw an instance exactly, as its drawn art in a `<g data-vector-instance>`. SVG import reads them back, with unused symbols, and turns a `<use>` of any element into an instance.
+  - The controller has `makeSymbol`, `placeSymbol`, `setInstanceOptions`, `replaceSymbol`, `detachInstances`, `renameSymbol`, `deleteSymbol`, `editSymbol` and `exitSymbolEdit` (isolation mode, with undo stepping in and out), `getSymbols`, `getSymbolInstances`, `symbolEditState`, and the symbols panel's data (`symbolsPanel`, `symbolEditBackground`). `vector.list` lists instances.
+  - The 10 symbol commands run, and the `symbols` scenario passes (10 of 15 vector scenarios).
+
+## 0.18.0
+
+### Minor Changes
+
+- 1864d55: **Swift vector editor: blends, envelopes and live symmetry (#624).**
+
+  - Morphs (`Blend.swift`): `createVectorMorph` and `interpolateVectorPaths` bring two paths or groups to matching anchors (arc-length refinement, the start and winding that cost least by Procrustes fit and shape contexts) and interpolate them, turning rather than collapsing; paints mix in OKLab (`interpolateVectorColor`, `interpolateVectorPaint`, resampled gradient stops), and stroke widths, dashes, arrowhead scales and width profiles interpolate (`interpolateVectorStyle`).
+  - Live blend groups (`BlendGroup.swift`): steps, distance and smooth-colour spacing, replaced spines with orientation to the spine, expand and release. The controller regenerates a blend's steps after every change and has `blend`, `setBlendOptions`, `replaceBlendSpine`, `expandBlend` and `releaseBlend`; `vector.list` lists blend options.
+  - Envelopes (`Warp.swift`): the fifteen warp presets, Bézier meshes (fit, evaluate, split, resize, from an outline, outline) and the Envelope effect, drawn in bounds, render data and SVG export. The controller has `envelope`, `makeEnvelopeWithTopObject` and `releaseEnvelope`; `updateEffect` turns a preset into the mesh it stood for, transforms that skew or mirror do too, and Free Distort maps envelope meshes and blend spines.
+  - Live symmetry (`Symmetry.swift`): mirror, four-quarter, diagonal and radial (kaleidoscope) symmetry groups drawn with their copies in bounds, render data and SVG export; `makeSymmetry`, `setSymmetry`, `releaseSymmetry` (with expand), `enterSymmetry` and `exitSymmetry`.
+  - SVG export writes blends (`data-vector-blend`), and SVG import reads back blends, symmetry groups and path effects.
+  - The 11 blend, envelope and symmetry commands run, and the `blends-and-envelopes` scenario passes (9 of 15 vector scenarios).
+
+- 55858eb: **Swift vector editor: paint and appearance (#624).**
+
+  - Gradients: `setGradient` (a colour becomes a gradient; type changes, `aspect`, `reverse`, stops), with `parseVectorColor`, `applyVectorGradientPatch` and `defaultVectorGradient`.
+  - Fill and stroke stacks: `addPaintLayer`, `updatePaintLayer`, `removePaintLayer`, `movePaintLayer` and `setPaintLayers`; `addShape`, `addPath` and `setStyle` now take gradient paints and whole `fills` / `strokes` stacks, and shape defaults may hold stacks.
+  - Blend modes and filters: `setBlendMode`, `addFilter`, `updateFilter`, `removeFilter` and `moveFilter`, with the filters drawn as SVG filters in the scene render data and the SVG export (`vectorFilterSvg`, `vectorFilterMarkup`).
+  - Path effects (`PathEffects.swift`, `applyVectorEffects`): Trim Paths, Round Corners, Pucker & Bloat, Twist, Zig Zag, Wiggle Paths, Offset Paths, Merge Paths, Repeater, Contour and Block Shadow, with `addEffect`, `updateEffect`, `removeEffect`, `moveEffect` and Expand Appearance. They follow baked transforms and are drawn in render data and SVG export. Envelope, Extrude and Bevel still throw `VectorNotPorted`.
+  - Masks: `makeMask` (clipping and opacity masks), `setMaskOptions` and `releaseMask`; mask groups are bounded, listed and used by booleans and the Pathfinder as their masked result.
+  - Lenses: `setLens`, with backdrops resolved after every edit and stripped from saved documents, and `vectorLensDrawn`.
+  - The 26 commands behind these run, and the `paint-and-appearance` scenario passes (6 of 15 vector scenarios).
+
+- 7822816: **Swift vector editor: gradient meshes, freeform gradients and the rest of the gradient paint servers (#624).**
+
+  - Gradient meshes and freeform gradients (`Shading.swift`): Coons patches through a lattice of coloured points (`createVectorMeshGradient`, `vectorMeshPointAt`, `vectorMeshColorAt`, `vectorMeshLines`), freeform colour fields with spreads and lines (`vectorFreeformField`, `sampleVectorFreeform`, `autoVectorFreeformGradient`), their checks (`sanitizeVectorShadedPaint`), point edits and transforms. They are drawn in render data and SVG export as patterns of flat tiles and strips (`vectorShadedSvgDefs`), and SVG import reads them back.
+  - The controller has `setMeshGradient`, `setMeshPoint`, `setFreeformGradient`, `addFreeformPoint`, `setFreeformPoint`, `removeFreeformPoint`, `setFreeformLines` and `getShading`, and the 8 commands behind them run. Mesh and freeform paints passed to `setStyle`, `addShape` and paint stacks are checked instead of throwing.
+  - Every gradient now has a paint server: stop midpoints, smoothness and linear / Oklab interpolation are expanded into stops (`expandVectorGradientStops`, `vectorGradientRamp`), reflected gradients with a pad or repeat spread become stop periods (`expandVectorGradientSpread`), conic and diamond gradients become patterns of gradient tiles, and gradients along or across a stroke become patterns of slices (`vectorStrokeGradientDefs`). `VectorPaintDef` is now an enum of a gradient element or a `VectorSvgPatternDef`.
+  - Free Distort now takes gradient, mesh and freeform paints: node-space gradient handles and mesh / freeform points follow the map (`mapVectorPaint`); box gradients follow the new bounds.
+  - The `gradients-and-shading` scenario passes (8 of 15 vector scenarios).
+
+- a262d64: **Swift vector editor: strokes, corners and brushstrokes (#624).**
+
+  - Width profiles (`Width.swift`): presets, side scales with monotone interpolation, width points (`insertWidthPoint`, `setWidthPoint`, `removeWidthPoints`), taper / wave and pressure generators. The controller has `setWidthProfile` and `setWidthPoint`; stroke layers, shape defaults and SVG import keep profiles.
+  - Variable-width outlines (`variableStrokeOutline`, `variableStrokeRings`) and stroke parts (`vectorStrokeParts`, `vectorStrokeOutlinePath`, `hitTestVectorStroke`): alignment, arrowheads (`tip` and `extend`), caps, joins and dashes, matching the TS core exactly. Opacity masks, filter reach and the Pathfinder now take aligned, arrowed and profiled strokes.
+  - `outlineStroke`: one filled path per stroke layer above a copy that keeps the fill.
+  - Live corners in the controller: `setCornerRadius`, `setCornerKind` and `setCornerSmoothing`.
+  - Brushstrokes as data: `addBrushstroke`, `setBrushstroke`, `setColorScheme` and `setColorLocked`, with the brushes the vector profile admits (`vectorBrushstrokeBrushes`), their checks and default colours. `PixerateVector` now depends on `PixeratePaint`. Drawing brushstrokes in render data and SVG export (the raster brush engine along a path) still throws `VectorNotPorted`, as do aligned, arrowed and profiled strokes in render data and SVG export.
+  - The 9 commands behind these run, and the `strokes-and-corners` scenario passes (7 of 15 vector scenarios).
+
+## 0.17.0
+
+### Minor Changes
+
+- 320fd4d: **History: remove stale steps with `dropSteps`.**
+
+  - `HistoryManager.dropSteps(match)` removes the undo and redo steps `match` picks without running them, for steps whose changes no longer apply (remote content replaced what they change, a layer was reloaded). The other steps keep their order, a gesture merging into a removed step ends, and a mark on a removed step is no longer valid. It reports a `drop` commit event and returns how many steps were removed. Until now, integrators had to skip such steps by hand or reach into private fields.
+  - History entries (`getEntries`, commit events) now carry the step's `tag`.
+  - React `useHistory().dropSteps`, Svelte `createHistory().dropSteps` and Swift `HistoryManager.dropSteps` match.
+
+  **Canvas: gesture undo keeps work done since.**
+
+  - `createCanvasGestureRecorder` undo and redo now put back only the nodes and edges the gesture changed. Before, they restored the whole canvas from before the drag, which removed nodes and edges a collaborator or an agent had added since and undid their moves. A node the gesture changed is replaced only if it is still there (undoing a move does not bring back a node deleted since), and one the gesture added or removed is removed or put back at its index.
+
+## 0.16.0
+
+### Minor Changes
+
+- b1acb12: **Swift vector editor: the controller and its commands (#622).**
+
+  - `VectorEditorController` in `PixerateVector`: the document, selection, tool, editing options and defaults, with one undo step per change on its `HistoryManager`. Transforms (move, scale, rotate, set rotation), skew, Free Distort, align, distribute, arrange, group, ungroup, layer moves, booleans and live booleans, Pathfinder, the Shape Builder, the paint bucket, anchor edits (move, bend, delete keeping the shape), Join, Average, Smooth, Remove Redundant Points, Scissors, Knife, Eraser, the distortion brushes (smudge, twirl, attract, repel, roughen), drawing by dimensions, and SVG export of plain paths and groups.
+  - `createVectorCommands`: all 150 vector commands, with their label, group, keywords, description, params schema and shortcut read from the contract (`commands.json`) and their TS enablement. The commands the controller does not have yet fail with "not ported to Swift yet (#624)".
+  - `VectorConformanceHost` and `VectorConformanceTests`: the `shapes-and-paths`, `arrange-and-transform`, `booleans-and-pathfinder` and `path-editing` scenarios pass; the other ten are skipped (#624).
+  - Live boolean groups now draw and are bounded as their folded operands (`expandVectorAppearance`, `vectorAppearanceShapes`).
+
+  **Core:** `vectorContracts()` now writes each command's own `undoable` and `readOnly` flags, and `params` only for commands that take some. Before, 31 commands that run outside history were listed as undoable, and `vector.list` had an empty params schema.
+
+- ac58b3b: **Swift vector editor: scene render data and SVG (#623).**
+
+  - `getVectorSceneRenderData` / `VectorEditorController.sceneRenderData` in `PixerateVector`: the document-space paths, groups and paint servers the canvases draw, as the TS returns them, for paths and groups, transforms, opacity, blend modes, linear and radial gradients, paint stacks and live booleans.
+  - Paint stacks (`vectorFills`, `vectorStrokes`, `withVectorFills`, `withVectorStrokes`, `normalizeVectorPaintStacks`, `vectorPaintLayerNodes`, the sanitizers) and gradient paint servers (`vectorPaintToSvg`, `vectorGradientSvgDefs`, `sanitizeVectorGradient`).
+  - `vectorDocumentToSvg` now writes gradients (with `data-vector-gradient`), paint stacks (`<g data-vector-path>`), blend modes, filter stacks whose filters draw nothing, and live booleans (drawn shapes plus the hidden source) as the TS does.
+  - SVG import: `parseVectorSvg` and the `vector.importSvg` command (add or replace): shapes, groups, transforms, `viewBox`, presentation attributes, `<style>` rules and `style` declarations, fill and stroke opacity, gradients through `href` chains, clip paths and masks as mask groups, and this editor's own export. Features not ported yet throw "not ported to Swift yet (#624)".
+  - The conformance runner reads the `render` step flag and compares `render()` of the host. The new `svg-round-trip` scenario passes, with the four ported scenarios' render steps; the SVG steps of `import-export` replay on their own.
+  - `String.jsParseFloat` and `String.jsToNumber` in `PixerateCore`: `parseFloat` and `Number` of strings as V8 reads them.
+
+  **Core:** conformance steps take an optional `render: true`: the recorder writes `expect.render` from the host's new optional `render()`, and the replay tests compare it like a result. The vector conformance host renders `getVectorSceneRenderData` of its controller's state. New vector scenario `svg-round-trip`.
+
+## 0.15.0
+
+### Minor Changes
+
+- e59fa5e: **Swift:** the first part of the Swift vector editor (#622).
+
+  **Commands in `PixerateCore`**
+  - `CommandRegistry`, `createCommandToolProvider` (`list_commands`, `run_command`, `run_commands` with `$N.path` references and atomic batches) and the palette ranking (`rankCommands`), ported from the TS core with the same results and messages.
+  - Shortcut chords are formatted per platform.
+
+  **`PixerateVector`, a new target**
+  - **Document model:** `VectorDocument`, `VectorNode`, `VectorSymbol`, `VectorSubpath`, `VectorAnchor`. It reads and writes documents exactly as the TS core's `toJSON` does: key order, omitted keys, and unknown members kept.
+  - **Geometry:**
+    - anchors ↔ Bézier;
+    - SVG path data;
+    - live corners;
+    - bounds, transforms and anchor edits;
+    - the shape builders.
+
+  Both are checked against vectors written by the TS core.
+
+## 0.14.0
+
+### Minor Changes
+
+- 8827291: Swift paint editor: brush pack import. `importBrushPack` / `readBrushPack` read Photoshop `.abr` (versions 1, 2, 6, 7 and 10) and Procreate `.brush` / `.brushset` packs into brushes and image sources, with the `unsupported` list and licence notes, through defensive `.abr`, ZIP and binary plist readers; the `import_brush_pack` tool adds them to the library in one import. The `brush-pack-import` paint scenario passes, so no paint scenario is skipped in Swift any more (#646).
+
+## 0.13.0
+
+### Minor Changes
+
+- 879a492: Swift paint editor: stamp tips (editor stamps and image sources) in the dab, pick-up, spray and particle paths, image brush sources (`BrushLibrary.addSource` / `listSources` / `getSource`, `sources` in library files, the `add_brush_source` and `list_brush_sources` tools, unknown `source:` refs refused), tip grain (`tip.grain`: texturised and moving, scale, depth, contrast, invert), `dynamics.count` and `dynamics.flip`, the `tipGrain` / `dabCount` profile capabilities, and `brushSources` in saved paintings. Stamp tips are now in `PaintEditorView`'s brush picker. The `brush-tips-and-grain` and new `stamp-tips` paint scenarios pass (#646).
+
+## 0.12.0
+
+### Minor Changes
+
+- 7f04a07: Add `PixerateGeometry`, the Swift port of the vector editor's path operations (#621): the Bézier path model, curve-preserving booleans with the polygon fallback, stroke outlines, the planar map, Pathfinder, hatching, curve fitting and shape geometry, checked against test vectors from the TS core. `JSONValue.jsNumber` is now public.
+
+## 0.11.0
+
+### Minor Changes
+
+- de3ed2e: Play `stroke_path` through `PaintDirector` when a director is passed (`{ kind: 'strokes' }`), pacing each subpath with the agent cursor and committing all subpaths as one undo step, `PaintEditorController.group` now accepts an async function (the step stays open, refusing other changes, until it settles; changes after an `await` go through its `within` argument), and add `speed` (`0.01..100` px/ms) to `samplePath` and `stroke_path` (#587).
+
+### Patch Changes
+
+- b5b703d: Vector brushstrokes paint with wet, mixer, smudge and blender brushes and with gradient paint (#519). Wet paint (watercolour, gouache, wet oils) runs the wet simulation in the stroke's own area for a fixed number of steps and dries, so the result is the same on every render; the scene shows the paint as laid while it settles in the background (`onVectorBrushstrokesSettled`, `settleVectorBrushstrokes`), and SVG and PDF exports wait for it. The Mixer Brush, smudge and blender act on a CPU backdrop of the fills, strokes and brushstrokes beneath the stroke (`rasterizeVectorBackdrop`), re-rendered when anything beneath changes. Gradient paint is sampled dab by dab along the path: the new `brush.paint` on a brushstroke (`vector.addBrushstroke` / `vector.setBrushstroke` `paint`; `velocity` and `time` mappings are refused), a gradient layer paint laid along, across or within the stroke, or a brush's own gradient. `VECTOR_PROFILE` now admits wet surfaces, the Mixer Brush reservoir and the blender and smudge tools.
+
+  Swift: `VECTOR_PROFILE` matches (wet surfaces, the reservoir, blender and smudge tools).
+
+## 0.10.0
+
+### Minor Changes
+
+- a7d3f4f: **Swift:** wet paint steps about 15× faster, with the same bits (#607). On an M4 Pro, a fully wet 2048² canvas now takes 15 ms a step instead of 223 ms.
+
+  - **Threads:** `WetWorld` steps tiles on every core and refills their halos the same way. `WetWorld.threads` changes only the speed.
+  - **SIMD:** each tile steps four cells at a time in a new C target, `PixerateWetKernel`, the counterpart of the core's WebAssembly SIMD kernel.
+  - **Same results:** saved paintings, exports and conformance results are unchanged. Tests compare the SIMD kernel with the scalar one, and several threads with one, bit for bit.
+
+## 0.9.2
+
+### Patch Changes
+
+- 69f399c: Brush thumbnails preview multiply light brushes (the highlighter) on their paper, as the TypeScript core does. `update_brush` keeps facets the host can't use that the brush already had (`kept`), matching the TypeScript tools (#612).
+
+## 0.9.1
+
+### Patch Changes
+
+- c4ecc8d: **Paint editor (TypeScript core and Swift):**
+
+  - **`set_effect_playback` keeps the setting a call leaves out.** `{ playing: false }` keeps the frame rate, and `{ fps: 12 }` keeps the play state. Before, the setting left out was unset (#602).
+  - **`export_high_res` works on paintings with stroke-mapped effect paint.** The replay now renders the effect paint the scaled strokes ask for, so a 2× export no longer fails with "is not rendered at this canvas size" (#603).
+
+## 0.9.0
+
+### Minor Changes
+
+- 0c3b944: Add `PixerateMarkdown`, the Markdown engine shared with Swash (#546), as a Foundation-only library product. It has a CommonMark 0.31.2 + GFM parser with exact source ranges for every node and syntax marker, the HTML renderer, HTML → Markdown paste conversion (on iOS too), the code highlighter, outlines and statistics. It also has the editing engine on raw Markdown: format toggles, links, list continuation, indent / outdent, Backspace and math braces, plus the format-command manifest from `@pixerate/markdown-conformance`. Its tests run the CommonMark and GFM spec examples and the shared Markdown editing corpus.
+
+## 0.8.1
+
+### Patch Changes
+
+- af0e180: Sticker provider contract additions (#488):
+
+  - **AI-generated art.** `StickerSummary.aiGenerated?: boolean`; `checkStickerProvider` rejects a value that isn't a boolean. `find_stickers` and `describe_sticker` return it, and the React and Svelte `StickerLibraryPicker` label such art "AI".
+  - **Light / dark variants.** `StickerSummary.variants?: ("light" | "dark")[]` (always with `light`) and `load(id, { variant })`, defaulting to `light`. A variant the sticker lacks is refused with an `unsupported_variant` `StickerError` that names the ones it has (`checkStickerVariant` does it for providers). The old, unused `StickerDescription.variants` (`{ id, name }[]`) is replaced by this field. `insert_sticker` takes `variant` and otherwise uses the dark art when the host's background is dark (`dark` option on `createVectorStickerHost`, `createImageStickerHost` and `createCanvasStickerHost`), and returns the variant used. The paint editor's sticker brush sprays dark variants on a dark colour scheme, and each sticker keeps the variant it was drawn in (`Sticker.variant`).
+  - **Collections.** `StickerSummary.collection`, `StickerSearchOptions.collection` and an optional `listCollections()`. `combineStickerProviders` namespaces collection ids as `provider:collection`. `find_stickers` filters by `collection` and returns the collections, the `StickerBrowser` has `setCollection`, and the pickers show a collection filter.
+  - The fake provider has AI-generated stickers, dark variants and collections to test against.
+  - Swift: `find_stickers` takes `collection` (from the regenerated contract) and refuses it, as the editor's own stickers are in no collection.
+
+## 0.8.0
+
+### Minor Changes
+
+- 9347e94: **Swift:** Metal now shades the display of large wet areas (#604). With `set_wet_engine` `auto` (the default) and at least `minTiles` live tiles (16), `WetMetalEngine` shades every stale wet tile in one command buffer. It reads the CPU engine's tiles in place on shared memory, so nothing is uploaded. A fully wet 2048² canvas shades in 10 ms instead of 119 ms on an M4 Pro.
+
+  - **Results are unchanged.** The CPU engine stays the authority, so drying, saving, export and replay are byte-identical with the GPU on or off. The display stays within 1/255 of the CPU's.
+  - **Engine reports:** `set_wet_engine` and `get_wet_paint` now report the engine's real state (`not-started`, `standby`, `active`, `unavailable`, `failed`, `off`) and the GPU's name.
+  - **Shader source:** the kernel is the core's `WGSL_SHADE`, translated to Metal by `pnpm gen:msl` (naga).
+
+  **Core:** the `set_wet_engine` and `get_wet_paint` descriptions now say that Engine B is WebGPU in browsers and Metal in the Swift editors.
+
 ## 0.7.0
 
 ### Minor Changes

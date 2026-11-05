@@ -13,10 +13,13 @@ import type { JsonSchema } from '../tools/schema';
 import { BrushLibraryError, closest, type BrushLibrary, type BrushLibraryEntry } from './library';
 import { normalizeBrushSpec } from './normalize';
 import { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, changedBrushPaths, mergeBrushPatch } from './patch';
-import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, type BrushCheck, type BrushHostProfile } from './profiles';
+import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, withKeptIssues, type BrushCheck, type BrushHostProfile } from './profiles';
 import { resolveCategory, resolveEngine } from './resolve';
 import { BRUSH_JSON_SCHEMA } from './schema';
 import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_TOOLS, type Brush } from './types';
+import { BRUSH_PACK_FORMATS, importBrushPack, MAX_BRUSH_PACK_BYTES, type BrushPackFormat } from './import/pack';
+import { base64ToBytes } from '../raster/png';
+import { BRUSH_SOURCE_CHANNELS, brushSourceIdOf, brushSourceIds, brushSourceRef, isBrushSourceRef, MAX_BRUSH_SOURCE_INPUT_PIXELS, MAX_BRUSH_SOURCE_SIZE, summarizeBrushSource } from './sources';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -28,7 +31,14 @@ export interface BrushPreviewImage {
 }
 
 /** Draws a sample stroke with a brush (the host's renderer: the paint engine, a canvas…). */
-export type BrushPreviewRenderer = (brush: Brush, options: { width: number; height: number; color: string }) => BrushPreviewImage | Promise<BrushPreviewImage>;
+export interface BrushPreviewRenderer {
+  (brush: Brush, options: { width: number; height: number; color: string }): BrushPreviewImage | Promise<BrushPreviewImage>;
+  /**
+   * What it draws on (#rrggbb), for `brushPreviewColours`: the paint engine's paper. Unset for a
+   * transparent preview, which shows whatever the UI puts behind it.
+   */
+  readonly paper?: string;
+}
 
 export interface BrushLibraryToolProviderOptions {
   /** What this host can render (default `PAINT_PROFILE`): lists are filtered by it and writes checked against it. */
@@ -104,14 +114,21 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     const ids = (await library.list()).map((e) => e.brush.id);
     throw new BrushLibraryError('unknown_brush', `No brush "${id}". ${closest(id, ids)}list_brush_presets lists them.`);
   };
-  /** `checkBrush`, plus a stamp tip's stickers checked against the host's sticker library. */
+  /** `checkBrush`, plus image sources checked against the library and a stamp tip's stickers against the host's sticker library. */
   const checkFor = async (brush: Brush, p: BrushHostProfile): Promise<BrushCheck> => {
     const check = checkBrush(brush, p);
-    const provider = options.stickers?.();
-    if (!provider || brush.tip.shape !== 'stamp') return check;
     const issues = [...check.issues];
+    const refs: [string, string][] = [...(brush.tip.stamps ?? []).map((r): [string, string] => ['tip.stamps', r]), ...(brush.tip.grain ? [['tip.grain.source', brush.tip.grain.source] as [string, string]] : [])];
+    for (const [facet, ref] of refs) {
+      const id = brushSourceIdOf(ref);
+      if (id === null || (await library.getSource(id))) continue;
+      const ids = (await library.listSources()).map((x) => x.id);
+      issues.push({ facet, severity: 'error', reason: `There is no image source "${id}" in the brush library. ${closest(id, ids)}`.trim(), fix: 'Add it with add_brush_source, or use a ref list_brush_sources lists.' });
+    }
+    const provider = options.stickers?.();
+    if (!provider || brush.tip.shape !== 'stamp') return { ok: !issues.some((i) => i.severity === 'error'), issues };
     for (const ref of brush.tip.stamps ?? []) {
-      if (ref.startsWith('editor:')) continue;
+      if (ref.startsWith('editor:') || isBrushSourceRef(ref)) continue;
       try {
         await describeStickerRef(provider, ref);
       } catch (e) {
@@ -120,8 +137,11 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     }
     return { ok: !issues.some((i) => i.severity === 'error'), issues };
   };
-  /** Normalises and checks a brush for this host, then stores it. */
-  const store = async (raw: Record<string, unknown>, overwrite: boolean) => {
+  /**
+   * Normalises and checks a brush for this host, then stores it. With `original` (an update), what
+   * it already had that this host can't use is kept, not refused: only new refusals refuse it.
+   */
+  const store = async (raw: Record<string, unknown>, overwrite: boolean, original?: Brush) => {
     const problems: string[] = [];
     let brush: Brush;
     try {
@@ -129,7 +149,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     } catch (e) {
       throw new BrushLibraryError('invalid', (e as Error).message);
     }
-    const check = await checkFor(brush, profile);
+    const check = withKeptIssues(await checkFor(brush, profile), original ? await checkFor(original, profile) : null);
     if (!check.ok) throw new BrushLibraryError('invalid', refusal(check, profile));
     const saved = await library.save(brush, { overwrite });
     return { ...saved, problems, check };
@@ -219,7 +239,36 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     handler: async ({ ids }) => ({ file: await library.exportFile(ids as string[] | undefined) }),
   };
 
-  const tools: AgentTool[] = [list, describe, check, exportTool];
+  const listSources: AgentTool = {
+    name: 'list_brush_sources',
+    title: 'List brush image sources',
+    description:
+      'Lists the image sources in the brush library: the images image tips and image grain are made from. Returns each source\'s id, ref (source:<id>, for tip.stamps of a stamp tip or tip.grain.source in create_brush / update_brush), name, width and height in px, licence and origin when it has them, and usedBy (the saved brushes that name it), plus total. Built-in grain patterns need no source. Changes nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', maxLength: 200, description: 'Words in the id, name or origin (each word must match the start of one).' },
+        offset: { type: 'integer', minimum: 0, description: 'Skip this many (default 0).' },
+        limit: { type: 'integer', minimum: 1, maximum: 200, description: 'At most this many (default 100).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'List brush image sources', ...READ },
+    handler: async ({ text, offset, limit }) => {
+      const brushes = (await library.list({ source: 'user' })).map((e) => e.brush);
+      const wordsOf = (v: string) => v.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+      const want = typeof text === 'string' ? wordsOf(text) : [];
+      const found = (await library.listSources()).filter((x) => {
+        const have = wordsOf([x.id, x.name, x.origin ?? ''].join(' '));
+        return want.every((w) => have.some((h) => h.startsWith(w)));
+      });
+      const start = (offset as number | undefined) ?? 0;
+      const page = found.slice(start, start + ((limit as number | undefined) ?? 100));
+      return { total: found.length, sources: page.map((x) => ({ ...summarizeBrushSource(x), usedBy: brushes.filter((b) => brushSourceIds(b).includes(x.id)).map((b) => b.id) })) };
+    },
+  };
+
+  const tools: AgentTool[] = [list, describe, check, exportTool, listSources];
 
   if (options.renderPreview) {
     const render = options.renderPreview;
@@ -281,7 +330,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     {
       name: 'update_brush',
       title: 'Update a brush',
-      description: `Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush; a refused change saves nothing. One change. Returns the brush, the leaf paths changed, problems and warnings.`,
+      description: `Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush: a change that adds what this host can't render is refused and saves nothing, while facets the brush already had for other hosts (a paint brush's light, in canvas) are kept as they are. One change. Returns the brush, the leaf paths changed, problems, warnings and, when there are any, kept: the facets this host can't use that the brush keeps.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -299,8 +348,33 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
         if (e.builtin) throw new BrushLibraryError('builtin', `"${id}" is a built-in brush and can't be changed; duplicate_brush makes a copy you can change.`);
         const base = copy(e.brush) as unknown as Record<string, unknown>;
         for (const k of (unset as string[] | undefined) ?? []) delete base[k];
-        const saved = await store(merge(base, { ...patch, id }), true);
-        return { id, brush: saved.brush, changed: changedPaths(e.brush, saved.brush), problems: saved.problems, warnings: warnings(saved.check) };
+        const saved = await store(merge(base, { ...patch, id }), true, e.brush);
+        return { id, brush: saved.brush, changed: changedPaths(e.brush, saved.brush), problems: saved.problems, warnings: warnings(saved.check), ...(saved.check.kept.length ? { kept: saved.check.kept } : {}) };
+      },
+    },
+    {
+      name: 'add_brush_source',
+      title: 'Add a brush image source',
+      description: `Adds an image to the brush library as a source for image tips and image grain (as Procreate's shape and grain sources). The image is a PNG data: URL; the marks are read from its transparency, its dark parts (a scan of marks on paper) or its light parts (white on black), as channel says, and kept as a grey mask at most ${MAX_BRUSH_SOURCE_SIZE} px on a side. Returns id, ref (source:<id>), the stored source's width and height, problems (the channel auto picked, scaling) and replaced. Then make the brush: create_brush or update_brush with tip { shape: "stamp", stamps: [ref] } for an image tip, or tip.grain { source: ref } for grain. A taken id is refused unless overwrite.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name, e.g. "Charcoal scan".' },
+          image: { type: 'string', pattern: '^data:image/png;base64,', maxLength: 40_000_000, description: `The image: a PNG data: URL, at most ${MAX_BRUSH_SOURCE_INPUT_PIXELS} pixels; larger than ${MAX_BRUSH_SOURCE_SIZE} px it is scaled down.` },
+          id: { type: 'string', pattern: String(FACETS.id!.pattern), description: 'The source id (default: from the name, made unique): lowercase letters, digits and dashes.' },
+          channel: { type: 'string', enum: [...BRUSH_SOURCE_CHANNELS], description: 'Where the marks are: auto (default: the transparency when the image has any, else the dark parts), alpha, darkness (dark marks on light paper) or lightness (light marks on black).' },
+          invert: { type: 'boolean', description: 'Swap painted and empty parts (default false).' },
+          licence: { type: 'string', maxLength: 2000, description: 'The licence or terms the image came with, kept with the source.' },
+          origin: { type: 'string', maxLength: 200, description: 'Where it came from: a file name, a pack or a URL.' },
+          overwrite: { type: 'boolean', description: 'Replace the image of a source with the same id (default false); brushes using it change with it.' },
+        },
+        required: ['name', 'image'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Add a brush image source', ...WRITE },
+      handler: async ({ overwrite, ...input }) => {
+        const r = await library.addSource(input as unknown as Parameters<BrushLibrary['addSource']>[0], { overwrite: !!overwrite });
+        return { id: r.source.id, ref: brushSourceRef(r.source.id), width: r.source.width, height: r.source.height, problems: r.problems, replaced: r.replaced };
       },
     },
     {
@@ -350,6 +424,42 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
       },
       annotations: { title: 'Import brushes', ...WRITE, destructiveHint: true },
       handler: async ({ file, overwrite }) => library.importFile(file, { overwrite: !!overwrite }),
+    },
+    {
+      name: 'import_brush_pack',
+      title: 'Import a brush pack',
+      description: `Imports a brush pack someone already owns: Photoshop .abr (sampled tips become image sources and stamp-tip brushes, computed tips round or flat brushes; preset names and spacing where the file has them) or Procreate .brush / .brushset (each brush's shape becomes its image tip and its grain its tip grain, with its name and spacing). Brushes and sources are added to the library in one import; ids already saved are skipped unless overwrite. Returns format, brushes (id, name, renderable: whether this host, ${profile.name}, can paint it), sources (ids), skipped, unsupported (what was not imported or mapped, in words), licence (the licence given and any licence or terms files found in the pack, also kept on each source) and problems. Packs are often licensed for personal use only: pass the licence they came with.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          file: { type: 'string', minLength: 4, maxLength: Math.ceil((MAX_BRUSH_PACK_BYTES * 4) / 3) + 4, description: `The pack's bytes, base64 (at most ${MAX_BRUSH_PACK_BYTES / 1024 / 1024} MB).` },
+          fileName: { type: 'string', minLength: 1, maxLength: 200, description: 'The file name, e.g. "Inky.abr": its extension picks the format and its name prefixes the brush ids and names.' },
+          format: { type: 'string', enum: [...BRUSH_PACK_FORMATS], description: 'abr, brush or brushset (default: from the file name, then the contents).' },
+          prefix: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'Id prefix for the brushes and sources (default: from the file name).' },
+          licence: { type: 'string', maxLength: 2000, description: 'The licence or terms the pack came with, kept on every source it adds.' },
+          overwrite: { type: 'boolean', description: 'Replace saved brushes and sources with the same ids (default false: skip them).' },
+        },
+        required: ['file', 'fileName'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Import a brush pack', ...WRITE, destructiveHint: true },
+      handler: async ({ file, fileName, format, prefix, licence, overwrite }) => {
+        let bytes: Uint8Array;
+        try {
+          bytes = base64ToBytes((file as string).replace(/^data:[^,]*,/, ''));
+        } catch {
+          throw new BrushLibraryError('invalid', 'file is not base64: pass the pack\'s bytes as base64 (a data: URL works too).');
+        }
+        let r;
+        try {
+          r = await importBrushPack(library, bytes, { fileName: fileName as string, ...(format ? { format: format as BrushPackFormat } : {}), ...(prefix ? { prefix: prefix as string } : {}), ...(licence ? { licence: licence as string } : {}), overwrite: !!overwrite });
+        } catch (e) {
+          if (e instanceof BrushLibraryError) throw e;
+          throw new BrushLibraryError('invalid', `${(e as Error).message} Nothing was imported.`);
+        }
+        const entries = await Promise.all(r.brushes.map((b) => library.get(b.id)));
+        return { ...r, brushes: r.brushes.map((b, i) => ({ ...b, renderable: entries[i] ? checkBrush(entries[i]!.brush, profile).ok : false })) };
+      },
     },
   );
   return tools;

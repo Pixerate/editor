@@ -17,6 +17,9 @@ let package = Package(
         .library(name: "PixeratePaint", targets: ["PixeratePaint"]),
         .library(name: "PixerateConformance", targets: ["PixerateConformance"]),
         .library(name: "PixeratePaintUI", targets: ["PixeratePaintUI"]),
+        .library(name: "PixerateMarkdown", targets: ["PixerateMarkdown"]),
+        .library(name: "PixerateGeometry", targets: ["PixerateGeometry"]),
+        .library(name: "PixerateVector", targets: ["PixerateVector"]),
     ],
     targets: [
         // Foundation only: no SwiftUI, AppKit or UIKit (the UI targets are the only ones that import them).
@@ -35,11 +38,28 @@ let package = Package(
         .target(name: "PixerateRaster", dependencies: ["PixerateCore"], path: "packages/swift/Sources/PixerateRaster", swiftSettings: settings),
         // The paint editor (`paint-editor`, `paint` and `brushes` in the TS core) on the raster module.
         // `Generated/` is written by scripts/gen-swift.mjs from the paint contracts.
-        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
+        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance", "PixerateWetKernel"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
+        // The wet-media step on four cells at a time, in C with clang vector extensions (the Swift
+        // compiler made the same SIMD code lane by lane). Bit-exact with `wetStepSlot`; used by
+        // `PixeratePaint` only.
+        .target(name: "PixerateWetKernel", path: "packages/swift/Sources/PixerateWetKernel"),
         // The paint editor's SwiftUI views (`PaintEditorView`, the canvas and panels) and their view
         // model on `PaintEditorController`. The only paint target that imports SwiftUI (AppKit / UIKit
         // for pen and trackpad input, behind `#if canImport`).
         .target(name: "PixeratePaintUI", dependencies: ["PixeratePaint", "PixerateCore", "PixerateRaster"], path: "packages/swift/Sources/PixeratePaintUI", swiftSettings: settings),
+        // The Markdown engine shared with Swash (#546): CommonMark + GFM parser, HTML renderer and
+        // HTML → Markdown converter, code highlighter, and the AST formatting and editing commands.
+        // Foundation only, with no dependency on the other targets, so apps can take it on its own.
+        .target(name: "PixerateMarkdown", path: "packages/swift/Sources/PixerateMarkdown", swiftSettings: settings),
+        // The vector editor's path operations (`canvas/pathops`, `curveFit`, `shapeGeometry` and
+        // `polygonBoolean` in the TS core): Bézier maths, curve booleans, stroke outlines, the planar
+        // map, Pathfinder and curve fitting, bit-exact with the TS. Foundation only.
+        .target(name: "PixerateGeometry", dependencies: ["PixerateCore", "PixerateRaster"], path: "packages/swift/Sources/PixerateGeometry", swiftSettings: settings),
+        // The vector editor (`vector/` in the TS core): the document model and core geometry (JSON round
+        // trips that keep key order and unknown members, anchors ↔ Bézier, bounds, transforms, anchor
+        // edits, shape builders), the controller, its commands (metadata from the contracts) and the
+        // conformance host. Foundation only.
+        .target(name: "PixerateVector", dependencies: ["PixerateCore", "PixerateContracts", "PixerateGeometry", "PixerateRaster", "PixerateConformance", "PixeratePaint"], path: "packages/swift/Sources/PixerateVector", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
@@ -66,6 +86,27 @@ let package = Package(
             name: "PixeratePaintUITests",
             dependencies: ["PixeratePaintUI", "PixeratePaint", "PixerateCore", "PixerateRaster"],
             path: "packages/swift/Tests/PixeratePaintUITests",
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateMarkdownTests",
+            dependencies: ["PixerateMarkdown"],
+            path: "packages/swift/Tests/PixerateMarkdownTests",
+            resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateVectorTests",
+            dependencies: ["PixerateVector", "PixerateGeometry", "PixerateCore", "PixerateRaster", "PixerateContracts", "PixerateConformance"],
+            path: "packages/swift/Tests/PixerateVectorTests",
+            resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateGeometryTests",
+            dependencies: ["PixerateGeometry", "PixerateCore"],
+            path: "packages/swift/Tests/PixerateGeometryTests",
+            resources: [.copy("Fixtures")],
             swiftSettings: settings
         ),
     ]

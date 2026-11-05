@@ -620,6 +620,8 @@ public struct StrokePathArguments: Sendable {
     public var spacing: Double?
     /// Pen pressure along each subpath, spread evenly from start to end (default full pressure); [0.2, 1, 0.2] tapers both ends.
     public var pressure: [Double]?
+    /// Drawing speed in document pixels per millisecond (optional; gives each sample a time t so playback has a pace and speed-sensitive brushes respond).
+    public var speed: Double?
     /// Layer id from list_layers (default the active layer).
     public var layerId: String?
     /// Brush id from list_brush_presets (default the active brush).
@@ -638,6 +640,7 @@ public struct StrokePathArguments: Sendable {
         path = try args.required(try args.string("path"), "path")
         spacing = try args.number("spacing")
         pressure = try args.numbers("pressure")
+        speed = try args.number("speed")
         layerId = try args.string("layerId")
         brushId = try args.string("brushId")
         brush = args.argument("brush")
@@ -1956,6 +1959,8 @@ public struct FindStickersArguments: Sendable {
     public var query: String?
     /// Only this category (the result lists them).
     public var category: String?
+    /// Only this collection id (the result lists them; default every collection).
+    public var collection: String?
     /// Only stickers with every one of these tags.
     public var tags: [String]?
     /// true: only stickers whose licence allows commercial use.
@@ -1969,6 +1974,7 @@ public struct FindStickersArguments: Sendable {
     public init(_ args: JSONObject) throws {
         query = try args.string("query")
         category = try args.string("category")
+        collection = try args.string("collection")
         tags = try args.strings("tags")
         commercial = try args.bool("commercial")
         limit = try args.integer("limit")
@@ -2503,6 +2509,23 @@ public struct ExportBrushesArguments: Sendable {
     }
 }
 
+/// Arguments of `list_brush_sources`.
+public struct ListBrushSourcesArguments: Sendable {
+    /// Words in the id, name or origin (each word must match the start of one).
+    public var text: String?
+    /// Skip this many (default 0).
+    public var offset: Int?
+    /// At most this many (default 100).
+    public var limit: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        text = try args.string("text")
+        offset = try args.integer("offset")
+        limit = try args.integer("limit")
+    }
+}
+
 /// Arguments of `preview_brush`.
 public struct PreviewBrushArguments: Sendable {
     /// Brush id from list_brush_presets (lowercase letters, digits and dashes).
@@ -2703,6 +2726,46 @@ public struct UpdateBrushArguments: Sendable {
     }
 }
 
+/// Arguments of `add_brush_source`.
+public struct AddBrushSourceArguments: Sendable {
+    /// Where the marks are: auto (default: the transparency when the image has any, else the dark parts), alpha, darkness (dark marks on light paper) or lightness (light marks on black).
+    public enum Channel: String, CaseIterable, Sendable {
+        case auto
+        case alpha
+        case darkness
+        case lightness
+    }
+
+    /// Display name, e.g.
+    public var name: String
+    /// The image: a PNG data: URL, at most 16777216 pixels; larger than 512 px it is scaled down.
+    public var image: String
+    /// The source id (default: from the name, made unique): lowercase letters, digits and dashes.
+    public var id: String?
+    /// Where the marks are: auto (default: the transparency when the image has any, else the dark parts), alpha, darkness (dark marks on light paper) or lightness (light marks on black).
+    public var channel: Channel?
+    /// Swap painted and empty parts (default false).
+    public var invert: Bool?
+    /// The licence or terms the image came with, kept with the source.
+    public var licence: String?
+    /// Where it came from: a file name, a pack or a URL.
+    public var origin: String?
+    /// Replace the image of a source with the same id (default false); brushes using it change with it.
+    public var overwrite: Bool?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        name = try args.required(try args.string("name"), "name")
+        image = try args.required(try args.string("image"), "image")
+        id = try args.string("id")
+        channel = try args.enumeration("channel", as: Channel.self)
+        invert = try args.bool("invert")
+        licence = try args.string("licence")
+        origin = try args.string("origin")
+        overwrite = try args.bool("overwrite")
+    }
+}
+
 /// Arguments of `duplicate_brush`.
 public struct DuplicateBrushArguments: Sendable {
     /// Brush id from list_brush_presets (lowercase letters, digits and dashes).
@@ -2741,6 +2804,39 @@ public struct ImportBrushesArguments: Sendable {
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
     public init(_ args: JSONObject) throws {
         file = try args.required(args.argument("file"), "file")
+        overwrite = try args.bool("overwrite")
+    }
+}
+
+/// Arguments of `import_brush_pack`.
+public struct ImportBrushPackArguments: Sendable {
+    /// abr, brush or brushset (default: from the file name, then the contents).
+    public enum Format: String, CaseIterable, Sendable {
+        case abr
+        case brush
+        case brushset
+    }
+
+    /// The pack's bytes, base64 (at most 64 MB).
+    public var file: String
+    /// The file name, e.g.
+    public var fileName: String
+    /// abr, brush or brushset (default: from the file name, then the contents).
+    public var format: Format?
+    /// Id prefix for the brushes and sources (default: from the file name).
+    public var prefix: String?
+    /// The licence or terms the pack came with, kept on every source it adds.
+    public var licence: String?
+    /// Replace saved brushes and sources with the same ids (default false: skip them).
+    public var overwrite: Bool?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        file = try args.required(try args.string("file"), "file")
+        fileName = try args.required(try args.string("fileName"), "fileName")
+        format = try args.enumeration("format", as: Format.self)
+        prefix = try args.string("prefix")
+        licence = try args.string("licence")
         overwrite = try args.bool("overwrite")
     }
 }
@@ -2930,12 +3026,15 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .describeBrush: try DescribeBrushArguments(args)
     case .checkBrush: try CheckBrushArguments(args)
     case .exportBrushes: try ExportBrushesArguments(args)
+    case .listBrushSources: try ListBrushSourcesArguments(args)
     case .previewBrush: try PreviewBrushArguments(args)
     case .createBrush: try CreateBrushArguments(args)
     case .updateBrush: try UpdateBrushArguments(args)
+    case .addBrushSource: try AddBrushSourceArguments(args)
     case .duplicateBrush: try DuplicateBrushArguments(args)
     case .removeBrush: try RemoveBrushArguments(args)
     case .importBrushes: try ImportBrushesArguments(args)
+    case .importBrushPack: try ImportBrushPackArguments(args)
     case .proposePaint: try ProposePaintArguments(args)
     case .listPaintProposals: try ListPaintProposalsArguments(args)
     case .acceptPaintProposal: try AcceptPaintProposalArguments(args)

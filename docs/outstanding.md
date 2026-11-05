@@ -26,9 +26,10 @@ Shipped behaviour with a documented gap.
 | **Brushstrokes are left out of Lottie** | They are raster images, which Lottie shape layers can't hold. The export notes it. They could go out as image layers | S–M | `src/vector/lottie.ts` |
 | Other **vector export notes** | PDF and Lottie leave out filters and opacity masks; Lottie draws lenses and path effects without an equivalent as their result. See the PDF and Lottie sections of [vector-editor.md](./vector-editor.md#pdf) | — | `src/vector/pdf.ts`, `lottie.ts` |
 | The **Flair paint agent script** is checked in a browser only | It needs a real WebGL context and the Flair catalog, which CI does not have (Flair is a devDependency of the demo only). #284 ran it by hand in the built demo | S–M (a headless GPU job) | `apps/demo`, CI |
-| **Brushstrokes on paths are dry only** (canvas and vector) | Wet, mixer, smudge and blender brushes need paint under the stroke, which a standalone stroke image doesn't have. The renderer refuses them | M | `src/paint/brushstroke.ts` |
-| **Vector brushstrokes paint one colour** | A gradient paint gives its middle colour, though the shared renderer takes a `PaintSource` since #277 | S | `src/vector/brushstroke.ts` |
-| **`WetWorld` has a fixed extent** (at most 8 wet layers and 352 tile slots) | It holds its slots in one `WebAssembly.Memory`. Water that spreads past the slots is lost, and a canvas paint layer can't be fully unbounded. A `paintWetPath` helper would also shorten the demo recipe | M | `src/paint/wet/world.ts` |
+| **Canvas brushstrokes are dry only** | Wet, mixer, smudge and blender brushes need paint under the stroke, which a standalone stroke image doesn't have. Vector brushstrokes have them since #519 (`src/vector/brushstrokeMedia.ts`); the canvas could follow the same way | M | `src/canvas/brushstrokeRender.ts` |
+| **Vector mixer, smudge and blender brushstrokes don't see text, images, filters or masks** | Their backdrop is a small CPU renderer of the scene (`src/vector/backdrop.ts`): fills, plain strokes (no dashes) and brushstrokes. Text drawn as SVG text, placed images, filters and masks are left out, and blend modes draw as normal | M | `src/vector/backdrop.ts` |
+| **Wet vector brushstrokes settle on the main thread** | 120 steps of the TypeScript wet kernel, in 12 ms slices, a few seconds per stroke; exports wait for them. A worker (or the wasm kernel, which gives the same bits) would free the page | S–M | `src/vector/brushstroke.ts`, `brushstrokeMedia.ts` |
+| **`WetWorld` has a fixed extent** (at most 8 wet layers and 328 tile slots) | It holds its slots in one `WebAssembly.Memory`. Water that spreads past the slots is lost, and a canvas paint layer can't be fully unbounded. A `paintWetPath` helper would also shorten the demo recipe | M | `src/paint/wet/world.ts` |
 | **Some image work stays 8-bit** | Smart object contents and smart filters (including effect filters) render at 8 bits, annotation layers are drawn at 8 bits, retouching on a mask is 8-bit on the pixels it changes, and effect maps come from the 8-bit shape. The viewport is 8-bit by design | M each | `src/image-editor/layers/smart.ts`, `layers/compositor.ts` |
 | **PSD import gaps** | Six adjustment kinds (Brightness / Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color, Color Lookup), Dissolve, `clbl`, artboards, vector masks on pixel layers, fill layers, external linked files, multi-patch warps on export. Each has a warning. See [PSD today](./image-editor-layers.md#psd-today) | S–M each | `src/image-editor/psd` |
 | **Painterly blend modes are written to PSD as Normal without a warning** by the image editor | Its export maps through `BLEND_TO_PSD` and warns only for `pigment`. The paint editor already uses `standardBlendMode` and reports it | S | `src/image-editor` PSD export |
@@ -60,16 +61,5 @@ Shipped behaviour with a documented gap.
 
 ### Tests and CI
 
-These tests are opt-in and don't run in CI: the PSD corpus (`pnpm test:corpus`), the wet-media GPU tests (`WET_GPU`, Dawn installed outside the repo), the ffmpeg render tests when ffmpeg is missing, the wet look renders (`OUT`), and the benchmarks (`IMAGE_LAYERS_BENCH`, `DEEP_BENCH`, `WET_BENCH`, `SPREADSHEET_BENCH`, transform bench). There are no unconditional skips or `todo` tests. Running the corpus and the GPU tests on a schedule would catch regressions there. S–M.
+These tests are opt-in and don't run on every pull request: the PSD corpus (`pnpm test:corpus`), the wet-media GPU tests (`WET_GPU`, Dawn installed outside the repo), the ffmpeg render tests when ffmpeg is missing, the wet look renders (`OUT`), and the benchmarks (`IMAGE_LAYERS_BENCH`, `DEEP_BENCH`, `WET_BENCH`, `SPREADSHEET_BENCH`, transform bench). There are no unconditional skips or `todo` tests. `.github/workflows/scheduled-suites.yml` runs the PSD corpus, the headless WebGPU wet-media suite, and the benchmarks weekly (and on `workflow_dispatch`).
 
-## Skills with out-of-date prose
-
-`tests/agent-skills.test.ts` keeps the tool tables in step with the code, but it can't check advice. These need a reread:
-
-- **`pixerate-image-editor`:**
-  - The `export_psd` row says it saves "an RGB PSD". It writes CMYK or Lab channels after `set_color_mode`, as the skill says further down.
-  - It lists only Pigment blends as written as Normal; the painterly modes are too.
-  - The description doesn't mention Blur, Sharpen, History Brush, 16 / 32-bit, colour management or provider effects.
-  - The body is at the 500-line limit the test enforces, so the next tool rows need prose moved into `references/` first.
-- **`pixerate-paint-editor`:** accurate, but it doesn't say that wet media holds at most 352 tiles, or that multi-threaded wet media needs a cross-origin isolated page (COOP / COEP) and runs on one thread otherwise.
-- **`pixerate-vector`:** will need the brush-character rows once the in-flight vector change lands (that change includes the update).

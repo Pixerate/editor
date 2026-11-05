@@ -31,3 +31,15 @@ How to move, scale, rotate, skew, distort and warp layers, selected pixels and m
 - **Scale proportionally** unless asked to stretch: give `scaleX` and `scaleY` the same value.
   Keep the subject in frame: after a scale about `center` the layer can run past the canvas,
   which `bounds` in the result shows.
+
+## Pitfalls
+
+- Transforms refuse hidden layers, layers with `locks.position` or `locks.pixels`, and adjustment,
+  annotation and group layers (transform a layer's mask with `channel: "mask"` after unlinking
+  it). A result larger than about 11 600 × 11 600 px is refused.
+- `transform_layer` scale fields are percent (100 = unchanged), not factors; `rotate` is degrees
+  clockwise. `corners` that cross or fold through the horizon are refused: keep the quad convex.
+- With a selection, `content: "auto"` (the default) moves only the selected pixels, not the
+  whole layer. Pass `content: "layer"` to move everything regardless of the selection.
+- A Background transformed smaller leaves transparent canvas around it; fill it with a layer
+  below or crop afterwards.

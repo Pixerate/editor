@@ -11,6 +11,7 @@ import { stampCoverage, type StampKind } from '../stickers/stamps';
 import { editorStampOf } from '../stickers/helpers';
 import type { StickerArtLookup } from './sticker-art';
 import { rand01 } from './noise';
+import { isBrushSourceRef } from '../brushes/sources';
 
 /** Coverage 0..1 of a stamp at (u, v) of its unit square (−1..1, y down); `seed` varies shapes with random parts. */
 export type StampSampler = (u: number, v: number, seed: number) => number;
@@ -18,11 +19,25 @@ export type StampSampler = (u: number, v: number, seed: number) => number;
 const samplers = new WeakMap<object, StampSampler>();
 
 /**
- * The sampler of a stamp ref: an editor stamp's coverage, or the alpha of a sticker's loaded art
- * (bilinear, centred in the unit square, aspect kept). `null` when the art is not loaded (or the
- * ref is not a sticker): the caller paints the round tip instead.
+ * The sampler of a stamp ref: an editor stamp's coverage, or the alpha of a sticker's or an image
+ * source's loaded art (bilinear, centred in the unit square, aspect kept). `null` when the art is
+ * not loaded (or the ref is not a sticker): the caller paints the round tip instead. `hardness`
+ * below 1 softens an image source's edges.
  */
-export function stampSampler(ref: string, art?: StickerArtLookup): StampSampler | null {
+export function stampSampler(ref: string, art?: StickerArtLookup, hardness = 1): StampSampler | null {
+  const sampler = baseSampler(ref, art);
+  // Image sources take the tip's hardness: below 1 they fade out towards the corners of their square.
+  if (!sampler || hardness >= 1 || !isBrushSourceRef(ref)) return sampler;
+  const h = Math.max(0, hardness);
+  return (u, v, seed) => {
+    const r = Math.hypot(u, v) / Math.SQRT2;
+    if (r <= h) return sampler(u, v, seed);
+    const t = Math.min(1, (r - h) / (1 - h));
+    return sampler(u, v, seed) * (1 - t * t * (3 - 2 * t));
+  };
+}
+
+function baseSampler(ref: string, art?: StickerArtLookup): StampSampler | null {
   let kind: StampKind | null = null;
   try {
     kind = editorStampOf(ref.includes(':') ? ref : `editor:${ref}`);
@@ -62,6 +77,8 @@ export interface StampDab {
   roundness: number;
   angle: number;
   alpha: number;
+  /** Mirrored across the tip's x axis (bit 1) and y axis (bit 2). */
+  flip?: number;
 }
 
 /** The pixel rectangle a stamp dab can touch. */
@@ -86,6 +103,8 @@ export function rasterizeStampDab(d: StampDab, sample: StampSampler, seed: numbe
   const sn = Math.sin(d.angle);
   const cs = Math.cos(d.angle);
   const ss = r < 6 ? 3 : 1;
+  const fu = d.flip && d.flip & 1 ? -1 : 1;
+  const fv = d.flip && d.flip & 2 ? -1 : 1;
   for (let yy = 0; yy < h; yy++) {
     for (let xx = 0; xx < w; xx++) {
       let sum = 0;
@@ -94,8 +113,8 @@ export function rasterizeStampDab(d: StampDab, sample: StampSampler, seed: numbe
           const dx = rect.x + xx + (sx + 0.5) / ss - d.x;
           const dy = rect.y + yy + (sy + 0.5) / ss - d.y;
           // Into the tip's frame (the angle turns counter-clockwise on screen, y down), then the unit square.
-          const u = (dx * cs - dy * sn) / r;
-          const v = (dx * sn + dy * cs) / (r * ro);
+          const u = ((dx * cs - dy * sn) / r) * fu;
+          const v = ((dx * sn + dy * cs) / (r * ro)) * fv;
           if (u > -1.05 && u < 1.05 && v > -1.05 && v < 1.05) sum += sample(u, v, seed);
         }
       }
@@ -105,10 +124,10 @@ export function rasterizeStampDab(d: StampDab, sample: StampSampler, seed: numbe
   }
 }
 
-/** The sticker refs a brush lays that need loaded art (provider stickers; editor stamps need none). */
+/** The sticker refs a brush lays that need loaded art (provider stickers; editor stamps and image sources need none). */
 export function brushStickerRefs(brush: { engine: string; stamp: string | null; sticker: { stamps: readonly string[] }; particle: { dotTextures: readonly string[] } }): string[] {
   const refs = brush.engine === 'sticker' ? [...brush.sticker.stamps] : brush.engine === 'particle' ? [...brush.particle.dotTextures] : brush.engine === 'dab' && brush.stamp ? [brush.stamp] : [];
-  return [...new Set(refs.filter((r) => r.includes(':') && !r.startsWith('editor:')))];
+  return [...new Set(refs.filter((r) => r.includes(':') && !r.startsWith('editor:') && !isBrushSourceRef(r)))];
 }
 
 /**

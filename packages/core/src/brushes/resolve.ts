@@ -7,13 +7,15 @@
  * `migrateBrushV1` reads the same map the other way, so the two directions cannot drift apart.
  */
 
-import { normalizePaintBrush, WET_MEDIA, type PaintBrushCategory, type PaintBrushEngine, type PaintBrushInput, type WetMediumKind, type WetTool } from '../paint-editor/brushes';
+import { normalizePaintBrush, WET_MEDIA, type PaintBrushCategory, type PaintBrushEngine, type PaintBrushInput, type WetMediumKind, type WetTool } from '../paint-editor/brush-model';
 import { editorStampOf } from '../stickers/helpers';
 import type { Brush, BrushTool, ResolvedBrush } from './types';
 
 const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
 /** Engines that pick up and mix paint dab by dab (the exchange ratios apply). */
 const EXCHANGE: readonly PaintBrushEngine[] = ['dab', 'wet', 'impasto'];
+/** Engines that lay dabs from the pen dab walker: tip grain, count and flip apply. */
+const DABS: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge'];
 
 /** One facet field and the engine field it sets. */
 export interface BrushField {
@@ -61,6 +63,9 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('dynamics.pressureSmoothing', 'pressureSmoothing'),
   f('dynamics.rotation', 'rotation'),
   ...each('dynamics', 'dynamics', ['minSize', 'pressureFlow', 'tiltSize', 'tiltRoundness', 'tiltOpacity', 'velocitySize', 'velocityOpacity', 'sizeJitter', 'angleJitter', 'opacityJitter', 'scatter']),
+  f('dynamics.count', 'dynamics.count', DABS),
+  f('dynamics.flip', 'dynamics.flip', DABS),
+  f('tip.grain', 'tipGrain', DABS),
   f('behaviour.grain', 'grain'),
   ...each('light', 'light', ['amount', 'pressure']),
   // Paint exchange: the dab, wet and impasto engines' behaviour, or the Mixer Brush's settings.

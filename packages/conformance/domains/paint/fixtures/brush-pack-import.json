@@ -1,0 +1,130 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "brush-pack-import",
+  "description": "Importing a Procreate .brush pack made for the tests: its shape becomes an image source and a stamp-tip brush that paints; a file that is not a pack is refused.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "import_brush_pack",
+      "arguments": {
+        "file": "UEsDBBQAAAAIAAAAAACfjyIBtQAAAM0AAAANAAAAQnJ1c2guYXJjaGl2ZTWNvQ7BUACFT+vff61Gd7GJF8BgIhJRUiGRti4qV2/TXoJJYvIIrJ6IWLyJkVLfcL7lJJ/hMMsTlcpDkkPhSDSWHBLdNRfWhroa+YxncVslgjsa4caSmsKbKMh1ei26o9NG8CzVX0v43OIJ1eVcHKRrKq30ib1m7J7J5vKqra/oyGFc9BzdtOz5QS7VnmefS79N9dkOcSgogqCMKprooIsBNIxhYA6GLfY4fhuQpZ9RCPzn9AZQSwMEFAAAAAgAAAAAACvjIPanAAAAiQAAAAkAAABTaGFwZS5wbmcVjTELAVEAgN9Nzul6JZO6ukxyK4ORezpvOXcyWORmJeIGynRFlHiRweQHKFFuuVImZZPYLhn8AFaueIbv+8ZvoKkKz4U5AACPsyhPK1JCLBU4vo0pjYZRqtBidhOdAyIrS853JhGzsl7Uy81ccHu4lOxGr3snVmK0ST7I8uXu2fa5OoTRub9vxgX99KzBztUreq4yhrLN+G4BIfZxIv8HzqholTasH1BLAwQUAAAACAAAAAAA1nAQb3YAAABhAAAAFwAAAFF1aWNrTG9vay9UaHVtYm5haWwucG5nFYuxCkVQHIf/uslNGe4dJGUy8BIGOuIsEspiMHgCE9lseAGjjAYZDCaj8gAewJNwzvD7fcPX1/ieI/AyDwACdlFA+KWjB3d2xwQ6RmZUMEZn/olhrudJxnw5YGpFSQv7ld3PLS2G6sMijlNL5UdbbHtottL6BVBLAQIUABQAAAAIAAAAAACfjyIBtQAAAM0AAAANAAAAAAAAAAAAAAAAAAAAAABCcnVzaC5hcmNoaXZlUEsBAhQAFAAAAAgAAAAAACvjIPanAAAAiQAAAAkAAAAAAAAAAAAAAAAA4AAAAFNoYXBlLnBuZ1BLAQIUABQAAAAIAAAAAADWcBBvdgAAAGEAAAAXAAAAAAAAAAAAAAAAAK4BAABRdWlja0xvb2svVGh1bWJuYWlsLnBuZ1BLBQYAAAAAAwADALcAAABZAgAAAAA=",
+        "fileName": "leafy.brush",
+        "licence": "Made for the conformance tests; CC0."
+      },
+      "expect": {
+        "result": {
+          "brushes": [
+            {
+              "id": "leafy-leafy",
+              "name": "Leafy",
+              "renderable": true
+            }
+          ],
+          "format": "brush",
+          "licence": [
+            "Made for the conformance tests; CC0."
+          ],
+          "problems": [],
+          "skipped": [],
+          "sources": [
+            "leafy-leafy-shape"
+          ],
+          "unsupported": [
+            "Procreate settings other than the name, shape, grain and spacing (dynamics, Apple Pencil curves, taper, wet mix, colour dynamics, rendering modes) are not mapped."
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_brush_sources",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "sources": [
+            {
+              "height": 20,
+              "id": "leafy-leafy-shape",
+              "licence": "Made for the conformance tests; CC0.",
+              "name": "Leafy shape",
+              "origin": "leafy/Shape.png",
+              "ref": "source:leafy-leafy-shape",
+              "usedBy": [
+                "leafy-leafy"
+              ],
+              "width": 32
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "import_brush_pack",
+      "arguments": {
+        "file": "bm90IGEgYnJ1c2ggcGFjaw==",
+        "fileName": "notes.txt"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "\"notes.txt\" is not a brush pack this reads: give a .abr (Photoshop), .brush or .brushset (Procreate) file. Nothing was imported."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 8,
+            "pressure": 0.6
+          },
+          {
+            "x": 24,
+            "y": 18,
+            "pressure": 0.9
+          },
+          {
+            "x": 44,
+            "y": 24,
+            "pressure": 0.5
+          }
+        ],
+        "brushId": "leafy-leafy",
+        "color": "#2d6a2d",
+        "seed": 121
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 56,
+            "width": 72,
+            "x": -15,
+            "y": -11
+          },
+          "dabs": 4,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/brush-pack-import.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "5800ef3e2e46f740431bc3b879befc60d28973473a9f5ad91c14b9fdd54aae2f",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

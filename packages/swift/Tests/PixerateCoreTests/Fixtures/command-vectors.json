@@ -1,0 +1,849 @@
+{
+ "listTools": "[{\"name\":\"commands__list_commands\",\"title\":\"List commands\",\"description\":\"Lists the commands you can run with run_command: id, label, group, params (JSON Schema), shortcuts, and whether each is enabled now (with the reason when it is not).\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Fuzzy filter on label, keywords, group and id.\"},\"enabledOnly\":{\"type\":\"boolean\",\"description\":\"Only commands that can run now (default false).\"}},\"additionalProperties\":false},\"annotations\":{\"title\":\"List commands\",\"readOnlyHint\":true,\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false}},{\"name\":\"commands__run_command\",\"title\":\"Run a command\",\"description\":\"Runs one command by id with optional params (see list_commands for each command's params schema). Unknown params are rejected.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Command id from list_commands.\",\"enum\":[\"counter.set\",\"counter.add\",\"counter.reset\",\"counter.fail\",\"counter.nan\",\"counter.off\",\"canvas.thing\"]},\"params\":{\"type\":\"object\",\"description\":\"Command parameters.\"}},\"required\":[\"id\"],\"additionalProperties\":false},\"annotations\":{\"title\":\"Run a command\",\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false}},{\"name\":\"commands__run_commands\",\"title\":\"Run several commands\",\"description\":\"Runs several commands in order: {steps: [{id, params?}], stopOnError?: true, atomic?: false, label?}. A param string \\\"$0.id\\\" or \\\"$last.id\\\" is replaced by that path of an earlier step's result, so you can use an id a step created without another round trip. Not atomic by default (each step is its own undo step and steps before a failure stay applied); atomic: true makes the batch one undo step named label and takes everything back if a step fails. Returns {completed, failed, skipped, results: [{id, ok, result | code, message}]}.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"steps\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":256,\"description\":\"Commands to run in order (at most 256).\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Command id.\"},\"params\":{\"type\":\"object\",\"description\":\"Command parameters; strings like \\\"$0.id\\\" or \\\"$last.series[0]\\\" refer to earlier results.\"}},\"required\":[\"id\"],\"additionalProperties\":false}},\"stopOnError\":{\"type\":\"boolean\",\"description\":\"Stop at the first failing step (default true). Ignored when atomic.\"},\"atomic\":{\"type\":\"boolean\",\"description\":\"Run every step as one undo step, all or nothing (default false). Needs a registry created with a history.\"},\"label\":{\"type\":\"string\",\"description\":\"Undo step name for an atomic batch (default \\\"Run commands\\\").\"}},\"required\":[\"steps\"],\"additionalProperties\":false},\"annotations\":{\"title\":\"Run several commands\",\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false}},{\"name\":\"commands__counter_add\",\"title\":\"Add…\",\"description\":\"Adds to the counter. (Runs the \\\"counter.add\\\" command; refused with the reason when it cannot run now.)\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"by\":{\"type\":\"number\",\"description\":\"Step.\"}},\"additionalProperties\":false},\"annotations\":{\"title\":\"Add…\",\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false}},{\"name\":\"commands__counter_reset\",\"title\":\"Reset\",\"description\":\"Reset (Runs the \\\"counter.reset\\\" command; refused with the reason when it cannot run now.)\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false},\"annotations\":{\"title\":\"Reset\",\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false}},{\"name\":\"commands__counter_nan\",\"title\":\"Odd Numbers\",\"description\":\"Odd Numbers\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false},\"annotations\":{\"title\":\"Odd Numbers\",\"readOnlyHint\":true,\"destructiveHint\":false,\"idempotentHint\":true,\"openWorldHint\":false}},{\"name\":\"commands__canvas_thing\",\"title\":\"Thing\",\"description\":\"Thing (Runs the \\\"canvas.thing\\\" command; refused with the reason when it cannot run now.)\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false},\"annotations\":{\"title\":\"Thing\",\"readOnlyHint\":false,\"destructiveHint\":true,\"idempotentHint\":false,\"openWorldHint\":false}}]",
+ "calls": [
+  {
+   "name": "list_commands",
+   "args": {},
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"commands\\\":[{\\\"id\\\":\\\"counter.set\\\",\\\"label\\\":\\\"Set Counter\\\",\\\"group\\\":\\\"Counter\\\",\\\"params\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"value\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":0,\\\"description\\\":\\\"New value.\\\"}},\\\"required\\\":[\\\"value\\\"]},\\\"shortcuts\\\":[\\\"Mod+Shift+S\\\"],\\\"enabled\\\":true,\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.add\\\",\\\"label\\\":\\\"Add…\\\",\\\"group\\\":\\\"Counter\\\",\\\"description\\\":\\\"Adds to the counter.\\\",\\\"params\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"by\\\":{\\\"type\\\":\\\"number\\\",\\\"description\\\":\\\"Step.\\\"}},\\\"additionalProperties\\\":false},\\\"enabled\\\":true,\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.reset\\\",\\\"label\\\":\\\"Reset\\\",\\\"group\\\":\\\"Counter\\\",\\\"enabled\\\":false,\\\"disabledReason\\\":\\\"Already at zero.\\\",\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.fail\\\",\\\"label\\\":\\\"Fail\\\",\\\"enabled\\\":true,\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.nan\\\",\\\"label\\\":\\\"Odd Numbers\\\",\\\"enabled\\\":true,\\\"readOnly\\\":true},{\\\"id\\\":\\\"counter.off\\\",\\\"label\\\":\\\"Off\\\",\\\"enabled\\\":false,\\\"disabledReason\\\":\\\"This command is not available right now.\\\",\\\"readOnly\\\":false},{\\\"id\\\":\\\"canvas.thing\\\",\\\"label\\\":\\\"Thing\\\",\\\"shortcuts\\\":[\\\"Alt+]\\\",\\\"Meta+Alt+Shift+K\\\"],\\\"enabled\\\":true,\\\"readOnly\\\":false}]}\"}],\"structuredContent\":{\"commands\":[{\"id\":\"counter.set\",\"label\":\"Set Counter\",\"group\":\"Counter\",\"params\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"New value.\"}},\"required\":[\"value\"]},\"shortcuts\":[\"Mod+Shift+S\"],\"enabled\":true,\"readOnly\":false},{\"id\":\"counter.add\",\"label\":\"Add…\",\"group\":\"Counter\",\"description\":\"Adds to the counter.\",\"params\":{\"type\":\"object\",\"properties\":{\"by\":{\"type\":\"number\",\"description\":\"Step.\"}},\"additionalProperties\":false},\"enabled\":true,\"readOnly\":false},{\"id\":\"counter.reset\",\"label\":\"Reset\",\"group\":\"Counter\",\"enabled\":false,\"disabledReason\":\"Already at zero.\",\"readOnly\":false},{\"id\":\"counter.fail\",\"label\":\"Fail\",\"enabled\":true,\"readOnly\":false},{\"id\":\"counter.nan\",\"label\":\"Odd Numbers\",\"enabled\":true,\"readOnly\":true},{\"id\":\"counter.off\",\"label\":\"Off\",\"enabled\":false,\"disabledReason\":\"This command is not available right now.\",\"readOnly\":false},{\"id\":\"canvas.thing\",\"label\":\"Thing\",\"shortcuts\":[\"Alt+]\",\"Meta+Alt+Shift+K\"],\"enabled\":true,\"readOnly\":false}]}}",
+   "value": 0,
+   "undo": "",
+   "undoCount": 0
+  },
+  {
+   "name": "list_commands",
+   "args": {
+    "query": "counter"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"commands\\\":[{\\\"id\\\":\\\"counter.set\\\",\\\"label\\\":\\\"Set Counter\\\",\\\"group\\\":\\\"Counter\\\",\\\"params\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"value\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":0,\\\"description\\\":\\\"New value.\\\"}},\\\"required\\\":[\\\"value\\\"]},\\\"shortcuts\\\":[\\\"Mod+Shift+S\\\"],\\\"enabled\\\":true,\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.add\\\",\\\"label\\\":\\\"Add…\\\",\\\"group\\\":\\\"Counter\\\",\\\"description\\\":\\\"Adds to the counter.\\\",\\\"params\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"by\\\":{\\\"type\\\":\\\"number\\\",\\\"description\\\":\\\"Step.\\\"}},\\\"additionalProperties\\\":false},\\\"enabled\\\":true,\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.reset\\\",\\\"label\\\":\\\"Reset\\\",\\\"group\\\":\\\"Counter\\\",\\\"enabled\\\":false,\\\"disabledReason\\\":\\\"Already at zero.\\\",\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.off\\\",\\\"label\\\":\\\"Off\\\",\\\"enabled\\\":false,\\\"disabledReason\\\":\\\"This command is not available right now.\\\",\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.fail\\\",\\\"label\\\":\\\"Fail\\\",\\\"enabled\\\":true,\\\"readOnly\\\":false},{\\\"id\\\":\\\"counter.nan\\\",\\\"label\\\":\\\"Odd Numbers\\\",\\\"enabled\\\":true,\\\"readOnly\\\":true}]}\"}],\"structuredContent\":{\"commands\":[{\"id\":\"counter.set\",\"label\":\"Set Counter\",\"group\":\"Counter\",\"params\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"New value.\"}},\"required\":[\"value\"]},\"shortcuts\":[\"Mod+Shift+S\"],\"enabled\":true,\"readOnly\":false},{\"id\":\"counter.add\",\"label\":\"Add…\",\"group\":\"Counter\",\"description\":\"Adds to the counter.\",\"params\":{\"type\":\"object\",\"properties\":{\"by\":{\"type\":\"number\",\"description\":\"Step.\"}},\"additionalProperties\":false},\"enabled\":true,\"readOnly\":false},{\"id\":\"counter.reset\",\"label\":\"Reset\",\"group\":\"Counter\",\"enabled\":false,\"disabledReason\":\"Already at zero.\",\"readOnly\":false},{\"id\":\"counter.off\",\"label\":\"Off\",\"enabled\":false,\"disabledReason\":\"This command is not available right now.\",\"readOnly\":false},{\"id\":\"counter.fail\",\"label\":\"Fail\",\"enabled\":true,\"readOnly\":false},{\"id\":\"counter.nan\",\"label\":\"Odd Numbers\",\"enabled\":true,\"readOnly\":true}]}}",
+   "value": 0,
+   "undo": "",
+   "undoCount": 0
+  },
+  {
+   "name": "list_commands",
+   "args": {
+    "query": "add",
+    "enabledOnly": true
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"commands\\\":[{\\\"id\\\":\\\"counter.add\\\",\\\"label\\\":\\\"Add…\\\",\\\"group\\\":\\\"Counter\\\",\\\"description\\\":\\\"Adds to the counter.\\\",\\\"params\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"by\\\":{\\\"type\\\":\\\"number\\\",\\\"description\\\":\\\"Step.\\\"}},\\\"additionalProperties\\\":false},\\\"enabled\\\":true,\\\"readOnly\\\":false}]}\"}],\"structuredContent\":{\"commands\":[{\"id\":\"counter.add\",\"label\":\"Add…\",\"group\":\"Counter\",\"description\":\"Adds to the counter.\",\"params\":{\"type\":\"object\",\"properties\":{\"by\":{\"type\":\"number\",\"description\":\"Step.\"}},\"additionalProperties\":false},\"enabled\":true,\"readOnly\":false}]}}",
+   "value": 0,
+   "undo": "",
+   "undoCount": 0
+  },
+  {
+   "name": "list_commands",
+   "args": {
+    "query": "assign"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"commands\\\":[{\\\"id\\\":\\\"counter.set\\\",\\\"label\\\":\\\"Set Counter\\\",\\\"group\\\":\\\"Counter\\\",\\\"params\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"value\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":0,\\\"description\\\":\\\"New value.\\\"}},\\\"required\\\":[\\\"value\\\"]},\\\"shortcuts\\\":[\\\"Mod+Shift+S\\\"],\\\"enabled\\\":true,\\\"readOnly\\\":false}]}\"}],\"structuredContent\":{\"commands\":[{\"id\":\"counter.set\",\"label\":\"Set Counter\",\"group\":\"Counter\",\"params\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"New value.\"}},\"required\":[\"value\"]},\"shortcuts\":[\"Mod+Shift+S\"],\"enabled\":true,\"readOnly\":false}]}}",
+   "value": 0,
+   "undo": "",
+   "undoCount": 0
+  },
+  {
+   "name": "list_commands",
+   "args": {
+    "query": "zzz"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"commands\\\":[]}\"}],\"structuredContent\":{\"commands\":[]}}",
+   "value": 0,
+   "undo": "",
+   "undoCount": 0
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.set",
+    "params": {
+     "value": 5
+    }
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"counter.set\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":5}}\"}],\"structuredContent\":{\"id\":\"counter.set\",\"ok\":true,\"result\":{\"value\":5}}}",
+   "value": 5,
+   "undo": "Set Counter",
+   "undoCount": 1
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.set",
+    "params": {
+     "value": -1.5
+    }
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"invalid_params: Invalid parameters for command \\\"counter.set\\\": /value Expected integer, got number.\"}],\"structuredContent\":{\"error\":{\"code\":\"invalid_params\",\"message\":\"Invalid parameters for command \\\"counter.set\\\": /value Expected integer, got number.\",\"command\":\"counter.set\",\"details\":[{\"path\":\"/value\",\"message\":\"Expected integer, got number.\"}]}},\"isError\":true}",
+   "value": 5,
+   "undo": "Set Counter",
+   "undoCount": 1
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.set",
+    "params": {
+     "value": 1,
+     "extra": true
+    }
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"invalid_params: Unknown parameter \\\"extra\\\" for command \\\"counter.set\\\"; expected \\\"value\\\".\"}],\"structuredContent\":{\"error\":{\"code\":\"invalid_params\",\"message\":\"Unknown parameter \\\"extra\\\" for command \\\"counter.set\\\"; expected \\\"value\\\".\",\"command\":\"counter.set\"}},\"isError\":true}",
+   "value": 5,
+   "undo": "Set Counter",
+   "undoCount": 1
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.reset",
+    "params": {
+     "hard": true
+    }
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"invalid_params: Unknown parameter \\\"hard\\\" for command \\\"counter.reset\\\"; expected no parameters.\"}],\"structuredContent\":{\"error\":{\"code\":\"invalid_params\",\"message\":\"Unknown parameter \\\"hard\\\" for command \\\"counter.reset\\\"; expected no parameters.\",\"command\":\"counter.reset\"}},\"isError\":true}",
+   "value": 5,
+   "undo": "Set Counter",
+   "undoCount": 1
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.add"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":6,\\\"items\\\":[{\\\"id\\\":\\\"i6\\\"}]}}\"}],\"structuredContent\":{\"id\":\"counter.add\",\"ok\":true,\"result\":{\"value\":6,\"items\":[{\"id\":\"i6\"}]}}}",
+   "value": 6,
+   "undo": "Add…",
+   "undoCount": 2
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.off"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"disabled: This command is not available right now.\"}],\"structuredContent\":{\"error\":{\"code\":\"disabled\",\"message\":\"This command is not available right now.\",\"command\":\"counter.off\"}},\"isError\":true}",
+   "value": 6,
+   "undo": "Add…",
+   "undoCount": 2
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.nan"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"counter.nan\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"x\\\":null,\\\"y\\\":0,\\\"z\\\":[null,1.5e-7]}}\"}],\"structuredContent\":{\"id\":\"counter.nan\",\"ok\":true,\"result\":{\"x\":null,\"y\":0,\"z\":[null,1.5e-7]}}}",
+   "value": 6,
+   "undo": "Add…",
+   "undoCount": 2
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.fail"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"failed: kaput\"}],\"structuredContent\":{\"error\":{\"code\":\"failed\",\"message\":\"kaput\",\"command\":\"counter.fail\"}},\"isError\":true}",
+   "value": 6,
+   "undo": "Add…",
+   "undoCount": 2
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "nope"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"Invalid arguments for tool \\\"commands__run_command\\\".\\n- /id: Expected one of \\\"counter.set\\\", \\\"counter.add\\\", \\\"counter.reset\\\", \\\"counter.fail\\\", \\\"counter.nan\\\", \\\"counter.off\\\", \\\"canvas.thing\\\", got \\\"nope\\\".\"}],\"structuredContent\":{\"error\":{\"code\":\"invalid_arguments\",\"message\":\"Invalid arguments for tool \\\"commands__run_command\\\".\",\"tool\":\"commands__run_command\",\"details\":[{\"path\":\"/id\",\"message\":\"Expected one of \\\"counter.set\\\", \\\"counter.add\\\", \\\"counter.reset\\\", \\\"counter.fail\\\", \\\"counter.nan\\\", \\\"counter.off\\\", \\\"canvas.thing\\\", got \\\"nope\\\".\"}]}},\"isError\":true}",
+   "value": 6,
+   "undo": "Add…",
+   "undoCount": 2
+  },
+  {
+   "name": "run_command",
+   "args": {
+    "id": "counter.hidden"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"Invalid arguments for tool \\\"commands__run_command\\\".\\n- /id: Expected one of \\\"counter.set\\\", \\\"counter.add\\\", \\\"counter.reset\\\", \\\"counter.fail\\\", \\\"counter.nan\\\", \\\"counter.off\\\", \\\"canvas.thing\\\", got \\\"counter.hidden\\\".\"}],\"structuredContent\":{\"error\":{\"code\":\"invalid_arguments\",\"message\":\"Invalid arguments for tool \\\"commands__run_command\\\".\",\"tool\":\"commands__run_command\",\"details\":[{\"path\":\"/id\",\"message\":\"Expected one of \\\"counter.set\\\", \\\"counter.add\\\", \\\"counter.reset\\\", \\\"counter.fail\\\", \\\"counter.nan\\\", \\\"counter.off\\\", \\\"canvas.thing\\\", got \\\"counter.hidden\\\".\"}]}},\"isError\":true}",
+   "value": 6,
+   "undo": "Add…",
+   "undoCount": 2
+  },
+  {
+   "name": "run_commands",
+   "args": {
+    "steps": [
+     {
+      "id": "counter.add",
+      "params": {
+       "by": 2
+      }
+     },
+     {
+      "id": "counter.set",
+      "params": {
+       "value": "$0.value"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$0.items.length"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$last.items[0]"
+      }
+     }
+    ]
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"completed\\\":3,\\\"failed\\\":1,\\\"skipped\\\":0,\\\"results\\\":[{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":8,\\\"items\\\":[{\\\"id\\\":\\\"i8\\\"}]}},{\\\"id\\\":\\\"counter.set\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":8}},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":9,\\\"items\\\":[{\\\"id\\\":\\\"i9\\\"}]}},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"Invalid parameters for command \\\\\\\"counter.add\\\\\\\": /by Expected number, got object.\\\"}]}\"}],\"structuredContent\":{\"completed\":3,\"failed\":1,\"skipped\":0,\"results\":[{\"id\":\"counter.add\",\"ok\":true,\"result\":{\"value\":8,\"items\":[{\"id\":\"i8\"}]}},{\"id\":\"counter.set\",\"ok\":true,\"result\":{\"value\":8}},{\"id\":\"counter.add\",\"ok\":true,\"result\":{\"value\":9,\"items\":[{\"id\":\"i9\"}]}},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"Invalid parameters for command \\\"counter.add\\\": /by Expected number, got object.\"}]},\"isError\":true}",
+   "value": 9,
+   "undo": "Add…",
+   "undoCount": 5
+  },
+  {
+   "name": "run_commands",
+   "args": {
+    "stopOnError": false,
+    "steps": [
+     {
+      "id": "counter.hidden"
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$5.id"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$last.value"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$2.nope"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$0007.x"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$2.items.0.id.length"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "note": [
+        "$2.value",
+        {
+         "deep": "$last.items"
+        }
+       ],
+       "by": 1
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$x.value"
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$1"
+      }
+     }
+    ]
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"completed\\\":0,\\\"failed\\\":9,\\\"skipped\\\":0,\\\"results\\\":[{\\\"id\\\":\\\"counter.hidden\\\",\\\"ok\\\":false,\\\"code\\\":\\\"unknown_command\\\",\\\"message\\\":\\\"Unknown command \\\\\\\"counter.hidden\\\\\\\".\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$5.id\\\\\\\" refers to step 5, but only 1 step has run.\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$last.value\\\\\\\": step 1's result has no \\\\\\\"value\\\\\\\".\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$2.nope\\\\\\\": step 2's result has no \\\\\\\"nope\\\\\\\".\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$0007.x\\\\\\\" refers to step 0007, but only 4 steps have run.\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$2.items.0.id.length\\\\\\\": step 2's result has no \\\\\\\"items\\\\\\\".\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$2.value\\\\\\\": step 2's result has no \\\\\\\"value\\\\\\\".\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"Invalid parameters for command \\\\\\\"counter.add\\\\\\\": /by Expected number, got string.\\\"},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"Invalid parameters for command \\\\\\\"counter.add\\\\\\\": /by Expected number, got null.\\\"}]}\"}],\"structuredContent\":{\"completed\":0,\"failed\":9,\"skipped\":0,\"results\":[{\"id\":\"counter.hidden\",\"ok\":false,\"code\":\"unknown_command\",\"message\":\"Unknown command \\\"counter.hidden\\\".\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$5.id\\\" refers to step 5, but only 1 step has run.\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$last.value\\\": step 1's result has no \\\"value\\\".\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$2.nope\\\": step 2's result has no \\\"nope\\\".\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$0007.x\\\" refers to step 0007, but only 4 steps have run.\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$2.items.0.id.length\\\": step 2's result has no \\\"items\\\".\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$2.value\\\": step 2's result has no \\\"value\\\".\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"Invalid parameters for command \\\"counter.add\\\": /by Expected number, got string.\"},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"Invalid parameters for command \\\"counter.add\\\": /by Expected number, got null.\"}]},\"isError\":true}",
+   "value": 9,
+   "undo": "Add…",
+   "undoCount": 5
+  },
+  {
+   "name": "run_commands",
+   "args": {
+    "steps": [
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$last.id"
+      }
+     }
+    ]
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"completed\\\":0,\\\"failed\\\":1,\\\"skipped\\\":0,\\\"results\\\":[{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$last.id\\\\\\\" refers to step last, but only 0 steps have run.\\\"}]}\"}],\"structuredContent\":{\"completed\":0,\"failed\":1,\"skipped\":0,\"results\":[{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$last.id\\\" refers to step last, but only 0 steps have run.\"}]},\"isError\":true}",
+   "value": 9,
+   "undo": "Add…",
+   "undoCount": 5
+  },
+  {
+   "name": "run_commands",
+   "args": {
+    "atomic": true,
+    "label": "Two adds",
+    "steps": [
+     {
+      "id": "counter.add",
+      "params": {
+       "by": 1
+      }
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$0.value"
+      }
+     }
+    ]
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"completed\\\":2,\\\"failed\\\":0,\\\"skipped\\\":0,\\\"rolledBack\\\":false,\\\"results\\\":[{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":10,\\\"items\\\":[{\\\"id\\\":\\\"i10\\\"}]}},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":20,\\\"items\\\":[{\\\"id\\\":\\\"i20\\\"}]}}]}\"}],\"structuredContent\":{\"completed\":2,\"failed\":0,\"skipped\":0,\"rolledBack\":false,\"results\":[{\"id\":\"counter.add\",\"ok\":true,\"result\":{\"value\":10,\"items\":[{\"id\":\"i10\"}]}},{\"id\":\"counter.add\",\"ok\":true,\"result\":{\"value\":20,\"items\":[{\"id\":\"i20\"}]}}]}}",
+   "value": 20,
+   "undo": "Two adds",
+   "undoCount": 6
+  },
+  {
+   "name": "run_commands",
+   "args": {
+    "atomic": true,
+    "steps": [
+     {
+      "id": "counter.add",
+      "params": {
+       "by": 1
+      }
+     },
+     {
+      "id": "counter.fail"
+     },
+     {
+      "id": "counter.add"
+     }
+    ]
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"completed\\\":0,\\\"failed\\\":1,\\\"skipped\\\":1,\\\"rolledBack\\\":true,\\\"results\\\":[{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":21,\\\"items\\\":[{\\\"id\\\":\\\"i21\\\"}]}},{\\\"id\\\":\\\"counter.fail\\\",\\\"ok\\\":false,\\\"code\\\":\\\"failed\\\",\\\"message\\\":\\\"kaput\\\"}]}\"}],\"structuredContent\":{\"completed\":0,\"failed\":1,\"skipped\":1,\"rolledBack\":true,\"results\":[{\"id\":\"counter.add\",\"ok\":true,\"result\":{\"value\":21,\"items\":[{\"id\":\"i21\"}]}},{\"id\":\"counter.fail\",\"ok\":false,\"code\":\"failed\",\"message\":\"kaput\"}]},\"isError\":true}",
+   "value": 20,
+   "undo": "Two adds",
+   "undoCount": 6
+  },
+  {
+   "name": "run_commands",
+   "args": {
+    "atomic": true,
+    "steps": [
+     {
+      "id": "counter.add"
+     },
+     {
+      "id": "counter.add",
+      "params": {
+       "by": "$3.value"
+      }
+     }
+    ]
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"completed\\\":0,\\\"failed\\\":1,\\\"skipped\\\":0,\\\"rolledBack\\\":true,\\\"results\\\":[{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":true,\\\"result\\\":{\\\"value\\\":21,\\\"items\\\":[{\\\"id\\\":\\\"i21\\\"}]}},{\\\"id\\\":\\\"counter.add\\\",\\\"ok\\\":false,\\\"code\\\":\\\"invalid_params\\\",\\\"message\\\":\\\"\\\\\\\"$3.value\\\\\\\" refers to step 3, but only 1 step has run.\\\"}]}\"}],\"structuredContent\":{\"completed\":0,\"failed\":1,\"skipped\":0,\"rolledBack\":true,\"results\":[{\"id\":\"counter.add\",\"ok\":true,\"result\":{\"value\":21,\"items\":[{\"id\":\"i21\"}]}},{\"id\":\"counter.add\",\"ok\":false,\"code\":\"invalid_params\",\"message\":\"\\\"$3.value\\\" refers to step 3, but only 1 step has run.\"}]},\"isError\":true}",
+   "value": 20,
+   "undo": "Two adds",
+   "undoCount": 6
+  },
+  {
+   "name": "counter_add",
+   "args": {
+    "by": 3
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"value\\\":23,\\\"items\\\":[{\\\"id\\\":\\\"i23\\\"}]}\"}],\"structuredContent\":{\"value\":23,\"items\":[{\"id\":\"i23\"}]}}",
+   "value": 23,
+   "undo": "Add…",
+   "undoCount": 7
+  },
+  {
+   "name": "counter_reset",
+   "args": {},
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"null\"}]}",
+   "value": 0,
+   "undo": "set",
+   "undoCount": 8
+  },
+  {
+   "name": "counter_reset",
+   "args": {},
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"disabled: Already at zero.\"}],\"structuredContent\":{\"error\":{\"code\":\"disabled\",\"message\":\"Already at zero.\",\"command\":\"counter.reset\"}},\"isError\":true}",
+   "value": 0,
+   "undo": "set",
+   "undoCount": 8
+  },
+  {
+   "name": "canvas_thing",
+   "args": {},
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"thing\"}]}",
+   "value": 0,
+   "undo": "set",
+   "undoCount": 8
+  },
+  {
+   "name": "counter_nan",
+   "args": {},
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"x\\\":null,\\\"y\\\":0,\\\"z\\\":[null,1.5e-7]}\"}],\"structuredContent\":{\"x\":null,\"y\":0,\"z\":[null,1.5e-7]}}",
+   "value": 0,
+   "undo": "set",
+   "undoCount": 8
+  },
+  {
+   "name": "list_commands",
+   "args": {
+    "filter": "x"
+   },
+   "result": "{\"content\":[{\"type\":\"text\",\"text\":\"Invalid arguments for tool \\\"commands__list_commands\\\".\\n- /filter: Unknown property \\\"filter\\\". Allowed: query, enabledOnly.\"}],\"structuredContent\":{\"error\":{\"code\":\"invalid_arguments\",\"message\":\"Invalid arguments for tool \\\"commands__list_commands\\\".\",\"tool\":\"commands__list_commands\",\"details\":[{\"path\":\"/filter\",\"message\":\"Unknown property \\\"filter\\\". Allowed: query, enabledOnly.\"}]}},\"isError\":true}",
+   "value": 0,
+   "undo": "set",
+   "undoCount": 8
+  }
+ ],
+ "unsupported": "{\"content\":[{\"type\":\"text\",\"text\":\"atomic batches need a CommandRegistry created with { history }; run the steps without atomic, or ask the host to share its history.\"}],\"structuredContent\":{\"error\":{\"code\":\"unsupported\",\"message\":\"atomic batches need a CommandRegistry created with { history }; run the steps without atomic, or ask the host to share its history.\"}},\"isError\":true}",
+ "fuzzy": [
+  [
+   "al",
+   "Align Left",
+   {
+    "score": 13,
+    "indices": [
+     0,
+     1
+    ]
+   }
+  ],
+  [
+   "ς",
+   "ΟΔΟΣ",
+   {
+    "score": 1,
+    "indices": [
+     3
+    ]
+   }
+  ],
+  [
+   "σ",
+   "ΟΔΟΣ",
+   null
+  ],
+  [
+   "i",
+   "İstanbul",
+   {
+    "score": 5,
+    "indices": [
+     0
+    ]
+   }
+  ],
+  [
+   "st",
+   "İstanbul",
+   {
+    "score": 8,
+    "indices": [
+     2,
+     3
+    ]
+   }
+  ],
+  [
+   "😀",
+   "a😀",
+   null
+  ],
+  [
+   "a l",
+   "Align Left",
+   {
+    "score": 13,
+    "indices": [
+     0,
+     1
+    ]
+   }
+  ],
+  [
+   "x",
+   "File › X",
+   {
+    "score": 5,
+    "indices": [
+     7
+    ]
+   }
+  ],
+  [
+   "e",
+   "é",
+   null
+  ],
+  [
+   "AB",
+   "xx(ab",
+   {
+    "score": 14,
+    "indices": [
+     3,
+     4
+    ]
+   }
+  ],
+  [
+   "  ",
+   "x",
+   {
+    "score": 0,
+    "indices": []
+   }
+  ],
+  [
+   "ss",
+   "Straße",
+   null
+  ],
+  [
+   "k",
+   "K",
+   {
+    "score": 6,
+    "indices": [
+     0
+    ]
+   }
+  ],
+  [
+   "ǆ",
+   "ǅ",
+   {
+    "score": 6,
+    "indices": [
+     0
+    ]
+   }
+  ]
+ ],
+ "exact": [
+  [
+   "settings",
+   [
+    "Settings…"
+   ],
+   1000
+  ],
+  [
+   "settings",
+   [
+    "Settings..."
+   ],
+   1000
+  ],
+  [
+   "settings",
+   [
+    "Settings...."
+   ],
+   0
+  ],
+  [
+   "x",
+   [
+    "  X  "
+   ],
+   1000
+  ],
+  [
+   "",
+   [
+    ""
+   ],
+   0
+  ],
+  [
+   "οδος",
+   [
+    "ΟΔΟΣ"
+   ],
+   1000
+  ]
+ ],
+ "rank": [
+  [
+   "settings",
+   [
+    [
+     "app.settings",
+     1061,
+     [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+     ]
+    ],
+    [
+     "view.settings",
+     61,
+     [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+     ]
+    ]
+   ]
+  ],
+  [
+   "flush",
+   [
+    [
+     "canvas.alignLeft",
+     1036,
+     []
+    ]
+   ]
+  ],
+  [
+   "arrange left",
+   [
+    [
+     "canvas.alignLeft",
+     69,
+     []
+    ]
+   ]
+  ],
+  [
+   "history",
+   [
+    [
+     "history.redo",
+     50,
+     []
+    ],
+    [
+     "history.undo",
+     50,
+     []
+    ]
+   ]
+  ],
+  [
+   "do",
+   [
+    [
+     "history.redo",
+     9,
+     [
+      2,
+      3
+     ]
+    ],
+    [
+     "history.undo",
+     9,
+     [
+      2,
+      3
+     ]
+    ]
+   ]
+  ],
+  [
+   "zzz",
+   []
+  ],
+  [
+   "al",
+   [
+    [
+     "canvas.alignLeft",
+     13,
+     [
+      0,
+      1
+     ]
+    ]
+   ]
+  ],
+  [
+   "a",
+   [
+    [
+     "a.b",
+     6,
+     [
+      0
+     ]
+    ],
+    [
+     "a.c",
+     6,
+     [
+      0
+     ]
+    ],
+    [
+     "canvas.alignLeft",
+     5,
+     [
+      0
+     ]
+    ],
+    [
+     "app.settings",
+     4,
+     []
+    ]
+   ]
+  ],
+  [
+   "e",
+   [
+    [
+     "history.redo",
+     4,
+     [
+      1
+     ]
+    ],
+    [
+     "app.settings",
+     0,
+     [
+      1
+     ]
+    ],
+    [
+     "canvas.alignLeft",
+     0,
+     [
+      7
+     ]
+    ],
+    [
+     "view.settings",
+     0,
+     [
+      7
+     ]
+    ],
+    [
+     "history.undo",
+     4,
+     []
+    ]
+   ]
+  ],
+  [
+   " S ",
+   [
+    [
+     "app.settings",
+     5,
+     [
+      0
+     ]
+    ],
+    [
+     "view.settings",
+     5,
+     [
+      6
+     ]
+    ],
+    [
+     "canvas.alignLeft",
+     -1,
+     []
+    ],
+    [
+     "history.redo",
+     -3,
+     []
+    ],
+    [
+     "history.undo",
+     -3,
+     []
+    ]
+   ]
+  ]
+ ],
+ "rankRecents": [
+  [
+   "history.redo",
+   8
+  ],
+  [
+   "app.settings",
+   3
+  ],
+  [
+   "view.settings",
+   1
+  ],
+  [
+   "canvas.alignLeft",
+   0
+  ],
+  [
+   "history.undo",
+   4
+  ]
+ ],
+ "rankEmpty": [
+  [
+   "history.redo",
+   1000,
+   true
+  ],
+  [
+   "view.settings",
+   0,
+   false
+  ],
+  [
+   "app.settings",
+   0,
+   false
+  ],
+  [
+   "canvas.alignLeft",
+   0,
+   false
+  ],
+  [
+   "a.b",
+   0,
+   false
+  ],
+  [
+   "a.c",
+   0,
+   false
+  ],
+  [
+   "history.undo",
+   0,
+   false
+  ]
+ ]
+}

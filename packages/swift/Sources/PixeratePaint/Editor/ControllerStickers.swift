@@ -158,6 +158,8 @@ func paintStickerHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
         if let cat = a["category"]?.stringValue, !categories.contains(where: { $0.objectValue?["id"]?.stringValue == cat }) {
             throw StickerError("invalid_argument", "No category \"\(cat)\" in \"\(lib.name)\"; categories: \(categories.compactMap { $0.objectValue?["id"]?.stringValue }.joined(separator: ", ")).")
         }
+        // The editor's own stickers are in no collection (`listCollections` is a host library's).
+        if a["collection"] != nil { throw StickerError("invalid_argument", "\"\(lib.name)\" has no collections; leave collection out.") }
         let page = try lib.page(query: (a["query"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines), category: a["category"]?.stringValue, tags: a["tags"]?.arrayValue?.compactMap(\.stringValue), commercial: a["commercial"]?.boolValue == true, limit: a["limit"]?.numberValue.map { Int($0) }, after: a["after"]?.stringValue)
         var o: JSONObject = ["provider": .string(lib.id), "items": .array(page.items.map(agentSummary)), "total": .number(Double(page.total))]
         if let next = page.next { o["next"] = .string(next) }

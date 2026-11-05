@@ -38,9 +38,9 @@ extension PaintEditorController {
      * `brush`, as if drawn by hand: one recorded stroke per subpath, sampled every `spacing` px
      * with an optional `pressure` profile along each. All of it is one undo step.
      */
-    public func strokePath(_ path: String, spacing: Double?, pressure: [Double]?, _ i: PaintStrokeInit) throws -> JSONObject {
+    public func strokePath(_ path: String, spacing: Double?, pressure: [Double]?, speed: Double? = nil, _ i: PaintStrokeInit) throws -> JSONObject {
         if path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw PaintEditorError("path is empty; give SVG path data in document pixels, e.g. \"M 10 10 C 40 0 80 60 120 30\".") }
-        let subpaths = try samplePath(path, spacing: spacing, pressure: pressure)
+        let subpaths = try samplePath(path, spacing: spacing, pressure: pressure, speed: speed)
         let before = doc
         var d = doc
         var bounds: RasterRect? = nil

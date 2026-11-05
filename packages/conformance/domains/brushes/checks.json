@@ -319,7 +319,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]
@@ -355,7 +355,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]
@@ -388,13 +388,8 @@
         ]
       },
       "vector": {
-        "ok": false,
-        "issues": [
-          {
-            "facet": "kind",
-            "severity": "error"
-          }
-        ]
+        "ok": true,
+        "issues": []
       }
     }
   },
@@ -424,13 +419,8 @@
         ]
       },
       "vector": {
-        "ok": false,
-        "issues": [
-          {
-            "facet": "kind",
-            "severity": "error"
-          }
-        ]
+        "ok": true,
+        "issues": []
       }
     }
   },
@@ -460,13 +450,8 @@
         ]
       },
       "vector": {
-        "ok": false,
-        "issues": [
-          {
-            "facet": "kind",
-            "severity": "error"
-          }
-        ]
+        "ok": true,
+        "issues": []
       }
     }
   },
@@ -647,13 +632,8 @@
         ]
       },
       "vector": {
-        "ok": false,
-        "issues": [
-          {
-            "facet": "behaviour.exchange.reservoir",
-            "severity": "error"
-          }
-        ]
+        "ok": true,
+        "issues": []
       }
     }
   },
@@ -691,12 +671,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -739,12 +715,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -787,12 +759,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -835,12 +803,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -883,12 +847,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -931,12 +891,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -979,12 +935,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -2091,12 +2043,8 @@
         ]
       },
       "vector": {
-        "ok": false,
+        "ok": true,
         "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          },
           {
             "facet": "behaviour.exchange",
             "severity": "warning"
@@ -2418,7 +2366,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]
@@ -2454,7 +2402,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]
@@ -2490,7 +2438,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]
@@ -2526,7 +2474,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]
@@ -2562,7 +2510,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]
@@ -2598,7 +2546,7 @@
         "ok": false,
         "issues": [
           {
-            "facet": "kind",
+            "facet": "tool",
             "severity": "error"
           }
         ]

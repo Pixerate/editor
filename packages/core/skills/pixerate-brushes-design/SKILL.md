@@ -26,8 +26,9 @@ This skill is the method. `pixerate-brushes` has the full tool reference.
 
 Ask when you cannot tell from the request; say what you assumed when you can.
 
-- **Host:** which editor will use it (paint by default; canvas and vector strokes take only dry
-  dab brushes, the image editor no wet, thick or particle brushes).
+- **Host:** which editor will use it (paint by default; canvas strokes take only dry dab brushes,
+  vector strokes dry and wet dab brushes, the Mixer Brush, smudge and blender; the image editor no
+  wet, thick or particle brushes).
 - **Medium and character:** what it imitates (pencil, ink, chalk, watercolour, marker…), and
   the size, softness and texture.
 - **Colour:** a default colour or palette, or the user's own colour (the default).
@@ -53,14 +54,18 @@ Ask when you cannot tell from the request; say what you assumed when you can.
 | Situation | Approach |
 | --- | --- |
 | A colour variant of a preset | `basedOn` it, set `colour.default` (and a `palette`), keep everything else. |
-| For canvas or vector strokes | Base on a dry preset (pencil, pastel, charcoal, marker, ink); no wet surface, particles, stickers or tools; no light on canvas. |
+| For canvas strokes | Base on a dry preset (pencil, pastel, charcoal, marker, ink); no wet surface, particles, stickers or tools; no light. |
+| For vector strokes | As canvas, but a wet surface (watercolour, gouache, wet oil), the Mixer Brush and the smudge and blender tools work too; no thick paint, particles, stickers, erasers or wet tools. |
 | A brush that must work in another editor | `check_brush` with that `host`, then `create_brush` from its `degraded` brush under a new id. |
-| A texture (chalk, charcoal, dry brush) | Raise `behaviour.grain` (0.8..1) and add `dynamics.sizeJitter`; test on rough paper. |
+| A texture (chalk, charcoal, dry brush) | Raise `behaviour.grain` (0.8..1) and add `dynamics.sizeJitter`; test on rough paper. For texture that shows on any paper, give the tip its own grain: `tip.grain` `{ source: "sanded", depth: 0.6 }` (paint editor; other hosts paint without it). |
+| A brush from an image (a scanned mark, a leaf, a texture) | `list_brush_sources`, or `add_brush_source` with the PNG (keep its `licence`); then `tip` `{ shape: "stamp", stamps: ["source:<id>"] }`, spacing 0.2–0.4, `dynamics.angleJitter`, `flip` and a little `scatter`. The image as grain instead: `tip.grain.source`. Paint editor only. |
 | A light brush (neon, glow) | `light.amount`, and paint it on dark paper; a highlighter keeps `light.spill.radius` 0. |
 | A colour that depends on the background (chalk, white ink) | `colour.default` as a light / dark pair `{ light, dark }`: the editor takes the side for its colour scheme when the brush is chosen. |
 | A shape as the tip (stars, leaves, a logo) | `tip.shape` stamp with `stamps` (an editor stamp or a ref from `find_stickers`), continuous marks; it paints in the user's colour. Keep the sticker's colours with `marks` objects. Paint editor only. |
 | A spray can or mist | `basedOn` `spray-can`, or `medium` spray with `marks` scatter (`density`, `size`). Paint editor only. |
+| From a brush pack the user owns (.abr, .brushset) | `import_brush_pack` with its `licence`, pick the closest imported brush, then `update_brush` its feel (pressure, jitter, grain): packs import tips, not dynamics. |
 | A change to a built-in | `duplicate_brush`, then `update_brush` the copy. |
+| Tune a brush from a host that can't paint all of it | `update_brush` there: what the host can't use is kept (`kept`), not stripped; refused only if the change adds it. |
 
 ## Recipes
 
@@ -71,6 +76,11 @@ basedOn: "highlighter", colour: { default: "#ff6ec7" } }`, then `check_brush`.
 `{ id: "board-chalk", name: "Board chalk", basedOn: "chalk", colour: { default: { light:
 "#334155", dark: "#f8fafc" } } }`: white chalk in dark mode, slate on light paper.
 
+**A charcoal brush from a scan.** `add_brush_source` `{ name: "Charcoal scan", image: <PNG>,
+channel: "darkness" }` → `create_brush` `{ id: "scan-charcoal", name: "Scan charcoal", basedOn:
+"charcoal-stick", tip: { shape: "stamp", stamps: ["source:charcoal-scan"], spacing: 0.25, grain:
+{ source: "rough", depth: 0.5 } }, dynamics: { angleJitter: 0.3, flip: "xy" } }` → `preview_brush`.
+
 **Port a wet brush to vector.** `check_brush` `{ id, host: "vector" }`; `create_brush` from the
 `degraded` brush with `id` `<id>-vector`; `check_brush` again.
 
@@ -79,7 +89,8 @@ basedOn: "highlighter", colour: { default: "#ff6ec7" } }`, then `check_brush`.
 - **Starting from nothing.** A brush without `basedOn` gets engine defaults (a hard round dab);
   it rarely looks like the medium asked for.
 - **A host that refuses the base.** A wet or particle preset can't be the base of a canvas
-  brush; set `behaviour.surface` to `dry` or start from a dry preset.
+  brush, nor a thick (impasto) preset of a vector one; set `behaviour.surface` to `dry` (vector
+  also takes `wet`) or start from a dry preset.
 - **Lists replace.** Giving `colour.palette` or `tip.stamps` replaces the whole list; include
   every entry you want.
 - **Changing a built-in.** `update_brush` refuses built-ins; duplicate first.
@@ -90,3 +101,5 @@ basedOn: "highlighter", colour: { default: "#ff6ec7" } }`, then `check_brush`.
 - `create_brush`, `update_brush`, `duplicate_brush`: make and tune the brush.
 - `check_brush`: prove it works for the host, and get a degraded spec when it doesn't.
 - `preview_brush`: look at a sample stroke when the host renders previews.
+- `add_brush_source`, `list_brush_sources`: images for image tips and grain.
+- `import_brush_pack`: tips and grain from a Photoshop or Procreate pack.

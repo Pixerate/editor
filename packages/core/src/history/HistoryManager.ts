@@ -559,6 +559,7 @@ export class HistoryManager {
       current: index === u - 1,
       undone: false,
       origin: e.origin,
+      ...(e.tag !== undefined ? { tag: e.tag } : {}),
     }));
     for (let i = this.redoStack.length - 1; i >= 0; i--) {
       const e = this.redoStack[i];
@@ -569,6 +570,7 @@ export class HistoryManager {
         current: false,
         undone: true,
         origin: e.origin,
+        ...(e.tag !== undefined ? { tag: e.tag } : {}),
       });
     }
     this.cachedEntries = entries;
@@ -603,6 +605,26 @@ export class HistoryManager {
       for (const [kind, id] of steps) this.emit(kind, id);
     }
     return n;
+  }
+
+  /**
+   * Removes the steps `match` picks from the undo and redo stacks without running them, e.g.
+   * steps whose changes no longer apply because remote content replaced what they change. The
+   * other steps keep their order, a gesture merging into a removed step ends, and a mark whose
+   * step was removed is no longer valid. `match` gets each step as `getEntries` lists it (with
+   * its `tag`). Does nothing while a step is being applied or a batch is open. Returns how many
+   * steps were removed.
+   */
+  public dropSteps(match: (step: HistoryEntry) => boolean): number {
+    if (this.isApplying || this.batchDepth > 0) return 0;
+    const ids = new Set(this.getEntries().filter((e) => match(e)).map((e) => e.id));
+    if (ids.size === 0) return 0;
+    this.undoStack = this.undoStack.filter((e) => !ids.has(e.id));
+    this.redoStack = this.redoStack.filter((e) => !ids.has(e.id));
+    if (this.gestureEntryId !== null && ids.has(this.gestureEntryId)) this.resetGesture();
+    this.notify();
+    this.emit("drop");
+    return ids.size;
   }
 
   /**

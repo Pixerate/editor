@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
-import { BrushEditor } from './BrushEditor';
+import { addBrushSourceFromFile, importBrushFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+import { BrushEditor } from '../brushes/BrushEditor';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
 import { PaintGradientEditor } from './PaintGradientEditor';
 import { StickerPicker } from './StickerPicker';
@@ -21,7 +21,9 @@ export interface BrushPanelProps {
  * grouped by medium and variety, tools apart) and the active brush in the `BrushEditor`: its
  * facets with a live preview, and "Save brush" into the editor's brush library. The paint
  * editor adds the brush's own gradient, the sticker stamps, what the brush carries (Load /
- * Clean), and import and export of library files.
+ * Clean), and import and export of library files; import also reads brush packs (`.abr`,
+ * `.brush`, `.brushset`). Images picked for an image tip or grain are
+ * added to the brush library as sources.
  */
 export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWidth = 112, thumbnailHeight = 32, className }) => {
   const state = usePaintEditorState(controller);
@@ -30,7 +32,8 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
   const { brush, brushes } = state;
   const paper = state.document.paper;
   const thumbs = useMemo(
-    () => new Map(brushes.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: '#26324a' })])),
+    // Each in a colour that reads on the paper (the brush's own default when it has one).
+    () => new Map(brushes.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: brushPreviewColours(controller.getBrushSpec(b.id)!, { paper: paper.color }).color })])),
     // Thumbnails follow the library and the paper.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [controller, brushes, paper, thumbnailWidth, thumbnailHeight]
@@ -56,6 +59,8 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
         preview={preview}
         onChange={(next) => attempt(() => controller.setBrushSpec(next))}
         onSaveAs={(name) => controller.saveBrush({ id: slug(name), name })}
+        sources={controller.brushSources.all()}
+        onAddSource={async (file) => (await addBrushSourceFromFile(controller.brushLibrary, file)).ref}
         renderExtra={(section) => {
           if (section === 'shape' && brush.engine === 'sticker')
             return <StickerPicker controller={controller} label="Sticker stamps" selected={brush.sticker.stamps} onPick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />;
@@ -115,12 +120,12 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
         <input
           ref={fileRef}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.abr,.brush,.brushset,application/json"
           aria-label="Import brushes"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) attempt(async () => controller.importBrushes(JSON.parse(await f.text())));
+            if (f) attempt(async () => (/\.json$/i.test(f.name) ? controller.importBrushes(JSON.parse(await f.text())) : importBrushFile(controller.brushLibrary, f)));
             e.target.value = '';
           }}
         />

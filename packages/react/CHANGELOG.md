@@ -1,5 +1,148 @@
 # @pixerate/editor-react
 
+## 0.185.0
+
+### Minor Changes
+
+- 320fd4d: **History: remove stale steps with `dropSteps`.**
+
+  - `HistoryManager.dropSteps(match)` removes the undo and redo steps `match` picks without running them, for steps whose changes no longer apply (remote content replaced what they change, a layer was reloaded). The other steps keep their order, a gesture merging into a removed step ends, and a mark on a removed step is no longer valid. It reports a `drop` commit event and returns how many steps were removed. Until now, integrators had to skip such steps by hand or reach into private fields.
+  - History entries (`getEntries`, commit events) now carry the step's `tag`.
+  - React `useHistory().dropSteps`, Svelte `createHistory().dropSteps` and Swift `HistoryManager.dropSteps` match.
+
+  **Canvas: gesture undo keeps work done since.**
+
+  - `createCanvasGestureRecorder` undo and redo now put back only the nodes and edges the gesture changed. Before, they restored the whole canvas from before the drag, which removed nodes and edges a collaborator or an agent had added since and undid their moves. A node the gesture changed is replaced only if it is still there (undoing a move does not bring back a node deleted since), and one the gesture added or removed is removed or put back at its index.
+
+### Patch Changes
+
+- Updated dependencies [320fd4d]
+  - @pixerate/editor@0.270.0
+
+## 0.184.0
+
+### Minor Changes
+
+- 88bc003: Import the brush packs people already own (#569).
+
+  - `import_brush_pack` agent tool, `importBrushPack(library, bytes, options)`, `readBrushPack` and `importBrushFile` (a `.json` library file or a pack, by name).
+  - Photoshop `.abr` (versions 1, 2, 6, 7 and 10, `readAbr`): sampled tips become image sources and stamp-tip brushes, computed tips round or flat brushes, with preset names and spacing where the file has them.
+  - Procreate `.brush` and `.brushset`: each brush's shape becomes its image tip and its grain its tip grain, with its name and spacing.
+  - Licence and terms files in a pack, and the licence passed in, are kept on every source and returned as `licence`; what isn't mapped (dynamics, pencil curves, patterns, dual brushes, wet settings) is returned as `unsupported`. Packs are read defensively, with size limits.
+  - React and Svelte `BrushPanel` Import… also takes `.abr`, `.brush` and `.brushset` files.
+
+### Patch Changes
+
+- e7c25db: Add `usePromptEditor` (and alias `createPromptEditor`) to `@pixerate/editor-svelte`: the Svelte 5 counterpart of React's `usePromptEditor`, with the same options, milestones, slash-command keys, plain-text clipboard handling, `loadingIndicator` and echo-safe controlled `content` (#500).
+
+  The prompt editor itself now lives in `@pixerate/editor` (`createPromptEditorOptions`, `syncPromptEditor`, `promptEditorConfigKey`, `promptMilestones`, `resolvePromptTemplateColorMap`, `PromptEditorConfig`), and both framework hooks are thin wrappers over it. React's `usePromptEditor` behaves as before.
+
+- Updated dependencies [88bc003]
+- Updated dependencies [e7c25db]
+  - @pixerate/editor@0.269.0
+
+## 0.183.1
+
+### Patch Changes
+
+- fcae5ae: Add complete `typesVersions` subpath mappings across `@pixerate/editor`, `@pixerate/editor-react`, and `@pixerate/editor-svelte` for `moduleResolution: "node"` (`node10`) compatibility (#501).
+- Updated dependencies [fcae5ae]
+  - @pixerate/editor@0.268.2
+
+## 0.183.0
+
+### Minor Changes
+
+- 87a74c0: Image brush tips and tip grain, like Procreate's shape and grain sources (#569).
+
+  - Brush image sources: `BrushLibrary.addSource`, `listSources` and `getSource` keep images (a PNG read from its transparency, dark or light parts, stored as a grey mask of at most 512 px with its licence and origin). Library files carry the sources their brushes name. `makeBrushSource`, `readBrushSource`, `decodeBrushSource`, `brushSourceRef`, `addBrushSourceFromFile`, `imageFileToPngDataUrl` and `withBrushSource`.
+  - A stamp tip lays an image source with `tip.stamps: ['source:<id>']` (continuous dabs, sprays and particle dots); its hardness fades it towards its edges. Objects marks still take stickers only.
+  - `tip.grain`: texture inside each dab, a built-in pattern or an image source, `texturised` (fixed to the canvas) or `moving` (rolls with the tip), with `scale`, `depth`, `contrast` and `invert`.
+  - `dynamics.count` (dabs per spacing step) and `dynamics.flip` (random mirroring).
+  - The paint engine's `PaintBrush` gains optional `tipGrain`, `dynamics.count` and `dynamics.flip`; brushes without them resolve as before. Recorded strokes keep the source refs and saved paintings carry the sources (`brushSources`), so replays, time-lapses and high-resolution exports match. `PaintEditorController.brushSources` and `stampArt`; `paintBrushPreviewRenderer(paper, { library })` draws image tips in previews.
+  - Host profiles gain `tipGrain` and `dabCount`: the paint editor paints both; the image editor, canvas and vector strokes paint without them (a warning). `brushEditorSections` adds a Grain section and, for stamp tips, count, scatter, rotation and size jitter and flip, and offers the library's sources.
+  - Agent tools `add_brush_source` and `list_brush_sources`; `create_brush`, `update_brush` and `set_brush` take the new facets, and image sources the library doesn't have are refused with the closest ids.
+  - React and Svelte `BrushEditor`: `sources` and `onAddSource` / `onaddsource`, with "Add image tip…" and "Add grain image…"; `BrushLibraryEditor` and the paint `BrushPanel` store picked images in the library.
+
+### Patch Changes
+
+- Updated dependencies [87a74c0]
+  - @pixerate/editor@0.268.0
+
+## 0.182.0
+
+### Minor Changes
+
+- aeedd05: Add path-node and words controls to `AnimationEffectsPanel` in React and Svelte, plus `AnimationEditorController.setVectorEffectPath` and its `set_vector_effect_path` agent tool in core, so an applied vector effect can be run along a path node (landing on it) or words in place, in one undo step (#496).
+- 3155b37: Canvas and vector get the paint editor's "Keep my colour" lock, and a canvas colour taken from a brush's light / dark default follows the colour scheme (#589).
+
+  - Canvas draw controller: `setColorLocked` / `colorLocked` (and a `colorLocked` option), which `selectBrush` respects; a colour taken from a light / dark default resolves again on `setColorScheme` until another colour is set; `colorScheme` and `brushSettings()`. Agents get `canvas.selectBrush`, `canvas.setColorLocked` and `canvas.setColorScheme` from `createDrawCommands`.
+  - Vector controller: `setColorLocked`, a `colorLocked` option, and `colorScheme` / `colorLocked` in the state; `addBrushstroke` and `setBrushstroke` keep the colour while locked. Strokes already made never change. Agents get `vector.setColorLocked` and `vector.setColorScheme`, and `vector.listBrushes` reports both.
+  - React `useCanvasDraw`: `colorLocked`, `setColorLocked`, `brushSettings` and an `initialColorLocked` option. Svelte `createCanvasDraw`: `colorLocked`, `setColorLocked`, `colorScheme` and `brushSettings`.
+  - `<VectorAppearancePanel>` (React and Svelte) has a "Keep my colour" toggle under brushstrokes.
+
+### Patch Changes
+
+- Updated dependencies [f6b0b95]
+- Updated dependencies [aeedd05]
+- Updated dependencies [3155b37]
+- Updated dependencies [365d86e]
+- Updated dependencies [de3ed2e]
+- Updated dependencies [b5b703d]
+  - @pixerate/editor@0.267.0
+
+## 0.181.0
+
+### Minor Changes
+
+- f0f8598: Brush previews read on what they are drawn on.
+
+  - `brushPreviewColours(brush, { paper, profile })` gives a preview's background and a stroke colour with at least 3:1 contrast against it: the brush's default for that background (a light / dark pair takes its side), else a colour for the medium. `brushPreviewsOnDark`: light paint previews on dark paper, but a multiply highlighter previews on its paper.
+  - `BrushPreviewRenderer` can say what it draws on (`paper`; `paintBrushPreviewRenderer` does). Canvas brush swatches take a `background` and colour each brush for it.
+  - `BrushLibraryEditor` takes `previewPaper` (the box behind transparent previews) and chooses its preview colour with `brushPreviewColours`; `previewColor` is now only an override. `BrushEditor` takes `previewBackground`. Paint `BrushPanel` thumbnails colour each brush for the paper.
+  - The ballpoint, gel pen and fineliner defaults are light / dark pairs, so they stay visible in dark-scheme editors.
+
+### Patch Changes
+
+- Updated dependencies [f0f8598]
+  - @pixerate/editor@0.265.0
+
+## 0.180.0
+
+### Minor Changes
+
+- ea91a07: One brush editor for every editor that paints, scoped to what each host can use.
+
+  - `BrushEditor` moved to `@pixerate/editor-react/brushes` and `@pixerate/editor-svelte/brushes` (still exported from `paint-editor`). It takes a brush, a host profile, a preview (pixels or an image URL) and `onSave` / `onSaveAs`, and names what the brush has that the host can't use.
+  - New `BrushLibraryEditor` on a brush library: edits a saved brush in place, saves built-ins as a copy, and starts new brushes for the host.
+  - `brushEditorSections` now lists only the sections, controls and options a host profile uses (no velocity on canvas, no grain or pick-up in the image editor, no engine controls for an engine the host lacks).
+  - Core: `brushEditorScope`, `checkBrushEdit`, `withKeptIssues`, `newBrushFor`, `saveBrushEdit`, `brushIdFromName`, `isBrushLibrary`, `degrade(…, { ignored })`, `paintBrushPreviewRenderer`, and vector `brushLibrary` / `refreshBrushes`.
+  - `update_brush` keeps facets the host can't use that the brush already had (returned as `kept`) and refuses only changes that add them.
+  - `vector.setBrushstroke` / `setBrushstroke` with the same `brushId` takes the saved brush as the library has it now.
+  - "Edit brush…" in the image `BrushOptionsBar`, and a library picker plus "Edit brush…" on vector brushstrokes in `VectorAppearancePanel`. Their previews come from a new `brushPreview` option on the image and vector controllers (or a `renderBrushPreview` prop).
+
+### Patch Changes
+
+- Updated dependencies [ea91a07]
+  - @pixerate/editor@0.264.0
+
+## 0.179.0
+
+### Minor Changes
+
+- af0e180: Sticker provider contract additions (#488):
+
+  - **AI-generated art.** `StickerSummary.aiGenerated?: boolean`; `checkStickerProvider` rejects a value that isn't a boolean. `find_stickers` and `describe_sticker` return it, and the React and Svelte `StickerLibraryPicker` label such art "AI".
+  - **Light / dark variants.** `StickerSummary.variants?: ("light" | "dark")[]` (always with `light`) and `load(id, { variant })`, defaulting to `light`. A variant the sticker lacks is refused with an `unsupported_variant` `StickerError` that names the ones it has (`checkStickerVariant` does it for providers). The old, unused `StickerDescription.variants` (`{ id, name }[]`) is replaced by this field. `insert_sticker` takes `variant` and otherwise uses the dark art when the host's background is dark (`dark` option on `createVectorStickerHost`, `createImageStickerHost` and `createCanvasStickerHost`), and returns the variant used. The paint editor's sticker brush sprays dark variants on a dark colour scheme, and each sticker keeps the variant it was drawn in (`Sticker.variant`).
+  - **Collections.** `StickerSummary.collection`, `StickerSearchOptions.collection` and an optional `listCollections()`. `combineStickerProviders` namespaces collection ids as `provider:collection`. `find_stickers` filters by `collection` and returns the collections, the `StickerBrowser` has `setCollection`, and the pickers show a collection filter.
+  - The fake provider has AI-generated stickers, dark variants and collections to test against.
+  - Swift: `find_stickers` takes `collection` (from the regenerated contract) and refuses it, as the editor's own stickers are in no collection.
+
+### Patch Changes
+
+- Updated dependencies [af0e180]
+  - @pixerate/editor@0.263.0
+
 ## 0.178.0
 
 ### Minor Changes

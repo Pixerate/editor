@@ -18,8 +18,9 @@ import PixerateRaster
  * - **Undo.** Each wet step of history keeps a snapshot of the world before and after it, within
  *   `undoMemory` bytes; older snapshots are dropped, and undoing past them leaves that paint dry.
  *
- * Only the CPU engine (the TS core's TypeScript kernel, the authority) is ported: there is no
- * WebAssembly or WebGPU engine, so `set_wet_engine` takes `gpu: "auto"` but the GPU never starts.
+ * The CPU engine (the TS core's TypeScript kernel) is the authority. With `gpu: "auto"`, Metal
+ * shades the display once at least `gpuMinTiles` tiles are wet (`WetMetal.swift`), as WebGPU does
+ * on the web; there is no WebAssembly engine, and the GPU never steps (see `WetMetalEngine`).
  */
 
 /// Water depth a stroke lays at the tip's centre at `water` 1.
@@ -396,6 +397,8 @@ public final class PaintWetLayers {
     private var stepsOwed = 0.0
     public internal(set) var gpuMode = "auto"
     public internal(set) var gpuMinTiles = 16
+    private var gpu: WetMetalEngine?
+    private var gpuSupport: WetGpuSupport?
     private let host: PaintWetHost
 
     init(_ host: PaintWetHost, _ options: PaintWetOptions = PaintWetOptions()) {
@@ -406,22 +409,57 @@ public final class PaintWetLayers {
         gpuMinTiles = Swift.max(1, options.gpuMinTiles ?? 16)
     }
 
-    /// `auto`: use the GPU for large wet areas when there is one; `off`: the CPU only. This port has no GPU, so either way the CPU runs.
+    // MARK: Metal shading
+
+    /// Starts the GPU engine for `world` (once; it may turn out unavailable).
+    private func startGpu(_ world: WetWorld) {
+        if gpuMode == "off" || gpu != nil || gpuSupport != nil { return }
+        let (engine, support) = WetMetalEngine.shared()
+        gpuSupport = support
+        guard let engine else { return }
+        gpu = engine
+        world.gpuMinTiles = gpuMinTiles
+        world.attachGpu(engine)
+    }
+
+    /// `auto`: use the GPU for large wet areas when there is one; `off`: the CPU only.
     func setGpu(_ mode: String, minTiles: Int?) -> WetEngineInfo {
-        if let minTiles { gpuMinTiles = Swift.max(1, minTiles) }
+        if let minTiles {
+            gpuMinTiles = Swift.max(1, minTiles)
+            world?.gpuMinTiles = gpuMinTiles
+        }
+        if mode == gpuMode { return engineInfo() }
         gpuMode = mode
+        if mode == "off" {
+            world?.attachGpu(nil)
+            gpu = nil
+            gpuSupport = nil
+        } else if let world {
+            startGpu(world)
+        }
         return engineInfo()
     }
 
     public func engineInfo() -> WetEngineInfo {
-        let base = WetEngineInfo(mode: gpuMode, state: "off", reason: nil, adapter: nil, maxTiles: 0, minTiles: gpuMinTiles, activeTiles: world?.activeTiles() ?? 0, cpu: backend())
-        var out = base
+        let w = world
+        var out = WetEngineInfo(mode: gpuMode, state: "off", reason: nil, adapter: gpuSupport?.adapter, maxTiles: gpuSupport?.maxSlots ?? 0, minTiles: gpuMinTiles, activeTiles: w?.activeTiles() ?? 0, cpu: backend())
         if gpuMode == "off" {
             out.reason = "Forced to the CPU."
-            return out
+        } else if let error = w?.gpuError {
+            out.state = "failed"
+            out.reason = error
+        } else if let s = gpuSupport, !s.supported {
+            out.state = "unavailable"
+            out.reason = s.reason
+        } else if gpu == nil {
+            out.state = "not-started"
+            out.reason = "Starts with the first wet stroke."
+        } else if w?.gpuActive == true {
+            out.state = "active"
+        } else {
+            out.state = "standby"
+            out.reason = "The GPU takes over at \(gpuMinTiles) wet tiles (256 px)."
         }
-        out.state = "unavailable"
-        out.reason = "This editor has no GPU engine; the CPU engine paints wet media."
         return out
     }
 
@@ -439,6 +477,8 @@ public final class PaintWetLayers {
     private func makeWorld(_ width: Int, _ height: Int, _ paper: PaperSettings) throws -> WetWorld {
         let w = try WetWorld(width: width, height: height, paper: wetPaperInput(paper))
         _ = w.setTilt(tilt)
+        w.gpuMinTiles = gpuMinTiles
+        if let gpu { w.attachGpu(gpu) } else { startGpu(w) }
         return w
     }
 
@@ -549,6 +589,22 @@ public final class PaintWetLayers {
         return rects
     }
 
+    /// Like `syncDisplays`, shading on the GPU when it is active (all stale tiles at once).
+    @discardableResult
+    func syncDisplaysGpu(_ maxCpuTiles: Int = Int.max) -> [RasterRect] {
+        guard let w = world else { return [] }
+        var surfaces = OrderedMap<String, TiledSurface>()
+        var rects: [RasterRect] = []
+        for id in w.laneIds() {
+            guard let d = try? w.displayGpu(id, maxCpuTiles: maxCpuTiles) else { continue }
+            if host.layerSurface(id) !== d.surface { surfaces.set(id, d.surface) }
+            rects += d.changed
+        }
+        syncLights()
+        if !surfaces.isEmpty { host.updateSurfaces(surfaces, rects) }
+        return rects
+    }
+
     /// Shows each wet layer's live light paint.
     private func syncLights() {
         guard let w = world else { return }
@@ -592,7 +648,7 @@ public final class PaintWetLayers {
         if n < 1 { return 0 }
         stepsOwed -= Double(n)
         w.step(n)
-        syncDisplays(DISPLAY_TILES_PER_TICK)
+        if w.gpuActive { syncDisplaysGpu(DISPLAY_TILES_PER_TICK) } else { syncDisplays(DISPLAY_TILES_PER_TICK) }
         retireDry()
         host.changed()
         return n
@@ -603,7 +659,7 @@ public final class PaintWetLayers {
         guard let w = world else { return 0 }
         let start = w.clock
         w.step(Swift.max(0, steps))
-        syncDisplays()
+        if w.gpuActive { syncDisplaysGpu() } else { syncDisplays() }
         retireDry()
         return w.clock - start
     }

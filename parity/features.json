@@ -92,38 +92,45 @@
           "swift": "Planned (#546)"
         },
         {
+          "feature": "Prompt Editor (plain-text editor: echo-safe controlled `content`, milestones, live `isEditing` / `placeholder` / `className`)",
+          "core": "`createPromptEditorOptions` & `syncPromptEditor`",
+          "react": "`usePromptEditor`",
+          "svelte": "`usePromptEditor`",
+          "swift": "Planned (#546)"
+        },
+        {
           "feature": "Plain Text Clipboard & Linebreak Parser",
           "core": "✅",
           "react": "✅",
-          "svelte": "Via core¹",
+          "svelte": "✅",
           "swift": "Planned (#546)"
         },
         {
           "feature": "Live Animated Gradient Text",
           "core": "✅",
           "react": "✅",
-          "svelte": "Via core¹",
+          "svelte": "✅",
           "swift": "Planned (#546)"
         },
         {
           "feature": "Slash Command Trigger (`/command`)",
           "core": "✅",
           "react": "✅",
-          "svelte": "Via core¹",
+          "svelte": "✅",
           "swift": "Planned (#546)"
         },
         {
           "feature": "Template Autocomplete (`{{`)",
           "core": "✅",
           "react": "✅",
-          "svelte": "Via core¹",
+          "svelte": "✅",
           "swift": "Planned (#546)"
         },
         {
           "feature": "Loading Placeholder (`loadingNode`: SVG spinner in `currentColor`, `role=\"status\"` with a label, custom indicator or component)",
           "core": "`LoadingNode.configure({ label, renderIndicator, nodeView })`",
           "react": "`usePromptEditor({ loadingIndicator, loadingLabel })` & `createReactLoadingNodeView`",
-          "svelte": "`createSvelteLoadingNodeView`",
+          "svelte": "`usePromptEditor({ loadingIndicator, loadingLabel })` & `createSvelteLoadingNodeView`",
           "swift": "Planned (#546)"
         },
         {
@@ -144,6 +151,13 @@
           "react": "Component",
           "svelte": "Component",
           "swift": "Planned (#546)"
+        },
+        {
+          "feature": "Markdown format commands and editing (`@pixerate/markdown-conformance`: the format-command manifest with labels, groups and shortcuts, and its editing corpus: toggles, links, blocks, code blocks, Return, Tab / Shift-Tab and Backspace)",
+          "core": "`createFormatCommands`, `formatCommandsFor`",
+          "react": "Via core (`formatCommandsFor`)",
+          "svelte": "Via core (`formatCommandsFor`)",
+          "swift": "`FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools planned (#546)"
         },
         {
           "feature": "Rich Text Preset (Headings, Lists, Task Lists, Links)",
@@ -328,7 +342,7 @@
           "core": "✅",
           "react": "`useFileImport` + `fileImport`",
           "svelte": "`createFileImport` + `fileImport` prop",
-          "swift": "Planned (#533)"
+          "swift": "Meshes and freeform gradients ✅ headless (`VectorEditorController`: `setMeshGradient`, `setMeshPoint`, `setFreeformGradient`, `addFreeformPoint`, `setFreeformPoint`, `removeFreeformPoint`, `setFreeformLines`, `getShading`; drawn as pattern tiles in render data and SVG export, imported from SVG); the Gradient tool's points on the canvas and the views: Planned (#533)"
         },
         {
           "feature": "Drag-and-Drop File Import at Drop Position",
@@ -945,105 +959,105 @@
           "core": "`VectorSnapTargets`, `setSnap` & `getVectorOverlayRenderData().guides`",
           "react": "`<VectorCanvas>` guides & `<VectorToolbar>` snapping toggle",
           "svelte": "`<VectorCanvas>` guides & `<VectorToolbar>` snapping toggle",
-          "swift": "Planned (#533)"
+          "swift": "Snap options ✅ headless (`VectorEditorController.setSnap`, `vector.getSnapOptions`, `vector.setSnapOptions` with polar increments, `vectorPolarAngles`); snapping at the pointer, guides and the toggle: Planned (#533)"
         },
         {
           "feature": "Vector CAD Tracking & Typed Dimensions (object snap tracking: anchors, centres and crossings acquired by resting the pointer on them, up to seven, sending horizontal / vertical or polar alignment paths and an open path's extension, snapping where paths cross, cross the drawing or onto them; polar tracking by increment (90°, 45°, 30°, 15° or custom angles), optionally relative to the last segment; typed distance, length<angle, @offset and position entry while the pen draws; draw by dimensions; agent commands `vector.getSnapOptions`, `vector.setSnapOptions`, `vector.addPathByDimensions`)",
           "core": "`acquireTrackingPoint`, `clearTracking`, `placePenPoint`, `addPathByDimensions`, `vectorPolarAngles`, `vectorTrackingPaths`, `snapFrom(…, tracking)` & `getVectorOverlayRenderData().trackingPoints` / `typedEntry`",
           "react": "`<VectorCanvas>` tracking markers and typed entry, `<VectorToolbar>` polar picker",
           "svelte": "`<VectorCanvas>` tracking markers and typed entry, `<VectorToolbar>` polar picker",
-          "swift": "Planned (#533)"
+          "swift": "Typed dimensions ✅ headless (`VectorEditorController`, `vector.addPathByDimensions`); tracking and the canvas: Planned (#533)"
         },
         {
           "feature": "Vector Transforms (move, resize and rotate handles with a selection box that stays rotated, set rotation, flip, align, distribute, arrange, group / ungroup, duplicate, copy / paste)",
           "core": "`transform`, `setRotation`, `align`, `distribute`, `arrange`, `group`",
           "react": "`<VectorToolbar>`",
           "svelte": "`<VectorToolbar>`",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController`: move, scale, rotate, set rotation, align, distribute, arrange, group / ungroup, layer moves; `createVectorCommands`); flip, duplicate, copy / paste, the selection box and the views: Planned (#533)"
         },
         {
           "feature": "Vector Path Editing (move points and handles, add / delete points, convert corner ↔ smooth, close / open, reverse) and Boolean Operations",
           "core": "`insertAnchorAt`, `convertAnchors`, `booleanOp`",
           "react": "`<VectorCanvas>` & `<VectorToolbar>`",
           "svelte": "`<VectorCanvas>` & `<VectorToolbar>`",
-          "swift": "Planned (#533)"
+          "swift": "Point moves, segment bending, point deletion and booleans ✅ headless (`VectorEditorController`; `vector.moveAnchor`, `vector.bendSegment`, `vector.deleteAnchors`, `vector.boolean`); handles, adding and converting points, close / open, reverse and the canvas: Planned (#533)"
         },
         {
           "feature": "Vector Path Clean-Up & Cutting (shape-keeping point deletion, segment bending, Curvature point moves, Join, Average, Remove Redundant Points, Smooth, Scissors, gap-free Knife, Eraser; all in each node's own space)",
           "core": "`deleteAnchors`, `bendSegment`, `joinPaths`, `knife`, `erase`, `setEditing` & `pathEdit` / `pathCut` helpers",
           "react": "`<VectorCanvas>` strokes & `<VectorToolbar>` path-editing group",
           "svelte": "`<VectorCanvas>` strokes & `<VectorToolbar>` path-editing group",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController`; `vector.join`, `vector.average`, `vector.removeRedundantPoints`, `vector.smooth`, `vector.cut`, `vector.knife`, `vector.erase`); the tools on the canvas: Planned (#533)"
         },
         {
           "feature": "Vector Live Corners & Stroke Options (per-anchor corner radius drawn round / inverted / chamfered at render, squircle corner smoothing (Figma / iOS style, any corner angle), hit-test, bounds, boolean, outline and export time; rectangle, polygon and star tools keep editable corners; draggable corner widgets in the direct tool; centre / inside / outside stroke alignment; arrowheads with tip / extend alignment and per-end scale; Outline Stroke)",
           "core": "`expandVectorCorners`, `setCornerRadius`, `vectorStrokeParts`, `outlineStroke` & `getVectorOverlayRenderData().cornerWidgets`",
           "react": "`<VectorCanvas>` corner widgets & clipped strokes, `<VectorStylePanel>`",
           "svelte": "`<VectorCanvas>` corner widgets & clipped strokes, `<VectorStylePanel>`",
-          "swift": "Planned (#533)"
+          "swift": "Live corner radius, kind and smoothing, arrowheads and stroke alignment ✅ headless (`VectorEditorController`: `setCornerRadius`, `setCornerKind`, `setCornerSmoothing`; `vectorStrokeParts`, `vectorStrokeOutlinePath`, `hitTestVectorStroke`); drawing aligned or arrowed strokes in render data and SVG export, corner widgets and the views: Planned (#533)"
         },
         {
           "feature": "Vector Variable-Width Strokes (width profiles with left / right side scales and monotone interpolation; taper, bulge, pinch, wave and pressure presets; parametric taper / wave; exact filled outlines refitted to Béziers with caps, joins, dashes, corners, arrowheads and alignment; Width tool (W) with draggable width points, Alt-drag copies, discontinuous points, Shift multi-selection and a numeric Width Point Edit on double-click; arrowheads sized from the profile; pencil pen pressure; SVG round-trip; Outline Stroke bakes them)",
           "core": "`strokeWidthProfile`, `setWidthProfile`, `setWidthPoint`, `widthPointEdit`, `selectedWidthPoints`, `variableStrokeOutline`, `widthProfileAt` & `getVectorOverlayRenderData().widthPoints`",
           "react": "`<VectorCanvas>` width points, filled outlines & `<VectorWidthPointEditor>`, `<VectorStylePanel>` profile picker",
           "svelte": "`<VectorCanvas>` width points, filled outlines & `<VectorWidthPointEditor>`, `<VectorStylePanel>` profile picker",
-          "swift": "Planned (#533)"
+          "swift": "Width profiles, presets, taper / wave generators and exact filled outlines ✅ headless (`VectorEditorController`: `setWidthProfile`, `setWidthPoint`, `outlineStroke`; `variableStrokeOutline`, `widthProfileAt`; SVG import of profiles); drawing profiled strokes in render data and SVG export, the Width tool and the views: Planned (#533)"
         },
         {
           "feature": "Vector Pathfinder, Shape Builder & Paint Bucket (Divide, Trim, Merge, Crop, Outline, Minus Back on rotated shapes with holes, live corners and stroke areas; Shape Builder (M) hover / click / drag merge and Alt delete of faces, line pieces and outline edges (an erased edge opens its path) with a hatched highlight; paint bucket (B) fills the region outlines enclose, islands as holes, optional gap closing)",
           "core": "`pathfinder`, `shapeBuilder`, `fillRegion`, `PlanarMap`, `cutOutPiece`, `hatchPath` & `getVectorOverlayRenderData().builder`",
           "react": "`<VectorCanvas>` hatched face highlights & `<VectorToolbar>` Pathfinder group",
           "svelte": "`<VectorCanvas>` hatched face highlights & `<VectorToolbar>` Pathfinder group",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless for filled shapes and stroke areas (`VectorEditorController`; `vector.pathfinder`, `vector.shapeBuilderFaces`, `vector.shapeBuilder`, `vector.fillRegion`); the tools: Planned (#533)"
         },
         {
           "feature": "Vector Blends & Path Morphing (live blend groups regenerated whenever a key changes; specified steps, specified distance or smooth colour; replace spine with orient to spine; Expand and Release; Blend tool (J) with clicked start anchors; morphs with arc-length anchor insertion, start and winding chosen by fit and shape context, Procrustes in-betweens that turn rather than collapse, holes growing from points, OKLab colours, resampled gradients, width profiles and rigid transforms; path keyframes for animation; SVG round-trip)",
           "core": "`blend`, `setBlendOptions`, `replaceBlendSpine`, `expandBlend`, `createVectorMorph`, `interpolateVectorPaths`, `evaluateVectorPathKeyframes` & `getVectorOverlayRenderData().blend`",
           "react": "`<VectorCanvas>` spines & Blend tool picks, `<VectorToolbar>` Blend group",
           "svelte": "`<VectorCanvas>` spines & Blend tool picks, `<VectorToolbar>` Blend group",
-          "swift": "Planned (#533)"
+          "swift": "Live blends and morphs ✅ headless (`VectorEditorController`: `blend`, `setBlendOptions`, `replaceBlendSpine`, `expandBlend`, `releaseBlend`; `createVectorMorph`, `interpolateVectorPaths`; steps in bounds, render data and the SVG round-trip); the Blend tool, path keyframes and the views: Planned (#533)"
         },
         {
           "feature": "Vector Path Effects (editable effect stacks on paths and groups: Trim Paths simultaneous / individual, Round Corners, Pucker & Bloat, Twist, Zig Zag, seeded Wiggle Paths, Offset Paths with copies, Merge Paths, Repeater with opacity ramp and fractional copies; After Effects stacking; effected geometry for render, hit-test, bounds, snapping, booleans, Pathfinder and SVG; per-node cache; Expand Appearance; slider drags as one undo step)",
           "core": "`addEffect`, `updateEffect`, `expandAppearance`, `expandVectorAppearance`, `applyVectorEffects` & `getVectorEffectsPanel`",
           "react": "`<VectorEffectsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>`",
           "svelte": "`<VectorEffectsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>`",
-          "swift": "Planned (#533)"
+          "swift": "Every effect but Extrude and Bevel ✅ headless (`VectorEditorController`: `addEffect`, `updateEffect`, `removeEffect`, `expandAppearance`; effected geometry for bounds, booleans, render data and SVG export with its round-trip); Extrude, Bevel, the per-node cache and the views: Planned (#533)"
         },
         {
           "feature": "Vector Appearance Stack (several fills and strokes per path, bottom to top with fills under strokes, each with its own paint, opacity, blend mode and visibility and each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile; `fill` / `stroke` as shorthands for the top layer, so old documents and commands keep working; node blend modes from the CSS `mix-blend-mode` set under the image editor's names; drop shadow, inner shadow, outer / inner glow, layer blur and feather as one SVG filter per node; topmost-visible-paint hit-testing; Outline Stroke per stroke layer; gradient editor and tool per layer; SVG export with filters and lossless round-trip, import of `fill-opacity`, `mix-blend-mode`, `feDropShadow` / blur filters and, optionally, stacked shapes; agent commands `vector.addFill` … `vector.moveFilter`)",
           "core": "`addPaintLayer`, `updatePaintLayer`, `movePaintLayer`, `setBlendMode`, `addFilter`, `vectorFills`, `vectorStrokes`, `vectorFilterSvg`, `hitTestVectorPaintLayer` & `getVectorAppearancePanel`",
           "react": "`<VectorAppearancePanel>` (in `<VectorStylePanel>`), `<VectorFilterDefs>` & `<VectorCanvas>` layers",
           "svelte": "`<VectorAppearancePanel>` (in `<VectorStylePanel>`), `<VectorFilterDefs>` & `<VectorCanvas>` layers",
-          "swift": "Planned (#533)"
+          "swift": "Fill and stroke stacks, per-layer width profiles, node blend modes and filters ✅ headless (`VectorEditorController`: `addPaintLayer`, `updatePaintLayer`, `movePaintLayer`, `setBlendMode`, `addFilter`; filters drawn in render data and SVG export); brushstroke layers are kept and edited, not drawn; the views: Planned (#533)"
         },
         {
           "feature": "Vector Masks & Clipping (mask groups whose first child masks the rest: clipping masks by outline, alpha and luminance opacity masks, inverted masks (an even-odd clip of a rectangle with the mask's union cut out; a colour-matrix filter for opacity masks); a hidden mask turns it off; hit-testing, bounds, snapping, booleans and the Pathfinder on the masked result, open paths cut where they cross; the group's filters, opacity and blend mode apply to the masked result and its path effects to the contents; Make Clipping Mask (Mod+7), Make Opacity Mask, Release (Mod+Alt+7), Edit Mask / Edit Contents; SVG export as `<clipPath>` / `<mask>` with a lossless round-trip and import of foreign `clip-path` / `mask` references (user space and `objectBoundingBox` units); agent commands `vector.makeClippingMask`, `vector.makeOpacityMask`, `vector.setMaskOptions`, `vector.releaseMask`)",
           "core": "`makeMask`, `releaseMask`, `setMaskOptions`, `editMask`, `vectorMaskRenderData`, `vectorMaskContains`, `getVectorMaskPanel` & `getVectorOverlayRenderData().masks`",
           "react": "`<VectorMaskPanel>` (in `<VectorStylePanel>`), `<VectorMaskedNodes>`, `<VectorToolbar>` mask actions & `<VectorCanvas>` mask indicator",
           "svelte": "`<VectorMaskPanel>` (in `<VectorStylePanel>`), `<VectorMaskedNodes>`, `<VectorToolbar>` mask actions & `<VectorCanvas>` mask indicator",
-          "swift": "Planned (#533)"
+          "swift": "Clipping and opacity masks, inverted or off ✅ headless (`VectorEditorController`: `makeMask`, `setMaskOptions`, `releaseMask`; bounds, booleans and the Pathfinder on the masked result); drawing masks in render data and SVG, hit-testing and the views: Planned (#533)"
         },
         {
           "feature": "Vector Live Booleans (boolean groups whose operands stay editable, each with its own operation; prefix-cached fold so an edit recombines only the operands above it; hit-testing by the result, or by the operands while entered; destructive booleans kept)",
           "core": "`booleanOp(op, { live })`, `foldVectorBooleanOperands` & `vectorEnteredGroups`",
           "react": "`<VectorToolbar>` Live toggle",
           "svelte": "`<VectorToolbar>` Live toggle",
-          "swift": "Planned (#533)"
+          "swift": "Live boolean groups with operand operations, drawn and bounded as their fold ✅ headless (`VectorEditorController`, `vector.boolean` with `live`); the prefix cache, hit-testing and the views: Planned (#533)"
         },
         {
           "feature": "Vector Distort & Envelopes (Free Distort mode of the selection box: corners distort in perspective by an exact homography, Shift+Alt+Mod for symmetric perspective, Mod-drag a side to skew; `distort(corners)` and `skew(ax, ay)` on rotated nodes too; adaptive curve mapping within a tolerance, refitted to fewer anchors; live envelope effect with Photoshop's fifteen warp presets — bend, horizontal / vertical distortion, orientation — or an editable bicubic mesh of rows × columns split exactly with de Casteljau; Envelope tool (U) dragging anchors, handles and the surface, one undo step per gesture; Make with Top Object, Release, Expand; user-space gradient handles mapped; agent commands `vector.distort`, `vector.skew`, `vector.envelope`)",
           "core": "`setFreeDistort`, `distort`, `skew`, `envelope`, `makeEnvelopeWithTopObject`, `releaseEnvelope`, `mapVectorSubpaths`, `vectorHomography`, `vectorWarpPresetMesh`, `getVectorEnvelopePanel` & `getVectorOverlayRenderData().envelope` / `.distort`",
           "react": "`<VectorEnvelopePanel>` (in `<VectorStylePanel>`), `<VectorToolbar>` Distort toggle & `<VectorCanvas>` mesh / quad overlay",
           "svelte": "`<VectorEnvelopePanel>` (in `<VectorStylePanel>`), `<VectorToolbar>` Distort toggle & `<VectorCanvas>` mesh / quad overlay",
-          "swift": "Planned (#533)"
+          "swift": "Free Distort, skew and envelopes ✅ headless (`VectorEditorController`: `distort`, `skew`, `envelope`, `makeEnvelopeWithTopObject`, `releaseEnvelope`; warp presets and meshes, `VectorWarpMesh`); the Envelope tool, the selection box and the views: Planned (#533)"
         },
         {
           "feature": "Vector Gradients (linear, radial with focal point / focal radius and aspect, conic, reflected and diamond; explicit start / end / aspect frames in the box or node space with the angle / centre shorthand; stop midpoints, smoothness and sRGB / linear-light / Oklab interpolation exported as extra stops; pad / reflect / repeat; within, along or across strokes; conic, diamond and stroke modes as SVG patterns; Gradient tool (G) with start, end, radius, aspect and focal handles, click-to-add, drag and drag-off-to-delete stops and midpoints, one undo step per gesture; gradients follow scale and skew; SVG import of fx / fy / fr / spreadMethod / gradientTransform / userSpaceOnUse and lossless round-trip)",
           "core": "`setGradient`, `setGradientStop`, `vectorGradientSvgDefs`, `expandVectorGradientStops`, `sampleVectorGradientAt`, `getVectorGradientEditor` & `getVectorOverlayRenderData().gradient`",
           "react": "`<VectorGradientEditor>` (in `<VectorStylePanel>`), `<VectorGradientAnnotator>` & `<VectorGradientDefs>`",
           "svelte": "`<VectorGradientEditor>` (in `<VectorStylePanel>`), `<VectorGradientAnnotator>` & `<VectorGradientDefs>`",
-          "swift": "Planned (#533)"
+          "swift": "Every style (linear, radial, conic, reflected, diamond), stop midpoints, smoothness and linear / Oklab interpolation, pad / reflect / repeat, and gradients along or across strokes ✅ headless (`VectorEditorController`: `setGradient`; `vectorGradientSvgDefs`, `vectorStrokeGradientDefs`; drawn in render data and SVG export, imported from SVG); the Gradient tool and the views: Planned (#533)"
         },
         {
           "feature": "Vector Gradient Meshes & Freeform Gradients (meshes of rows × columns smooth Coons patches over a path, their sides Catmull-Rom curves through a lattice of coloured points, colours blended per patch with per-point opacity; freeform gradients of colour points anywhere in a shape with a spread of pure colour, blended by distance, and lines carrying colour along curves; first points placed inside the shape automatically; drawn as SVG pattern tiles (mesh cells, freeform strips each with a gradient) and moved with their paths; Gradient tool editing: drag points, click to add a freeform point, Alt-click to remove; SVG round-trip; agent commands `vector.setMeshGradient`, `vector.setMeshPoint`, `vector.setFreeformGradient`, `vector.addFreeformPoint`, `vector.setFreeformPoint`, `vector.removeFreeformPoint`, `vector.setFreeformLines`, `vector.getShading`)",
@@ -1085,28 +1099,28 @@
           "core": "`makeSymbol`, `placeSymbol`, `detachInstances`, `replaceSymbol`, `setInstanceOptions`, `editSymbol`, `exitSymbolEdit`, `resolveVectorSymbols`, `getVectorSymbolsPanel` & `getVectorSymbolEditBackground`",
           "react": "`<VectorSymbolsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` isolation mode",
           "svelte": "`<VectorSymbolsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` isolation mode",
-          "swift": "Planned (#533)"
+          "swift": "Symbols and instances ✅ headless (`VectorEditorController`: `makeSymbol`, `placeSymbol`, `setInstanceOptions`, `replaceSymbol`, `detachInstances`, `renameSymbol`, `deleteSymbol`, `editSymbol`, `exitSymbolEdit`, `symbolsPanel`, `symbolEditBackground`; `resolveVectorSymbols`, `vectorInstanceDrawn`; instances in bounds, blends, render data and the SVG round-trip, with foreign use elements imported); double-click into isolation, the dimmed host on the canvas, the panel's views and the view following isolation: Planned (#533)"
         },
         {
           "feature": "Vector Constraints (CAD-style parametric drawing: coincident, collinear, concentric, fix, parallel, perpendicular, horizontal, vertical, tangent (segment–circle, circle–circle, G1 at an anchor), smooth (G2), symmetric, equal, and dimensions — distance (aligned, horizontal, vertical), angle, radius, diameter — with named values and expressions over parameters; anchors referred to by stable ids; a damped minimum-norm Gauss–Newton solve per connected component after every edit, so the geometry just moved moves least; conflicts and redundant constraints refused with the constraints involved; degrees of freedom per drawing and per path (QR rank and null space); Auto Constrain infers what a sketch nearly satisfies; glyphs and dimension lines on the canvas; agent commands `vector.listConstraints`, `vector.addConstraint`, `vector.removeConstraint`, `vector.setConstraintValue`, `vector.autoConstrain`)",
           "core": "`addConstraint`, `removeConstraints`, `setConstraintValue`, `autoConstrain`, `getConstraintDof`, `solveVectorConstraints`, `addVectorConstraint`, `inferVectorConstraints`, `vectorConstraintDof`, `getVectorConstraintPanel` & `getVectorOverlayRenderData().constraints`",
           "react": "`<VectorConstraintsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` glyphs",
           "svelte": "`<VectorConstraintsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` glyphs",
-          "swift": "Planned (#533)"
+          "swift": "Constraints ✅ headless (`VectorEditorController`: `addConstraint`, `removeConstraints`, `setConstraintValue`, `autoConstrain`, `getConstraintDof`, `constraintPanel`, solved after every edit; `solveVectorConstraints`, `addVectorConstraint`, `inferVectorConstraints`, `vectorConstraintDof`, `vectorConstraintGlyphs`); glyphs and dimension lines on the canvas and the panel's views: Planned (#533)"
         },
         {
           "feature": "Vector Contour (CorelDRAW-style live contour effect: concentric offset steps inside, outside or to the centre, `offset` apart, fill and stroke blending to end colours with acceleration; drawn over the shape inside and under it outside; works with every other effect, export and agent path through `vector.addEffect` with type `contour`)",
           "core": "`createVectorEffect('contour', …)`, `applyVectorEffects`",
           "react": "`<VectorEffectsPanel>` (colour parameters)",
           "svelte": "`<VectorEffectsPanel>` (colour parameters)",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`vector.addEffect` with type `contour`, `expandAppearance`); the views: Planned (#533)"
         },
         {
           "feature": "Vector Block Shadow (CorelDRAW-style live block / long shadow effect: each shape swept `distance` along `angle` (`sweepPath`, a Minkowski sum with a segment) and drawn under the art in a shadow colour or the shape's own, fading to `endOpacity` along the direction for a long shadow; works with every other effect and export, Lottie as drawn; agent path through `vector.addEffect` with type `blockShadow`)",
           "core": "`createVectorEffect('blockShadow', …)`, `sweepPath`, `applyVectorEffects`",
           "react": "`<VectorEffectsPanel>`",
           "svelte": "`<VectorEffectsPanel>`",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`vector.addEffect` with type `blockShadow`, `expandAppearance`); the views: Planned (#533)"
         },
         {
           "feature": "Vector Extrude (CorelDRAW-style live extrude effect: each shape drawn as a solid, its side faces going back `depth` along an angle (parallel) or `toward` percent of the way to a vanishing point (perspective), shaded by how squarely they face a light, drawn back to front in an exact order for concave outlines, under the shape; works with every other effect and export, Lottie as drawn; agent path through `vector.addEffect` with type `extrude`)",
@@ -1127,14 +1141,14 @@
           "core": "`setLens`, `resolveVectorLenses`, `vectorLensDrawn`, `vectorLensColorMap`, `mapVectorPaintColors`, `sanitizeVectorLens`",
           "react": "`<VectorLensPanel>` (in `<VectorToolbar>`)",
           "svelte": "`<VectorLensPanel>` (in `<VectorStylePanel>`)",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController`: `setLens`; backdrops resolved after every edit, `vectorLensDrawn`); drawing lenses in render data and SVG and the views: Planned (#533)"
         },
         {
           "feature": "Vector Live Symmetry (symmetry groups drawing their children with mirrored copies — left / right, top / bottom, four quarters, diagonal — or radial turns, mirrored for a kaleidoscope, about a centre and rotation; copies regenerated on every edit and drawn, hit, bounded, exported (SVG round-trip, Lottie, PDF) as part of the group; Draw inside: pen, pencil, shapes and text go into the group mirrored as they are drawn; axes on the canvas; Release or Expand into real objects; `parentId` on add commands; agent commands `vector.makeSymmetry`, `vector.setSymmetry`, `vector.releaseSymmetry`, `vector.enterSymmetry`, `vector.exitSymmetry`)",
           "core": "`makeSymmetry`, `setSymmetry`, `releaseSymmetry`, `enterSymmetry`, `vectorSymmetryMatrices`, `vectorSymmetryDrawn` & `getVectorOverlayRenderData().symmetry`",
           "react": "`<VectorSymmetryPanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` axes",
           "svelte": "`<VectorSymmetryPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` axes",
-          "swift": "Planned (#533)"
+          "swift": "Symmetry groups ✅ headless (`VectorEditorController`: `makeSymmetry`, `setSymmetry`, `releaseSymmetry`, `enterSymmetry`, `exitSymmetry`; `vectorSymmetryDrawn` in bounds, render data and the SVG round-trip); drawing inside, the axes and the views: Planned (#533)"
         },
         {
           "feature": "Vector Bitmap-to-Vector Stylise (a PNG turned into stylised vector art rather than traced outlines: mosaic tiles (square or round, with grout), halftone dots on a turned screen whose area follows the darkness (one ink or the picture's colours), low-poly triangles on a seeded jittered grid, and engraving lines that swell where the picture is dark and break where it is light; colours reduced to a median-cut palette with one compound path per colour; placed like Image Trace; agent commands `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage`, `vector.hatchImage`)",
@@ -1148,21 +1162,21 @@
           "core": "`distortBrush`, `distortVectorPath`, `vectorDistortDabMap`, `setEditing({ distortMode, distortSize, distortStrength })` & `getVectorOverlayRenderData().brush`",
           "react": "`<VectorToolbar>` Distort Brush options & `<VectorCanvas>` brush circle",
           "svelte": "`<VectorToolbar>` Distort Brush options & `<VectorCanvas>` brush circle",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController`; `vector.smudgeBrush`, `vector.twirlBrush`, `vector.attractBrush`, `vector.repelBrush`, `vector.roughenBrush`); the Distort Brush tool: Planned (#533)"
         },
         {
           "feature": "Vector Perspective Drawing (CorelDRAW-style perspective grids: 1, 2 or 3 vanishing points and an origin, with floor and wall (or front) planes; the Rectangle, Ellipse, Polygon and Star tools draw on the active plane, their drag box taken on it so shapes recede; Attach lays flat art onto a plane, read from the origin; grid lines, vanishing points and origin on the canvas, the active plane stronger; agent commands `vector.getPerspective`, `vector.setPerspective`, `vector.removePerspective`, `vector.setPerspectivePlane`, `vector.attachToPerspective`)",
           "core": "`setPerspective`, `setPerspectivePlane`, `attachToPerspective`, `vectorPerspectivePlaneMap`, `vectorPerspectiveFlatToPlane`, `vectorPerspectiveMapPath`, `vectorPerspectivePreset` & `getVectorOverlayRenderData().perspective`",
           "react": "`<VectorPerspectivePanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` grid",
           "svelte": "`<VectorPerspectivePanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` grid",
-          "swift": "Planned (#533)"
+          "swift": "Perspective grids ✅ headless (`VectorEditorController`: `setPerspective`, `setPerspectivePlane`, `attachToPerspective`; `vectorPerspectivePlaneMap`, `vectorPerspectiveFlatToPlane`, `vectorPerspectiveMapPath`, `vectorPerspectiveGridLines`, `vectorPerspectivePreset`); drawing shapes on a plane, the grid on the canvas and the panel: Planned (#533)"
         },
         {
           "feature": "Vector Frames & Artboards (a group becomes a frame with a rectangle, a background fill and clipping; top-level frames are artboards with their names on the canvas; Frame tool (F) that takes in the objects it encloses, Frame Selection with padding, position and size fields; resizing constraints per child — left, right, left & right (stretch), centre or scale horizontally, top, bottom, top & bottom, centre or scale vertically — applied whenever the frame is resized (panel, selection handles or scale), text keeping its font size; frames select, snap and bound by their rectangle; SVG export with a clip path and a lossless round-trip, and Export Frame as an SVG of its own size; agent commands `vector.listFrames`, `vector.addFrame`, `vector.frameSelection`, `vector.setFrame`, `vector.setResizing`, `vector.exportFrameSvg`)",
           "core": "`addFrame`, `frameSelection`, `setFrame`, `setResizing`, `getFrames`, `frameToSvg`, `vectorFrameChildMatrix`, `vectorFrameDocument`, `getVectorFramePanel` & `getVectorOverlayRenderData().frames`",
           "react": "`<VectorFramePanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` frame labels",
           "svelte": "`<VectorFramePanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` frame labels",
-          "swift": "Planned (#533)"
+          "swift": "Frames and resizing constraints ✅ headless (`VectorEditorController`: `addFrame`, `frameSelection`, `setFrame`, `setResizing`, `getFrames`, `frameToSvg`; `vectorFrameDrawn`, `vectorFrameChildMatrix`, `vectorFrameDocument`; frames in bounds, masks, render data and the SVG round trip); the Frame tool, labels and the panel: Planned (#533)"
         },
         {
           "feature": "Vector Generative Prompts (through `@pixerate/editor/generation`: a prompt planned against a model's capabilities and sent to the host's generator; SVG from text models is read with the SVG importer, pictures from image models are traced or stylised (mosaic, halftone, low poly, engraving); the art goes into a box on the artboard as one editable group holding the generation's provenance, so it can be regenerated in place with a new seed or prompt; every request takes an idempotency key; agent tools `list_vector_art_models`, `generate_vector_art`, `regenerate_vector_art`)",
@@ -1176,21 +1190,21 @@
           "core": "`addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`, `vectorPages`, `vectorMasterPages`, `resolveVectorMasterPages`",
           "react": "`<VectorPagesPanel>` (in `<VectorToolbar>`)",
           "svelte": "`<VectorPagesPanel>` (in `<VectorStylePanel>`)",
-          "swift": "Planned (#533)"
+          "swift": "Pages and master pages ✅ headless (`VectorEditorController`: `addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`; `vectorPages`, `vectorMasterPages`, `resolveVectorMasterPages` after every edit, in render data and SVG); master text tokens need text (#624); the panel: Planned (#533)"
         },
         {
-          "feature": "Vector Brushstrokes (natural-media brushes — pencils, pastels, charcoal, markers, inks: the presets `VECTOR_PROFILE` admits and, with a `brushLibrary`, saved brushes from the shared brush library, kept in the layer so the document renders without it — laid along vector paths as stroke layers of kind `brushstroke`: the path stays the data and the rendered brush images are a cache, through the shared `renderBrushstroke` / `BrushstrokeCache` renderer the canvas uses; colour from the layer's paint, a size and a pressure profile along the length; opt-in brush character with a `seed` (seeded jitter and a procedural paper grain, `paper` to pick it or `null` for none; seedless layers render as before, panel-added layers get a random seed); drawn on both canvases, exported to SVG as images (the layer data round-trips) and to PDF as image objects with soft masks; brush, size, colour and a grain toggle in the appearance panel; agent commands `vector.listBrushes`, `vector.addBrushstroke`, `vector.setBrushstroke` and the brush library tools with `VECTOR_PROFILE`)",
-          "core": "`addBrushstroke`, `setBrushstroke` (`seed`, `paper`), `brushLibrary`, `listBrushstrokeBrushes`, `vectorBrushstrokeBrushes`, `vectorBrushstrokeImages`, `randomVectorBrushstrokeSeed`",
+          "feature": "Vector Brushstrokes (natural-media brushes — pencils, pastels, charcoal, markers, inks, wet paint (watercolour, gouache, wet oils), the Mixer Brush, smudge and blender: the presets `VECTOR_PROFILE` admits and, with a `brushLibrary`, saved brushes from the shared brush library, kept in the layer so the document renders without it — laid along vector paths as stroke layers of kind `brushstroke`: the path stays the data and the rendered brush images are a cache, through the shared `renderBrushstroke` / `BrushstrokeCache` renderer the canvas uses; colour from the layer's paint, or gradient paint sampled dab by dab along the path (`brush.paint`; a gradient layer paint along, across or within the stroke; a brush's own gradient), a size and a pressure profile along the length; wet paint simulated in the stroke's own wet area for a fixed number of steps and dried (shown as laid until it settles in the background; exports wait); the Mixer Brush, smudge and blender acting on a CPU backdrop of the fills, strokes and brushstrokes beneath, re-rendered when that changes; opt-in brush character with a `seed` (seeded jitter and a procedural paper grain, `paper` to pick it or `null` for none; seedless layers render as before, panel-added layers get a random seed); drawn on both canvases, exported to SVG as images (the layer data round-trips) and to PDF as image objects with soft masks; brush, size, colour and a grain toggle in the appearance panel; agent commands `vector.listBrushes`, `vector.addBrushstroke`, `vector.setBrushstroke` and the brush library tools with `VECTOR_PROFILE`)",
+          "core": "`addBrushstroke`, `setBrushstroke` (`seed`, `paper`, `paint`), `brushLibrary`, `listBrushstrokeBrushes`, `vectorBrushstrokeBrushes`, `vectorBrushstrokeImages`, `onVectorBrushstrokesSettled`, `settleVectorBrushstrokes`, `WetBrushstrokeJob`, `renderBackdropBrushstroke`, `rasterizeVectorBackdrop`, `randomVectorBrushstrokeSeed`",
           "react": "`<VectorAppearancePanel>` brushstroke rows (grain toggle) & `<VectorCanvas>` images",
           "svelte": "`<VectorAppearancePanel>` brushstroke rows (grain toggle) & `<VectorCanvas>` images",
-          "swift": "Planned (#533)"
+          "swift": "Brushstroke layers as data ✅ headless (`VectorEditorController`: `addBrushstroke`, `setBrushstroke`, `setColorScheme`, `setColorLocked`; `vectorBrushstrokeBrushes`, `sanitizeVectorBrushstroke`); rendering them (the raster brush engine along a path), saved library brushes and the views: Planned (#533)"
         },
         {
           "feature": "Vector Connectors (open paths whose ends are glued to other objects' connection sites — the middle of each side of their own bounds, through their rotation, or the centre — or left free; `auto` sides pick the side facing the other end; straight, elbow (right angles leaving along the sides, optional bend radius) and curved routes; routed again after every edit, including constraint solves, so connectors follow moved, resized and turned objects in the same undo step, with glue to deleted objects dropped; Connector tool (X) showing the sites under the pointer; SVG round-trip; agent commands `vector.connect`, `vector.setConnector`, `vector.listConnectors`, `vector.listConnectionSites`)",
           "core": "`addConnector`, `setConnector`, `getConnectors`, `getConnectionSites`, `setConnectorRoute`, `rerouteVectorConnectors`, `vectorConnectionSites`, `getVectorConnectorPanel` & `getVectorOverlayRenderData().connectorSites`",
           "react": "`<VectorConnectorPanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` site dots",
           "svelte": "`<VectorConnectorPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` site dots",
-          "swift": "Planned (#533)"
+          "swift": "Connectors ✅ headless (`VectorEditorController`: `addConnector`, `setConnector`, `getConnectors`, `getConnectionSites`, `setConnectorRoute`; `vectorConnectionSites`, `routeVectorConnector`, `rerouteVectorConnectors` after every edit; the SVG round trip); arrowheads in render data and SVG wait on stroke parts (#624); the Connector tool and the panel: Planned (#533)"
         },
         {
           "feature": "Vector Style Panel (fill, stroke, gradient editor, width, alignment, width profile, arrowheads, corner radius and kind, opacity, fill and stroke stacks, blend mode, filters, effects, envelope; defaults for new shapes)",
@@ -1204,7 +1218,7 @@
           "core": "`parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands`",
           "react": "`useVectorCommands`",
           "svelte": "`useVectorCommands`",
-          "swift": "Planned (#533)"
+          "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata and enablement; those not ported yet fail, #624) and SVG export of plain paths and groups ✅; SVG import and the rest: Planned (#533)"
         },
         {
           "feature": "Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools)",
@@ -1490,10 +1504,10 @@
           "swift": "Planned (#533)"
         },
         {
-          "feature": "Effects Along a Path (a provider effect with a path control, e.g. Flair's beams, trails and signatures: `accepts: ['path']` in search and on summaries, `pathControlsOf`, `pathFromText` for words; in the video editor a path drawn on the preview, a clip's mask outline, path data or words, mapped into the picture the effect renders so a clip effect follows its moved clip; in the animation editor a vector effect run along a path node and placed on it; `search_effects` `accepts`, `describe_effect` `pathControls`, `set_video_effect_path` and `add_vector_effect` `path` agent tools)",
-          "core": "`pathControlsOf`, `EffectProvider.pathFromText`, `VideoEditorController.setEffectPath`, `startPathDrawing`, `VideoPathGesture`, `framePointsToPicture`, `AnimationEditorController.addVectorEffect({ path })`",
-          "react": "Path row in `<VideoEffectsPanel>` (Draw path, Use mask outline, Write, Clear path), drawing on `<VideoPreview>`",
-          "svelte": "Path row in `<VideoEffectsPanel>` (Draw path, Use mask outline, Write, Clear path), drawing on `<VideoPreview>`",
+          "feature": "Effects Along a Path (a provider effect with a path control, e.g. Flair's beams, trails and signatures: `accepts: ['path']` in search and on summaries, `pathControlsOf`, `pathFromText` for words; in the video editor a path drawn on the preview, a clip's mask outline, path data or words, mapped into the picture the effect renders so a clip effect follows its moved clip; in the animation editor a vector effect run along a path node and placed on it; `search_effects` `accepts`, `describe_effect` `pathControls`, `set_video_effect_path`, `add_vector_effect` `path` and `set_vector_effect_path` agent tools)",
+          "core": "`pathControlsOf`, `EffectProvider.pathFromText`, `VideoEditorController.setEffectPath`, `startPathDrawing`, `VideoPathGesture`, `framePointsToPicture`, `AnimationEditorController.addVectorEffect({ path })`, `AnimationEditorController.setVectorEffectPath`",
+          "react": "Path row in `<VideoEffectsPanel>` (Draw path, Use mask outline, Write, Clear path), drawing on `<VideoPreview>`, Path row in `<AnimationEffectsPanel>` (Use path node, Write, Clear path)",
+          "svelte": "Path row in `<VideoEffectsPanel>` (Draw path, Use mask outline, Write, Clear path), drawing on `<VideoPreview>`, Path row in `<AnimationEffectsPanel>` (Use path node, Write, Clear path)",
           "swift": "Planned (#533)"
         },
         {
@@ -1960,11 +1974,32 @@
           "swift": "`BrushLibrary`, `createPaintBrushLibraryToolProvider`, brush picker in `PaintBrushPanel` (thumbnail browser and brush editor views: Planned (#533))"
         },
         {
-          "feature": "Brush Colours, Stamp Tips & Spray (a brush's default colour, palette of up to 16 and `own` colour: hex, `rgba()`, light / dark pairs, gradients or effect paint; choosing a brush with a default colour makes it the paint colour unless the colour is locked; light / dark colours resolve for the host's colour scheme when the brush is chosen and when a stroke starts, and the stroke records the colour, so replays stay exact; stamp tips (every dab a sticker's shape: an editor stamp or any sticker from the sticker library, in the paint colour), textured particle dots from library stickers, a spray can (`marks` scatter: seeded droplets across the tip); presets ballpoint, gel pen, fineliner, crayon, chalk (a light / dark default) and spray can, the highlighter in fluorescent yellow with a palette; `set_color` `locked`, `create_brush` / `update_brush` `colour`, stickers checked against the host's sticker library, image `set_brush_preset` colour; the canvas and vector pickers take default colours too: canvas `selectBrush`, `canvas.drawFreehand` with a brush and no colour, `vector.addBrushstroke` / `setBrushstroke` with `keepColour`)",
-          "core": "`setColorScheme`, `setColorLocked`, `brushColourHex`, canvas `selectBrush`, `vectorBrushstrokeDefaultColour`, `PaintBrush.stamp` / `.spray`, `stampSampler`, `snapshotBrushLibrary`",
-          "react": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `useCanvasDraw` `selectBrush` and `colorScheme`",
-          "svelte": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `createCanvasDraw` `selectBrush` and `setColorScheme`",
-          "swift": "Brush colours, palettes, `own` colours and the spray can ✅ (`PaintEditorController`); stamp tips and textured particle dots from library stickers: Planned (#545) (they need the sticker art)"
+          "feature": "Shared Brush Editor in Every Host (one brush editor for every editor that paints, needing only a brush, a host profile, a preview renderer and save callbacks; it shows only the sections, controls and options the host's profile uses (tip shapes, marks, surfaces, tools, colour kinds, velocity, tilt, grain, pick-up, light, motion) and names what the brush has that the host can't use, which is kept unchanged on save; a new brush from a limited host holds only what that host accepts and must pass its check; saves go to the shared library (built-ins as a copy); \"Edit brush…\" in the image brush options, the canvas draw panel and vector brushstroke rows, a library picker for vector brushstrokes; previews and thumbnails coloured to read on what they are drawn on (the renderer's paper, dark paper for light paint but not for a multiply highlighter, or the surface behind a transparent preview; at least 3:1); the demo's Brushes tab with a host switch; agents follow the same rule: `update_brush` keeps facets a host can't use (`kept`) and refuses ones the change adds)",
+          "core": "`brushEditorSections`, `brushEditorScope`, `checkBrushEdit`, `newBrushFor`, `saveBrushEdit`, `brushPreviewColours`, `brushPreviewsOnDark`, `isBrushLibrary`, `paintBrushPreviewRenderer`, vector `refreshBrushes`",
+          "react": "`<BrushEditor>`, `<BrushLibraryEditor>` (`@pixerate/editor-react/brushes`) in `<BrushPanel>`, `<BrushOptionsBar>` and `<VectorAppearancePanel>`",
+          "svelte": "`<BrushEditor>`, `<BrushLibraryEditor>` (`@pixerate/editor-svelte/brushes`) in `<BrushPanel>`, `<BrushOptionsBar>` and `<VectorAppearancePanel>`",
+          "swift": "`update_brush` keeps facets the host can't use ✅ (`createPaintBrushLibraryToolProvider`); the brush editor views and the other hosts: Planned (#533)"
+        },
+        {
+          "feature": "Brush Colours, Stamp Tips & Spray (a brush's default colour, palette of up to 16 and `own` colour: hex, `rgba()`, light / dark pairs, gradients or effect paint; choosing a brush with a default colour makes it the paint colour unless the colour is locked; light / dark colours resolve for the host's colour scheme when the brush is chosen and when a stroke starts, and the stroke records the colour, so replays stay exact; stamp tips (every dab a sticker's shape: an editor stamp or any sticker from the sticker library, in the paint colour), textured particle dots from library stickers, a spray can (`marks` scatter: seeded droplets across the tip); presets ballpoint, gel pen, fineliner, crayon, chalk (a light / dark default) and spray can, the highlighter in fluorescent yellow with a palette; `set_color` `locked`, `create_brush` / `update_brush` `colour`, stickers checked against the host's sticker library, image `set_brush_preset` colour; the canvas and vector pickers take default colours too: canvas `selectBrush`, `canvas.drawFreehand` with a brush and no colour, `vector.addBrushstroke` / `setBrushstroke` with `keepColour`; canvas and vector have the same \"Keep my colour\" lock, and a canvas colour taken from a light / dark default follows the scheme while vector strokes already made keep theirs: `canvas.selectBrush`, `canvas.setColorLocked`, `canvas.setColorScheme`, `vector.setColorLocked`, `vector.setColorScheme`)",
+          "core": "`setColorScheme`, `setColorLocked`, `brushColourHex`, canvas `selectBrush`, `setColorLocked`, `brushSettings` and `colorLocked` option, vector `setColorLocked` and `colorLocked` state, `vectorBrushstrokeDefaultColour`, `PaintBrush.stamp` / `.spray`, `stampSampler`, `snapshotBrushLibrary`",
+          "react": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>` and `<VectorAppearancePanel>`, `useCanvasDraw` `selectBrush`, `colorScheme`, `colorLocked` / `setColorLocked` and `brushSettings`",
+          "svelte": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>` and `<VectorAppearancePanel>`, `createCanvasDraw` `selectBrush`, `colorScheme` / `setColorScheme`, `colorLocked` / `setColorLocked` and `brushSettings`",
+          "swift": "Brush colours, palettes, `own` colours, the spray can and stamp tips of the editor's stamps and image sources ✅ (`PaintEditorController`, in the brush picker of `PaintEditorView`); stamps of a host's sticker library: — (host sticker libraries are not ported)"
+        },
+        {
+          "feature": "Image Brush Tips & Tip Grain (Procreate-style shape and grain sources: images added to the shared brush library as sources (`source:<id>`; a PNG read from its transparency, dark or light parts, kept as a grey mask of at most 512 px with its licence and origin) laid as stamp tips with hardness, roundness, angle and pressure size, or tiled inside each dab as tip grain (built-in patterns or image sources; texturised, fixed to the canvas, or moving, rolling with the tip; scale, depth, contrast, invert); several dabs per step (`dynamics.count`) and random flips (`dynamics.flip`) besides scatter and rotation jitter; recorded strokes keep the source refs and saved paintings and library files carry the sources' bytes, so replays, time-lapses and high-resolution exports stay exact; host profiles say which hosts paint tip grain and counts (paint) and which paint without them (image, canvas, vector), stamp and image tips paint editor only; \"Add image tip…\" and \"Add grain image…\" in the brush editor; `add_brush_source`, `list_brush_sources`, `create_brush` / `update_brush` / `set_brush` with `tip.stamps`, `tip.grain`, `dynamics.count` and `dynamics.flip`)",
+          "core": "`createBrushLibrary` `addSource` / `listSources`, `makeBrushSource`, `BrushSource`, `TipGrain`, `BrushSourceArtCache`, `addBrushSourceFromFile`, `withBrushSource`",
+          "react": "`<BrushEditor>` `sources` / `onAddSource` and Grain section, `<BrushLibraryEditor>` (image uploads into the library)",
+          "svelte": "`<BrushEditor>` `sources` / `onaddsource` and Grain section, `<BrushLibraryEditor>` (image uploads into the library)",
+          "swift": "✅ (`BrushLibrary` `addSource` / `listSources`, `makeBrushSource`, `BrushSourceArtCache`, `TipGrainSettings`; `add_brush_source`, `list_brush_sources`; `brushSources` in saved paintings); the brush editor's image uploads: Planned (#533)"
+        },
+        {
+          "feature": "Brush Pack Import (Photoshop `.abr` versions 1, 2, 6, 7 and 10 and Procreate `.brush` / `.brushset` packs people already own: sampled `.abr` tips and Procreate shapes become image sources and stamp-tip brushes, Procreate grain becomes tip grain, computed `.abr` tips round or flat brushes; preset names and spacing where the file has them; licence and terms files and the licence given are kept on every source; what isn't mapped (dynamics, pencil curves, patterns, dual brushes, wet mixing) is reported as `unsupported`; untrusted files read defensively with size limits; one library import; Import in the paint brush panel and the demo's Brushes tab; `import_brush_pack` agent tool)",
+          "core": "`importBrushPack`, `readBrushPack`, `importBrushFile`, `readAbr`",
+          "react": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
+          "svelte": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
+          "swift": "✅ (`importBrushPack`, `readBrushPack`, `readAbr`; `import_brush_pack`); the Import button: Planned (#533)"
         },
         {
           "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
@@ -1974,7 +2009,7 @@
           "swift": "`RecordedStroke`"
         },
         {
-          "feature": "Brush a Path (SVG path data brushed with the active brush as if drawn by hand along it: each subpath one recorded stroke, sampled evenly, with an even pressure or a taper; grain, pick-up, wet and thick paint as in a hand stroke; one undo step; `stroke_path` agent tool, canvas coordinates on a hosted layer)",
+          "feature": "Brush a Path (SVG path data brushed with the active brush as if drawn by hand along it: each subpath one recorded stroke, sampled evenly, with an even pressure or a taper and an optional drawing speed that times the samples; grain, pick-up, wet and thick paint as in a hand stroke; one undo step; `stroke_path` agent tool, canvas coordinates on a hosted layer)",
           "core": "`strokePath`, `samplePath`, `PATH_STROKE_TAPERS`",
           "react": "`<PathStrokePanel>` (in `<PaintEditor>`'s Layers tab)",
           "svelte": "`<PathStrokePanel>` (in `<PaintEditor>`'s Layers tab)",
@@ -2027,14 +2062,14 @@
           "core": "`WetWorld`, `WetMedium`, `pigmentOf`, `filmPixel` (`/paint`) & `PaintWetLayers`, `WetStrokeDriver`, `tickWet`, `dryPaint`, `wetPaper`, `startWetClock`",
           "react": "`<WetPanel>`, the wet tools and wet settings in `<BrushPanel>`'s `<BrushEditor>`, clock and water overlay in `<PaintCanvas>`",
           "svelte": "`<WetPanel>`, the wet tools and wet settings in `<BrushPanel>`'s `<BrushEditor>`, clock and water overlay in `<PaintCanvas>`",
-          "swift": "✅ `PaintWetLayers` on `WetWorld` (the TypeScript kernel's maths, bit-exact, on one thread), `WetParams`, `WetFlowSpec`, `WetTilt`, `PaintWetOptions`; `PaintEditorController` `tickWet`, `advanceWet`, `dryPaint`, `wetPaper`; `PaintWetPanel` and the water overlay in `PaintCanvasView`, ticked by `PaintEditorModel` `runWetClock`; no WebAssembly or worker threads"
+          "swift": "✅ `PaintWetLayers` on `WetWorld` (the TypeScript kernel's maths, bit-exact; tiles on every core, four cells at a time in C), `WetParams`, `WetFlowSpec`, `WetTilt`, `PaintWetOptions`; `PaintEditorController` `tickWet`, `advanceWet`, `dryPaint`, `wetPaper`; `PaintWetPanel` and the water overlay in `PaintCanvasView`, ticked by `PaintEditorModel` `runWetClock`; no WebAssembly or worker threads"
         },
         {
           "feature": "Wet Media GPU Accelerator (Engine B: the wet step and display shading in WebGPU compute shaders on the CPU engine's tile layout, used when `navigator.gpu` is there and at least 16 tiles of 256 px are wet; edits upload only the rows they change, each batch also runs on the GPU, and every stale tile is shaded and read back at once; between strokes the GPU shows up to 16 steps ahead while the CPU works through them; the CPU engine stays the authority, so the display is within 1/255 of it and drying, saving, export and replay are byte-identical with the GPU on or off; capability check with the reason it is unavailable; force CPU; `set_wet_engine` agent tool, `engine` in `get_wet_paint`)",
           "core": "`createWetGpuEngine`, `wetGpuSupport`, `WetWorld.attachGpu` / `displayGpu` (`/paint`) & `setWetEngine`, `wetEngine`, `wetEngineSummary`",
           "react": "Engine select and status in `<WetPanel>`",
           "svelte": "Engine select and status in `<WetPanel>`",
-          "swift": "CPU only (TypeScript kernel); no GPU: `set_wet_engine` takes `auto` or `off` and reports the engine (`WetEngineInfo`), and the engine picker in `PaintWetPanel` lists both"
+          "swift": "✅ Metal shading of the display: `WetMetalEngine` shades every stale tile at once from the core's WGSL shading kernel (translated by naga, `pnpm gen:msl`), reading the CPU engine's tiles in place on shared memory (`WetWorld` `attachGpu` / `displayGpu`), at 16 wet tiles; the GPU never steps (the CPU is the authority and runs every step), so there are no lead frames; `set_wet_engine` reports the engine (`WetEngineInfo`), and the engine picker in `PaintWetPanel` lists both"
         },
         {
           "feature": "Oils & Thick Paint (wet oil on the wet simulation: thick, slow-drying, blending into the wet paint it meets; a thick-paint layer channel set of height and material (gloss, metallic) lit at render time by a movable light, relit tile by tile; impasto brush with bristle ridges, paint tube, palette knife that scrapes and smears, roller, gloop pen, metallic paint; paint loading that runs out along a stroke, thinners, instant dry; metallic paper; relief and lighting saved with the document; `set_lighting`, `get_relief`, `flatten_relief`, `set_instant_dry` agent tools)",
@@ -2051,11 +2086,11 @@
           "swift": "✅ `PaintEditorController` `timeLapse` (`PaintTimeLapse`) and `renderHighRes`, with wet events, wet strokes at their clock and flattened relief; PNG 2× in the Export menu"
         },
         {
-          "feature": "Procedural, Bristle & Sticker Brushes (particle brushes: spring-and-mass strings, springs, orbits, flow particles, elastic strands that stretch and snap back and fuzzy winding strands, drawn as dots, lines, bead sequences or filled ribbons between neighbouring paths (seamless, telescoped coverage); sine waves on any kind (amplitude, wavelength, speed by stroke time, phase jitter); dots and beads textured with up to four sticker stamps in turn or at random, turned by motion, at random or to the tip; `set_brush` `marks` and `tip.stamps` agent settings; bristle brushes whose bristles splay with pressure, flatten with tilt, bend at turns and run dry one by one; sticker spray of any sticker from the sticker library (the editor's procedural textured stamps by default, or a host's: `setStickersProvider`, refs `provider:id`; art loaded once and cached, tintable art in the paint colour; bare stamps in old brushes and documents read as `editor:` refs and paint the same pixels) that stay editable objects on a sticker layer: move, turn, resize, recolour, restamp, reorder, delete; placed exactly, picked by shape and dragged with the Stickers tool, each drag one undo step; all seeded and replayable; `add_stickers`, `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`, `remove_stickers` agent tools)",
+          "feature": "Procedural, Bristle & Sticker Brushes (particle brushes: spring-and-mass strings, springs, orbits, flow particles, elastic strands that stretch and snap back and fuzzy winding strands, drawn as dots, lines, bead sequences or filled ribbons between neighbouring paths (seamless, telescoped coverage); sine waves on any kind (amplitude, wavelength, speed by stroke time, phase jitter); dots and beads textured with up to four sticker stamps in turn or at random, turned by motion, at random or to the tip; `set_brush` `marks` and `tip.stamps` agent settings; bristle brushes whose bristles splay with pressure, flatten with tilt, bend at turns and run dry one by one; sticker spray of any sticker from the sticker library (the editor's procedural textured stamps by default, or a host's: `setStickersProvider`, refs `provider:id`; art loaded once and cached, tintable art in the paint colour, a sticker's dark variant on a dark colour scheme, kept by each sticker; bare stamps in old brushes and documents read as `editor:` refs and paint the same pixels) that stay editable objects on a sticker layer: move, turn, resize, recolour, restamp, reorder, delete; placed exactly, picked by shape and dragged with the Stickers tool, each drag one undo step; all seeded and replayable; `add_stickers`, `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`, `remove_stickers` agent tools)",
           "core": "`ParticleStroke`, `BristleStroke`, `StickerSpray`, `addStickers`, `stickerAt`, `previewSticker`, `updateSticker`, `stickerSurface`",
-          "react": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
-          "svelte": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
-          "swift": "Particle, bristle and sticker brushes ✅ (every particle kind and render, dots textured with editor stamps; sticker spray and sticker layers of the editor's stickers: `Sticker`, `EditorStickers`, `PaintEditorController` `addStickers` / `updateSticker`; all in the brush picker of `PaintEditorView`); host sticker libraries and their art, the Stickers tool and sticker panel: Planned (#545)"
+          "react": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>` (by category or collection, AI-generated art labelled), the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
+          "svelte": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>` (by category or collection, AI-generated art labelled), the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
+          "swift": "Particle, bristle and sticker brushes ✅ (every particle kind and render, dots textured with editor stamps; sticker spray and sticker layers of the editor's stickers: `Sticker`, `EditorStickers`, `PaintEditorController` `addStickers` / `updateSticker`; all in the brush picker of `PaintEditorView`); host sticker libraries and their art: —; the Stickers tool and sticker panel: Planned (#533)"
         },
         {
           "feature": "Light Paint (a per-layer light channel any dab, particle, bristle, Mixer Brush or impasto brush lays with `light.amount`: the paint glows in its own colour and spills, blurred, onto its surroundings; it moves with paint (smudges, blenders, the knife and pick-up brushes carry it; plain paint dims it; erasers remove it); glassy impasto with rim and clarity; Light presets glow gel, neon marker, light airbrush, spark trail, light ribbon, flame ribbon, neon strand, smoke ribbon, bokeh dots, twinkle sparks; per-layer spill radius and strength; saved, undone and replayed; PSD spill layers in Linear Dodge (Add); `get_light`, `set_light_spill`, `clear_light`, `set_brush` `light` / `behaviour.thick.rim` / `behaviour.thick.clarity` agent tools)",
@@ -2079,7 +2114,7 @@
           "swift": "`Stencil`, `PaintToolbarView` Ruler, Circle, Mask & outlines in `PaintCanvasView`"
         },
         {
-          "feature": "Paint Agent Cursors (an agent's strokes painted live by its cursor on the canvas, paced by the points' times, as one undo step; fills rubbed across the sheet, replays starting from the strokes they copy; cursors placed through the view's zoom, rotation and mirroring; `paint_stroke`, `fill_layer` and `replay_strokes` act out through a `director`)",
+          "feature": "Paint Agent Cursors (an agent's strokes painted live by its cursor on the canvas, paced by the points' times, as one undo step; fills rubbed across the sheet, replays starting from the strokes they copy; cursors placed through the view's zoom, rotation and mirroring; `paint_stroke`, `stroke_path` (each subpath in turn, the whole path one undo step), `fill_layer` and `replay_strokes` act out through a `director`)",
           "core": "`PaintDirector`, `PaintPresence` & `createPaintEditorToolProvider({ director })`",
           "react": "`usePaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",
           "svelte": "`createPaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",
@@ -2433,6 +2468,13 @@
           "swift": "`HistoryManager`"
         },
         {
+          "feature": "History Stale-Step Removal (`dropSteps` removes steps by tag or origin without running them, e.g. when remote content replaces what they change)",
+          "core": "`HistoryManager`",
+          "react": "`useHistory`",
+          "svelte": "`createHistory`",
+          "swift": "`HistoryManager`"
+        },
+        {
           "feature": "History Panel & Memory Budget (`getEntries`, `goTo`, `maxBytes` / `sizeOf`)",
           "core": "`HistoryManager`",
           "react": "`useHistory().entries`",
@@ -2592,7 +2634,5 @@
       ]
     }
   ],
-  "notes": [
-    "¹ Svelte doesn't have a prompt-editor equivalent of React's `usePromptEditor` yet. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`."
-  ]
+  "notes": []
 }

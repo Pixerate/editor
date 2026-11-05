@@ -136,6 +136,7 @@ extension PaintEditorController {
         if w > 16384 || h > 16384 { throw PaintEditorError("At scale \(jsText(scale)) the canvas would be \(jsText(w))×\(jsText(h)); the limit is 16384 px per side. Use a smaller scale.") }
         let target = try PaintEditorController(width: w, height: h, dpi: doc.canvas.dpi * scale, brushLibrary: brushLibrary, wet: wetOptions)
         target.brushEntries = brushEntries
+        target.brushSources.set(brushSources.all())
         var paper = doc.paper
         paper.scale = Swift.min(8, paper.scale * scale)
         target.doc = PaintDocumentState(canvas: target.doc.canvas, paper: paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [])
@@ -149,9 +150,10 @@ extension PaintEditorController {
     /// Repaints this painting into `target`, calling `onStroke` after each stroke (`replayPainting`).
     func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
         let source = doc
-        // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be).
-        try await target.prepareEffectPaints(source.strokes.compactMap(\.effect))
         let m: Affine = [s, 0, 0, s, 0, 0]
+        // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be),
+        // as the scaled strokes ask for it (scaling a stroke-mapped effect scales its map length).
+        try await target.prepareEffectPaints(source.strokes.map { s == 1 ? $0 : varyStroke($0, m) }.compactMap(\.effect))
         enum Item { case stroke(RecordedStroke), paint(PaintEvent), wet(WetEvent) }
         var items: [(item: Item, at: Double, order: Int)] = []
         var order = 0
