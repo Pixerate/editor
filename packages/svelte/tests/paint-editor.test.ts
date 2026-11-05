@@ -183,7 +183,7 @@ describe('Svelte paint editor', () => {
     expect(q<HTMLInputElement>('input[aria-label="Brush variety"]').value).toBe('highlighter');
     // Facets of the preset, edited: a narrower tip, a pink default colour and a palette colour.
     expect(q('[data-testid="brush-editor"] canvas[aria-label="Brush preview"]')).not.toBeNull();
-    expect([...target.querySelectorAll('[data-testid="brush-editor"] section')].map((s) => s.getAttribute('data-section'))).toEqual(['medium', 'shape', 'marks', 'feel', 'behaviour', 'light', 'colour']);
+    expect([...target.querySelectorAll('[data-testid="brush-editor"] section')].map((s) => s.getAttribute('data-section'))).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'colour']);
     setValue(q('input[aria-label="Size"]'), '18');
     setValue(q('input[aria-label="Brush default colour"]'), '#ff6ec7', true);
     setValue(q('input[aria-label="Add a palette colour"]'), '#ffd1ec', true);

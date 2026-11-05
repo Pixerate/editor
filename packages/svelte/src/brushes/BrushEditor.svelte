@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { brushEditorScope, brushEditorSections, PAINT_PROFILE, setBrushEditorValue, type Brush, type BrushHostProfile } from '@pixerate/editor/brushes';
+  import { brushEditorScope, brushEditorSections, PAINT_PROFILE, setBrushEditorValue, withBrushSource, type Brush, type BrushHostProfile, type BrushSource } from '@pixerate/editor/brushes';
   import PaintSlider from '../paint-editor/PaintSlider.svelte';
   import PixelCanvas from '../paint-editor/PixelCanvas.svelte';
   import { button, chip } from './styles.js';
@@ -27,10 +27,17 @@
     onsaveas?: (name: string) => unknown;
     /** Extra controls a host adds to a section (e.g. the sticker picker for stamps). */
     extra?: Snippet<[string]>;
+    /** The library's image sources, offered as stamps and as grain. */
+    sources?: ReadonlyArray<Pick<BrushSource, 'id' | 'name'>>;
+    /**
+     * With it, "Add image…" buttons for an image tip and for grain: it stores the picked file as a
+     * source (e.g. `addBrushSourceFromFile`) and returns its `source:<id>` ref.
+     */
+    onaddsource?: (file: File) => Promise<string>;
     class?: string;
   }
-  let { brush, profile = PAINT_PROFILE, onchange, preview, previewBackground, onsave, saveLabel = 'Save', onsaveas, extra, class: className = '' }: Props = $props();
-  const sections = $derived(brushEditorSections(brush, profile));
+  let { brush, profile = PAINT_PROFILE, onchange, preview, previewBackground, onsave, saveLabel = 'Save', onsaveas, extra, sources, onaddsource, class: className = '' }: Props = $props();
+  const sections = $derived(brushEditorSections(brush, profile, { sources }));
   const scope = $derived(brushEditorScope(brush, profile));
   let problems = $state<string | null>(null);
   let name = $state('');
@@ -38,6 +45,17 @@
     const r = setBrushEditorValue(brush, path, value);
     problems = r.problems.length ? r.problems.join(' ') : null;
     if (r.brush !== brush) onchange(r.brush);
+  };
+  /** Stores a picked image as a source and makes it the tip or the grain. */
+  const addSource = async (file: File | undefined, as: 'tip' | 'grain') => {
+    if (!file || !onaddsource) return;
+    try {
+      const r = withBrushSource(brush, await onaddsource(file), as);
+      problems = r.problems.length ? r.problems.join(' ') : null;
+      onchange(r.brush);
+    } catch (e) {
+      problems = (e as Error).message;
+    }
   };
   const setColour = (path: string, light: string, dark: string | null) => set(path, dark === null ? light : { light, dark });
   const setAt = (path: string, list: Array<string | { light: string; dark: string }>, i: number, entry: string | { light: string; dark: string }) => set(path, list.map((x, j) => (j === i ? entry : x)));
@@ -139,6 +157,23 @@
               <button type="button" aria-pressed={on} class={chip(on)} onclick={() => set(c.path, on ? c.value.filter((v) => v !== o.value) : [...c.value, o.value].slice(-c.max))}>{o.label}</button>
             {/each}
           </div>
+        {/if}
+        {#if onaddsource && (c.path === 'tip.stamps' || c.path === 'tip.grain.source')}
+          {@const label = c.path === 'tip.stamps' ? 'Add image tip…' : 'Add grain image…'}
+          <label class={`${button} cursor-pointer self-start`}>
+            {label}
+            <input
+              type="file"
+              accept="image/*"
+              aria-label={label}
+              class="sr-only"
+              onchange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                e.currentTarget.value = '';
+                void addSource(file, c.path === 'tip.stamps' ? 'tip' : 'grain');
+              }}
+            />
+          </label>
         {/if}
       {/each}
       {#if extra}{@render extra(s.id)}{/if}
