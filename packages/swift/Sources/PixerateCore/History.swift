@@ -67,16 +67,18 @@ public struct HistoryEntry: Equatable, Sendable {
     public var undone: Bool
     /// Who made the step: `user` or `agent:<id>`.
     public var origin: String
+    /// The step's command tag, when it has one.
+    public var tag: String? = nil
 }
 
 /// What an `onCommit` listener hears.
 public enum HistoryCommitKind: String, Sendable {
-    case execute, merge, undo, redo, revert, clear
+    case execute, merge, undo, redo, revert, drop, clear
 }
 
 public struct HistoryCommitEvent: Equatable, Sendable {
     public var kind: HistoryCommitKind
-    /// The step recorded, merged into, undone or redone. `nil` for `revert` and `clear`.
+    /// The step recorded, merged into, undone or redone. `nil` for `revert`, `drop` and `clear`.
     public var entry: HistoryEntry?
     /// The step's origin for `execute` / `merge`, else the origin in effect.
     public var origin: String
@@ -438,9 +440,9 @@ public final class HistoryManager {
     public var entries: [HistoryEntry] {
         if let cachedEntries { return cachedEntries }
         let u = undoStack.count
-        var list = undoStack.enumerated().map { HistoryEntry(id: $1.id, label: $1.name, index: $0, current: $0 == u - 1, undone: false, origin: $1.origin) }
+        var list = undoStack.enumerated().map { HistoryEntry(id: $1.id, label: $1.name, index: $0, current: $0 == u - 1, undone: false, origin: $1.origin, tag: $1.tag) }
         for e in redoStack.reversed() {
-            list.append(HistoryEntry(id: e.id, label: e.name, index: list.count, current: false, undone: true, origin: e.origin))
+            list.append(HistoryEntry(id: e.id, label: e.name, index: list.count, current: false, undone: true, origin: e.origin, tag: e.tag))
         }
         cachedEntries = list
         return list
@@ -463,6 +465,23 @@ public final class HistoryManager {
         notify()
         for (kind, id) in steps { emit(kind, id) }
         return steps.count
+    }
+
+    /// Removes the steps `match` picks from both stacks without running them (steps whose changes
+    /// no longer apply). The others keep their order, a gesture merging into a removed step ends
+    /// and a mark on a removed step is no longer valid. Does nothing while a step is applied or a
+    /// batch is open. Returns how many steps were removed.
+    @discardableResult
+    public func dropSteps(_ match: (HistoryEntry) -> Bool) -> Int {
+        guard !isApplying, batchDepth == 0 else { return 0 }
+        let ids = Set(entries.filter(match).map(\.id))
+        if ids.isEmpty { return 0 }
+        undoStack.removeAll { ids.contains($0.id) }
+        redoStack.removeAll { ids.contains($0.id) }
+        if let gesture = gestureEntryId, ids.contains(gesture) { resetGesture() }
+        notify()
+        emit(.drop)
+        return ids.count
     }
 
     /// Empties both stacks.

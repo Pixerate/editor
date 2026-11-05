@@ -642,12 +642,13 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>History, autosave and persistence</strong> (10)</summary>
+<summary><strong>History, autosave and persistence</strong> (11)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
 | History Gesture Merge Keys & Held Gestures (`executeMerged(cmd, { key })`, `beginGesture` / `endGesture`) | `HistoryManager` | `useHistory` | `createHistory` | `HistoryManager` |
 | History Undo Marks / Escape-Cancel (`mark`, `revertTo`) | `HistoryManager` | `useHistory` | `createHistory` | `HistoryManager` |
+| History Stale-Step Removal (`dropSteps` removes steps by tag or origin without running them, e.g. when remote content replaces what they change) | `HistoryManager` | `useHistory` | `createHistory` | `HistoryManager` |
 | History Panel & Memory Budget (`getEntries`, `goTo`, `maxBytes` / `sizeOf`) | `HistoryManager` | `useHistory().entries` | `createHistory().entries` | `HistoryManager` |
 | Dirty-vs-Saved Tracking (undo-to-saved is clean, `normalize`, `suppress`) | `DirtyTracker` & `bindDirtyToHistory` | `useHistoryDirty` | `createHistoryDirty` | Planned (#533) |
 | Autosave & Crash Recovery (hydration gate, backoff retry, flush on page hide, own-snapshot-only clean) | `createAutosaveController` & `createRecoveryPolicy` (`/persistence`) | `useAutosave` & `<RecoveryPrompt>` | `createAutosave` & `<RecoveryPrompt>` | Planned (#533) |

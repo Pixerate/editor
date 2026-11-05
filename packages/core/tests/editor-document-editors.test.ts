@@ -289,6 +289,50 @@ describe("editor documents", () => {
     expect(recorder.end()).toBe(false);
   });
 
+  it("undoes and redoes only what the gesture changed, keeping work added since", () => {
+    const history = new HistoryManager();
+    const at = (id: string, x: number): CanvasNode => ({ id, position: { x, y: 0 }, data: {} });
+    let nodes: CanvasNode[] = [at("a", 0), at("b", 100)];
+    let edges: CanvasEdge[] = [{ id: "a-b", source: "a", target: "b" }];
+    const recorder = createCanvasGestureRecorder({
+      getNodes: () => nodes,
+      setNodes: (n) => void (nodes = n),
+      getEdges: () => edges,
+      setEdges: (e) => void (edges = e),
+      history,
+    });
+
+    recorder.begin();
+    nodes = [at("a", 50), at("b", 100)];
+    expect(recorder.end("Move")).toBe(true);
+
+    // A collaborator adds a node, moves b and connects them after the drag.
+    nodes = [at("a", 50), at("b", 300), at("c", 200)];
+    edges = [...edges, { id: "b-c", source: "b", target: "c" }];
+    history.undo();
+    expect(nodes.map((n) => [n.id, n.position.x])).toEqual([["a", 0], ["b", 300], ["c", 200]]);
+    expect(edges.map((e) => e.id)).toEqual(["a-b", "b-c"]);
+    history.redo();
+    expect(nodes.map((n) => [n.id, n.position.x])).toEqual([["a", 50], ["b", 300], ["c", 200]]);
+
+    // A gesture that removes a node and its edge puts both back at their places on undo.
+    recorder.begin();
+    nodes = nodes.filter((n) => n.id !== "a");
+    edges = edges.filter((e) => e.id !== "a-b");
+    expect(recorder.end("Delete")).toBe(true);
+    history.undo();
+    expect(nodes.map((n) => n.id)).toEqual(["a", "b", "c"]);
+    expect(edges.map((e) => e.id)).toEqual(["a-b", "b-c"]);
+
+    // Undoing a move does not bring back a node deleted since.
+    recorder.begin();
+    nodes = nodes.map((n) => (n.id === "c" ? at("c", 250) : n));
+    recorder.end("Move");
+    nodes = nodes.filter((n) => n.id !== "c");
+    history.undo();
+    expect(nodes.map((n) => n.id)).toEqual(["a", "b"]);
+  });
+
   describe("canvas document options", () => {
     const canvas = (options: Partial<Parameters<typeof createCanvasEditorDocument>[0]> = {}) => {
       const state = {

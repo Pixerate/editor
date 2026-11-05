@@ -96,6 +96,8 @@ export interface HistoryEntry {
   undone: boolean;
   /** Who made the step: `user` or `agent:<id>` (see `Command.origin`). */
   origin: string;
+  /** The step's command tag, when it has one (see `Command.tag`). */
+  tag?: string;
 }
 
 /**
@@ -104,13 +106,21 @@ export interface HistoryEntry {
  * - `merge`: a change folded into the top step (a gesture or a coalesced `executeMerged`).
  * - `undo` / `redo`: one step was taken back or re-applied (`goTo` reports one per step).
  * - `revert`: `revertTo` took steps back for good.
+ * - `drop`: `dropSteps` removed steps without running them.
  * - `clear`: the history was emptied.
  */
-export type HistoryCommitKind = "execute" | "merge" | "undo" | "redo" | "revert" | "clear";
+export type HistoryCommitKind =
+  | "execute"
+  | "merge"
+  | "undo"
+  | "redo"
+  | "revert"
+  | "drop"
+  | "clear";
 
 export interface HistoryCommitEvent {
   kind: HistoryCommitKind;
-  /** The step recorded, merged into, undone or redone. Absent for `revert` and `clear`. */
+  /** The step recorded, merged into, undone or redone. Absent for `revert`, `drop` and `clear`. */
   entry?: HistoryEntry;
   /** Who made the change: the step's origin for `execute` / `merge`, else the origin in effect. */
   origin: string;
