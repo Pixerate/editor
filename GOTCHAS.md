@@ -3837,6 +3837,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
 - **Solution / Workaround**: `vectorContracts()` writes each spec's own `shortcut` as written (`Mod` for Cmd or Ctrl), as paint's `PAINT_SHORTCUTS` do. Anything exported for another implementation must not go through platform-resolving APIs.
 
+### [svelte/runes] Destructuring ProseMirror `$from` / `$to` in `.svelte.ts` Files Fails Compilation
+- **Issue / Symptom**: Writing `const { $from, from, to } = selection;` inside a `.svelte.ts` rune module fails with `CompileError: The $ prefix is reserved, and cannot be used for variables and imports`.
+- **Root Cause**: The Svelte 5 compiler reserves all local identifier names prefixed with `$` inside `.svelte` and `.svelte.ts` files for runes and store auto-subscriptions.
+- **Solution / Workaround**: Rename `$`-prefixed ProseMirror properties when destructuring in `.svelte.ts` files (e.g. `const { $from: resolvedFrom, from, to } = selection;`) or access them as property lookups (`selection.$from`).
+
+### [svelte/runes] A Getter-Based Wrapper Must Not Re-Apply Unchanged Controlled Content
+- **Issue / Symptom**: In Svelte's `usePromptEditor`, changing an unrelated prop (e.g. `placeholder`) reset the editor to the parent's `content`, throwing away text the parent had not taken up from `onContentChange`. React's hook did not do this.
+- **Root Cause**: A Svelte `$effect` re-reads the whole props getter whenever any prop changes, whereas React's content `useEffect` only runs when `content` changes. Comparing `content` against the editor's text on every run therefore overwrote un-echoed edits.
+- **Solution / Workaround**: `syncPromptEditor(editor, config, previous)` in core applies content only when `config.content !== previous.content` and it differs from the editor's text. Pass the previous config from both bindings.
 ### [ci] Vitest Hides the Benchmarks' Tables Unless `--silent=false`
 - **Issue / Symptom**: `DEEP_BENCH=1 vitest run tests/raster-deep.bench.test.ts` passed but printed no timing table; the same happened for `WET_BENCH` and `SELECTION_BENCH`, so the scheduled benchmark job would have recorded nothing for them.
 - **Root Cause**: Vitest 5 drops the console output of passing tests by default, and those benchmarks only `console.log` their results (the image-layers, spreadsheet and transform benchmarks also write `*_BENCH_OUT` files).

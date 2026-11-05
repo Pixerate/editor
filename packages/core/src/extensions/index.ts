@@ -2,6 +2,7 @@ export * from "./gradient-text";
 export * from "./slash-commands";
 export * from "./template-suggestions";
 export * from "./loading-node";
+export * from "./prompt-editor";
 export * from "./SmilieReplacer";
 export * from "./ColorHighlighter";
 export * from "./FontSize";

@@ -102,38 +102,45 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#546)"
       },
       {
+        "feature": "Prompt Editor (plain-text editor: echo-safe controlled `content`, milestones, live `isEditing` / `placeholder` / `className`)",
+        "core": "`createPromptEditorOptions` & `syncPromptEditor`",
+        "react": "`usePromptEditor`",
+        "svelte": "`usePromptEditor`",
+        "swift": "Planned (#546)"
+      },
+      {
         "feature": "Plain Text Clipboard & Linebreak Parser",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Live Animated Gradient Text",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Slash Command Trigger (`/command`)",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Template Autocomplete (`{{`)",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Loading Placeholder (`loadingNode`: SVG spinner in `currentColor`, `role=\"status\"` with a label, custom indicator or component)",
         "core": "`LoadingNode.configure({ label, renderIndicator, nodeView })`",
         "react": "`usePromptEditor({ loadingIndicator, loadingLabel })` & `createReactLoadingNodeView`",
-        "svelte": "`createSvelteLoadingNodeView`",
+        "svelte": "`usePromptEditor({ loadingIndicator, loadingLabel })` & `createSvelteLoadingNodeView`",
         "swift": "Planned (#546)"
       },
       {
@@ -2624,6 +2631,4 @@ export const PARITY_AREAS: ParityArea[] = [
   }
 ];
 
-export const PARITY_NOTES: string[] = [
-  "¹ Svelte doesn't have a prompt-editor equivalent of React's `usePromptEditor` yet. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`."
-];
+export const PARITY_NOTES: string[] = [];
