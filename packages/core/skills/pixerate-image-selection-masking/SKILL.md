@@ -220,8 +220,7 @@ step 5, then refine. For a layer mask, `load_selection_from_mask`, refine, then 
 - `select_polygon`: the lasso, along a contour; with `snapToEdges`, the Magnetic Lasso
 - `quick_select`: brush strokes that grow out to the region's edges
 - `select_object`: the object in a box or under a point
-- `select_focus_area`: what is in focus
-- `select_sky`: the sky
+- `select_focus_area`, `select_sky`: what is in focus; the sky
 - `select_layer_transparency`: a layer's own pixels
 - `grow_selection`, `select_similar`: add similar colour, connected or anywhere
 - `save_selection`, `load_selection_from_channel`, `list_channels`, `set_channel_properties`, `duplicate_channel`, `delete_channel`: keep and manage selections as alpha channels
