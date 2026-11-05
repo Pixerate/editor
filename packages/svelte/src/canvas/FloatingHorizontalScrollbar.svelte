@@ -90,6 +90,17 @@
 			updateMetrics();
 		}
 	});
+
+	// A target can change size with no window or target event (a CSS variable
+	// written in an animation frame, a sidebar closing), which would leave the bar
+	// at the old left and width. Guarded because jsdom has no ResizeObserver.
+	$effect(() => {
+		const target = targetElement;
+		if (!target || typeof ResizeObserver === 'undefined') return;
+		const observer = new ResizeObserver(() => updateMetrics());
+		observer.observe(target);
+		return () => observer.disconnect();
+	});
 </script>
 
 {#if isVisible}

@@ -13,19 +13,6 @@ import PixerateRaster
 /// A command's run: the controller and the validated params, returning the result (nil for `undefined`).
 typealias VectorCommandRun = (VectorEditorController, JSONObject) throws -> JSONValue?
 
-/// Commands whose TS spec does not set `undoable` (the contract writes `undoable !== false`, so it
-/// says `true` for them; the registry runs them outside a history batch).
-private let NOT_UNDOABLE: Set<String> = [
-    "vector.list", "vector.select", "vector.getAppearance", "vector.listFonts", "vector.getText", "vector.listSymbols", "vector.editSymbol", "vector.exitSymbolEdit",
-    "vector.listConstraints", "vector.listFrames", "vector.exportFrameSvg", "vector.listPages", "vector.goToPage", "vector.listConnectors", "vector.listConnectionSites",
-    "vector.getSnapOptions", "vector.setSnapOptions", "vector.getShading", "vector.exportLottie", "vector.exportPdf", "vector.enterSymmetry", "vector.exitSymmetry",
-    "vector.listBrushes", "vector.setColorLocked", "vector.setColorScheme", "vector.getPerspective", "vector.setPerspectivePlane", "vector.shapeBuilderFaces",
-    "vector.setEditing", "vector.setTool", "vector.exportSvg",
-]
-
-/// Commands whose TS spec has no params schema (the contract writes an empty one).
-private let NO_PARAMS: Set<String> = ["vector.list"]
-
 /// Commands enabled when `ids` are given or something is selected (`enabledFor` in TS).
 private let ENABLED_FOR: Set<String> = [
     "vector.setStyle", "vector.setGradient", "vector.addFill", "vector.addStroke", "vector.setBlendMode", "vector.addFilter", "vector.makeClippingMask",
@@ -62,8 +49,8 @@ public func createVectorCommands(_ controller: VectorEditorController) throws ->
         let run: VectorCommandRun = runs[id] ?? { _, _ in throw VectorEditorError("\(id) is not ported to Swift yet (#624).") }
         return CommandSpec<VectorEditorController>(
             id: c.id, label: c.label, group: c.group, keywords: c.keywords, description: c.description,
-            params: NO_PARAMS.contains(c.id) ? nil : c.params, shortcut: c.shortcut.map { CommandShortcut($0) }, scope: c.scope,
-            undoable: c.undoable && !NOT_UNDOABLE.contains(c.id), readOnly: c.readOnly, hidden: c.hidden, enabled: enabled,
+            params: c.params, shortcut: c.shortcut.map { CommandShortcut($0) }, scope: c.scope,
+            undoable: c.undoable, readOnly: c.readOnly, hidden: c.hidden, enabled: enabled,
             run: { _, params in try run(controller, params) }
         )
     }

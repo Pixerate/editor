@@ -36,13 +36,12 @@ public struct VectorCommandContract: Equatable, Sendable {
     public var group: String?
     public var keywords: [String]?
     public var description: String?
-    /// The params schema (`{ type: 'object', properties: {}, additionalProperties: false }` where
-    /// the TS spec has none).
-    public var params: JSONObject
+    /// The params schema, or nil for a command that takes none (`run_command` refuses any).
+    public var params: JSONObject?
     /// Default shortcut(s) as written (`Mod` is ⌘ / Ctrl).
     public var shortcut: [String]
     public var scope: String?
-    /// `undoable !== false` of the TS spec (see `VectorCommandContract.tsUndoable`).
+    /// The spec runs in one history step (`undoable`; unset is false).
     public var undoable: Bool
     public var readOnly: Bool
     public var hidden: Bool
@@ -54,14 +53,14 @@ public struct VectorCommandContract: Equatable, Sendable {
         group = o["group"]?.stringValue
         keywords = o["keywords"]?.arrayValue?.compactMap(\.stringValue)
         description = o["description"]?.stringValue
-        params = o["params"]?.objectValue ?? JSONObject()
+        params = o["params"]?.objectValue
         switch o["shortcut"] {
         case .string(let s)?: shortcut = [s]
         case .array(let a)?: shortcut = a.compactMap(\.stringValue)
         default: shortcut = []
         }
         scope = o["scope"]?.stringValue
-        undoable = o["undoable"]?.boolValue ?? true
+        undoable = o["undoable"]?.boolValue ?? false
         readOnly = o["readOnly"]?.boolValue ?? false
         hidden = o["hidden"]?.boolValue ?? false
     }

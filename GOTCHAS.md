@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [svelte/canvas] `FloatingHorizontalScrollbar` Kept a Stale Position When Its Target Resized Quietly
+
+- **Issue / Symptom**: The bar stayed at its old `left` and `width` after the target changed size. In one host app it stayed 1022px wide while the board it tracks was 1313px wide.
+- **Root Cause**: The component measured only on window `scroll` / `resize` and target `scroll`. A target widened by a CSS variable written in an animation frame after the scroll event changes size after the last measurement, and no further event arrives.
+- **Solution / Workaround**: A `ResizeObserver` on `targetElement` calls `updateMetrics`. It lives in an `$effect` rather than `onMount` so it follows the prop. It reports size changes only, so a target that moves without resizing still waits for the next scroll or resize event.
+
 ### [core/canvas] Proposal Ghosts Stay Hidden in React Flow Unless They Carry a Size
 
 - **Issue / Symptom**: Ghost nodes from `useCanvasProposals().view` were in the DOM with their label but never showed (`visibility: hidden`), and their edges did not draw.
@@ -3943,10 +3949,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: V8's `toLowerCase` applies the final-sigma rule (`ΟΔΟΣ` → `οδος`), which Swift's `lowercased()` skips, and JavaScript's `trim` whitespace set (U+FEFF among others) differs from Swift's `whitespacesAndNewlines` (which includes U+0085, JavaScript's doesn't).
 - **Solution / Workaround**: Use `String.jsLowercased` and `String.jsTrimmed` (`PixerateCore/JSString.swift`) wherever the TS calls `toLowerCase` or `trim` on text that compares across ports. `tests/swift-command-vectors.test.ts` pins them against Node, with astral characters, `İ` and final sigma.
 
-### [swift] The Vector Commands Contract Says `undoable: true` for Commands the TS Registry Runs Outside History
+### [core/vector] Contracts Must Export a Command Spec's Own Flags, Not Defaults
 - **Issue / Symptom**: Building the Swift vector commands straight from `domains/vector/commands.json` made `vector.list`, `vector.select`, `vector.setTool`, `vector.exportSvg` and 27 other commands undoable, and gave `vector.list` a params schema `list_commands` would show.
-- **Root Cause**: `vectorContracts` in `vector/contract.ts` writes `undoable: s.undoable !== false` and an empty `params` schema for a spec without one, while `CommandRegistry` runs a command in a history batch only when `!!spec.undoable` and lists `params` only when the spec has it. A spec that leaves `undoable` unset is not undoable in TS but `true` in the contract.
-- **Solution / Workaround**: `createVectorCommands` in `PixerateVector/Editor/Commands.swift` takes every other field from the contract and keeps two small tables: `NOT_UNDOABLE` (the commands whose TS spec leaves `undoable` unset) and `NO_PARAMS` (`vector.list`). When a vector command is added or changes its `undoable`, update the table (or fix the contract export to write `!!s.undoable`, re-export, and drop the table).
+- **Root Cause**: `vectorContracts` in `vector/contract.ts` first wrote `undoable: s.undoable !== false` and an empty `params` schema for a spec without one, while `CommandRegistry` runs a command in a history batch only when `!!spec.undoable` and lists `params` only when the spec has it. A spec that left `undoable` unset was not undoable in TS but `true` in the contract (31 commands).
+- **Solution / Workaround**: The contract now writes the spec's own flags (`!!s.undoable`, `!!s.readOnly`) and `params` only when the spec has them, and `tests/vector-contracts.test.ts` compares each command's `params`, `undoable` and `readOnly` with its spec. `createVectorCommands` in Swift takes them from the contract as they are. Export a spec's fields as the registry reads them, never with a default of your own.
 
 ### [swift] Swift Vector Documents Compare by Value Where the TS Compares by Identity
 - **Issue / Symptom**: The TS `VectorEditorController` decides whether an edit made an undo step (`before.doc === after.doc`) and which paths a distortion brush changed (`findVectorNode(next.nodes, id) !== this.getNode(id)`) by object identity. Swift `VectorDocument` and `VectorNode` are values.

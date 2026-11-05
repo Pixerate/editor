@@ -10,12 +10,7 @@
       "outline"
     ],
     "description": "Lists every node (paths and groups, depth first) with bounds, style, path data and selection.",
-    "params": {
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false
-    },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -44,7 +39,7 @@
         "ids"
       ]
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -3775,7 +3770,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -5679,7 +5674,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -6320,7 +6315,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -7307,7 +7302,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -7964,7 +7959,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -7982,7 +7977,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -8003,7 +7998,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -8282,7 +8277,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -9093,7 +9088,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -9113,7 +9108,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -9297,7 +9292,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -9319,7 +9314,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -9347,7 +9342,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -9858,7 +9853,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -9932,7 +9927,7 @@
       },
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -10079,7 +10074,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -10601,7 +10596,7 @@
       },
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -10688,7 +10683,7 @@
       },
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -10898,7 +10893,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -10915,7 +10910,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -10938,7 +10933,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {
@@ -11553,7 +11548,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -11585,7 +11580,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -11885,7 +11880,7 @@
       "properties": {},
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -12023,7 +12018,7 @@
       ],
       "additionalProperties": false
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -13245,7 +13240,7 @@
         }
       }
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -14354,7 +14349,7 @@
         }
       }
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -14405,7 +14400,7 @@
         "tool"
       ]
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": false
   },
   {
@@ -14428,7 +14423,7 @@
         }
       }
     },
-    "undoable": true,
+    "undoable": false,
     "readOnly": true
   },
   {

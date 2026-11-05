@@ -35,12 +35,17 @@ describe('the vector contracts in @pixerate/conformance', () => {
 	});
 
 	it('lists every command with its params schema, and run_command offers each one', () => {
-		const commands = committed('commands.json') as Array<{ id: string; label: string; params: JsonSchema; undoable: boolean; readOnly: boolean }>;
+		const commands = committed('commands.json') as Array<{ id: string; label: string; params?: JsonSchema; undoable: boolean; readOnly: boolean }>;
+		const specs = createVectorCommands(new VectorEditorController());
 		expect(commands.map((c) => c.id)).toEqual(createVectorCommands(new VectorEditorController()).map((s) => s.id));
 		expect(commands.map((c) => c.id)).toEqual(expect.arrayContaining(['vector.list', 'vector.addShape', 'vector.boolean', 'vector.exportSvg']));
-		for (const c of commands) {
+		for (const [i, c] of commands.entries()) {
 			expect(c.label, c.id).toBeTruthy();
-			expect(c.params.type, c.id).toBe('object');
+			// The spec's own params and flags, exactly: a command without params takes none, unset flags are false.
+			if (c.params) expect(c.params.type, c.id).toBe('object');
+			expect(c.params, c.id).toEqual(specs[i].params);
+			expect(c.undoable, c.id).toBe(!!specs[i].undoable);
+			expect(c.readOnly, c.id).toBe(!!specs[i].readOnly);
 		}
 		const { providers } = committed('tools.json') as { providers: Array<{ id: string; tools: Array<{ name: string; inputSchema: JsonSchema }> }> };
 		const run = providers.find((p) => p.id === 'vector-commands')!.tools.find((t) => t.name === 'run_command')!;
