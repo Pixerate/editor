@@ -238,6 +238,68 @@ function normParams(kind: AdjustmentKind, raw: unknown): AdjustmentParamsMap[Adj
   }
 }
 
+/** The accepted shape of a params value, for error messages: `{master: {gamma, ...}, ...}`. */
+function describeParamShape(template: unknown): string {
+  if (Array.isArray(template)) return `[${describeParamShape(template[0])}]`;
+  if (template && typeof template === 'object') {
+    const fields = Object.entries(template).map(([k, v]) => (v && typeof v === 'object' ? `${k}: ${describeParamShape(v)}` : k));
+    return `{${fields.join(', ')}}`;
+  }
+  return typeof template === 'number' ? 'number' : 'value';
+}
+
+/** Walks `value` beside the neutral `template`, collecting keys it lacks and values of the wrong type. */
+function checkParamShape(value: unknown, template: unknown, path: string, unknown: string[], invalid: string[]): void {
+  if (Array.isArray(template)) {
+    if (!Array.isArray(value)) invalid.push(`${path} must be an array`);
+    // A null entry keeps its neutral value, so one hue range can be set without the others.
+    else value.forEach((item, i) => item !== null && checkParamShape(item, template[0], `${path}.${i}`, unknown, invalid));
+  } else if (template && typeof template === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      if (path) invalid.push(`${path} must be an object`);
+      return;
+    }
+    for (const [key, item] of Object.entries(value)) {
+      const at = path ? `${path}.${key}` : key;
+      if (Object.hasOwn(template, key)) checkParamShape(item, (template as Record<string, unknown>)[key], at, unknown, invalid);
+      else unknown.push(at);
+    }
+  } else if (typeof template === 'string' || template === null) {
+    // The only string parameters are colours; a null default (black and white tint) means optional.
+    if (!(template === null && value === null) && !(typeof value === 'string' && HEX.test(value))) {
+      invalid.push(`${path} must be a #rrggbb colour${template === null ? ' or null' : ''}`);
+    }
+  } else if (typeof value !== typeof template || (typeof value === 'number' && !Number.isFinite(value))) {
+    invalid.push(`${path} must be a ${typeof template}`);
+  }
+}
+
+/**
+ * Throws unless `params` are parameters a `kind` layer uses. {@link normalizeAdjustmentLayer} drops
+ * anything else, which is right for stored documents, but it would leave an agent with a layer
+ * that does nothing and no error, so the tools check first. The shape comes from
+ * {@link defaultAdjustmentParams}. Dotted control ids (`master.gamma`) are unknown keys here: they
+ * address a parameter in `set_adjustments`, whereas `params` nests them.
+ */
+export function assertAdjustmentParams(kind: AdjustmentKind, params: unknown): void {
+  if (params === undefined) return;
+  const template = defaultAdjustmentParams(kind);
+  const unknown: string[] = [];
+  const invalid: string[] = [];
+  if (!params || typeof params !== 'object' || Array.isArray(params)) invalid.push('params must be an object');
+  else checkParamShape(params, template, '', unknown, invalid);
+  if (!unknown.length && !invalid.length) return;
+  const problems: string[] = [];
+  if (unknown.length) problems.push(`Unknown params key(s) for a ${kind} layer: ${unknown.join(', ')}.`);
+  if (invalid.length) problems.push(`Invalid params for a ${kind} layer: ${invalid.join('; ')}.`);
+  if (unknown.some((key) => key.includes('.'))) {
+    problems.push('Nest parameters as objects and arrays: dotted control ids only work in set_adjustments ("layers.<layerId>.<controlId>").');
+  }
+  const accepted = describeParamShape(template);
+  problems.push(accepted === '{}' ? `This ${kind} layer takes no params.` : `Accepted: ${accepted}.`);
+  throw new Error(problems.join(' '));
+}
+
 /**
  * A clean, deep-copied layer from stored or hand-written data: missing fields get neutral
  * defaults, numbers are clamped to their ranges. `null` for an unknown kind.
