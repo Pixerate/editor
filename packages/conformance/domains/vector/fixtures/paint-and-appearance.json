@@ -1,0 +1,1480 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "paint-and-appearance",
+  "description": "Fills and strokes as stacks, gradients, blend modes, filters, effects, masks and lenses.",
+  "setup": {
+    "width": 300,
+    "height": 200
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 20,
+          "y": 20,
+          "width": 120,
+          "height": 80,
+          "fill": "#2563eb"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 160,
+          "y": 20,
+          "width": 100,
+          "height": 100,
+          "fill": "#e11d48"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setGradient",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "type": "linear",
+          "angle": 45,
+          "stops": [
+            {
+              "offset": 0,
+              "color": "#f97316"
+            },
+            {
+              "offset": 1,
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setGradient",
+          "ok": true,
+          "result": {
+            "gradient": {
+              "angle": 45,
+              "stops": [
+                {
+                  "color": "#f97316",
+                  "offset": 0
+                },
+                {
+                  "color": "#7c3aed",
+                  "offset": 1
+                }
+              ],
+              "type": "linear"
+            },
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setGradient",
+        "params": {
+          "ids": [
+            "n2"
+          ],
+          "target": "stroke",
+          "type": "radial",
+          "stops": [
+            {
+              "offset": 0,
+              "color": "#ffffff"
+            },
+            {
+              "offset": 1,
+              "color": "#111827"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setGradient",
+          "ok": true,
+          "result": {
+            "gradient": {
+              "stops": [
+                {
+                  "color": "#ffffff",
+                  "offset": 0
+                },
+                {
+                  "color": "#111827",
+                  "offset": 1
+                }
+              ],
+              "type": "radial"
+            },
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addFill",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "paint": "#facc15",
+          "opacity": 0.5,
+          "blendMode": "multiply"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addFill",
+          "ok": true,
+          "result": {
+            "nodes": [
+              {
+                "fills": [
+                  {
+                    "paint": {
+                      "angle": 45,
+                      "stops": [
+                        {
+                          "color": "#f97316",
+                          "offset": 0
+                        },
+                        {
+                          "color": "#7c3aed",
+                          "offset": 1
+                        }
+                      ],
+                      "type": "linear"
+                    }
+                  },
+                  {
+                    "blendMode": "multiply",
+                    "opacity": 0.5,
+                    "paint": "#facc15"
+                  }
+                ],
+                "id": "n1"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.updateFill",
+        "params": {
+          "nodeId": "n1",
+          "index": 1,
+          "opacity": 0.3
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.updateFill",
+          "ok": true,
+          "result": {
+            "fills": [
+              {
+                "paint": {
+                  "angle": 45,
+                  "stops": [
+                    {
+                      "color": "#f97316",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#7c3aed",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "linear"
+                }
+              },
+              {
+                "blendMode": "multiply",
+                "opacity": 0.3,
+                "paint": "#facc15"
+              }
+            ],
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.moveFill",
+        "params": {
+          "nodeId": "n1",
+          "index": 1,
+          "to": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.moveFill",
+          "ok": true,
+          "result": {
+            "fills": [
+              {
+                "blendMode": "multiply",
+                "opacity": 0.3,
+                "paint": "#facc15"
+              },
+              {
+                "paint": {
+                  "angle": 45,
+                  "stops": [
+                    {
+                      "color": "#f97316",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#7c3aed",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "linear"
+                }
+              }
+            ],
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.removeFill",
+        "params": {
+          "nodeId": "n1",
+          "index": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.removeFill",
+          "ok": true,
+          "result": {
+            "fills": [
+              {
+                "paint": {
+                  "angle": 45,
+                  "stops": [
+                    {
+                      "color": "#f97316",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#7c3aed",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "linear"
+                }
+              }
+            ],
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addStroke",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "paint": "#111827",
+          "strokeWidth": 3
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addStroke",
+          "ok": true,
+          "result": {
+            "nodes": [
+              {
+                "id": "n1",
+                "strokes": [
+                  {
+                    "paint": "#18181b",
+                    "strokeWidth": 2
+                  },
+                  {
+                    "paint": "#111827",
+                    "strokeWidth": 3
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.updateStroke",
+        "params": {
+          "nodeId": "n1",
+          "index": 0,
+          "strokeWidth": 5
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.updateStroke",
+          "ok": true,
+          "result": {
+            "id": "n1",
+            "strokes": [
+              {
+                "paint": "#18181b",
+                "strokeWidth": 5
+              },
+              {
+                "paint": "#111827",
+                "strokeWidth": 3
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addStroke",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "paint": "#ffffff",
+          "strokeWidth": 1
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addStroke",
+          "ok": true,
+          "result": {
+            "nodes": [
+              {
+                "id": "n1",
+                "strokes": [
+                  {
+                    "paint": "#18181b",
+                    "strokeWidth": 5
+                  },
+                  {
+                    "paint": "#111827",
+                    "strokeWidth": 3
+                  },
+                  {
+                    "paint": "#ffffff",
+                    "strokeWidth": 1
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.moveStroke",
+        "params": {
+          "nodeId": "n1",
+          "index": 1,
+          "to": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.moveStroke",
+          "ok": true,
+          "result": {
+            "id": "n1",
+            "strokes": [
+              {
+                "paint": "#111827",
+                "strokeWidth": 3
+              },
+              {
+                "paint": "#18181b",
+                "strokeWidth": 5
+              },
+              {
+                "paint": "#ffffff",
+                "strokeWidth": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.removeStroke",
+        "params": {
+          "nodeId": "n1",
+          "index": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.removeStroke",
+          "ok": true,
+          "result": {
+            "id": "n1",
+            "strokes": [
+              {
+                "paint": "#18181b",
+                "strokeWidth": 5
+              },
+              {
+                "paint": "#ffffff",
+                "strokeWidth": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.getAppearance",
+        "params": {
+          "id": "n1"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.getAppearance",
+          "ok": true,
+          "result": {
+            "blendMode": "normal",
+            "fillRule": "nonzero",
+            "fills": [
+              {
+                "paint": {
+                  "angle": 45,
+                  "stops": [
+                    {
+                      "color": "#f97316",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#7c3aed",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "linear"
+                }
+              }
+            ],
+            "filters": [],
+            "id": "n1",
+            "opacity": 1,
+            "strokes": [
+              {
+                "paint": "#18181b",
+                "strokeWidth": 5
+              },
+              {
+                "paint": "#ffffff",
+                "strokeWidth": 1
+              }
+            ],
+            "type": "path"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setBlendMode",
+        "params": {
+          "blendMode": "screen",
+          "ids": [
+            "n2"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setBlendMode",
+          "ok": true,
+          "result": {
+            "nodes": [
+              {
+                "blendMode": "screen",
+                "id": "n2"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addFilter",
+        "params": {
+          "type": "dropShadow",
+          "params": {
+            "color": "#000000",
+            "opacity": 0.4,
+            "offsetX": 4,
+            "offsetY": 4,
+            "blur": 6
+          },
+          "ids": [
+            "n2"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addFilter",
+          "ok": true,
+          "result": {
+            "nodes": [
+              {
+                "filterId": "filter1",
+                "filters": [
+                  {
+                    "id": "filter1",
+                    "params": {
+                      "blur": 6,
+                      "color": "#000000",
+                      "offsetX": 4,
+                      "offsetY": 4,
+                      "opacity": 0.4,
+                      "spread": 0
+                    },
+                    "type": "dropShadow"
+                  }
+                ],
+                "id": "n2"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.updateFilter",
+        "params": {
+          "nodeId": "n2",
+          "filterId": "filter1",
+          "enabled": false
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.updateFilter",
+          "ok": true,
+          "result": {
+            "filters": [
+              {
+                "enabled": false,
+                "id": "filter1",
+                "params": {
+                  "blur": 6,
+                  "color": "#000000",
+                  "offsetX": 4,
+                  "offsetY": 4,
+                  "opacity": 0.4,
+                  "spread": 0
+                },
+                "type": "dropShadow"
+              }
+            ],
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.moveFilter",
+        "params": {
+          "nodeId": "n2",
+          "filterId": "filter1",
+          "index": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.moveFilter",
+          "ok": true,
+          "result": {
+            "filters": [
+              {
+                "enabled": false,
+                "id": "filter1",
+                "params": {
+                  "blur": 6,
+                  "color": "#000000",
+                  "offsetX": 4,
+                  "offsetY": 4,
+                  "opacity": 0.4,
+                  "spread": 0
+                },
+                "type": "dropShadow"
+              }
+            ],
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.removeFilter",
+        "params": {
+          "nodeId": "n2",
+          "filterId": "filter1"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.removeFilter",
+          "ok": true,
+          "result": {
+            "filters": [],
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addEffect",
+        "params": {
+          "type": "roundCorners",
+          "ids": [
+            "n1"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addEffect",
+          "ok": true,
+          "result": {
+            "effects": [
+              {
+                "effectId": "fx1",
+                "nodeId": "n1"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.updateEffect",
+        "params": {
+          "nodeId": "n1",
+          "effectId": "fx1",
+          "enabled": false
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.updateEffect",
+          "ok": true,
+          "result": {
+            "effects": [
+              {
+                "enabled": false,
+                "id": "fx1",
+                "params": {
+                  "radius": 10
+                },
+                "type": "roundCorners"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.removeEffect",
+        "params": {
+          "nodeId": "n1",
+          "effectId": "fx1"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.removeEffect",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addEffect",
+        "params": {
+          "type": "zigzag",
+          "ids": [
+            "n2"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addEffect",
+          "ok": true,
+          "result": {
+            "effects": [
+              {
+                "effectId": "fx1",
+                "nodeId": "n2"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.expandAppearance",
+        "params": {
+          "ids": [
+            "n2"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.expandAppearance",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n2"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 40,
+          "y": 120,
+          "width": 200,
+          "height": 60,
+          "fill": "#16a34a"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 60,
+          "y": 110,
+          "width": 80,
+          "height": 80,
+          "fill": "#000000"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.makeClippingMask",
+        "params": {
+          "ids": [
+            "n3",
+            "n4"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.makeClippingMask",
+          "ok": true,
+          "result": {
+            "id": "n5",
+            "mask": {
+              "contents": [
+                "n3"
+              ],
+              "enabled": true,
+              "invert": false,
+              "maskId": "n4",
+              "type": "clip"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setMaskOptions",
+        "params": {
+          "invert": true
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setMaskOptions",
+          "ok": true,
+          "result": {
+            "groups": [
+              {
+                "id": "n5",
+                "mask": {
+                  "contents": [
+                    "n3"
+                  ],
+                  "enabled": true,
+                  "invert": true,
+                  "maskId": "n4",
+                  "type": "clip"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.releaseMask"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.releaseMask",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n3",
+              "n4"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.makeOpacityMask",
+        "params": {
+          "ids": [
+            "n3",
+            "n4"
+          ],
+          "type": "luminance"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.makeOpacityMask",
+          "ok": true,
+          "result": {
+            "id": "n6",
+            "mask": {
+              "contents": [
+                "n3"
+              ],
+              "enabled": true,
+              "invert": false,
+              "maskId": "n4",
+              "type": "luminance"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setLens",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "type": "magnify",
+          "amount": 1.5
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setLens",
+          "ok": true,
+          "result": {
+            "lenses": [
+              {
+                "id": "n1",
+                "lens": {
+                  "amount": 1.5,
+                  "type": "magnify"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.removeLens",
+        "params": {
+          "ids": [
+            "n1"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.removeLens",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 120,
+                  "x": 20,
+                  "y": 20
+                },
+                "d": "M20 20L140 20L140 100L20 100Z",
+                "depth": 0,
+                "fill": {
+                  "angle": 45,
+                  "stops": [
+                    {
+                      "color": "#f97316",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#7c3aed",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "linear"
+                },
+                "id": "n1",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#ffffff",
+                "strokeWidth": 1,
+                "strokes": [
+                  {
+                    "paint": "#18181b",
+                    "strokeWidth": 5
+                  },
+                  {
+                    "paint": "#ffffff",
+                    "strokeWidth": 1
+                  }
+                ],
+                "type": "path",
+                "visible": true
+              },
+              {
+                "blendMode": "screen",
+                "bounds": {
+                  "height": 104.64,
+                  "width": 110,
+                  "x": 155,
+                  "y": 17.68
+                },
+                "d": "M210 25L227 17.68L236.45 33.59L254.5 37.67L252.81 56.09L265 70L252.81 83.91L254.5 102.33L236.45 106.41L227 122.32L210 115L193 122.32L183.55 106.41L165.5 102.33L167.19 83.91L155 70L167.19 56.09L165.5 37.67L183.55 33.59L193 17.68Z",
+                "depth": 0,
+                "fill": "#e11d48",
+                "id": "n2",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": false,
+                "stroke": {
+                  "stops": [
+                    {
+                      "color": "#ffffff",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#111827",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "radial"
+                },
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 60,
+                  "width": 82,
+                  "x": 59,
+                  "y": 120
+                },
+                "children": 2,
+                "depth": 0,
+                "id": "n6",
+                "locked": false,
+                "mask": {
+                  "contents": [
+                    "n3"
+                  ],
+                  "enabled": true,
+                  "invert": false,
+                  "maskId": "n4",
+                  "type": "luminance"
+                },
+                "name": "Opacity Mask",
+                "rotation": 0,
+                "selected": true,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 80,
+                  "width": 80,
+                  "x": 60,
+                  "y": 110
+                },
+                "d": "M100 110C122.09 110 140 127.91 140 150C140 172.09 122.09 190 100 190C77.91 190 60 172.09 60 150C60 127.91 77.91 110 100 110Z",
+                "depth": 1,
+                "fill": "#000000",
+                "id": "n4",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 60,
+                  "width": 200,
+                  "x": 40,
+                  "y": 120
+                },
+                "d": "M40 120L240 120L240 180L40 180Z",
+                "depth": 1,
+                "fill": "#16a34a",
+                "id": "n3",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n6"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": {
+                  "angle": 45,
+                  "stops": [
+                    {
+                      "color": "#f97316",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#7c3aed",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "linear"
+                },
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#ffffff",
+                "strokeWidth": 1,
+                "strokes": [
+                  {
+                    "paint": "#18181b",
+                    "strokeWidth": 5
+                  },
+                  {
+                    "paint": "#ffffff",
+                    "strokeWidth": 1
+                  }
+                ],
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 20,
+                        "y": 20
+                      },
+                      {
+                        "x": 140,
+                        "y": 20
+                      },
+                      {
+                        "x": 140,
+                        "y": 100
+                      },
+                      {
+                        "x": 20,
+                        "y": 100
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "blendMode": "screen",
+                "fill": "#e11d48",
+                "id": "n2",
+                "name": "Ellipse",
+                "stroke": {
+                  "stops": [
+                    {
+                      "color": "#ffffff",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#111827",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "radial"
+                },
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 210,
+                        "y": 25
+                      },
+                      {
+                        "x": 226.99914070624206,
+                        "y": 17.678739795575346
+                      },
+                      {
+                        "x": 236.44843658364664,
+                        "y": 33.588488644033404
+                      },
+                      {
+                        "x": 254.49697011593517,
+                        "y": 37.66723196402613
+                      },
+                      {
+                        "x": 252.81006437428996,
+                        "y": 56.089087569133504
+                      },
+                      {
+                        "x": 265,
+                        "y": 70
+                      },
+                      {
+                        "x": 252.81006437429002,
+                        "y": 83.9109124308665
+                      },
+                      {
+                        "x": 254.49697011593517,
+                        "y": 102.3327680359739
+                      },
+                      {
+                        "x": 236.44843658364658,
+                        "y": 106.41151135596661
+                      },
+                      {
+                        "x": 226.999140706242,
+                        "y": 122.32126020442468
+                      },
+                      {
+                        "x": 210,
+                        "y": 115
+                      },
+                      {
+                        "x": 193.00085929375803,
+                        "y": 122.32126020442469
+                      },
+                      {
+                        "x": 183.55156341635342,
+                        "y": 106.41151135596661
+                      },
+                      {
+                        "x": 165.50302988406486,
+                        "y": 102.33276803597386
+                      },
+                      {
+                        "x": 167.18993562571004,
+                        "y": 83.9109124308665
+                      },
+                      {
+                        "x": 155,
+                        "y": 70
+                      },
+                      {
+                        "x": 167.18993562571004,
+                        "y": 56.08908756913352
+                      },
+                      {
+                        "x": 165.5030298840649,
+                        "y": 37.667231964026115
+                      },
+                      {
+                        "x": 183.5515634163534,
+                        "y": 33.5884886440334
+                      },
+                      {
+                        "x": 193.00085929375797,
+                        "y": 17.678739795575343
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#000000",
+                    "id": "n4",
+                    "name": "Ellipse",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 77.90861000676826,
+                              "y": 110
+                            },
+                            "out": {
+                              "x": 122.09138999323174,
+                              "y": 110
+                            },
+                            "type": "symmetric",
+                            "x": 100,
+                            "y": 110
+                          },
+                          {
+                            "in": {
+                              "x": 140,
+                              "y": 127.90861000676826
+                            },
+                            "out": {
+                              "x": 140,
+                              "y": 172.09138999323176
+                            },
+                            "type": "symmetric",
+                            "x": 140,
+                            "y": 150
+                          },
+                          {
+                            "in": {
+                              "x": 122.09138999323174,
+                              "y": 190
+                            },
+                            "out": {
+                              "x": 77.90861000676826,
+                              "y": 190
+                            },
+                            "type": "symmetric",
+                            "x": 100,
+                            "y": 190
+                          },
+                          {
+                            "in": {
+                              "x": 60,
+                              "y": 172.09138999323176
+                            },
+                            "out": {
+                              "x": 60,
+                              "y": 127.90861000676826
+                            },
+                            "type": "symmetric",
+                            "x": 60,
+                            "y": 150
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#16a34a",
+                    "id": "n3",
+                    "name": "Rectangle",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 40,
+                            "y": 120
+                          },
+                          {
+                            "x": 240,
+                            "y": 120
+                          },
+                          {
+                            "x": 240,
+                            "y": 180
+                          },
+                          {
+                            "x": 40,
+                            "y": 180
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n6",
+                "mask": {
+                  "type": "luminance"
+                },
+                "name": "Opacity Mask",
+                "type": "group"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

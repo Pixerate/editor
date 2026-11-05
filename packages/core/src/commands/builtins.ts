@@ -2,7 +2,7 @@ import type { HistoryState } from '../history/types.js';
 import type { CanvasArrangeAction } from '../canvas/arrangeShortcuts.js';
 import type { AlignEdge, DistributeAxis, DistributeMode, ZOrderOperation } from '../canvas/arrange.js';
 import { DEFAULT_ARRANGE_SHORTCUTS } from '../canvas/arrangeShortcuts.js';
-import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset } from '../canvas/brushTypes.js';
+import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset, CanvasBrushChoice } from '../canvas/brushTypes.js';
 import {
 	arrowGesture,
 	bracketGesture,
@@ -356,6 +356,15 @@ export interface DrawCommandTarget {
 	listBrushes(): Promise<CanvasBrushPreset[]>;
 	/** A node's box in canvas coordinates, so gestures can take `{ nodeId }` targets (without it they take boxes and points only). */
 	nodeBounds?(id: string): { x: number; y: number; width: number; height: number } | undefined;
+	/**
+	 * The brush picker's state, for `canvas.selectBrush`, `canvas.setColorLocked` and
+	 * `canvas.setColorScheme` (registered only when the target has all of these; the draw
+	 * controller does).
+	 */
+	brushSettings?(): CanvasBrushChoice;
+	selectBrush?(id: string | null, choice?: { keepColour?: boolean }): Promise<CanvasBrushPreset | null>;
+	setColorLocked?(locked: boolean): void;
+	setColorScheme?(scheme: 'light' | 'dark'): void;
 }
 
 export interface DrawCommandOptions {
@@ -586,7 +595,76 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 			readOnly: true,
 			run: async () => ({ brushes: await target.listBrushes() })
 		},
+		...createBrushChoiceCommands(target, base, prefix),
 		...createGestureCommands(target, base, prefix, options)
+	];
+}
+
+/**
+ * The brush picker for agents: `canvas.selectBrush` (the current pen brush, taking its default
+ * colour unless locked), `canvas.setColorLocked` ("Keep my colour") and `canvas.setColorScheme`.
+ * Each returns the picker's settings. Editor state, not undo steps. None when the target has no picker.
+ */
+function createBrushChoiceCommands(target: DrawCommandTarget, base: { group: string; scope?: string }, prefix: string): CommandSpec[] {
+	const { brushSettings, selectBrush, setColorLocked, setColorScheme } = target;
+	if (!brushSettings || !selectBrush || !setColorLocked || !setColorScheme) return [];
+	const settings = () => brushSettings();
+	const RESULT = 'Returns { brush, color, colorScheme, colorLocked, colorFollowsScheme } (colorFollowsScheme: the colour is a brush\'s light / dark default and changes with the scheme).';
+	return [
+		{
+			...base,
+			id: `${prefix}selectBrush`,
+			label: 'Choose Pen Brush',
+			keywords: ['brush', 'pen', 'pick brush', 'chalk', 'pencil', 'ink'],
+			description: `Chooses the brush the pen and highlighter draw with by hand (brushId from canvas.listBrushes, or null for a plain vector stroke), at the brush's own size. A brush with a default colour (the ballpoint's blue, the chalk's light / dark pair) makes it the stroke colour unless keepColour or the colour is locked (canvas.setColorLocked). Does not draw; canvas.drawFreehand takes its own brush. ${RESULT}`,
+			params: {
+				type: 'object',
+				additionalProperties: false,
+				required: ['brushId'],
+				properties: {
+					brushId: { type: ['string', 'null'], minLength: 1, description: 'A brush id from canvas.listBrushes, or null for a plain vector stroke.' },
+					keepColour: { type: 'boolean', description: 'Keep the current stroke colour this once instead of taking the brush\'s default colour (default false).' }
+				}
+			},
+			run: async (_ctx: unknown, params: { brushId: string | null; keepColour?: boolean }) => {
+				await selectBrush(params.brushId, params.keepColour ? { keepColour: true } : {});
+				return settings();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setColorLocked`,
+			label: 'Keep My Colour',
+			keywords: ['lock colour', 'keep colour', 'brush colour', 'color lock'],
+			description: `Locks or unlocks the stroke colour ("Keep my colour"): while locked, canvas.selectBrush keeps the current colour instead of taking a brush's default colour. ${RESULT}`,
+			params: {
+				type: 'object',
+				additionalProperties: false,
+				required: ['locked'],
+				properties: { locked: { type: 'boolean', description: 'true locks the colour, false unlocks it (the canvas starts unlocked).' } }
+			},
+			run: (_ctx: unknown, params: { locked: boolean }) => {
+				setColorLocked(params.locked);
+				return settings();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setColorScheme`,
+			label: 'Brush Colours for Light / Dark',
+			keywords: ['colour scheme', 'dark mode', 'light mode', 'theme', 'brush colour'],
+			description: `Sets the colour scheme that picks the side of a brush's light / dark default colour (white chalk in dark, dark chalk in light). A stroke colour that came from such a default follows; strokes already drawn keep theirs, and canvas.drawFreehand resolves brush defaults for this scheme. The host usually sets it to match its theme. ${RESULT}`,
+			params: {
+				type: 'object',
+				additionalProperties: false,
+				required: ['scheme'],
+				properties: { scheme: { type: 'string', enum: ['light', 'dark'], description: 'light (dark chalk on a light background) or dark (light chalk on a dark one).' } }
+			},
+			run: (_ctx: unknown, params: { scheme: 'light' | 'dark' }) => {
+				setColorScheme(params.scheme);
+				return settings();
+			}
+		}
 	];
 }
 

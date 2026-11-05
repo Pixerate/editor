@@ -1,0 +1,3033 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "import-export",
+  "description": "Import and export: SVG in and out, PDF, Lottie both ways, image tracing and image stylising.",
+  "setup": {
+    "width": 200,
+    "height": 200
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.importSvg",
+        "params": {
+          "svg": "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect x='10' y='10' width='50' height='30' fill='#2563eb'/><circle cx='70' cy='60' r='20' fill='#e11d48'/></svg>"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.importSvg",
+          "ok": true,
+          "result": {
+            "nodes": 2,
+            "selection": [
+              "n1",
+              "n2"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.exportSvg"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.exportSvg",
+          "ok": true,
+          "result": {
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\" viewBox=\"0 0 200 200\">\n  <path id=\"n1\" d=\"M10 10L60 10L60 40L10 40Z\" fill=\"#2563eb\"/>\n  <path id=\"n2\" d=\"M70 40C81.046 40 90 48.954 90 60C90 71.046 81.046 80 70 80C58.954 80 50 71.046 50 60C50 48.954 58.954 40 70 40Z\" fill=\"#e11d48\"/>\n</svg>"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.exportPdf",
+        "params": {
+          "compress": false
+        }
+      },
+      "ignore": [
+        "/pdf",
+        "/bytes"
+      ],
+      "expect": {
+        "result": {
+          "id": "vector.exportPdf",
+          "ok": true,
+          "result": {
+            "bytes": 768,
+            "notes": [],
+            "pages": 1,
+            "pdf": "<binary>"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.exportLottie",
+        "params": {
+          "fps": 30,
+          "frames": 1
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.exportLottie",
+          "ok": true,
+          "result": {
+            "lottie": {
+              "assets": [],
+              "ddd": 0,
+              "fr": 30,
+              "h": 200,
+              "ip": 0,
+              "layers": [
+                {
+                  "ao": 0,
+                  "bm": 0,
+                  "ddd": 0,
+                  "ind": 1,
+                  "ip": 0,
+                  "ks": {
+                    "a": {
+                      "a": 0,
+                      "k": [
+                        0,
+                        0,
+                        0
+                      ]
+                    },
+                    "o": {
+                      "a": 0,
+                      "k": 100
+                    },
+                    "p": {
+                      "a": 0,
+                      "k": [
+                        0,
+                        0,
+                        0
+                      ]
+                    },
+                    "r": {
+                      "a": 0,
+                      "k": 0
+                    },
+                    "s": {
+                      "a": 0,
+                      "k": [
+                        100,
+                        100,
+                        100
+                      ]
+                    }
+                  },
+                  "nm": "Vector",
+                  "op": 1,
+                  "shapes": [
+                    {
+                      "it": [
+                        {
+                          "ks": {
+                            "a": 0,
+                            "k": {
+                              "c": true,
+                              "i": [
+                                [
+                                  -11.0457,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  -11.0457
+                                ],
+                                [
+                                  11.0457,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  11.0457
+                                ]
+                              ],
+                              "o": [
+                                [
+                                  11.0457,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  11.0457
+                                ],
+                                [
+                                  -11.0457,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  -11.0457
+                                ]
+                              ],
+                              "v": [
+                                [
+                                  70,
+                                  40
+                                ],
+                                [
+                                  90,
+                                  60
+                                ],
+                                [
+                                  70,
+                                  80
+                                ],
+                                [
+                                  50,
+                                  60
+                                ]
+                              ]
+                            }
+                          },
+                          "nm": "Path 1",
+                          "ty": "sh"
+                        },
+                        {
+                          "c": {
+                            "a": 0,
+                            "k": [
+                              0.8824,
+                              0.1137,
+                              0.2824,
+                              1
+                            ]
+                          },
+                          "o": {
+                            "a": 0,
+                            "k": 100
+                          },
+                          "r": 1,
+                          "ty": "fl"
+                        },
+                        {
+                          "a": {
+                            "a": 0,
+                            "k": [
+                              0,
+                              0
+                            ]
+                          },
+                          "o": {
+                            "a": 0,
+                            "k": 100
+                          },
+                          "p": {
+                            "a": 0,
+                            "k": [
+                              0,
+                              0
+                            ]
+                          },
+                          "r": {
+                            "a": 0,
+                            "k": 0
+                          },
+                          "s": {
+                            "a": 0,
+                            "k": [
+                              100,
+                              100
+                            ]
+                          },
+                          "ty": "tr"
+                        }
+                      ],
+                      "nm": "n2",
+                      "np": 2,
+                      "ty": "gr"
+                    },
+                    {
+                      "it": [
+                        {
+                          "ks": {
+                            "a": 0,
+                            "k": {
+                              "c": true,
+                              "i": [
+                                [
+                                  0,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  0
+                                ]
+                              ],
+                              "o": [
+                                [
+                                  0,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  0
+                                ],
+                                [
+                                  0,
+                                  0
+                                ]
+                              ],
+                              "v": [
+                                [
+                                  10,
+                                  10
+                                ],
+                                [
+                                  60,
+                                  10
+                                ],
+                                [
+                                  60,
+                                  40
+                                ],
+                                [
+                                  10,
+                                  40
+                                ]
+                              ]
+                            }
+                          },
+                          "nm": "Path 1",
+                          "ty": "sh"
+                        },
+                        {
+                          "c": {
+                            "a": 0,
+                            "k": [
+                              0.1451,
+                              0.3882,
+                              0.9216,
+                              1
+                            ]
+                          },
+                          "o": {
+                            "a": 0,
+                            "k": 100
+                          },
+                          "r": 1,
+                          "ty": "fl"
+                        },
+                        {
+                          "a": {
+                            "a": 0,
+                            "k": [
+                              0,
+                              0
+                            ]
+                          },
+                          "o": {
+                            "a": 0,
+                            "k": 100
+                          },
+                          "p": {
+                            "a": 0,
+                            "k": [
+                              0,
+                              0
+                            ]
+                          },
+                          "r": {
+                            "a": 0,
+                            "k": 0
+                          },
+                          "s": {
+                            "a": 0,
+                            "k": [
+                              100,
+                              100
+                            ]
+                          },
+                          "ty": "tr"
+                        }
+                      ],
+                      "nm": "n1",
+                      "np": 2,
+                      "ty": "gr"
+                    }
+                  ],
+                  "sr": 1,
+                  "st": 0,
+                  "ty": 4
+                }
+              ],
+              "nm": "Vector",
+              "op": 1,
+              "v": "5.7.4",
+              "w": 200
+            },
+            "notes": []
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.importLottie",
+        "params": {
+          "lottie": {
+            "v": "5.7.0",
+            "fr": 30,
+            "ip": 0,
+            "op": 30,
+            "w": 100,
+            "h": 100,
+            "layers": [
+              {
+                "ty": 4,
+                "ind": 1,
+                "ip": 0,
+                "op": 30,
+                "ks": {},
+                "shapes": [
+                  {
+                    "ty": "rc",
+                    "p": {
+                      "a": 0,
+                      "k": [
+                        50,
+                        50
+                      ]
+                    },
+                    "s": {
+                      "a": 0,
+                      "k": [
+                        40,
+                        40
+                      ]
+                    },
+                    "r": {
+                      "a": 0,
+                      "k": 0
+                    }
+                  },
+                  {
+                    "ty": "fl",
+                    "c": {
+                      "a": 0,
+                      "k": [
+                        0,
+                        0.5,
+                        1,
+                        1
+                      ]
+                    },
+                    "o": {
+                      "a": 0,
+                      "k": 100
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.importLottie",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n3-2"
+            ],
+            "notes": []
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.traceImage",
+        "params": {
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR42mP48OHDf3yYgWgFIjYnUPBAKCDbFwBp6dhBTAFOhgAAAABJRU5ErkJggg==",
+          "mode": "color",
+          "colors": 2,
+          "x": 120,
+          "y": 120,
+          "width": 64
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.traceImage",
+          "ok": true,
+          "result": {
+            "id": "n6",
+            "paths": [
+              {
+                "fill": "#f0f0f0",
+                "id": "n4",
+                "name": "#f0f0f0",
+                "subpaths": 1
+              },
+              {
+                "fill": "#143cc8",
+                "id": "n5",
+                "name": "#143cc8",
+                "subpaths": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.mosaicImage",
+        "params": {
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR42mP48OHDf3yYgWgFIjYnUPBAKCDbFwBp6dhBTAFOhgAAAABJRU5ErkJggg==",
+          "x": 10,
+          "y": 120,
+          "width": 40,
+          "cell": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.mosaicImage",
+          "ok": true,
+          "result": {
+            "id": "n9",
+            "paths": [
+              {
+                "fill": "#f0f0f0",
+                "id": "n7",
+                "name": "Mosaic #f0f0f0",
+                "subpaths": 12
+              },
+              {
+                "fill": "#143cc8",
+                "id": "n8",
+                "name": "Mosaic #143cc8",
+                "subpaths": 4
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.halftoneImage",
+        "params": {
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR42mP48OHDf3yYgWgFIjYnUPBAKCDbFwBp6dhBTAFOhgAAAABJRU5ErkJggg==",
+          "x": 60,
+          "y": 120,
+          "width": 40,
+          "cell": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.halftoneImage",
+          "ok": true,
+          "result": {
+            "id": "n11",
+            "paths": [
+              {
+                "fill": "#000000",
+                "id": "n10",
+                "name": "Halftone",
+                "subpaths": 13
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.lowPolyImage",
+        "params": {
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR42mP48OHDf3yYgWgFIjYnUPBAKCDbFwBp6dhBTAFOhgAAAABJRU5ErkJggg==",
+          "x": 120,
+          "y": 10,
+          "width": 40,
+          "cell": 2,
+          "seed": 1
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.lowPolyImage",
+          "ok": true,
+          "result": {
+            "id": "n14",
+            "paths": [
+              {
+                "fill": "#f0f0f0",
+                "id": "n12",
+                "name": "Low Poly #f0f0f0",
+                "subpaths": 24
+              },
+              {
+                "fill": "#143cc8",
+                "id": "n13",
+                "name": "Low Poly #143cc8",
+                "subpaths": 8
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.hatchImage",
+        "params": {
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVR42mP48OHDf3yYgWgFIjYnUPBAKCDbFwBp6dhBTAFOhgAAAABJRU5ErkJggg==",
+          "x": 160,
+          "y": 10,
+          "width": 40,
+          "cell": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.hatchImage",
+          "ok": true,
+          "result": {
+            "id": "n16",
+            "paths": [
+              {
+                "fill": "#000000",
+                "id": "n15",
+                "name": "Hatch",
+                "subpaths": 3
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.importSvg",
+        "params": {
+          "svg": "not svg"
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "The markup has no <svg> element."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 50,
+                  "x": 10,
+                  "y": 10
+                },
+                "d": "M10 10L60 10L60 40L10 40Z",
+                "depth": 0,
+                "fill": "#2563eb",
+                "id": "n1",
+                "locked": false,
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 50,
+                  "y": 40
+                },
+                "d": "M70 40C81.05 40 90 48.95 90 60C90 71.05 81.05 80 70 80C58.95 80 50 71.05 50 60C50 48.95 58.95 40 70 40Z",
+                "depth": 0,
+                "fill": "#e11d48",
+                "id": "n2",
+                "locked": false,
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 30,
+                  "y": 30
+                },
+                "children": 1,
+                "depth": 0,
+                "id": "n3-2",
+                "locked": false,
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 30,
+                  "y": 30
+                },
+                "d": "M30 30L70 30L70 70L30 70Z",
+                "depth": 1,
+                "fill": "#0080ff",
+                "id": "n3-1",
+                "locked": false,
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 74.9,
+                  "width": 68.34,
+                  "x": 117.83,
+                  "y": 114.55
+                },
+                "children": 2,
+                "depth": 0,
+                "id": "n6",
+                "locked": false,
+                "name": "Image Trace",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 74.9,
+                  "width": 68.34,
+                  "x": 117.83,
+                  "y": 114.55
+                },
+                "d": "M124 120C208.98 91.67 183.26 182.91 180 184C95.02 212.33 120.74 121.09 124 120Z",
+                "depth": 1,
+                "fill": "#f0f0f0",
+                "id": "n4",
+                "locked": false,
+                "name": "#f0f0f0",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 34.74,
+                  "width": 35.89,
+                  "x": 134.14,
+                  "y": 135.46
+                },
+                "d": "M148 136C185.18 136 164.04 167.99 164 168C124.1 181.3 130.04 129.65 148 136Z",
+                "depth": 1,
+                "fill": "#143cc8",
+                "id": "n5",
+                "locked": false,
+                "name": "#143cc8",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 39,
+                  "width": 39,
+                  "x": 10.5,
+                  "y": 120.5
+                },
+                "children": 2,
+                "depth": 0,
+                "id": "n9",
+                "locked": false,
+                "name": "Mosaic",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 39,
+                  "width": 39,
+                  "x": 10.5,
+                  "y": 120.5
+                },
+                "d": "M10.5 120.5L19.5 120.5L19.5 129.5L10.5 129.5ZM20.5 120.5L29.5 120.5L29.5 129.5L20.5 129.5ZM30.5 120.5L39.5 120.5L39.5 129.5L30.5 129.5ZM40.5 120.5L49.5 120.5L49.5 129.5L40.5 129.5ZM10.5 130.5L19.5 130.5L19.5 139.5L10.5 139.5ZM40.5 130.5L49.5 130.5L49.5 139.5L40.5 139.5ZM10.5 140.5L19.5 140.5L19.5 149.5L10.5 149.5ZM40.5 140.5L49.5 140.5L49.5 149.5L40.5 149.5ZM10.5 150.5L19.5 150.5L19.5 159.5L10.5 159.5ZM20.5 150.5L29.5 150.5L29.5 159.5L20.5 159.5ZM30.5 150.5L39.5 150.5L39.5 159.5L30.5 159.5ZM40.5 150.5L49.5 150.5L49.5 159.5L40.5 159.5Z",
+                "depth": 1,
+                "fill": "#f0f0f0",
+                "id": "n7",
+                "locked": false,
+                "name": "Mosaic #f0f0f0",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 19,
+                  "width": 19,
+                  "x": 20.5,
+                  "y": 130.5
+                },
+                "d": "M20.5 130.5L29.5 130.5L29.5 139.5L20.5 139.5ZM30.5 130.5L39.5 130.5L39.5 139.5L30.5 139.5ZM20.5 140.5L29.5 140.5L29.5 149.5L20.5 149.5ZM30.5 140.5L39.5 140.5L39.5 149.5L30.5 149.5Z",
+                "depth": 1,
+                "fill": "#143cc8",
+                "id": "n8",
+                "locked": false,
+                "name": "Mosaic #143cc8",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 31.71,
+                  "width": 31.71,
+                  "x": 64.14,
+                  "y": 124.14
+                },
+                "children": 1,
+                "depth": 0,
+                "id": "n11",
+                "locked": false,
+                "name": "Halftone",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 31.71,
+                  "width": 31.71,
+                  "x": 64.14,
+                  "y": 124.14
+                },
+                "d": "M94.14 124.14C95.09 124.14 95.86 124.91 95.86 125.86C95.86 126.81 95.09 127.57 94.14 127.57C93.19 127.57 92.43 126.81 92.43 125.86C92.43 124.91 93.19 124.14 94.14 124.14ZM80 124.14C80.95 124.14 81.71 124.91 81.71 125.86C81.71 126.81 80.95 127.57 80 127.57C79.05 127.57 78.29 126.81 78.29 125.86C78.29 124.91 79.05 124.14 80 124.14ZM87.07 126.77C90.47 126.77 93.23 129.53 93.23 132.93C93.23 136.33 90.47 139.09 87.07 139.09C83.67 139.09 80.91 136.33 80.91 132.93C80.91 129.53 83.67 126.77 87.07 126.77ZM94.14 138.29C95.09 138.29 95.86 139.05 95.86 140C95.86 140.95 95.09 141.71 94.14 141.71C93.19 141.71 92.43 140.95 92.43 140C92.43 139.05 93.19 138.29 94.14 138.29ZM65.86 124.14C66.81 124.14 67.57 124.91 67.57 125.86C67.57 126.81 66.81 127.57 65.86 127.57C64.91 127.57 64.14 126.81 64.14 125.86C64.14 124.91 64.91 124.14 65.86 124.14ZM72.93 126.77C76.33 126.77 79.09 129.53 79.09 132.93C79.09 136.33 76.33 139.09 72.93 139.09C69.53 139.09 66.77 136.33 66.77 132.93C66.77 129.53 69.53 126.77 72.93 126.77ZM80 133.84C83.4 133.84 86.16 136.6 86.16 140C86.16 143.4 83.4 146.16 80 146.16C76.6 146.16 73.84 143.4 73.84 140C73.84 136.6 76.6 133.84 80 133.84ZM87.07 140.91C90.47 140.91 93.23 143.67 93.23 147.07C93.23 150.47 90.47 153.23 87.07 153.23C83.67 153.23 80.91 150.47 80.91 147.07C80.91 143.67 83.67 140.91 87.07 140.91ZM94.14 152.43C95.09 152.43 95.86 153.19 95.86 154.14C95.86 155.09 95.09 155.86 94.14 155.86C93.19 155.86 92.43 155.09 92.43 154.14C92.43 153.19 93.19 152.43 94.14 152.43ZM65.86 138.29C66.81 138.29 67.57 139.05 67.57 140C67.57 140.95 66.81 141.71 65.86 141.71C64.91 141.71 64.14 140.95 64.14 140C64.14 139.05 64.91 138.29 65.86 138.29ZM72.93 140.91C76.33 140.91 79.09 143.67 79.09 147.07C79.09 150.47 76.33 153.23 72.93 153.23C69.53 153.23 66.77 150.47 66.77 147.07C66.77 143.67 69.53 140.91 72.93 140.91ZM80 152.43C80.95 152.43 81.71 153.19 81.71 154.14C81.71 155.09 80.95 155.86 80 155.86C79.05 155.86 78.29 155.09 78.29 154.14C78.29 153.19 79.05 152.43 80 152.43ZM65.86 152.43C66.81 152.43 67.57 153.19 67.57 154.14C67.57 155.09 66.81 155.86 65.86 155.86C64.91 155.86 64.14 155.09 64.14 154.14C64.14 153.19 64.91 152.43 65.86 152.43Z",
+                "depth": 1,
+                "fill": "#000000",
+                "id": "n10",
+                "locked": false,
+                "name": "Halftone",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 120,
+                  "y": 10
+                },
+                "children": 2,
+                "depth": 0,
+                "id": "n14",
+                "locked": false,
+                "name": "Low Poly",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 120,
+                  "y": 10
+                },
+                "d": "M120 10L127.89 10L120 22.52ZM127.89 10L130.17 21.2L120 22.52ZM127.89 10L137.01 10L136.54 23.47ZM127.89 10L136.54 23.47L130.17 21.2ZM137.01 10L146.97 10L136.54 23.47ZM146.97 10L149.21 20.91L136.54 23.47ZM146.97 10L160 10L160 17.64ZM146.97 10L160 17.64L149.21 20.91ZM120 22.52L130.17 21.2L127.15 31.69ZM120 22.52L127.15 31.69L120 32.5ZM149.21 20.91L160 17.64L151.83 27.21ZM160 17.64L160 27.88L151.83 27.21ZM120 32.5L127.15 31.69L120 37.59ZM127.15 31.69L132.73 42.1L120 37.59ZM151.83 27.21L160 27.88L160 43.16ZM151.83 27.21L160 43.16L152.05 40.4ZM120 37.59L132.73 42.1L131.16 50ZM120 37.59L131.16 50L120 50ZM132.73 42.1L138.94 36.73L131.16 50ZM138.94 36.73L136.65 50L131.16 50ZM138.94 36.73L152.05 40.4L146.56 50ZM138.94 36.73L146.56 50L136.65 50ZM152.05 40.4L160 43.16L146.56 50ZM160 43.16L160 50L146.56 50Z",
+                "depth": 1,
+                "fill": "#f0f0f0",
+                "id": "n12",
+                "locked": false,
+                "name": "Low Poly #f0f0f0",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#f0f0f0",
+                "strokeWidth": 0.5,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 21.19,
+                  "width": 24.9,
+                  "x": 127.15,
+                  "y": 20.91
+                },
+                "d": "M130.17 21.2L136.54 23.47L127.15 31.69ZM136.54 23.47L139.02 28.28L127.15 31.69ZM136.54 23.47L149.21 20.91L151.83 27.21ZM136.54 23.47L151.83 27.21L139.02 28.28ZM127.15 31.69L139.02 28.28L138.94 36.73ZM127.15 31.69L138.94 36.73L132.73 42.1ZM139.02 28.28L151.83 27.21L138.94 36.73ZM151.83 27.21L152.05 40.4L138.94 36.73Z",
+                "depth": 1,
+                "fill": "#143cc8",
+                "id": "n13",
+                "locked": false,
+                "name": "Low Poly #143cc8",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#143cc8",
+                "strokeWidth": 0.5,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 28.28,
+                  "width": 28.28,
+                  "x": 165.86,
+                  "y": 15.86
+                },
+                "children": 1,
+                "depth": 0,
+                "id": "n16",
+                "locked": false,
+                "name": "Engraving",
+                "rotation": 0,
+                "selected": true,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 28.28,
+                  "width": 28.28,
+                  "x": 165.86,
+                  "y": 15.86
+                },
+                "d": "M180 15.86L184.66 25.34L194.14 30L194.14 30L189.48 20.52L180 15.86ZM165.86 15.86L170.52 25.34L177.59 32.41L184.66 39.48L194.14 44.14L194.14 44.14L189.48 34.66L182.41 27.59L175.34 20.52L165.86 15.86ZM165.86 30L170.52 39.48L180 44.14L180 44.14L175.34 34.66L165.86 30Z",
+                "depth": 1,
+                "fill": "#000000",
+                "id": "n15",
+                "locked": false,
+                "name": "Hatch",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 1,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n16"
+            ],
+            "tool": "select",
+            "width": 200
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#2563eb",
+                "id": "n1",
+                "stroke": null,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 10,
+                        "y": 10
+                      },
+                      {
+                        "x": 60,
+                        "y": 10
+                      },
+                      {
+                        "x": 60,
+                        "y": 40
+                      },
+                      {
+                        "x": 10,
+                        "y": 40
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#e11d48",
+                "id": "n2",
+                "stroke": null,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "in": {
+                          "x": 58.95430500338413,
+                          "y": 40
+                        },
+                        "out": {
+                          "x": 81.04569499661588,
+                          "y": 40
+                        },
+                        "type": "symmetric",
+                        "x": 70,
+                        "y": 40
+                      },
+                      {
+                        "in": {
+                          "x": 90,
+                          "y": 48.95430500338413
+                        },
+                        "out": {
+                          "x": 90,
+                          "y": 71.04569499661588
+                        },
+                        "type": "symmetric",
+                        "x": 90,
+                        "y": 60
+                      },
+                      {
+                        "in": {
+                          "x": 81.04569499661588,
+                          "y": 80
+                        },
+                        "out": {
+                          "x": 58.95430500338413,
+                          "y": 80
+                        },
+                        "type": "symmetric",
+                        "x": 70,
+                        "y": 80
+                      },
+                      {
+                        "in": {
+                          "x": 50,
+                          "y": 71.04569499661588
+                        },
+                        "out": {
+                          "x": 50,
+                          "y": 48.95430500338413
+                        },
+                        "type": "symmetric",
+                        "x": 50,
+                        "y": 60
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#0080ff",
+                    "id": "n3-1",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 30,
+                            "y": 30
+                          },
+                          {
+                            "x": 70,
+                            "y": 30
+                          },
+                          {
+                            "x": 70,
+                            "y": 70
+                          },
+                          {
+                            "x": 30,
+                            "y": 70
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n3-2",
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#f0f0f0",
+                    "fillRule": "evenodd",
+                    "id": "n4",
+                    "name": "#f0f0f0",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 120.74420144905328,
+                              "y": 121.08526618364891
+                            },
+                            "out": {
+                              "x": 208.98222771208913,
+                              "y": 91.67259076263696
+                            },
+                            "x": 124,
+                            "y": 120
+                          },
+                          {
+                            "in": {
+                              "x": 183.25579855094674,
+                              "y": 182.9147338163511
+                            },
+                            "out": {
+                              "x": 95.01777228791083,
+                              "y": 212.32740923736304
+                            },
+                            "x": 180,
+                            "y": 184
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#143cc8",
+                    "fillRule": "evenodd",
+                    "id": "n5",
+                    "name": "#143cc8",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 130.0438199195231,
+                              "y": 129.65153165044399
+                            },
+                            "out": {
+                              "x": 185.180410830776,
+                              "y": 136
+                            },
+                            "x": 148,
+                            "y": 136
+                          },
+                          {
+                            "in": {
+                              "x": 164.0405299078508,
+                              "y": 167.9864900307164
+                            },
+                            "out": {
+                              "x": 124.09689387222036,
+                              "y": 181.30103537592655
+                            },
+                            "x": 164,
+                            "y": 168
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n6",
+                "name": "Image Trace",
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#f0f0f0",
+                    "id": "n7",
+                    "name": "Mosaic #f0f0f0",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 10.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 129.5
+                          },
+                          {
+                            "x": 10.5,
+                            "y": 129.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 20.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 129.5
+                          },
+                          {
+                            "x": 20.5,
+                            "y": 129.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 30.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 129.5
+                          },
+                          {
+                            "x": 30.5,
+                            "y": 129.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 40.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 120.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 129.5
+                          },
+                          {
+                            "x": 40.5,
+                            "y": 129.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 10.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 139.5
+                          },
+                          {
+                            "x": 10.5,
+                            "y": 139.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 40.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 139.5
+                          },
+                          {
+                            "x": 40.5,
+                            "y": 139.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 10.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 149.5
+                          },
+                          {
+                            "x": 10.5,
+                            "y": 149.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 40.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 149.5
+                          },
+                          {
+                            "x": 40.5,
+                            "y": 149.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 10.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 19.5,
+                            "y": 159.5
+                          },
+                          {
+                            "x": 10.5,
+                            "y": 159.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 20.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 159.5
+                          },
+                          {
+                            "x": 20.5,
+                            "y": 159.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 30.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 159.5
+                          },
+                          {
+                            "x": 30.5,
+                            "y": 159.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 40.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 150.5
+                          },
+                          {
+                            "x": 49.5,
+                            "y": 159.5
+                          },
+                          {
+                            "x": 40.5,
+                            "y": 159.5
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#143cc8",
+                    "id": "n8",
+                    "name": "Mosaic #143cc8",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 20.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 139.5
+                          },
+                          {
+                            "x": 20.5,
+                            "y": 139.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 30.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 130.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 139.5
+                          },
+                          {
+                            "x": 30.5,
+                            "y": 139.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 20.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 29.5,
+                            "y": 149.5
+                          },
+                          {
+                            "x": 20.5,
+                            "y": 149.5
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 30.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 140.5
+                          },
+                          {
+                            "x": 39.5,
+                            "y": 149.5
+                          },
+                          {
+                            "x": 30.5,
+                            "y": 149.5
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n9",
+                "name": "Mosaic",
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#000000",
+                    "id": "n10",
+                    "name": "Halftone",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 93.19497509181329,
+                              "y": 124.14287852484397
+                            },
+                            "out": {
+                              "x": 95.08929615564861,
+                              "y": 124.14287852484397
+                            },
+                            "type": "symmetric",
+                            "x": 94.14213562373095,
+                            "y": 124.14287852484397
+                          },
+                          {
+                            "in": {
+                              "x": 95.85712147515603,
+                              "y": 124.91070384435139
+                            },
+                            "out": {
+                              "x": 95.85712147515603,
+                              "y": 126.80502490818671
+                            },
+                            "type": "symmetric",
+                            "x": 95.85712147515603,
+                            "y": 125.85786437626905
+                          },
+                          {
+                            "in": {
+                              "x": 95.08929615564861,
+                              "y": 127.57285022769413
+                            },
+                            "out": {
+                              "x": 93.19497509181329,
+                              "y": 127.57285022769413
+                            },
+                            "type": "symmetric",
+                            "x": 94.14213562373095,
+                            "y": 127.57285022769413
+                          },
+                          {
+                            "in": {
+                              "x": 92.42714977230585,
+                              "y": 126.80502490818671
+                            },
+                            "out": {
+                              "x": 92.42714977230585,
+                              "y": 124.91070384435139
+                            },
+                            "type": "symmetric",
+                            "x": 92.42714977230585,
+                            "y": 125.85786437626905
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 79.05283946808234,
+                              "y": 124.14287852484397
+                            },
+                            "out": {
+                              "x": 80.94716053191766,
+                              "y": 124.14287852484397
+                            },
+                            "type": "symmetric",
+                            "x": 80,
+                            "y": 124.14287852484397
+                          },
+                          {
+                            "in": {
+                              "x": 81.71498585142508,
+                              "y": 124.91070384435139
+                            },
+                            "out": {
+                              "x": 81.71498585142508,
+                              "y": 126.80502490818671
+                            },
+                            "type": "symmetric",
+                            "x": 81.71498585142508,
+                            "y": 125.85786437626905
+                          },
+                          {
+                            "in": {
+                              "x": 80.94716053191766,
+                              "y": 127.57285022769413
+                            },
+                            "out": {
+                              "x": 79.05283946808234,
+                              "y": 127.57285022769413
+                            },
+                            "type": "symmetric",
+                            "x": 80,
+                            "y": 127.57285022769413
+                          },
+                          {
+                            "in": {
+                              "x": 78.28501414857492,
+                              "y": 126.80502490818671
+                            },
+                            "out": {
+                              "x": 78.28501414857492,
+                              "y": 124.91070384435139
+                            },
+                            "type": "symmetric",
+                            "x": 78.28501414857492,
+                            "y": 125.85786437626905
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 83.67010638006471,
+                              "y": 126.77094677781359
+                            },
+                            "out": {
+                              "x": 90.47202924366626,
+                              "y": 126.77094677781359
+                            },
+                            "type": "symmetric",
+                            "x": 87.07106781186548,
+                            "y": 126.77094677781359
+                          },
+                          {
+                            "in": {
+                              "x": 93.22905322218642,
+                              "y": 129.52797075633376
+                            },
+                            "out": {
+                              "x": 93.22905322218642,
+                              "y": 136.3298936199353
+                            },
+                            "type": "symmetric",
+                            "x": 93.22905322218642,
+                            "y": 132.92893218813452
+                          },
+                          {
+                            "in": {
+                              "x": 90.47202924366626,
+                              "y": 139.08691759845547
+                            },
+                            "out": {
+                              "x": 83.67010638006471,
+                              "y": 139.08691759845547
+                            },
+                            "type": "symmetric",
+                            "x": 87.07106781186548,
+                            "y": 139.08691759845547
+                          },
+                          {
+                            "in": {
+                              "x": 80.91308240154454,
+                              "y": 136.3298936199353
+                            },
+                            "out": {
+                              "x": 80.91308240154454,
+                              "y": 129.52797075633376
+                            },
+                            "type": "symmetric",
+                            "x": 80.91308240154454,
+                            "y": 132.92893218813452
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 93.19497509181329,
+                              "y": 138.2850141485749
+                            },
+                            "out": {
+                              "x": 95.08929615564861,
+                              "y": 138.2850141485749
+                            },
+                            "type": "symmetric",
+                            "x": 94.14213562373095,
+                            "y": 138.2850141485749
+                          },
+                          {
+                            "in": {
+                              "x": 95.85712147515603,
+                              "y": 139.05283946808234
+                            },
+                            "out": {
+                              "x": 95.85712147515603,
+                              "y": 140.94716053191766
+                            },
+                            "type": "symmetric",
+                            "x": 95.85712147515603,
+                            "y": 140
+                          },
+                          {
+                            "in": {
+                              "x": 95.08929615564861,
+                              "y": 141.7149858514251
+                            },
+                            "out": {
+                              "x": 93.19497509181329,
+                              "y": 141.7149858514251
+                            },
+                            "type": "symmetric",
+                            "x": 94.14213562373095,
+                            "y": 141.7149858514251
+                          },
+                          {
+                            "in": {
+                              "x": 92.42714977230585,
+                              "y": 140.94716053191766
+                            },
+                            "out": {
+                              "x": 92.42714977230585,
+                              "y": 139.05283946808234
+                            },
+                            "type": "symmetric",
+                            "x": 92.42714977230585,
+                            "y": 140
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 64.91070384435139,
+                              "y": 124.14287852484397
+                            },
+                            "out": {
+                              "x": 66.80502490818671,
+                              "y": 124.14287852484397
+                            },
+                            "type": "symmetric",
+                            "x": 65.85786437626905,
+                            "y": 124.14287852484397
+                          },
+                          {
+                            "in": {
+                              "x": 67.57285022769413,
+                              "y": 124.91070384435139
+                            },
+                            "out": {
+                              "x": 67.57285022769413,
+                              "y": 126.80502490818671
+                            },
+                            "type": "symmetric",
+                            "x": 67.57285022769413,
+                            "y": 125.85786437626905
+                          },
+                          {
+                            "in": {
+                              "x": 66.80502490818671,
+                              "y": 127.57285022769413
+                            },
+                            "out": {
+                              "x": 64.91070384435139,
+                              "y": 127.57285022769413
+                            },
+                            "type": "symmetric",
+                            "x": 65.85786437626905,
+                            "y": 127.57285022769413
+                          },
+                          {
+                            "in": {
+                              "x": 64.14287852484397,
+                              "y": 126.80502490818671
+                            },
+                            "out": {
+                              "x": 64.14287852484397,
+                              "y": 124.91070384435139
+                            },
+                            "type": "symmetric",
+                            "x": 64.14287852484397,
+                            "y": 125.85786437626905
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 69.52797075633376,
+                              "y": 126.77094677781359
+                            },
+                            "out": {
+                              "x": 76.32989361993529,
+                              "y": 126.77094677781359
+                            },
+                            "type": "symmetric",
+                            "x": 72.92893218813452,
+                            "y": 126.77094677781359
+                          },
+                          {
+                            "in": {
+                              "x": 79.08691759845546,
+                              "y": 129.52797075633376
+                            },
+                            "out": {
+                              "x": 79.08691759845546,
+                              "y": 136.3298936199353
+                            },
+                            "type": "symmetric",
+                            "x": 79.08691759845546,
+                            "y": 132.92893218813452
+                          },
+                          {
+                            "in": {
+                              "x": 76.32989361993529,
+                              "y": 139.08691759845547
+                            },
+                            "out": {
+                              "x": 69.52797075633376,
+                              "y": 139.08691759845547
+                            },
+                            "type": "symmetric",
+                            "x": 72.92893218813452,
+                            "y": 139.08691759845547
+                          },
+                          {
+                            "in": {
+                              "x": 66.77094677781359,
+                              "y": 136.3298936199353
+                            },
+                            "out": {
+                              "x": 66.77094677781359,
+                              "y": 129.52797075633376
+                            },
+                            "type": "symmetric",
+                            "x": 66.77094677781359,
+                            "y": 132.92893218813452
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 76.59903856819923,
+                              "y": 133.84201458967905
+                            },
+                            "out": {
+                              "x": 83.40096143180077,
+                              "y": 133.84201458967905
+                            },
+                            "type": "symmetric",
+                            "x": 80,
+                            "y": 133.84201458967905
+                          },
+                          {
+                            "in": {
+                              "x": 86.15798541032093,
+                              "y": 136.59903856819923
+                            },
+                            "out": {
+                              "x": 86.15798541032093,
+                              "y": 143.40096143180077
+                            },
+                            "type": "symmetric",
+                            "x": 86.15798541032093,
+                            "y": 140
+                          },
+                          {
+                            "in": {
+                              "x": 83.40096143180077,
+                              "y": 146.15798541032095
+                            },
+                            "out": {
+                              "x": 76.59903856819923,
+                              "y": 146.15798541032095
+                            },
+                            "type": "symmetric",
+                            "x": 80,
+                            "y": 146.15798541032095
+                          },
+                          {
+                            "in": {
+                              "x": 73.84201458967907,
+                              "y": 143.40096143180077
+                            },
+                            "out": {
+                              "x": 73.84201458967907,
+                              "y": 136.59903856819923
+                            },
+                            "type": "symmetric",
+                            "x": 73.84201458967907,
+                            "y": 140
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 83.67010638006471,
+                              "y": 140.91308240154456
+                            },
+                            "out": {
+                              "x": 90.47202924366626,
+                              "y": 140.91308240154456
+                            },
+                            "type": "symmetric",
+                            "x": 87.07106781186548,
+                            "y": 140.91308240154456
+                          },
+                          {
+                            "in": {
+                              "x": 93.22905322218642,
+                              "y": 143.6701063800647
+                            },
+                            "out": {
+                              "x": 93.22905322218642,
+                              "y": 150.47202924366627
+                            },
+                            "type": "symmetric",
+                            "x": 93.22905322218642,
+                            "y": 147.07106781186548
+                          },
+                          {
+                            "in": {
+                              "x": 90.47202924366626,
+                              "y": 153.22905322218642
+                            },
+                            "out": {
+                              "x": 83.67010638006471,
+                              "y": 153.22905322218642
+                            },
+                            "type": "symmetric",
+                            "x": 87.07106781186548,
+                            "y": 153.22905322218642
+                          },
+                          {
+                            "in": {
+                              "x": 80.91308240154454,
+                              "y": 150.47202924366627
+                            },
+                            "out": {
+                              "x": 80.91308240154454,
+                              "y": 143.6701063800647
+                            },
+                            "type": "symmetric",
+                            "x": 80.91308240154454,
+                            "y": 147.07106781186548
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 93.19497509181329,
+                              "y": 152.42714977230585
+                            },
+                            "out": {
+                              "x": 95.08929615564861,
+                              "y": 152.42714977230585
+                            },
+                            "type": "symmetric",
+                            "x": 94.14213562373095,
+                            "y": 152.42714977230585
+                          },
+                          {
+                            "in": {
+                              "x": 95.85712147515603,
+                              "y": 153.1949750918133
+                            },
+                            "out": {
+                              "x": 95.85712147515603,
+                              "y": 155.0892961556486
+                            },
+                            "type": "symmetric",
+                            "x": 95.85712147515603,
+                            "y": 154.14213562373095
+                          },
+                          {
+                            "in": {
+                              "x": 95.08929615564861,
+                              "y": 155.85712147515602
+                            },
+                            "out": {
+                              "x": 93.19497509181329,
+                              "y": 155.85712147515602
+                            },
+                            "type": "symmetric",
+                            "x": 94.14213562373095,
+                            "y": 155.85712147515602
+                          },
+                          {
+                            "in": {
+                              "x": 92.42714977230585,
+                              "y": 155.0892961556486
+                            },
+                            "out": {
+                              "x": 92.42714977230585,
+                              "y": 153.1949750918133
+                            },
+                            "type": "symmetric",
+                            "x": 92.42714977230585,
+                            "y": 154.14213562373095
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 64.91070384435139,
+                              "y": 138.2850141485749
+                            },
+                            "out": {
+                              "x": 66.80502490818671,
+                              "y": 138.2850141485749
+                            },
+                            "type": "symmetric",
+                            "x": 65.85786437626905,
+                            "y": 138.2850141485749
+                          },
+                          {
+                            "in": {
+                              "x": 67.57285022769413,
+                              "y": 139.05283946808234
+                            },
+                            "out": {
+                              "x": 67.57285022769413,
+                              "y": 140.94716053191766
+                            },
+                            "type": "symmetric",
+                            "x": 67.57285022769413,
+                            "y": 140
+                          },
+                          {
+                            "in": {
+                              "x": 66.80502490818671,
+                              "y": 141.7149858514251
+                            },
+                            "out": {
+                              "x": 64.91070384435139,
+                              "y": 141.7149858514251
+                            },
+                            "type": "symmetric",
+                            "x": 65.85786437626905,
+                            "y": 141.7149858514251
+                          },
+                          {
+                            "in": {
+                              "x": 64.14287852484397,
+                              "y": 140.94716053191766
+                            },
+                            "out": {
+                              "x": 64.14287852484397,
+                              "y": 139.05283946808234
+                            },
+                            "type": "symmetric",
+                            "x": 64.14287852484397,
+                            "y": 140
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 69.52797075633376,
+                              "y": 140.91308240154456
+                            },
+                            "out": {
+                              "x": 76.32989361993529,
+                              "y": 140.91308240154456
+                            },
+                            "type": "symmetric",
+                            "x": 72.92893218813452,
+                            "y": 140.91308240154456
+                          },
+                          {
+                            "in": {
+                              "x": 79.08691759845546,
+                              "y": 143.6701063800647
+                            },
+                            "out": {
+                              "x": 79.08691759845546,
+                              "y": 150.47202924366627
+                            },
+                            "type": "symmetric",
+                            "x": 79.08691759845546,
+                            "y": 147.07106781186548
+                          },
+                          {
+                            "in": {
+                              "x": 76.32989361993529,
+                              "y": 153.22905322218642
+                            },
+                            "out": {
+                              "x": 69.52797075633376,
+                              "y": 153.22905322218642
+                            },
+                            "type": "symmetric",
+                            "x": 72.92893218813452,
+                            "y": 153.22905322218642
+                          },
+                          {
+                            "in": {
+                              "x": 66.77094677781359,
+                              "y": 150.47202924366627
+                            },
+                            "out": {
+                              "x": 66.77094677781359,
+                              "y": 143.6701063800647
+                            },
+                            "type": "symmetric",
+                            "x": 66.77094677781359,
+                            "y": 147.07106781186548
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 79.05283946808234,
+                              "y": 152.42714977230585
+                            },
+                            "out": {
+                              "x": 80.94716053191766,
+                              "y": 152.42714977230585
+                            },
+                            "type": "symmetric",
+                            "x": 80,
+                            "y": 152.42714977230585
+                          },
+                          {
+                            "in": {
+                              "x": 81.71498585142508,
+                              "y": 153.1949750918133
+                            },
+                            "out": {
+                              "x": 81.71498585142508,
+                              "y": 155.0892961556486
+                            },
+                            "type": "symmetric",
+                            "x": 81.71498585142508,
+                            "y": 154.14213562373095
+                          },
+                          {
+                            "in": {
+                              "x": 80.94716053191766,
+                              "y": 155.85712147515602
+                            },
+                            "out": {
+                              "x": 79.05283946808234,
+                              "y": 155.85712147515602
+                            },
+                            "type": "symmetric",
+                            "x": 80,
+                            "y": 155.85712147515602
+                          },
+                          {
+                            "in": {
+                              "x": 78.28501414857492,
+                              "y": 155.0892961556486
+                            },
+                            "out": {
+                              "x": 78.28501414857492,
+                              "y": 153.1949750918133
+                            },
+                            "type": "symmetric",
+                            "x": 78.28501414857492,
+                            "y": 154.14213562373095
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 64.91070384435139,
+                              "y": 152.42714977230585
+                            },
+                            "out": {
+                              "x": 66.80502490818671,
+                              "y": 152.42714977230585
+                            },
+                            "type": "symmetric",
+                            "x": 65.85786437626905,
+                            "y": 152.42714977230585
+                          },
+                          {
+                            "in": {
+                              "x": 67.57285022769413,
+                              "y": 153.1949750918133
+                            },
+                            "out": {
+                              "x": 67.57285022769413,
+                              "y": 155.0892961556486
+                            },
+                            "type": "symmetric",
+                            "x": 67.57285022769413,
+                            "y": 154.14213562373095
+                          },
+                          {
+                            "in": {
+                              "x": 66.80502490818671,
+                              "y": 155.85712147515602
+                            },
+                            "out": {
+                              "x": 64.91070384435139,
+                              "y": 155.85712147515602
+                            },
+                            "type": "symmetric",
+                            "x": 65.85786437626905,
+                            "y": 155.85712147515602
+                          },
+                          {
+                            "in": {
+                              "x": 64.14287852484397,
+                              "y": 155.0892961556486
+                            },
+                            "out": {
+                              "x": 64.14287852484397,
+                              "y": 153.1949750918133
+                            },
+                            "type": "symmetric",
+                            "x": 64.14287852484397,
+                            "y": 154.14213562373095
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n11",
+                "name": "Halftone",
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#f0f0f0",
+                    "id": "n12",
+                    "name": "Low Poly #f0f0f0",
+                    "stroke": "#f0f0f0",
+                    "strokeLinejoin": "round",
+                    "strokeWidth": 0.5,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 120,
+                            "y": 10
+                          },
+                          {
+                            "x": 127.88999456222868,
+                            "y": 10
+                          },
+                          {
+                            "x": 120,
+                            "y": 22.522487984044126
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 127.88999456222868,
+                            "y": 10
+                          },
+                          {
+                            "x": 130.1668553835868,
+                            "y": 21.203882472055007
+                          },
+                          {
+                            "x": 120,
+                            "y": 22.522487984044126
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 127.88999456222868,
+                            "y": 10
+                          },
+                          {
+                            "x": 137.00820703653343,
+                            "y": 10
+                          },
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 127.88999456222868,
+                            "y": 10
+                          },
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          },
+                          {
+                            "x": 130.1668553835868,
+                            "y": 21.203882472055007
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 137.00820703653343,
+                            "y": 10
+                          },
+                          {
+                            "x": 146.97276197408158,
+                            "y": 10
+                          },
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 146.97276197408158,
+                            "y": 10
+                          },
+                          {
+                            "x": 149.20665306195306,
+                            "y": 20.91342709921613
+                          },
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 146.97276197408158,
+                            "y": 10
+                          },
+                          {
+                            "x": 160,
+                            "y": 10
+                          },
+                          {
+                            "x": 160,
+                            "y": 17.641712510758477
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 146.97276197408158,
+                            "y": 10
+                          },
+                          {
+                            "x": 160,
+                            "y": 17.641712510758477
+                          },
+                          {
+                            "x": 149.20665306195306,
+                            "y": 20.91342709921613
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 120,
+                            "y": 22.522487984044126
+                          },
+                          {
+                            "x": 130.1668553835868,
+                            "y": 21.203882472055007
+                          },
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 120,
+                            "y": 22.522487984044126
+                          },
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          },
+                          {
+                            "x": 120,
+                            "y": 32.50157909048758
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 149.20665306195306,
+                            "y": 20.91342709921613
+                          },
+                          {
+                            "x": 160,
+                            "y": 17.641712510758477
+                          },
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 160,
+                            "y": 17.641712510758477
+                          },
+                          {
+                            "x": 160,
+                            "y": 27.884766989244326
+                          },
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 120,
+                            "y": 32.50157909048758
+                          },
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          },
+                          {
+                            "x": 120,
+                            "y": 37.59253375117959
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          },
+                          {
+                            "x": 132.73395570885248,
+                            "y": 42.10086113694144
+                          },
+                          {
+                            "x": 120,
+                            "y": 37.59253375117959
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          },
+                          {
+                            "x": 160,
+                            "y": 27.884766989244326
+                          },
+                          {
+                            "x": 160,
+                            "y": 43.15606558733994
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          },
+                          {
+                            "x": 160,
+                            "y": 43.15606558733994
+                          },
+                          {
+                            "x": 152.04923858785753,
+                            "y": 40.39763535580077
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 120,
+                            "y": 37.59253375117959
+                          },
+                          {
+                            "x": 132.73395570885248,
+                            "y": 42.10086113694144
+                          },
+                          {
+                            "x": 131.1570194360467,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 120,
+                            "y": 37.59253375117959
+                          },
+                          {
+                            "x": 131.1570194360467,
+                            "y": 50
+                          },
+                          {
+                            "x": 120,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 132.73395570885248,
+                            "y": 42.10086113694144
+                          },
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          },
+                          {
+                            "x": 131.1570194360467,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          },
+                          {
+                            "x": 136.65093116768423,
+                            "y": 50
+                          },
+                          {
+                            "x": 131.1570194360467,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          },
+                          {
+                            "x": 152.04923858785753,
+                            "y": 40.39763535580077
+                          },
+                          {
+                            "x": 146.56113337563843,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          },
+                          {
+                            "x": 146.56113337563843,
+                            "y": 50
+                          },
+                          {
+                            "x": 136.65093116768423,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 152.04923858785753,
+                            "y": 40.39763535580077
+                          },
+                          {
+                            "x": 160,
+                            "y": 43.15606558733994
+                          },
+                          {
+                            "x": 146.56113337563843,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 160,
+                            "y": 43.15606558733994
+                          },
+                          {
+                            "x": 160,
+                            "y": 50
+                          },
+                          {
+                            "x": 146.56113337563843,
+                            "y": 50
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#143cc8",
+                    "id": "n13",
+                    "name": "Low Poly #143cc8",
+                    "stroke": "#143cc8",
+                    "strokeLinejoin": "round",
+                    "strokeWidth": 0.5,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 130.1668553835868,
+                            "y": 21.203882472055007
+                          },
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          },
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          },
+                          {
+                            "x": 139.0163344506911,
+                            "y": 28.28181272623637
+                          },
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          },
+                          {
+                            "x": 149.20665306195306,
+                            "y": 20.91342709921613
+                          },
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 136.53590989369803,
+                            "y": 23.474724549794274
+                          },
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          },
+                          {
+                            "x": 139.0163344506911,
+                            "y": 28.28181272623637
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          },
+                          {
+                            "x": 139.0163344506911,
+                            "y": 28.28181272623637
+                          },
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 127.1513016795859,
+                            "y": 31.68933103959759
+                          },
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          },
+                          {
+                            "x": 132.73395570885248,
+                            "y": 42.10086113694144
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 139.0163344506911,
+                            "y": 28.28181272623637
+                          },
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          },
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 151.82610165032702,
+                            "y": 27.206710859832054
+                          },
+                          {
+                            "x": 152.04923858785753,
+                            "y": 40.39763535580077
+                          },
+                          {
+                            "x": 138.94352265061892,
+                            "y": 36.73464909154797
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n14",
+                "name": "Low Poly",
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#000000",
+                    "id": "n15",
+                    "name": "Hatch",
+                    "stroke": null,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 180,
+                            "y": 15.85786437626905
+                          },
+                          {
+                            "x": 184.6578038756122,
+                            "y": 25.342196124387826
+                          },
+                          {
+                            "x": 194.14213562373095,
+                            "y": 30
+                          },
+                          {
+                            "x": 194.14213562373095,
+                            "y": 30
+                          },
+                          {
+                            "x": 189.48433174811876,
+                            "y": 20.515668251881227
+                          },
+                          {
+                            "x": 180,
+                            "y": 15.85786437626905
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 165.85786437626905,
+                            "y": 15.85786437626905
+                          },
+                          {
+                            "x": 170.51566825188124,
+                            "y": 25.342196124387826
+                          },
+                          {
+                            "x": 177.5867360637467,
+                            "y": 32.413263936253294
+                          },
+                          {
+                            "x": 184.6578038756122,
+                            "y": 39.48433174811878
+                          },
+                          {
+                            "x": 194.14213562373095,
+                            "y": 44.14213562373095
+                          },
+                          {
+                            "x": 194.14213562373095,
+                            "y": 44.14213562373095
+                          },
+                          {
+                            "x": 189.48433174811876,
+                            "y": 34.657803875612174
+                          },
+                          {
+                            "x": 182.4132639362533,
+                            "y": 27.586736063746702
+                          },
+                          {
+                            "x": 175.3421961243878,
+                            "y": 20.515668251881227
+                          },
+                          {
+                            "x": 165.85786437626905,
+                            "y": 15.85786437626905
+                          }
+                        ],
+                        "closed": true
+                      },
+                      {
+                        "anchors": [
+                          {
+                            "x": 165.85786437626905,
+                            "y": 30
+                          },
+                          {
+                            "x": 170.51566825188124,
+                            "y": 39.48433174811878
+                          },
+                          {
+                            "x": 180,
+                            "y": 44.14213562373095
+                          },
+                          {
+                            "x": 180,
+                            "y": 44.14213562373095
+                          },
+                          {
+                            "x": 175.3421961243878,
+                            "y": 34.657803875612174
+                          },
+                          {
+                            "x": 165.85786437626905,
+                            "y": 30
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n16",
+                "name": "Engraving",
+                "type": "group"
+              }
+            ],
+            "width": 200
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

@@ -1334,4 +1334,27 @@ describe("Brushstrokes (svelte)", () => {
     expect(brush().paper).toBeUndefined();
     expect(grain().checked).toBe(true);
   });
+
+  it("keeps the stroke's colour when choosing a brush while 'Keep my colour' is on", async () => {
+    const { VectorAppearancePanel } = await import("../src/vector");
+    const c = make();
+    c.select(["a"]);
+    const el = render(VectorAppearancePanel, { controller: c });
+    expect(el.querySelector("[data-vector-keep-colour]")).toBeNull();
+    click(el.querySelector("[data-vector-add-brushstroke]"));
+    const index = (c.getNode("a") as VectorPathNode).strokes!.length - 1;
+    const layer = () => (c.getNode("a") as VectorPathNode).strokes![index];
+    const before = layer().paint;
+    const keep = () => el.querySelector("[data-vector-keep-colour]") as HTMLInputElement;
+    expect(keep().checked).toBe(false);
+    click(keep());
+    expect(c.getState().colorLocked).toBe(true);
+    expect(keep().checked).toBe(true);
+    c.setBrushstroke(index, { brushId: "chalk" }, { ids: ["a"] });
+    flushSync();
+    expect(layer()).toMatchObject({ paint: before, brush: { brushId: "chalk" } });
+    click(keep());
+    c.setBrushstroke(index, { brushId: "ballpoint" }, { ids: ["a"] });
+    expect(layer().paint).toBe("#1e3a8a");
+  });
 });

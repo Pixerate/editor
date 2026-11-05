@@ -153,7 +153,9 @@ way (`normalizeConformanceValue` in `@pixerate/editor/tools`):
 3. **Binary.** A string starting with `data:`, or at least 200 characters of base64, becomes
    `"<binary>"`: the PNG encoder is not part of the contract (pixels are compared separately).
 4. **Clock times.** An ISO 8601 date-time string becomes `"<time>"`.
-5. **Keys.** Object keys are sorted; numbers compare as numbers.
+5. **Keys.** Object keys are sorted; numbers compare as numbers, equal within a relative
+   `1e-9` (`conformanceValuesMatch`, `CONFORMANCE_NUMBER_TOLERANCE`): maths functions such as
+   `Math.sin` may differ in their last bits between CPUs, and recordings are replayed on others.
 
 ### Recording
 
@@ -170,7 +172,16 @@ whose output differs between the runs (pass a `seed` to anything random). It wri
 each step and the PNGs, and removes PNGs no step records. `--check` writes nothing and exits 1 when
 a recording is out of date. `packages/core/tests/paint-conformance.test.ts` replays every scenario
 against the source, and fails when a paint tool is not used by any scenario: a new tool needs a
-scenario in the same change.
+scenario in the same change. `vector-conformance.test.ts` does the same for vector, and also fails
+when a vector command is not run by any scenario (through `run_command` or a step of
+`run_commands`): a new command needs a scenario too.
 
 To add a scenario, write `{ "$schema", "id", "description", "setup", "steps": [{ "tool", "arguments" }] }`
 with the steps you want compared (`document`, `pixels`), then record it.
+
+Vector scenarios run commands as `{ "tool": "run_command", "arguments": { "id": "vector.addShape",
+"params": { … } } }`. Node ids come from a counter (`n1`, `n2`, … in creation order), so later steps
+use them as they are, without placeholders. They never take `pixels`; compare results, documents
+and `vector.exportSvg`. Give `generate_vector_art` and `regenerate_vector_art` a `seed`, or the
+fake generator's seed is random. Each scenario also makes one deliberate mistake (an unknown id, a
+value out of range), because error messages are part of the contract.

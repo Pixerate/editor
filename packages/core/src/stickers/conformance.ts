@@ -1,3 +1,4 @@
+import { providerCollections } from './helpers';
 import type { StickerProvider, StickerSummary } from './types';
 
 export interface StickerConformanceIssue {
@@ -36,7 +37,7 @@ function checkSummary(s: StickerSummary, provider: StickerProvider, issues: Stic
     else if (!v.includes('light')) at('variants must include light (every sticker has its light art)');
   }
   if (s.collection !== undefined && (typeof s.collection !== 'string' || !s.collection)) at('collection must be a non-empty string when present');
-  if (s.collection !== undefined && !provider.listCollections) at(`is in collection "${s.collection}" but the provider has no listCollections()`);
+  if (s.collection !== undefined && !provider.collections && !provider.listCollections) at(`is in collection "${s.collection}" but the provider has no collections()`);
 }
 
 /**
@@ -102,24 +103,24 @@ export async function checkStickerProvider(provider: StickerProvider, options: S
     if (d?.colours?.some((c) => !HEX.test(c))) top(`describe("${first.id}").colours must be #rrggbb`);
   }
   if ((await provider.describe('__no_such_sticker__')) !== undefined) top('describe of an unknown id returned a sticker');
-  if (provider.listCollections) {
+  if (provider.collections || provider.listCollections) {
     try {
-      const collections = await provider.listCollections();
+      const collections = (await providerCollections(provider)) ?? [];
       const known = new Set<string>();
       for (const c of collections) {
         if (typeof c?.id !== 'string' || !c.id || typeof c.name !== 'string' || !c.name || !(Number.isInteger(c.count) && c.count >= 0)) {
-          top(`listCollections() returned ${JSON.stringify(c)}; each needs id, name and a count`);
+          top(`collections() returned ${JSON.stringify(c)}; each needs id, name and a count`);
           continue;
         }
-        if (known.has(c.id)) top(`listCollections() lists "${c.id}" twice`);
+        if (known.has(c.id)) top(`collections() lists "${c.id}" twice`);
         known.add(c.id);
         const page = await provider.list({ collection: c.id, limit: 100 });
         if (page.total !== c.count) top(`collection "${c.id}" says count ${c.count} but list({ collection }) has ${page.total}`);
         if (page.items.some((x) => x.collection !== c.id)) top(`list({ collection: "${c.id}" }) returned stickers of other collections`);
       }
-      for (const x of all) if (x.collection !== undefined && !known.has(x.collection)) issues.push({ stickerId: x.id, message: `collection "${x.collection}" is not in listCollections()` });
+      for (const x of all) if (x.collection !== undefined && !known.has(x.collection)) issues.push({ stickerId: x.id, message: `collection "${x.collection}" is not in collections()` });
     } catch (e) {
-      top(`listCollections() rejected: ${(e as Error).message}`);
+      top(`collections() rejected: ${(e as Error).message}`);
     }
   }
   let rejected = false;

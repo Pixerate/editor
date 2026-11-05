@@ -1,0 +1,1431 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "path-editing",
+  "description": "Editing anchors and segments: moving, bending, deleting, joining, averaging, smoothing, cutting, knife, eraser and the distortion brushes.",
+  "setup": {
+    "width": 300,
+    "height": 300
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M20 20 L120 20 L120 120 L20 120 Z",
+          "fill": "#2563eb"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.moveAnchor",
+        "params": {
+          "nodeId": "n1",
+          "subpath": 0,
+          "index": 2,
+          "x": 140,
+          "y": 140
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.moveAnchor",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.bendSegment",
+        "params": {
+          "nodeId": "n1",
+          "subpath": 0,
+          "segment": 0,
+          "x": 70,
+          "y": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.bendSegment",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.deleteAnchors",
+        "params": {
+          "anchors": [
+            {
+              "nodeId": "n1",
+              "subpath": 0,
+              "index": 3
+            }
+          ],
+          "keepShape": true
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.deleteAnchors",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M150 40 L200 40",
+          "stroke": "#111827",
+          "strokeWidth": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M202 41 L250 80",
+          "stroke": "#111827",
+          "strokeWidth": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.join",
+        "params": {
+          "ids": [
+            "n2",
+            "n3"
+          ],
+          "tolerance": 5
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.join",
+          "ok": true,
+          "result": {
+            "selection": [
+              "n2"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.average",
+        "params": {
+          "axis": "horizontal",
+          "anchors": [
+            {
+              "nodeId": "n1",
+              "subpath": 0,
+              "index": 0
+            },
+            {
+              "nodeId": "n1",
+              "subpath": 0,
+              "index": 1
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.average",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M20 200 L40 210 L60 195 L80 212 L100 198 L120 205",
+          "stroke": "#111827"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.removeRedundantPoints",
+        "params": {
+          "ids": [
+            "n4"
+          ],
+          "tolerance": 4
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.removeRedundantPoints",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.smooth",
+        "params": {
+          "ids": [
+            "n4"
+          ],
+          "amount": 0.6
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.smooth",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.cut",
+        "params": {
+          "nodeId": "n4",
+          "x": 60,
+          "y": 195
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.cut",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n4",
+              "n5"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 160,
+          "y": 160,
+          "width": 100,
+          "height": 100,
+          "fill": "#16a34a"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n6"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.knife",
+        "params": {
+          "points": [
+            [
+              150,
+              210
+            ],
+            [
+              270,
+              210
+            ]
+          ],
+          "ids": [
+            "n6"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.knife",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n6",
+              "n7"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.erase",
+        "params": {
+          "points": [
+            [
+              200,
+              170
+            ],
+            [
+              200,
+              250
+            ]
+          ],
+          "size": 10
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.erase",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n6",
+              "n7"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.smudgeBrush",
+        "params": {
+          "points": [
+            [
+              30,
+              60
+            ],
+            [
+              60,
+              60
+            ]
+          ],
+          "ids": [
+            "n1"
+          ],
+          "radius": 30,
+          "strength": 0.5
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.smudgeBrush",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.twirlBrush",
+        "params": {
+          "points": [
+            [
+              70,
+              70
+            ]
+          ],
+          "ids": [
+            "n1"
+          ],
+          "radius": 40,
+          "strength": 0.5,
+          "angle": 45
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.twirlBrush",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.attractBrush",
+        "params": {
+          "points": [
+            [
+              70,
+              70
+            ]
+          ],
+          "ids": [
+            "n1"
+          ],
+          "radius": 30,
+          "strength": 0.4
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.attractBrush",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.repelBrush",
+        "params": {
+          "points": [
+            [
+              70,
+              70
+            ]
+          ],
+          "ids": [
+            "n1"
+          ],
+          "radius": 30,
+          "strength": 0.4
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.repelBrush",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.roughenBrush",
+        "params": {
+          "points": [
+            [
+              70,
+              70
+            ]
+          ],
+          "ids": [
+            "n1"
+          ],
+          "radius": 30,
+          "strength": 0.4,
+          "seed": 7
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.roughenBrush",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setEditing",
+        "params": {
+          "keepShapeOnDelete": false,
+          "pencilSmoothing": 0.5,
+          "distortMode": "twirl"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setEditing",
+          "ok": true,
+          "result": {
+            "editing": {
+              "curvatureMoves": false,
+              "distortMode": "twirl",
+              "distortSize": 20,
+              "distortStrength": 0.5,
+              "eraserSize": 10,
+              "fillGap": 0,
+              "keepShapeOnDelete": false,
+              "pencilPressure": "pen",
+              "pencilSmoothing": 0.5,
+              "recognizeShapes": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.moveAnchor",
+        "params": {
+          "nodeId": "n1",
+          "subpath": 0,
+          "index": 99,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "There is no such anchor."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPathByDimensions",
+        "params": {
+          "start": {
+            "x": 20,
+            "y": 260
+          },
+          "steps": [
+            {
+              "length": 40,
+              "angle": 0
+            },
+            {
+              "dx": 0,
+              "dy": -30
+            },
+            {
+              "x": 20,
+              "y": 230
+            }
+          ],
+          "closed": true
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPathByDimensions",
+          "ok": true,
+          "result": {
+            "anchors": [
+              {
+                "x": 20,
+                "y": 260
+              },
+              {
+                "x": 60,
+                "y": 260
+              },
+              {
+                "x": 60,
+                "y": 230
+              },
+              {
+                "x": 20,
+                "y": 230
+              }
+            ],
+            "id": "n8"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 300,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 139.75,
+                  "width": 120,
+                  "x": 20,
+                  "y": 0.25
+                },
+                "d": "M20 20L25.56 16.05L31.11 12.1L36.67 9.14L42.22 6.17L47.78 4.2L53.33 2.22L58.89 1.23L64.44 0.25L70 0.25L75.56 0.25L81.11 1.23L86.67 2.22L92.22 4.2L97.78 6.17L103.33 9.14L108.89 12.1L114.44 16.05L120 20L120.83 25L121.67 30L122.5 35L123.33 40L124.17 45L125 50L125.83 55L126.67 60L127.5 65L128.33 70L129.17 75L130 80L130.83 85L131.67 90L132.5 95L133.33 100L134.17 105L135 110L135.83 115L136.67 120L137.5 125L138.33 130L139.17 135L140 140L136.41 136.41L132.81 132.81L129.22 129.22L125.63 125.63L122.03 122.03L118.44 118.44L114.84 114.84L111.25 111.25L106.83 106.83L102.4 102.4L101.91 101.91L100.83 100.83L99.55 99.55L98.47 98.47L97.98 97.99L94 95.18L89.74 92.84L88.05 91.91L86.81 91.2L85.54 90.59L83.96 89.6L79.77 85.81L74.73 82.28L72.98 75.59L67.39 68.87L68.68 62.95L62.95 60.47L64.01 55.69L59.96 53.28L57.36 50.1L54.32 46.92L50.33 44.41L46.86 42.52L43.64 40.52L37.75 36.15L34.67 33.9L31.68 31.54L29.27 29.27L26.92 26.92Z",
+                "depth": 0,
+                "fill": "#2563eb",
+                "id": "n1",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 100,
+                  "x": 150,
+                  "y": 40
+                },
+                "d": "M150 40L200 40L250 80",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n2",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 15.02,
+                  "width": 40,
+                  "x": 20,
+                  "y": 195
+                },
+                "d": "M20 200C20 200 35.56 210.55 40 210C44.96 209.38 55.01 194.75 60 195",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n4",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 17.01,
+                  "width": 60,
+                  "x": 60,
+                  "y": 195
+                },
+                "d": "M60 195C65.24 195.26 74.76 211.61 80 212C84.87 212.37 95.19 198.84 100 198C104.17 197.27 120 205 120 205",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n5",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 50,
+                  "width": 100,
+                  "x": 160,
+                  "y": 210
+                },
+                "d": "M260 210L260 260L160 260L160 210L195 210L195 250C195 252.76 197.24 255 200 255C202.76 255 205 252.76 205 250L205 210Z",
+                "depth": 0,
+                "fill": "#16a34a",
+                "id": "n6",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 50,
+                  "width": 100,
+                  "x": 160,
+                  "y": 160
+                },
+                "d": "M160 210L160 160L260 160L260 210L205 210L205 170C205 167.24 202.76 165 200 165C197.24 165 195 167.24 195 170L195 210Z",
+                "depth": 0,
+                "fill": "#16a34a",
+                "id": "n7",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 40,
+                  "x": 20,
+                  "y": 230
+                },
+                "d": "M20 260L60 260L60 230L20 230Z",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n8",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n8"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        },
+        "document": {
+          "document": {
+            "height": 300,
+            "nodes": [
+              {
+                "fill": "#2563eb",
+                "id": "n1",
+                "name": "Path",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 20,
+                        "y": 20
+                      },
+                      {
+                        "x": 25.555555555555554,
+                        "y": 16.049382716049383
+                      },
+                      {
+                        "x": 31.111111111111107,
+                        "y": 12.098765432098764
+                      },
+                      {
+                        "x": 36.666666666666664,
+                        "y": 9.135802469135802
+                      },
+                      {
+                        "x": 42.22222222222222,
+                        "y": 6.172839506172839
+                      },
+                      {
+                        "x": 47.77777777777777,
+                        "y": 4.197530864197531
+                      },
+                      {
+                        "x": 53.33333333333333,
+                        "y": 2.2222222222222228
+                      },
+                      {
+                        "x": 58.88888888888888,
+                        "y": 1.234567901234568
+                      },
+                      {
+                        "x": 64.44444444444443,
+                        "y": 0.24691358024691357
+                      },
+                      {
+                        "x": 70,
+                        "y": 0.24691358024691346
+                      },
+                      {
+                        "x": 75.55555555555556,
+                        "y": 0.24691358024691334
+                      },
+                      {
+                        "x": 81.11111111111111,
+                        "y": 1.2345679012345674
+                      },
+                      {
+                        "x": 86.66666666666666,
+                        "y": 2.2222222222222214
+                      },
+                      {
+                        "x": 92.22222222222221,
+                        "y": 4.19753086419753
+                      },
+                      {
+                        "x": 97.77777777777777,
+                        "y": 6.1728395061728385
+                      },
+                      {
+                        "x": 103.33333333333334,
+                        "y": 9.1358024691358
+                      },
+                      {
+                        "x": 108.8888888888889,
+                        "y": 12.098765432098764
+                      },
+                      {
+                        "x": 114.44444444444446,
+                        "y": 16.049382716049383
+                      },
+                      {
+                        "x": 120,
+                        "y": 20
+                      },
+                      {
+                        "x": 120.83333333333333,
+                        "y": 25
+                      },
+                      {
+                        "x": 121.66666666666667,
+                        "y": 30
+                      },
+                      {
+                        "x": 122.5,
+                        "y": 35
+                      },
+                      {
+                        "x": 123.33333333333333,
+                        "y": 40
+                      },
+                      {
+                        "x": 124.16666666666667,
+                        "y": 45
+                      },
+                      {
+                        "x": 125,
+                        "y": 50
+                      },
+                      {
+                        "x": 125.83333333333333,
+                        "y": 55
+                      },
+                      {
+                        "x": 126.66666666666667,
+                        "y": 60
+                      },
+                      {
+                        "x": 127.5,
+                        "y": 65
+                      },
+                      {
+                        "x": 128.33333333333334,
+                        "y": 70
+                      },
+                      {
+                        "x": 129.16666666666666,
+                        "y": 75
+                      },
+                      {
+                        "x": 130,
+                        "y": 80
+                      },
+                      {
+                        "x": 130.83333333333334,
+                        "y": 85
+                      },
+                      {
+                        "x": 131.66666666666666,
+                        "y": 90
+                      },
+                      {
+                        "x": 132.5,
+                        "y": 95
+                      },
+                      {
+                        "x": 133.33333333333334,
+                        "y": 100
+                      },
+                      {
+                        "x": 134.16666666666666,
+                        "y": 105
+                      },
+                      {
+                        "x": 135,
+                        "y": 110
+                      },
+                      {
+                        "x": 135.83333333333334,
+                        "y": 115
+                      },
+                      {
+                        "x": 136.66666666666666,
+                        "y": 120
+                      },
+                      {
+                        "x": 137.5,
+                        "y": 125
+                      },
+                      {
+                        "x": 138.33333333333334,
+                        "y": 130
+                      },
+                      {
+                        "x": 139.16666666666666,
+                        "y": 135
+                      },
+                      {
+                        "x": 140,
+                        "y": 140
+                      },
+                      {
+                        "x": 136.40625,
+                        "y": 136.40625
+                      },
+                      {
+                        "x": 132.8125,
+                        "y": 132.8125
+                      },
+                      {
+                        "x": 129.21875,
+                        "y": 129.21875
+                      },
+                      {
+                        "x": 125.625,
+                        "y": 125.625
+                      },
+                      {
+                        "x": 122.03125,
+                        "y": 122.03125
+                      },
+                      {
+                        "x": 118.4375,
+                        "y": 118.4375
+                      },
+                      {
+                        "x": 114.84375,
+                        "y": 114.84375
+                      },
+                      {
+                        "x": 111.25,
+                        "y": 111.25
+                      },
+                      {
+                        "x": 106.82692307692307,
+                        "y": 106.82692307692307
+                      },
+                      {
+                        "x": 102.40384615384615,
+                        "y": 102.40384615384615
+                      },
+                      {
+                        "x": 101.91485149093175,
+                        "y": 101.91461117662368
+                      },
+                      {
+                        "x": 100.83252301656357,
+                        "y": 100.83220259896274
+                      },
+                      {
+                        "x": 99.55188347989973,
+                        "y": 99.55260442946872
+                      },
+                      {
+                        "x": 98.4679556300982,
+                        "y": 98.47180067674677
+                      },
+                      {
+                        "x": 97.97576221631707,
+                        "y": 97.98577534940222
+                      },
+                      {
+                        "x": 94.00083524253424,
+                        "y": 95.17506068839285
+                      },
+                      {
+                        "x": 89.73802738396982,
+                        "y": 92.84134065761016
+                      },
+                      {
+                        "x": 88.05135172503167,
+                        "y": 91.907063111824
+                      },
+                      {
+                        "x": 86.8052562321791,
+                        "y": 91.20362901265473
+                      },
+                      {
+                        "x": 85.54034734099562,
+                        "y": 90.5887060268718
+                      },
+                      {
+                        "x": 83.96488632463905,
+                        "y": 89.6007646599389
+                      },
+                      {
+                        "x": 79.76899928194229,
+                        "y": 85.80674658886346
+                      },
+                      {
+                        "x": 74.72543514947176,
+                        "y": 82.27954406051327
+                      },
+                      {
+                        "x": 72.98262356649579,
+                        "y": 75.59328640016014
+                      },
+                      {
+                        "x": 67.38882645034415,
+                        "y": 68.87176363933169
+                      },
+                      {
+                        "x": 68.67859023588824,
+                        "y": 62.95139489604145
+                      },
+                      {
+                        "x": 62.95389896426401,
+                        "y": 60.47351133673145
+                      },
+                      {
+                        "x": 64.01240727634264,
+                        "y": 55.6866327470212
+                      },
+                      {
+                        "x": 59.96447428686644,
+                        "y": 53.27779825284189
+                      },
+                      {
+                        "x": 57.363923915729096,
+                        "y": 50.1033518666043
+                      },
+                      {
+                        "x": 54.31599947359799,
+                        "y": 46.91608043106433
+                      },
+                      {
+                        "x": 50.33098289272161,
+                        "y": 44.414517189955035
+                      },
+                      {
+                        "x": 46.856955289694156,
+                        "y": 42.51731191171699
+                      },
+                      {
+                        "x": 43.64137311003448,
+                        "y": 40.52461816176421
+                      },
+                      {
+                        "x": 37.74897652457963,
+                        "y": 36.15384615384616
+                      },
+                      {
+                        "x": 34.674204691187136,
+                        "y": 33.904804775985546
+                      },
+                      {
+                        "x": 31.680483746938005,
+                        "y": 31.53846153846154
+                      },
+                      {
+                        "x": 29.270589036827708,
+                        "y": 29.27005139635837
+                      },
+                      {
+                        "x": 26.92307692307692,
+                        "y": 26.92307692307692
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n2",
+                "name": "Path",
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 150,
+                        "y": 40
+                      },
+                      {
+                        "x": 200,
+                        "y": 40
+                      },
+                      {
+                        "x": 250,
+                        "y": 80
+                      }
+                    ],
+                    "closed": false
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n4",
+                "name": "Path",
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 20,
+                        "y": 200
+                      },
+                      {
+                        "in": {
+                          "x": 35.562398430198165,
+                          "y": 210.5547001962252
+                        },
+                        "out": {
+                          "x": 44.96138938356834,
+                          "y": 209.37982632705396
+                        },
+                        "type": "smooth",
+                        "x": 40,
+                        "y": 210
+                      },
+                      {
+                        "in": {
+                          "x": 55.00623830561078,
+                          "y": 194.75031191528055
+                        },
+                        "x": 60,
+                        "y": 195
+                      }
+                    ],
+                    "closed": false
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n5",
+                "name": "Path",
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "out": {
+                          "x": 65.24321197554026,
+                          "y": 195.262160598777
+                        },
+                        "x": 60,
+                        "y": 195
+                      },
+                      {
+                        "in": {
+                          "x": 74.76494105687682,
+                          "y": 211.60737057926576
+                        },
+                        "out": {
+                          "x": 84.86894753444989,
+                          "y": 212.36517106508376
+                        },
+                        "type": "smooth",
+                        "x": 80,
+                        "y": 212
+                      },
+                      {
+                        "in": {
+                          "x": 95.19046832778871,
+                          "y": 198.841668042637
+                        },
+                        "out": {
+                          "x": 104.17448427727315,
+                          "y": 197.26946525147721
+                        },
+                        "type": "smooth",
+                        "x": 100,
+                        "y": 198
+                      },
+                      {
+                        "x": 120,
+                        "y": 205
+                      }
+                    ],
+                    "closed": false
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#16a34a",
+                "id": "n6",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 260,
+                        "y": 210
+                      },
+                      {
+                        "x": 260,
+                        "y": 260
+                      },
+                      {
+                        "x": 160,
+                        "y": 260
+                      },
+                      {
+                        "x": 160,
+                        "y": 210
+                      },
+                      {
+                        "x": 195,
+                        "y": 210
+                      },
+                      {
+                        "out": {
+                          "x": 195,
+                          "y": 252.76142374915398
+                        },
+                        "x": 195,
+                        "y": 250
+                      },
+                      {
+                        "in": {
+                          "x": 197.23857625084602,
+                          "y": 255
+                        },
+                        "out": {
+                          "x": 202.76142374915398,
+                          "y": 255
+                        },
+                        "type": "symmetric",
+                        "x": 200,
+                        "y": 255
+                      },
+                      {
+                        "in": {
+                          "x": 205,
+                          "y": 252.76142374915398
+                        },
+                        "x": 205,
+                        "y": 250
+                      },
+                      {
+                        "x": 205,
+                        "y": 210
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#16a34a",
+                "id": "n7",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 160,
+                        "y": 210
+                      },
+                      {
+                        "x": 160,
+                        "y": 160
+                      },
+                      {
+                        "x": 260,
+                        "y": 160
+                      },
+                      {
+                        "x": 260,
+                        "y": 210
+                      },
+                      {
+                        "x": 205,
+                        "y": 210
+                      },
+                      {
+                        "out": {
+                          "x": 205,
+                          "y": 167.23857625084602
+                        },
+                        "x": 205,
+                        "y": 170
+                      },
+                      {
+                        "in": {
+                          "x": 202.76142374915398,
+                          "y": 165
+                        },
+                        "out": {
+                          "x": 197.23857625084602,
+                          "y": 165
+                        },
+                        "type": "symmetric",
+                        "x": 200,
+                        "y": 165
+                      },
+                      {
+                        "in": {
+                          "x": 195,
+                          "y": 167.23857625084602
+                        },
+                        "x": 195,
+                        "y": 170
+                      },
+                      {
+                        "x": 195,
+                        "y": 210
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n8",
+                "name": "Path",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 20,
+                        "y": 260
+                      },
+                      {
+                        "x": 60,
+                        "y": 260
+                      },
+                      {
+                        "x": 60,
+                        "y": 230
+                      },
+                      {
+                        "x": 20,
+                        "y": 230
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

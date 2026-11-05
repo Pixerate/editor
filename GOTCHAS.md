@@ -3561,8 +3561,9 @@ All contributors and AI assistants should check this file before starting work a
   - `colour.own` brushes paint their default at every stroke, resolved when the stroke starts. The stroke records the hex, so replays in another scheme stay exact.
   - Gradient defaults were already the brush's own paint. Effect defaults stay a suggestion.
   - The image editor's `setBrushPreset` takes the default as the foreground unless `keepColour`.
-  - Canvas: `selectBrush(id, { keepColour })` takes the default (`CanvasBrushPreset.defaultColor`) for the controller's `colorScheme`; `drawStroke` with a brush and no `style.color` paints in it, so agents get the ballpoint's blue without asking.
-  - Vector: `addBrushstroke` and `setBrushstroke` with another brush take its default unless `keepColour`; an explicit `color` always wins. Existing strokes keep their colour when the scheme changes.
+  - Canvas: `selectBrush(id, { keepColour })` takes the default (`CanvasBrushPreset.defaultColor`) for the controller's `colorScheme`, unless `setColorLocked(true)` (`canvas.setColorLocked`). Like paint, a light / dark default taken this way resolves again on `setColorScheme` until `setStyle` sets a colour (or the pen / highlighter switch resets the style); locking afterwards doesn't stop it following, since the colour is still the brush's. `drawStroke` with a brush and no `style.color` paints in it, so agents get the ballpoint's blue without asking; the lock doesn't apply there, since `drawStroke` ignores the picker's style anyway.
+  - Vector: `addBrushstroke` and `setBrushstroke` with another brush take its default unless `keepColour` or `setColorLocked(true)` (`vector.setColorLocked`); an explicit `color` always wins. Existing strokes keep their colour when the scheme changes: vector has no current brush colour to follow.
+  - A host that keeps the picked brush in its own state (the demo's canvas tab did) undoes an agent's `canvas.selectBrush` on the next render. Read the brush from the draw style instead.
 
 ### [core/paint-editor] Stamp Tips and Spray Run in Both Dab Engines
 
@@ -3570,11 +3571,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: A dab brush paints through `DryStroke`, or through `PaintDabStroke` (the exchange path) when it picks paint up or takes gradient paint. At first only `DryStroke` asked `stampSampler` for the tip and scattered droplets.
 - **Solution / Workaround**: Both engines rasterise stamp tips (`rasterizeStampDab`) and expand dabs into droplets with the shared `sprayDroplets(dab, spray, seed)`. In the exchange path each droplet picks up and lays paint, so a dirty spray mixes droplet by droplet. Keep droplet generation in that one helper so the two engines can't drift. The normaliser still drops scatter marks on bristle, wet and thick brushes and on the Mixer Brush, which have engines of their own. Provider sticker art must be loaded first (`prepareStickers`, which `set_brush` and `paint_stroke` call); until it is, the tip paints round. Canvas, vector and image profiles refuse stamp tips and scatter marks.
 
-### [core/brushes] Every Built-In Preset Needs a Flat Twin in `BUILTIN_BRUSHES`
+### [core/brushes] `BUILTIN_BRUSHES` Is Derived From `BRUSH_PRESETS`; Don't Import It Into `brushes/resolve`
 
-- **Issue / Symptom**: A preset added to `BRUSH_PRESETS` alone failed "has a facet spec for every built-in brush". Canvas and vector also threw while building their lists (`find` returned undefined).
-- **Root Cause**: The paint editor's v1 `BUILTIN_BRUSHES` is still a hand-written flat list. The hosts pair each preset with its flat brush by id. Making `BUILTIN_BRUSHES` resolve the presets would create an import cycle (`brushes/resolve` imports `paint-editor/brushes`).
-- **Solution / Workaround**: Add the facet spec, then generate the flat entry from what it resolves to: `engineChanges(normalizePaintBrush({ id, name }), resolveBrush(spec))`, with the category set by hand. Append it at the same position in both lists. `tests/brushes.test.ts` checks every pair deep-equals.
+- **Issue / Symptom**: Every facet preset in `BRUSH_PRESETS` used to need a hand-written flat twin in the paint editor's `BUILTIN_BRUSHES`. Deriving the list from the presets created an import cycle, because `brushes/resolve` imported `paint-editor/brushes` for `normalizePaintBrush`.
+- **Root Cause**: The engine brush type and its normaliser lived in the same module as the built-in list that has to resolve the presets.
+- **Solution / Workaround**: The engine brush (`PaintBrush`, its settings, `normalizePaintBrush`) lives in `paint-editor/brush-model.ts`, which `brushes/resolve` imports. `paint-editor/brushes.ts` re-exports it and builds `BUILTIN_BRUSHES` as `BRUSH_PRESETS.map((spec) => resolveBrush(spec, { builtin: true }))`. Add a preset to `BRUSH_PRESETS` only, then run `pnpm contracts`: `tests/brushes.test.ts` checks each built-in brush against the committed `resolved.json`. Never import `paint-editor/brushes` (or anything that does) from `brushes/resolve`, `brushes/presets` or `brush-model.ts`; use `brush-model` for engine types and the normaliser.
 
 ### [core/canvas] Canvas and Vector Strokes Copy a Saved Brush Into the Stroke
 
@@ -3840,3 +3841,17 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `DEEP_BENCH=1 vitest run tests/raster-deep.bench.test.ts` passed but printed no timing table; the same happened for `WET_BENCH` and `SELECTION_BENCH`, so the scheduled benchmark job would have recorded nothing for them.
 - **Root Cause**: Vitest 5 drops the console output of passing tests by default, and those benchmarks only `console.log` their results (the image-layers, spreadsheet and transform benchmarks also write `*_BENCH_OUT` files).
 - **Solution / Workaround**: Run them with `vitest run --silent=false` (as `.github/workflows/scheduled-suites.yml` does, teeing the log into the step summary and artifact), or add a `*_BENCH_OUT` file to the benchmark.
+### [core/vector] Regenerating Vector Art Without a Seed Picks a Random One
+- **Issue / Symptom**: The vector scenario recorder refused `effects-and-generation`: the document after `regenerate_vector_art` differed between its two runs, in the generation provenance's `seed`.
+- **Root Cause**: Without a `seed`, generation and regeneration draw a fresh random seed (so a new take looks different), and record it in the provenance.
+- **Solution / Workaround**: Scenarios pass a `seed` to both `generate_vector_art` and `regenerate_vector_art`. The provenance's `createdAt` is normalised to `"<time>"` by the runner, so it needs nothing.
+
+### [core] Trig Results Differ in the Last Bits Between Mac and Linux, So Recordings Compare Numbers Within 1e-9
+- **Issue / Symptom**: The vector `blends-and-envelopes` scenario, recorded on an M-series Mac, failed on the Linux CI runner: a blend step's rotation matrix read `0.6595295122134215` where the recording had `0.6595295122134217`.
+- **Root Cause**: V8's `Math.sin` / `Math.cos` are fdlibm ports compiled per CPU, and clang fuses multiply-adds on arm64 but not on x64, so results can differ in the last bits. Anything stored straight from trig (orient-to-spine transforms, rotations) is then machine-dependent.
+- **Solution / Workaround**: The TS replay tests compare with `conformanceValuesMatch` (numbers equal within a relative `CONFORMANCE_NUMBER_TOLERANCE`, 1e-9), as the Swift runner always has; on a mismatch they fall back to `toEqual` to show the diff. Recordings stay exact. Strings are still compared exactly, so text that formats such a number (SVG path data, messages) should round it, as `exportSvg`'s `precision` does.
+
+### [swift] PixerateMarkdown's Growth Checks Remeasure While the Ratio Looks Superlinear
+- **Issue / Symptom**: `MarkdownSpecTests.testParseTimeGrowth` failed on the iOS simulator job of unrelated PRs: "growth angle brackets 5k 15.8 ms 20k 171.2 ms ×10.8", over the limit of 10. The same parse is ×4.0 locally, in both debug and release builds.
+- **Root Cause**: The shared CI simulator can stall for the length of a whole measurement round, so even the best of five alternating runs can catch the large input in a slow stretch.
+- **Solution / Workaround**: `TimingBudget.growth` measures up to four rounds while the ratio is above 5 and keeps the best times. A linear parse settles near ×4; a quadratic one stays near ×16 in every round, so it still fails. As with the TS `measureGrowth`, never fix such a flake by raising the limit alone.
