@@ -1,4 +1,4 @@
-import { sanitizeVectorBrushstroke, vectorBrushstrokeBrushError, vectorBrushstrokeDefaultColour, vectorBrushstrokeBrushes, vectorBrushstrokeCharacterError } from './brushstroke.js';
+import { onVectorBrushstrokesSettled, sanitizeVectorBrushstroke, vectorBrushstrokePaintError, vectorBrushstrokeBrushError, vectorBrushstrokeDefaultColour, vectorBrushstrokeBrushes, vectorBrushstrokeCharacterError } from './brushstroke.js';
 import { snapshotBrushLibrary, type BrushLibrary, type BrushLibrarySnapshot } from '../brushes/library.js';
 import type { BrushPreviewRenderer } from '../brushes/tools.js';
 import type { PaintBrush } from '../paint-editor/brushes.js';
@@ -319,6 +319,7 @@ import type {
 	VectorGeomRef,
 	VectorParameter,
 	VectorBrushstroke,
+	VectorBrushstrokePaint,
 	VectorBrushstrokePaper
 } from './types.js';
 
@@ -1626,7 +1627,9 @@ export class VectorEditorController {
 		this.cleanups.push(
 			this.history.subscribe((h) => {
 				if (!this.applying && this.historyDiffers(h)) this.notify();
-			})
+			}),
+			// A wet brushstroke settled: views redraw with its final image.
+			onVectorBrushstrokesSettled(() => this.notify())
 		);
 		// Catch up on history changes made while disconnected.
 		if (this.historyDiffers(this.history.getState())) this.state = this.computeState();
@@ -3137,6 +3140,8 @@ export class VectorEditorController {
 		if (brush.size !== undefined && !(brush.size > 0 && brush.size <= 500)) return { ok: false, message: 'size must be above 0 and at most 500 (document units).' };
 		const characterError = vectorBrushstrokeCharacterError(brush);
 		if (characterError) return { ok: false, message: characterError };
+		const paintError = brush.paint !== undefined ? vectorBrushstrokePaintError(brush.paint) : null;
+		if (paintError) return { ok: false, message: paintError };
 		if (options.color !== undefined && !parseVectorColor(options.color)) return { ok: false, message: `"${options.color}" is not a colour.` };
 		if (options.opacity !== undefined && !(options.opacity >= 0 && options.opacity <= 1)) return { ok: false, message: 'opacity must be from 0 to 1.' };
 		const own = options.keepColour || this.colorLocked ? null : vectorBrushstrokeDefaultColour(clean.brushId, user, this.colorScheme);
@@ -3159,7 +3164,7 @@ export class VectorEditorController {
 	 */
 	setBrushstroke(
 		index: number,
-		patch: { brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; keepColour?: boolean; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null },
+		patch: { brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; keepColour?: boolean; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null; paint?: VectorBrushstrokePaint | null },
 		options: { ids?: readonly string[]; merge?: boolean | string } = {}
 	): VectorActionResult {
 		const user = this.brushes?.user ?? [];
@@ -3170,6 +3175,8 @@ export class VectorEditorController {
 		if (patch.opacity !== undefined && !(patch.opacity >= 0 && patch.opacity <= 1)) return { ok: false, message: 'opacity must be from 0 to 1.' };
 		const characterError = vectorBrushstrokeCharacterError({ ...(patch.seed !== null && patch.seed !== undefined ? { seed: patch.seed } : {}), ...(patch.paper !== undefined ? { paper: patch.paper } : {}) });
 		if (characterError) return { ok: false, message: characterError };
+		const paintError = patch.paint !== undefined && patch.paint !== null ? vectorBrushstrokePaintError(patch.paint) : null;
+		if (paintError) return { ok: false, message: paintError };
 		const merge = options.merge === true ? `brushstroke:${index}` : options.merge || undefined;
 		return this.editStacks(
 			'stroke',
@@ -3188,6 +3195,8 @@ export class VectorEditorController {
 				if (patch.seed === null) delete brush.seed;
 				else if (patch.seed !== undefined) brush.seed = patch.seed;
 				if (patch.paper !== undefined) brush.paper = patch.paper;
+				if (patch.paint === null) delete brush.paint;
+				else if (patch.paint !== undefined) brush.paint = patch.paint;
 				const own = patch.brushId && patch.brushId !== layer.brush.brushId && !patch.keepColour && !this.colorLocked ? vectorBrushstrokeDefaultColour(patch.brushId, user, this.colorScheme) : null;
 				const colour = patch.color ?? own;
 				const next: VectorStrokeLayer = { ...layer, brush: sanitizeVectorBrushstroke(brush, user) ?? layer.brush, ...(colour ? { paint: colour } : {}), ...(patch.opacity !== undefined ? { opacity: patch.opacity } : {}) };
