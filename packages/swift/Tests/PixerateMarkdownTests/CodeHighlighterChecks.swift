@@ -152,9 +152,7 @@ enum CodeHighlighterChecks {
         func ms(_ language: CodeLanguage, _ code: String) -> Double {
             var best = Double.infinity
             for _ in 0..<3 {
-                let start = Date()
-                _ = CodeHighlighter.tokens(for: code, language: language)
-                best = min(best, Date().timeIntervalSince(start) * 1000)
+                best = min(best, TimingBudget.cpuMilliseconds { _ = CodeHighlighter.tokens(for: code, language: language) })
             }
             return best
         }

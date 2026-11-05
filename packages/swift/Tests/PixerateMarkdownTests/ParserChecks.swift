@@ -454,9 +454,7 @@ enum ParserChecks {
             ("long document", String(repeating: "## Head *x*\n\nPara **b** [l](u) `c`\n\n- item\n\n", count: 1000)),
         ]
         for (name, input) in pathological {
-            let start = Date()
-            _ = MarkdownDocument.parse(input)
-            let ms = Date().timeIntervalSince(start) * 1000
+            let ms = TimingBudget.cpuMilliseconds { _ = MarkdownDocument.parse(input) }
             let ok = ms < 2000 * TimingBudget.scale
             if !ok { failures += 1 }
             print(String(format: "  %@ %-20@ %7.1f ms", ok ? "✓" : "❌", name as NSString, ms))
@@ -489,9 +487,7 @@ enum ParserChecks {
         // activeBlockFormat on a long selection walked the tree once per selected line (§5.3)
         let lines = (0..<400).map { "Line \($0) of a long selection with **bold** text" }.joined(separator: "\n\n")
         let formatting = MarkdownFormatting(text: lines)
-        let start = Date()
-        _ = formatting.activeBlockFormat(selection: NSRange(location: 0, length: (lines as NSString).length))
-        let ms = Date().timeIntervalSince(start) * 1000
+        let ms = TimingBudget.cpuMilliseconds { _ = formatting.activeBlockFormat(selection: NSRange(location: 0, length: (lines as NSString).length)) }
         let ok = ms < 15 * TimingBudget.scale
         if !ok { failures += 1 }
         print(String(format: "  %@ activeBlockFormat, 400 lines selected %6.1f ms", ok ? "✓" : "❌", ms))

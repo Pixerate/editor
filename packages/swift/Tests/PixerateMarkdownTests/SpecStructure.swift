@@ -53,17 +53,28 @@ enum TimingBudget {
         #endif
     }
 
-    /// The best times (ms) of `run` on a small and a 4× input, alternating the two five times so
-    /// that a busy stretch on the machine slows both rather than only one of them. While the ratio
-    /// looks worse than linear it measures again, up to four rounds: a shared CI simulator can
-    /// stall for a whole round (×10.8 there for a parse that is ×4.0 locally), and a quadratic
+    /**
+     * Milliseconds of CPU time the calling thread spent in `body`. Wall-clock time also counts
+     * the time other threads and processes held the CPU: on the iOS simulator job, where other
+     * suites run alongside (the wet-paint tests on every core), a 90 ms parse kept being
+     * interrupted while a 4 ms one slipped through, so a linear parse measured ×22 (and ×10.8).
+     */
+    static func cpuMilliseconds(_ body: () -> Void) -> Double {
+        func now() -> Double {
+            var ts = timespec()
+            clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts)
+            return Double(ts.tv_sec) * 1000 + Double(ts.tv_nsec) / 1_000_000
+        }
+        let start = now()
+        body()
+        return now() - start
+    }
+
+    /// The best CPU times (ms) of `run` on a small and a 4× input, alternating the two five times.
+    /// While the ratio looks worse than linear it measures again, up to four rounds; a quadratic
     /// path stays at ~16× however often it is measured.
     static func growth(small: String, large: String, _ run: (String) -> Void) -> (small: Double, large: Double) {
-        func time(_ input: String) -> Double {
-            let start = Date()
-            run(input)
-            return Date().timeIntervalSince(start) * 1000
-        }
+        func time(_ input: String) -> Double { cpuMilliseconds { run(input) } }
         var best = (small: Double.infinity, large: Double.infinity)
         for round in 0..<4 {
             for _ in 0..<5 {
