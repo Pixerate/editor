@@ -321,7 +321,7 @@ extension JSONValue {
 
     /// A number as JavaScript prints it (`Number.prototype.toString`): shortest round trip,
     /// plain digits from 1e-6 up to 1e21, exponents (`1e+21`, `1e-7`) outside.
-    static func jsNumber(_ n: Double) -> String {
+    public static func jsNumber(_ n: Double) -> String {
         guard n.isFinite else { return "null" }
         if n == 0 { return "0" }
         // Swift's description is the shortest round-trip form; re-lay its digits the JS way.

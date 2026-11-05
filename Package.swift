@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "PixerateConformance", targets: ["PixerateConformance"]),
         .library(name: "PixeratePaintUI", targets: ["PixeratePaintUI"]),
         .library(name: "PixerateMarkdown", targets: ["PixerateMarkdown"]),
+        .library(name: "PixerateGeometry", targets: ["PixerateGeometry"]),
     ],
     targets: [
         // Foundation only: no SwiftUI, AppKit or UIKit (the UI targets are the only ones that import them).
@@ -49,6 +50,10 @@ let package = Package(
         // HTML → Markdown converter, code highlighter, and the AST formatting and editing commands.
         // Foundation only, with no dependency on the other targets, so apps can take it on its own.
         .target(name: "PixerateMarkdown", path: "packages/swift/Sources/PixerateMarkdown", swiftSettings: settings),
+        // The vector editor's path operations (`canvas/pathops`, `curveFit`, `shapeGeometry` and
+        // `polygonBoolean` in the TS core): Bézier maths, curve booleans, stroke outlines, the planar
+        // map, Pathfinder and curve fitting, bit-exact with the TS. Foundation only.
+        .target(name: "PixerateGeometry", dependencies: ["PixerateCore", "PixerateRaster"], path: "packages/swift/Sources/PixerateGeometry", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
@@ -81,6 +86,13 @@ let package = Package(
             name: "PixerateMarkdownTests",
             dependencies: ["PixerateMarkdown"],
             path: "packages/swift/Tests/PixerateMarkdownTests",
+            resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateGeometryTests",
+            dependencies: ["PixerateGeometry", "PixerateCore"],
+            path: "packages/swift/Tests/PixerateGeometryTests",
             resources: [.copy("Fixtures")],
             swiftSettings: settings
         ),
