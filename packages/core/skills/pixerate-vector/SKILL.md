@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints, artboards and frames with resizing constraints, connectors, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping and opacity masks, gradients (linear, radial, conic, mesh, freeform), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints, artboards and frames with resizing constraints, connectors, stacked fills and strokes with blend modes, brushstrokes with brush character and paper grain, drop shadows, glows and blurs, clipping and opacity masks, gradients (linear, radial, conic, mesh, freeform), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -20,7 +20,9 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
   `{ type, stops: [{ offset, color, opacity?, midpoint? }], ... }`.
 - **Appearance**: a path can stack several fills and several strokes (bottom to top; all fills
   draw under all strokes), each with its own paint, `opacity`, `blendMode` and `visible`, and
-  each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile. Layers
+  each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile, or a
+  **brushstroke** (`vector.addBrushstroke`, `vector.setBrushstroke`, `vector.listBrushes`) painted
+  along the outline with a dry brush, seeded jitter and paper grain. Layers
   are addressed by `index` in their stack, 0 at the bottom. `fill` / `stroke` and the stroke
   settings of `vector.setStyle` are shorthands for the **top** layer; `null` clears the stack.
   Any node can also have a `blendMode` and `filters` (drop / inner shadow, outer / inner glow,
@@ -101,7 +103,7 @@ the pitfalls, and uses the commands below.
   than splitting text into separate nodes, so it still edits as one paragraph. Create Outlines
   only for final artwork or logos that must not depend on fonts; keep a copy as text if it may
   change.
-- **Paths, strokes, booleans, gradients, stacks, masks, shadows, connectors, constraints and
+- **Paths, strokes, brushstrokes, booleans, gradients, stacks, masks, shadows, connectors, constraints and
   vertical text:** read [references/best-practices.md](references/best-practices.md) first.
 - **Non-destructive first.** Live booleans (`vector.boolean` with `live: true`), path effects
   and envelopes keep the operands editable. A destructive boolean or Pathfinder replaces its

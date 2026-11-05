@@ -211,4 +211,18 @@ describe('pigment blend mode through the image editor', () => {
     reopened.loadPsd(bytes);
     expect(reopened.getLayers().map((l) => l.blend)).not.toContain('pigment');
   });
+
+  it('PSD export writes the painterly blend modes as Normal, without a warning (as the image skill says)', async () => {
+    const { c, registry } = setup();
+    const modes = ['watercolor', 'tint', 'highlight', 'shadow'] as const;
+    for (const mode of modes) {
+      const id = c.addPixelLayer({ name: `Wash ${mode}`, color: '#3366cc' });
+      const res = await registry.callTool('set_layer_properties', { layerId: id, blend: mode, opacity: 0.5 });
+      expect(res.isError, JSON.stringify(res.content)).toBeFalsy();
+    }
+    const { bytes, warnings } = await c.toPsd();
+    expect(warnings).toEqual([]);
+    const psd = readPsd(bytes);
+    for (const mode of modes) expect(psd.layers.find((r) => r.legacyName === `Wash ${mode}`)!.blendKey).toBe('norm');
+  });
 });
