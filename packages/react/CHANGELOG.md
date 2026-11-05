@@ -1,5 +1,27 @@
 # @pixerate/editor-react
 
+## 0.182.0
+
+### Minor Changes
+
+- aeedd05: Add path-node and words controls to `AnimationEffectsPanel` in React and Svelte, plus `AnimationEditorController.setVectorEffectPath` and its `set_vector_effect_path` agent tool in core, so an applied vector effect can be run along a path node (landing on it) or words in place, in one undo step (#496).
+- 3155b37: Canvas and vector get the paint editor's "Keep my colour" lock, and a canvas colour taken from a brush's light / dark default follows the colour scheme (#589).
+
+  - Canvas draw controller: `setColorLocked` / `colorLocked` (and a `colorLocked` option), which `selectBrush` respects; a colour taken from a light / dark default resolves again on `setColorScheme` until another colour is set; `colorScheme` and `brushSettings()`. Agents get `canvas.selectBrush`, `canvas.setColorLocked` and `canvas.setColorScheme` from `createDrawCommands`.
+  - Vector controller: `setColorLocked`, a `colorLocked` option, and `colorScheme` / `colorLocked` in the state; `addBrushstroke` and `setBrushstroke` keep the colour while locked. Strokes already made never change. Agents get `vector.setColorLocked` and `vector.setColorScheme`, and `vector.listBrushes` reports both.
+  - React `useCanvasDraw`: `colorLocked`, `setColorLocked`, `brushSettings` and an `initialColorLocked` option. Svelte `createCanvasDraw`: `colorLocked`, `setColorLocked`, `colorScheme` and `brushSettings`.
+  - `<VectorAppearancePanel>` (React and Svelte) has a "Keep my colour" toggle under brushstrokes.
+
+### Patch Changes
+
+- Updated dependencies [f6b0b95]
+- Updated dependencies [aeedd05]
+- Updated dependencies [3155b37]
+- Updated dependencies [365d86e]
+- Updated dependencies [de3ed2e]
+- Updated dependencies [b5b703d]
+  - @pixerate/editor@0.267.0
+
 ## 0.181.0
 
 ### Minor Changes
