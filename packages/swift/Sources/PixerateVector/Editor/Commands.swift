@@ -120,8 +120,8 @@ private let STYLE_PROPS = ["fills", "strokes", "fill", "stroke", "strokeWidth", 
 private func checkPaint(_ paint: JSONValue?, _ where_: String) throws -> JSONValue? {
     guard let paint, paint.objectValue != nil else { return paint }
     if let t = paint["type"]?.stringValue, t == "mesh" || t == "freeform" {
-        // not ported yet: mesh and freeform gradients (sanitizeVectorShadedPaint) (#624)
-        throw VectorNotPorted("mesh and freeform gradients")
+        guard let shaded = sanitizeVectorShadedPaint(paint) else { throw fail("\(where_) is not a valid mesh or freeform gradient (see vector.setMeshGradient / vector.setFreeformGradient).") }
+        return .object(shaded)
     }
     guard let g = sanitizeVectorGradient(paint) else { throw fail("\(where_) is not a valid gradient: give a type and at least one stop { offset, color }.") }
     return .object(g)
@@ -466,6 +466,7 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     }
     vectorAppearanceRuns(&r)
     vectorStrokeRuns(&r)
+    vectorShadingRuns(&r)
     return r
 }
 
@@ -802,5 +803,64 @@ private func vectorStrokeRuns(_ r: inout [String: VectorCommandRun]) {
     r["vector.setColorScheme"] = { c, params in
         c.setColorScheme(VectorParams(params).str("scheme") ?? "light")
         return brushColourResult(c)
+    }
+}
+
+// MARK: - Meshes and freeform gradients
+
+/// `{ id, shading }`: the mesh or freeform fill of path `id` in document units.
+private func shadingResult(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let shading = c.getShading(id) else { throw fail("\"\(id)\" has no mesh or freeform fill.") }
+    return .object(JSONObject([("id", .string(id)), ("shading", .object(shading))]))
+}
+
+private func vectorShadingRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.getShading"] = { c, params in try shadingResult(c, VectorParams(params).str("id") ?? "") }
+    r["vector.setMeshGradient"] = { c, params in
+        let p = VectorParams(params)
+        let list = try targetIds(c, p)
+        try check(c.setMeshGradient(rows: p.num("rows") ?? .nan, columns: p.num("columns") ?? .nan, colors: p.strings("colors"), corners: p.strings("corners"), ids: list))
+        return ["meshes": .array(try list.map { try shadingResult(c, $0) })]
+    }
+    r["vector.setMeshPoint"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        if params.keys.allSatisfy({ $0 == "id" || $0 == "index" }) { throw fail("Pass at least one of x / y, color, opacity.") }
+        try check(c.setMeshPoint(id, p.int("index") ?? 0, x: p.num("x"), y: p.num("y"), color: p.str("color"), opacity: p.num("opacity")))
+        return try shadingResult(c, id)
+    }
+    r["vector.setFreeformGradient"] = { c, params in
+        let p = VectorParams(params)
+        let list = try targetIds(c, p)
+        try check(c.setFreeformGradient(points: params["points"]?.arrayValue, lines: params["lines"]?.arrayValue, colors: p.strings("colors"), ids: list))
+        return ["gradients": .array(try list.map { try shadingResult(c, $0) })]
+    }
+    r["vector.addFreeformPoint"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        let (result, index) = c.addFreeformPoint(id, x: p.num("x") ?? .nan, y: p.num("y") ?? .nan, color: p.str("color"), opacity: p.num("opacity"), spread: p.num("spread"))
+        try check(result)
+        guard case var .object(o) = try shadingResult(c, id) else { return .null }
+        o["index"] = .number(Double(index ?? 0))
+        return .object(o)
+    }
+    r["vector.setFreeformPoint"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        if params.keys.allSatisfy({ $0 == "id" || $0 == "index" }) { throw fail("Pass at least one of x / y, color, opacity, spread.") }
+        try check(c.setFreeformPoint(id, p.int("index") ?? 0, x: p.num("x"), y: p.num("y"), color: p.str("color"), opacity: p.num("opacity"), spread: p.num("spread")))
+        return try shadingResult(c, id)
+    }
+    r["vector.removeFreeformPoint"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        try check(c.removeFreeformPoint(id, p.int("index") ?? 0))
+        return try shadingResult(c, id)
+    }
+    r["vector.setFreeformLines"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        try check(c.setFreeformLines(id, params["lines"]?.arrayValue ?? []))
+        return try shadingResult(c, id)
     }
 }

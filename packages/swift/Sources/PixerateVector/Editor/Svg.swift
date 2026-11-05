@@ -5,11 +5,11 @@ import PixerateRaster
 
 // SVG export and import (`vectorDocumentToSvg` and `parseVectorSvg` in `vector/svg.ts`).
 //
-// Export writes plain paths and groups with colour and gradient paints (linear and radial, see
-// `Gradient.swift`), paint stacks, live corners, live booleans (drawn shapes plus the hidden
+// Export writes plain paths and groups with colour, gradient, mesh and freeform paints (see
+// `Gradient.swift` and `Shading.swift`), paint stacks, live corners, live booleans (drawn shapes plus the hidden
 // source), transforms, opacity, visibility, blend modes and filters.
 // Stroke parts (inside / outside alignment, arrowheads, width profiles), masks,
-// frames, text, instances, symbols, blends, shading, connectors, generated art,
+// frames, text, instances, symbols, blends, connectors, generated art,
 // lenses and brushstrokes throw `VectorNotPorted` (#624).
 
 private func escapeAttr(_ value: String) -> String {
@@ -29,16 +29,29 @@ func vectorCornersAttribute(_ subpaths: [VectorSubpath], _ precision: Int = 3) -
     return out.joined(separator: " ")
 }
 
-/// A paint server's markup (`paintDefMarkup`): the first def of a gradient carries
-/// `data-vector-gradient` (the gradient as JSON) so import restores what SVG cannot say.
-private func paintDefMarkup(_ def: VectorPaintDef, _ gradient: JSONValue?) -> String {
+private func attrsMarkup(_ attrs: JSONObject) -> String {
+    attrs.map { k, v in " \(k)=\"\(escapeAttr(v.stringValue ?? v.numberValue.map(JSONValue.jsNumber) ?? v.stringified()))\"" }.joined()
+}
+
+/// A gradient element's markup (`gradientMarkup`).
+private func gradientMarkup(_ def: SvgGradientDef, _ extra: String = "") -> String {
     let tag = def.type == "radial" ? "radialGradient" : "linearGradient"
-    let attrs = def.attrs.map { k, v in " \(k)=\"\(escapeAttr(v.stringValue ?? v.numberValue.map(JSONValue.jsNumber) ?? v.stringified()))\"" }.joined()
-    let extra = gradient.map { " data-vector-gradient=\"\(escapeAttr($0.stringified()))\"" } ?? ""
     let stops = def.stops.map { s in
         "<stop offset=\"\(s.offset)\" stop-color=\"\(escapeAttr(s.stopColor))\"\(s.stopOpacity.map { " stop-opacity=\"\(JSONValue.jsNumber($0))\"" } ?? "")/>"
     }.joined()
-    return "<\(tag) id=\"\(escapeAttr(def.id))\"\(attrs)\(extra)>\(stops)</\(tag)>"
+    return "<\(tag) id=\"\(escapeAttr(def.id))\"\(attrsMarkup(def.attrs))\(extra)>\(stops)</\(tag)>"
+}
+
+/// A paint server's markup (`paintDefMarkup`): the first def of a gradient carries
+/// `data-vector-gradient` (the gradient as JSON) so import restores what SVG cannot say.
+private func paintDefMarkup(_ def: VectorPaintDef, _ gradient: JSONValue?) -> String {
+    let extra = gradient.map { " data-vector-gradient=\"\(escapeAttr($0.stringified()))\"" } ?? ""
+    switch def {
+    case let .gradient(g): return gradientMarkup(g, extra)
+    case let .pattern(p):
+        let inner = p.gradients.map { gradientMarkup($0) }.joined() + p.tiles.map { "<path d=\"\($0.d)\" fill=\"\(escapeAttr($0.fill))\"/>" }.joined()
+        return "<pattern id=\"\(escapeAttr(p.id))\"\(attrsMarkup(p.attrs))\(extra)>\(inner)</pattern>"
+    }
 }
 
 /// Markup of a paint's defs, the gradient's data attribute on the first (`paintMarkup`).
@@ -67,9 +80,9 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
         if truthy(node["blendStep"]) { out += " data-vector-blend-step=\"\"" }
         if let op = node["booleanOperation"]?.stringValue, !op.isEmpty { out += " data-vector-boolean-operation=\"\(op)\"" }
         if truthy(node["resizing"]) { out += " data-vector-resizing=\"\(escapeAttr(node["resizing"]!.stringified()))\"" }
-        // not ported yet: blends, shading, connectors, generated art, lenses (#624)
+        if node.isPath && isVectorShadedPaint(node.fill) { out += " data-vector-shading=\"\(escapeAttr(node.fill!.stringified()))\"" }
+        // not ported yet: blends, connectors, generated art, lenses (#624)
         for key in ["blend", "connector", "generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
-        if node.isPath && isVectorShadedPaint(node.fill) { throw VectorNotPorted("exporting shaded paints to SVG") }
         if let blend = vectorBlendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
         if let filters = node["filters"], let n = arrayLength(filters), n > 0 {
             let data = " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""
@@ -132,7 +145,7 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
             geometry = ""
         }
         for l in layers {
-            let paint = try vectorPaintToSvg(l.layer["paint"], "\(prefix)\(l.kind)-\(node.id)-\(l.index)", node: l.node, role: l.kind)
+            let paint = vectorPaintToSvg(l.layer["paint"], "\(prefix)\(l.kind)-\(node.id)-\(l.index)", node: l.node, role: l.kind, precision: precision)
             defs += paintMarkup(l.layer["paint"], paint.defs)
             let attrs = " data-vector-layer=\"\(l.index)\"\(layerAttrs(l.layer))"
             if l.kind == "fill" {
@@ -189,8 +202,8 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
             try emitStacked(node, depth)
             return
         }
-        let fill = try vectorPaintToSvg(node.fill, "\(prefix)fill-\(node.id)", node: node)
-        let stroke = try vectorPaintToSvg(node.stroke, "\(prefix)stroke-\(node.id)", node: node, role: "stroke")
+        let fill = vectorPaintToSvg(node.fill, "\(prefix)fill-\(node.id)", node: node, precision: precision)
+        let stroke = vectorPaintToSvg(node.stroke, "\(prefix)stroke-\(node.id)", node: node, role: "stroke", precision: precision)
         defs += paintMarkup(node.fill, fill.defs) + paintMarkup(node.stroke, stroke.defs)
         try checkStroke(node, stroke.value)
         let d = vectorPathData(node, precision: precision)

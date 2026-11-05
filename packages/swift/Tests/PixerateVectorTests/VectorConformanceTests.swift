@@ -44,7 +44,7 @@ final class VectorConformanceTests: XCTestCase {
     /// The scenarios this port covers stay unskipped.
     func testPortedScenariosAreNotSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners"] {
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading"] {
             let scenario = try XCTUnwrap(scenarios.first { $0.id == id })
             XCTAssertNil(scenario.skip["swift"], id)
         }

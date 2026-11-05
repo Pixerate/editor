@@ -6,7 +6,7 @@ import PixerateRaster
 // The scene render data of a vector editor (`getVectorSceneRenderData` in `vector/render.ts`): the
 // document-space paths, groups and paint servers React and Svelte draw as SVG, as JSON with the TS
 // field names. Ported for what the controller holds now: paths and groups, transforms, opacity,
-// blend modes, colour and gradient paints (see `Gradient.swift`), paint stacks and live booleans.
+// blend modes, colour, gradient, mesh and freeform paints (see `Gradient.swift`, `Shading.swift`), paint stacks and live booleans.
 // Text, instances, frames, masks that are on, stroke parts (inside / outside
 // alignment, arrowheads, width profiles), brushstroke layers, lenses and the viewport culling
 // options (`viewportSize`, `lod`) throw `VectorNotPorted` (#624). The overlay and the panels'
@@ -80,7 +80,7 @@ private struct SceneRenderer {
                 throw VectorNotPorted("drawing brushstrokes")
             }
             if !l.drawn { continue }
-            let paint = try vectorPaintToSvg(l.layer["paint"], "\(prefix)\(l.kind)-\(node.id)-\(l.index)", node: l.node, role: l.kind)
+            let paint = vectorPaintToSvg(l.layer["paint"], "\(prefix)\(l.kind)-\(node.id)-\(l.index)", node: l.node, role: l.kind)
             defs += paint.defs
             var o = JSONObject([("kind", .string(l.kind)), ("index", .number(Double(l.index))), ("opacity", .number(l.layer["opacity"]?.numberValue ?? 1))])
             if let blend = vectorBlendModeCss(l.layer["blendMode"]) { o["blendMode"] = .string(blend) }
@@ -137,8 +137,8 @@ private struct SceneRenderer {
             o["layers"] = .array(layers.map { .object($0) })
             return .object(o)
         }
-        let fill = try vectorPaintToSvg(node.fill, "\(prefix)fill-\(node.id)", node: node)
-        let stroke = try vectorPaintToSvg(node.stroke, "\(prefix)stroke-\(node.id)", node: node, role: "stroke")
+        let fill = vectorPaintToSvg(node.fill, "\(prefix)fill-\(node.id)", node: node)
+        let stroke = vectorPaintToSvg(node.stroke, "\(prefix)stroke-\(node.id)", node: node, role: "stroke")
         defs += fill.defs + stroke.defs
         if stroke.value != "none" { try checkStrokeParts(node) }
         o["fill"] = .string(fill.value)

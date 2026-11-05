@@ -174,9 +174,7 @@ public func normalizeVectorPaintStacks(_ node: VectorNode, prefer: String = "sho
 private func sanitizePaint(_ value: JSONValue?) throws -> JSONValue {
     guard let value, value != .null else { return .null }
     if case .string = value { return value }
-    // not ported yet: mesh and freeform gradients (sanitizeVectorShadedPaint) (#624)
-    if let t = value["type"]?.stringValue, t == "mesh" || t == "freeform" { throw VectorNotPorted("mesh and freeform gradients") }
-    return sanitizeVectorGradient(value).map { .object($0) } ?? .null
+    return (sanitizeVectorShadedPaint(value) ?? sanitizeVectorGradient(value)).map { .object($0) } ?? .null
 }
 
 private func sanitizeLayerBase(_ raw: JSONObject) throws -> JSONObject {
