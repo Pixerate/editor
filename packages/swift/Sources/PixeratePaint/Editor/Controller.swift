@@ -230,6 +230,10 @@ public final class PaintEditorController {
     /// Change listeners (`subscribe`) and how many changes there have been.
     var listeners: [UUID: () -> Void] = [:]
     public internal(set) var version = 0
+    /// What each recent change redrew (`emit`): rectangles (a stroke's dabs), or nil for anything, by version, oldest first.
+    var dirtyLog: [(version: Int, rects: [RasterRect]?)] = []
+    /// The version each compositor last composited (`compositeTiles(using:)`).
+    var compositedVersions: [ObjectIdentifier: Int] = [:]
     /// The live stroke being painted from pointer input (`beginStroke`), if any.
     var liveStroke: PaintLiveStroke?
     /// The compositor the canvas view draws with: its per-tile cache makes redraws touch only changed tiles.
