@@ -36,6 +36,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 
 ## Working method
 
+Apply early: an unapplied selection changes nothing if the run stops. Once it's roughly right, do
+step 5, then refine. For a layer mask, `load_selection_from_mask`, refine, then `add_layer_mask`
+`from: "selection"` replaces it. Stop and report once step 7 passes.
+
 1. **Choose the method by subject** (see the decision table).
    **Check:** `get_selection` → `empty: false` and a plausible `percent` (for a person in a
    portrait, typically 15–50 %). A wand or range above about 80 % has flooded: undo, then lower
@@ -216,14 +220,11 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `select_polygon`: the lasso, along a contour; with `snapToEdges`, the Magnetic Lasso
 - `quick_select`: brush strokes that grow out to the region's edges
 - `select_object`: the object in a box or under a point
-- `select_focus_area`: what is in focus
-- `select_sky`: the sky
+- `select_focus_area`, `select_sky`: what is in focus; the sky
 - `select_layer_transparency`: a layer's own pixels
 - `grow_selection`, `select_similar`: add similar colour, connected or anywhere
-- `reselect`: undo a deselect
 - `save_selection`, `load_selection_from_channel`, `list_channels`, `set_channel_properties`, `duplicate_channel`, `delete_channel`: keep and manage selections as alpha channels
-- `export_mask_image`: a selection, channel or layer mask as a greyscale PNG
-- `load_channel_from_image`: a mask image into a new channel
+- `export_mask_image`, `load_channel_from_image`: a mask out to a greyscale PNG, and back into a channel
 - `set_quick_mask`: paint the selection
 - `fill_pixels`, `blur_stroke`: fill or soften the selection in Quick Mask mode
 - `magic_wand`: similar colour from a seed
@@ -231,8 +232,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `select_subject`: a subject by description with a host model; without one, the most salient subject
 - `load_selection_from_image`: AI or saved mattes
 - `load_selection_from_mask`: a layer mask back to a selection
-- `set_selection_display`: ants, Quick Mask tint or hidden
-- `set_mask_view`: a layer mask alone in grey or as a red overlay, to check it
+- `set_selection_display`, `set_mask_view`: how a selection shows; a layer mask alone in grey or as a red overlay
 - `add_vector_mask`, `set_vector_mask_path`, `set_vector_mask_properties`, `get_vector_mask`: sharp, editable path masks
 - `rasterize_vector_mask`, `remove_vector_mask`: turn a vector mask into pixels, or drop it
 - `selection_to_path`, `path_to_selection`: a selection's outline as Bézier paths, and a path back into a selection
@@ -252,5 +252,5 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `copy_pixels`, `cut_pixels`, `paste_pixels`: the editor clipboard
 - `add_adjustment_layer`, `apply_effect`, `add_smart_filter`: masked by an active selection
 - `paint_stroke`: paint on a mask with `channel: "mask"`
-- `undo_image`: take back a step
+- `undo_image`, `reselect`: take back a step or a deselect
 - `set_layer_properties`, `add_effect_layer`: clipping
