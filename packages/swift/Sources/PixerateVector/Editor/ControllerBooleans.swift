@@ -42,9 +42,8 @@ func vectorPathEntries(_ doc: VectorDocument, _ roots: [String]?, locked: Bool =
     var out: [VectorPathEntry] = []
     func visit(_ stored: VectorNode, _ parent: VectorMatrix, _ inside: Bool) throws {
         if !stored.isVisible || (stored.isLocked && !locked) { return }
-        // not ported yet: mask groups as their masked shapes (vectorMaskedGeometry) (#624)
-        if expand && isVectorMaskActive(stored) { throw VectorNotPorted("mask groups as their masked shapes (vectorMaskedGeometry)") }
-        let node = expand ? try expandVectorAppearance(stored) : stored
+        // As drawn: effects and live booleans evaluated, mask groups as their masked shapes.
+        let node = expand ? try expandVectorAppearance(try vectorMaskedGeometry(stored)) : stored
         let picked = inside || roots == nil || roots!.contains(node.id)
         if node.isGroup {
             let m = multiplyMatrices(nodeMatrix(node), parent)
@@ -342,9 +341,7 @@ extension VectorEditorController {
         guard let n = getNode(rootId) else { return false }
         if findVectorNode([n], id) != nil { return true }
         if findVectorNode([try expandVectorAppearance(n)], id) != nil { return true }
-        // not ported yet: vectorMaskedGeometry (#624)
-        if isVectorMaskActive(n) { throw VectorNotPorted("mask groups as their masked shapes (vectorMaskedGeometry)") }
-        return false
+        return findVectorNode([try vectorMaskedGeometry(n)], id) != nil
     }
 
     /// A document-space path mapped into the parent space of node `id`.

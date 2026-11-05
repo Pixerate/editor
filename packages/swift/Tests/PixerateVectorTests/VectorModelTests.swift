@@ -71,9 +71,9 @@ final class VectorModelTests: XCTestCase {
     }
 
     func testUnportedFeaturesThrow() throws {
-        let effected = try node(#"{"id":"e","type":"path","subpaths":[{"anchors":[{"x":0,"y":0},{"x":4,"y":4}],"closed":false}],"effects":[{"id":"z","type":"zigzag","params":{"size":1,"ridges":2,"smooth":false}}]}"#)
+        let effected = try node(#"{"id":"e","type":"path","subpaths":[{"anchors":[{"x":0,"y":0},{"x":4,"y":4}],"closed":false}],"effects":[{"id":"z","type":"bevel","params":{"width":1}}]}"#)
         XCTAssertThrowsError(try vectorNodeBounds(effected)) { XCTAssertTrue($0 is VectorNotPorted) }
-        XCTAssertThrowsError(try transformVectorNode(effected, scaleMatrix(2, 2)))
+        XCTAssertNoThrow(try transformVectorNode(effected, scaleMatrix(2, 2)), "bevel parameters do not follow a transform")
         XCTAssertEqual(try vectorPathWorldBezier(effected, effects: false).count, 2)
         // A disabled effect (or one of an unknown type) does not change the outline.
         let disabled = try node(#"{"id":"e","type":"path","subpaths":[{"anchors":[{"x":0,"y":0},{"x":4,"y":4}],"closed":false}],"effects":[{"id":"z","type":"zigzag","enabled":false,"params":{}}]}"#)
@@ -82,7 +82,7 @@ final class VectorModelTests: XCTestCase {
         XCTAssertThrowsError(try vectorNodeBounds(text))
         XCTAssertThrowsError(try transformVectorNode(text, translateMatrix(1, 0)))
         XCTAssertNoThrow(try transformVectorNode(text, rotateMatrix(30)), "a rigid move only sets the transform")
-        let mask = try node(#"{"id":"m","type":"group","mask":{"type":"clip"},"children":[{"id":"a","type":"path","subpaths":[]}]}"#)
-        XCTAssertThrowsError(try vectorNodeBounds(mask))
+        let frameMask = try node(#"{"id":"m","type":"group","mask":{"type":"clip"},"children":[{"id":"f","type":"group","frame":{"x":0,"y":0,"width":4,"height":4},"children":[]},{"id":"a","type":"path","subpaths":[{"anchors":[{"x":0,"y":0},{"x":4,"y":4}],"closed":false}]}]}"#)
+        XCTAssertThrowsError(try vectorNodeBounds(frameMask)) { XCTAssertTrue($0 is VectorNotPorted) }
     }
 }

@@ -7,9 +7,9 @@ import PixerateRaster
 //
 // Export writes plain paths and groups with colour and gradient paints (linear and radial, see
 // `Gradient.swift`), paint stacks, live corners, live booleans (drawn shapes plus the hidden
-// source), transforms, opacity, visibility, blend modes and filter stacks that draw nothing.
-// Stroke parts (inside / outside alignment, arrowheads, width profiles), filters that draw, masks,
-// frames, text, instances, symbols, path effects, blends, shading, connectors, generated art,
+// source), transforms, opacity, visibility, blend modes and filters.
+// Stroke parts (inside / outside alignment, arrowheads, width profiles), masks,
+// frames, text, instances, symbols, blends, shading, connectors, generated art,
 // lenses and brushstrokes throw `VectorNotPorted` (#624).
 
 private func escapeAttr(_ value: String) -> String {
@@ -78,9 +78,13 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
         if node.isPath && isVectorShadedPaint(node.fill) { throw VectorNotPorted("exporting shaded paints to SVG") }
         if let blend = vectorBlendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
         if let filters = node["filters"], let n = arrayLength(filters), n > 0 {
-            // not ported yet: filters that draw (vectorNodeFilterSvg, vectorFilterMarkup) (#624)
-            if !activeVectorFilters(node).isEmpty { throw VectorNotPorted("exporting filters to SVG") }
-            out += " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""
+            let data = " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""
+            if let filter = try vectorNodeFilterSvg(node, "\(prefix)filter-\(node.id)") {
+                defs.append(vectorFilterMarkup(filter, data))
+                out += " filter=\"url(#\(escapeAttr(filter.id)))\""
+            } else {
+                out += data
+            }
         }
         return out
     }

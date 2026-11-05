@@ -192,15 +192,14 @@ public final class VectorEditorController {
     }
 
     /// The document with its derived parts brought up to date (`refreshed`): shorthand fills and
-    /// strokes go to the top layer of their stack. Blends, symbols, constraints, connectors,
-    /// master pages and lenses are made only by commands that are not ported yet (#624), so there
-    /// is nothing else to refresh.
+    /// strokes go to the top layer of their stack, and lenses show what is below them. Blends,
+    /// symbols, constraints, connectors and master pages are made only by commands that are not
+    /// ported yet (#624), so there is nothing else to refresh.
     func refreshed(_ d: VectorDocument) -> VectorDocument {
         let nodes = normalizeVectorTree(d.nodes, prefer: "shorthand")
-        if nodes == d.nodes { return d }
         var out = d
-        out.nodes = nodes
-        return out
+        if nodes != d.nodes { out.nodes = nodes }
+        return resolveVectorLenses(out)
     }
 
     func notify() {
@@ -403,7 +402,7 @@ public final class VectorEditorController {
     // MARK: Document
 
     /// The document as saved (`toJSON`): a copy.
-    public func toJSON() throws -> VectorDocument { try cloneVectorDocument(doc) }
+    public func toJSON() throws -> VectorDocument { try cloneVectorDocument(stripVectorLensViews(doc)) }
 
     /// The `pixerate.editor-document` envelope of kind `vector` (`createVectorEditorDocument`).
     public func editorDocument() throws -> JSONValue {

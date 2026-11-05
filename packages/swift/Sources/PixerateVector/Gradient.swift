@@ -306,3 +306,159 @@ public func vectorPaintToSvg(_ paint: JSONValue?, _ gradientId: String, node: Ve
     let bounds = node.flatMap(vectorPathLocalBounds)
     return ("url(#\(gradientId))", try vectorGradientSvgDefs(g, gradientId, bounds: bounds))
 }
+
+// MARK: - Colours
+
+/// `hex2` of `tokens/color.ts`: a 0–1 channel as two hex digits.
+private func hexByte(_ v: Double) -> String {
+    let n = Int(JS.round(clamp(v, 0, 1) * 255))
+    return (n < 16 ? "0" : "") + String(n, radix: 16)
+}
+
+/// The colour as normalised hex (`#rrggbb`, `#rrggbbaa` when not opaque), or nil when it is not a
+/// colour the token parser reads (`normalizeTokenColor` for strings: hex, `rgb()` / `rgba()`,
+/// `transparent`, `black`, `white`).
+func normalizeTokenColor(_ input: String) -> String? {
+    let text = input.jsTrimmed
+    if text.utf16.count > 200 { return nil }
+    let lower = text.jsLowercased
+    if lower == "transparent" { return "#00000000" }
+    if lower == "black" { return "#000000" }
+    if lower == "white" { return "#ffffff" }
+    let hexDigits = Set("0123456789abcdefABCDEF")
+    if text.hasPrefix("#") {
+        let digits = text.dropFirst()
+        guard [3, 4, 6, 8].contains(digits.count), digits.allSatisfy({ hexDigits.contains($0) }) else { return nil }
+        var d = digits.lowercased()
+        if d.count <= 4 { d = d.map { "\($0)\($0)" }.joined() }
+        if d.count == 8 && d.hasSuffix("ff") { d = String(d.prefix(6)) }
+        return "#\(d)"
+    }
+    guard lower.hasPrefix("rgb(") || lower.hasPrefix("rgba("), text.hasSuffix(")") else { return nil }
+    let open = text.firstIndex(of: "(")!
+    let inner = String(text[text.index(after: open) ..< text.index(before: text.endIndex)])
+    if inner.contains("(") || inner.contains(")") { return nil }
+    let halves = inner.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+    let colour = halves[0]
+    var parts = colour.split { $0 == " " || $0 == "," || $0 == "\t" || $0 == "\n" || $0 == "\r" || $0 == "\u{0C}" }.map(String.init)
+    var alpha: String? = halves.count > 1 ? halves[1].jsTrimmed : nil
+    if parts.count == 4 && alpha == nil { alpha = parts.removeLast() }
+    if parts.count != 3 { return nil }
+    func channel(_ part: String, _ scale: Double) -> Double? {
+        let pct = part.hasSuffix("%")
+        let n = (pct ? String(part.dropLast()) : part).jsToNumber
+        if !n.isFinite { return nil }
+        return pct ? n / 100 : n / scale
+    }
+    let channels = parts.map { channel($0, 255) }
+    let a = alpha == nil || alpha == "" ? 1 : channel(alpha!, 1)
+    guard let r = channels[0], let g = channels[1], let b = channels[2], let a else { return nil }
+    let head = "#\(hexByte(r))\(hexByte(g))\(hexByte(b))"
+    let ab = hexByte(a)
+    return ab == "ff" ? head : head + ab
+}
+
+/// A CSS colour as 0–1 channels `[r, g, b, a]` (hex, `rgb()`, `transparent`, `black`, `white`),
+/// or nil (`parseVectorColor`).
+public func parseVectorColor(_ color: String) -> [Double]? {
+    guard let hex = normalizeTokenColor(color) else { return nil }
+    let chars = Array(hex.utf8)
+    func n(_ i: Int) -> Double { Double(Int(String(decoding: chars[i ..< i + 2], as: UTF8.self), radix: 16)!) / 255 }
+    return [n(1), n(3), n(5), chars.count == 9 ? n(7) : 1]
+}
+
+// MARK: - Editing gradients
+
+/// Whether the gradient has explicit `start` and `end` points (`hasExplicitGradientGeometry`).
+func hasExplicitGradientGeometry(_ g: JSONObject) -> Bool { finitePoint(g["start"]) && finitePoint(g["end"]) }
+
+/// Whether the style is centred (radial, conic, diamond).
+func isCentredVectorGradient(_ type: String) -> Bool { type == "radial" || type == "conic" || type == "diamond" }
+
+/// The gradient with its stops reversed, each midpoint measured from the other side (`reverseVectorGradient`).
+func reverseVectorGradient(_ g: JSONObject) -> JSONObject {
+    let stops = Array(sortedVectorGradientStops(g).reversed())
+    let next = stops.enumerated().map { i, s -> JSONValue in
+        let following = i + 1 < stops.count ? stops[i + 1] : nil
+        let mid = following.map { 1 - ($0["midpoint"]?.numberValue ?? 0.5) } ?? 0.5
+        var rest = s
+        rest["midpoint"] = Optional<JSONValue>.none
+        rest["offset"] = .number(1 - s["offset"]!.numberValue!)
+        if abs(mid - 0.5) > 1e-6 { rest["midpoint"] = .number(mid) }
+        return .object(rest)
+    }
+    var out = g
+    out["stops"] = .array(next)
+    return out
+}
+
+/// The gradient with explicit points (in its units) replacing the shorthand (`explicitVectorGradient`).
+func explicitVectorGradient(_ g: JSONObject) -> JSONObject {
+    let p = vectorGradientPoints(g)
+    var rest = g
+    for k in ["angle", "cx", "cy", "r"] { rest[k] = Optional<JSONValue>.none }
+    rest["start"] = p.start.json
+    rest["end"] = p.end.json
+    rest["width"] = p.width.json
+    if let f = p.focal { rest["focal"] = f.json }
+    rest["units"] = .string(p.userSpace ? "userSpaceOnUse" : "objectBoundingBox")
+    return rest
+}
+
+/// A gradient changed to style `type`, keeping its stops, colour settings and placement (`convertVectorGradient`).
+func convertVectorGradient(_ g: JSONObject, _ type: String) -> JSONObject {
+    let from = g["type"]?.stringValue ?? ""
+    if from == type { return g }
+    var next = g
+    next["type"] = .string(type)
+    if type != "radial" {
+        next["focal"] = Optional<JSONValue>.none
+        next["focalRadius"] = Optional<JSONValue>.none
+    }
+    if !hasExplicitGradientGeometry(g) && isCentredVectorGradient(type) != isCentredVectorGradient(from) {
+        for k in ["angle", "cx", "cy", "r"] { next[k] = Optional<JSONValue>.none }
+    }
+    return next
+}
+
+/// A default gradient for a paint that was a colour (or nothing): the colour fading to white (`defaultVectorGradient`).
+func defaultVectorGradient(_ type: String = "linear", _ from: JSONValue? = nil) -> JSONObject {
+    if isVectorGradient(from), let g = from?.objectValue { return convertVectorGradient(g, type) }
+    let colour = from?.stringValue.flatMap { parseVectorColor($0) != nil ? $0 : nil } ?? "#000000"
+    return JSONObject([("type", .string(type)), ("stops", [["offset": 0, "color": .string(colour)], ["offset": 1, "color": "#ffffff"]])])
+}
+
+/// `g` with `patch` applied (`applyVectorGradientPatch`): any gradient field (`null` removes it),
+/// `aspect` and `reverse`; a style change converts it first. Nil when the result is not a gradient.
+func applyVectorGradientPatch(_ g: JSONObject, _ patch: JSONObject) -> JSONObject? {
+    var fields = patch
+    let aspect = patch["aspect"]?.numberValue
+    let reverse = patch["reverse"]?.boolValue ?? false
+    let type = patch["type"]?.stringValue
+    for k in ["aspect", "reverse", "type"] { fields[k] = Optional<JSONValue>.none }
+    var next = type != nil && type != g["type"]?.stringValue ? convertVectorGradient(g, type!) : g
+    for (k, v) in fields {
+        if v == .null { next[k] = Optional<JSONValue>.none } else { next[k] = v }
+    }
+    // Explicit points replace the shorthand (and the other way round).
+    if (truthy(fields["start"]) || truthy(fields["end"])) && !hasExplicitGradientGeometry(next) {
+        var bare = g
+        bare["start"] = Optional<JSONValue>.none
+        bare["end"] = Optional<JSONValue>.none
+        let p = vectorGradientPoints(bare)
+        if next["start"] == nil { next["start"] = p.start.json }
+        if next["end"] == nil { next["end"] = p.end.json }
+    }
+    if let aspect, aspect.isFinite {
+        let e = explicitVectorGradient(next)
+        let s = point(e["start"])
+        let u = sub(point(e["end"]), s)
+        let a = abs(aspect) < 0.01 ? (aspect < 0 ? -0.01 : 0.01) : aspect
+        next = e
+        next["width"] = add(s, scale(perp(u), a)).json
+    }
+    if reverse { next = reverseVectorGradient(next) }
+    guard var clean = sanitizeVectorGradient(.object(next)) else { return nil }
+    clean["stops"] = .array(sortedVectorGradientStops(clean).map { .object($0) })
+    return clean
+}

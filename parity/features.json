@@ -1022,21 +1022,21 @@
           "core": "`addEffect`, `updateEffect`, `expandAppearance`, `expandVectorAppearance`, `applyVectorEffects` & `getVectorEffectsPanel`",
           "react": "`<VectorEffectsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>`",
           "svelte": "`<VectorEffectsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>`",
-          "swift": "Planned (#533)"
+          "swift": "Every effect but Envelope, Extrude and Bevel ✅ headless (`VectorEditorController`: `addEffect`, `updateEffect`, `removeEffect`, `expandAppearance`; effected geometry for bounds, booleans, render data and SVG export); Envelope, Extrude, Bevel, the per-node cache and the views: Planned (#533)"
         },
         {
           "feature": "Vector Appearance Stack (several fills and strokes per path, bottom to top with fills under strokes, each with its own paint, opacity, blend mode and visibility and each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile; `fill` / `stroke` as shorthands for the top layer, so old documents and commands keep working; node blend modes from the CSS `mix-blend-mode` set under the image editor's names; drop shadow, inner shadow, outer / inner glow, layer blur and feather as one SVG filter per node; topmost-visible-paint hit-testing; Outline Stroke per stroke layer; gradient editor and tool per layer; SVG export with filters and lossless round-trip, import of `fill-opacity`, `mix-blend-mode`, `feDropShadow` / blur filters and, optionally, stacked shapes; agent commands `vector.addFill` … `vector.moveFilter`)",
           "core": "`addPaintLayer`, `updatePaintLayer`, `movePaintLayer`, `setBlendMode`, `addFilter`, `vectorFills`, `vectorStrokes`, `vectorFilterSvg`, `hitTestVectorPaintLayer` & `getVectorAppearancePanel`",
           "react": "`<VectorAppearancePanel>` (in `<VectorStylePanel>`), `<VectorFilterDefs>` & `<VectorCanvas>` layers",
           "svelte": "`<VectorAppearancePanel>` (in `<VectorStylePanel>`), `<VectorFilterDefs>` & `<VectorCanvas>` layers",
-          "swift": "Planned (#533)"
+          "swift": "Fill and stroke stacks, node blend modes and filters ✅ headless (`VectorEditorController`: `addPaintLayer`, `updatePaintLayer`, `movePaintLayer`, `setBlendMode`, `addFilter`; filters drawn in render data and SVG export); brushstroke layers, per-layer width profiles and the views: Planned (#533)"
         },
         {
           "feature": "Vector Masks & Clipping (mask groups whose first child masks the rest: clipping masks by outline, alpha and luminance opacity masks, inverted masks (an even-odd clip of a rectangle with the mask's union cut out; a colour-matrix filter for opacity masks); a hidden mask turns it off; hit-testing, bounds, snapping, booleans and the Pathfinder on the masked result, open paths cut where they cross; the group's filters, opacity and blend mode apply to the masked result and its path effects to the contents; Make Clipping Mask (Mod+7), Make Opacity Mask, Release (Mod+Alt+7), Edit Mask / Edit Contents; SVG export as `<clipPath>` / `<mask>` with a lossless round-trip and import of foreign `clip-path` / `mask` references (user space and `objectBoundingBox` units); agent commands `vector.makeClippingMask`, `vector.makeOpacityMask`, `vector.setMaskOptions`, `vector.releaseMask`)",
           "core": "`makeMask`, `releaseMask`, `setMaskOptions`, `editMask`, `vectorMaskRenderData`, `vectorMaskContains`, `getVectorMaskPanel` & `getVectorOverlayRenderData().masks`",
           "react": "`<VectorMaskPanel>` (in `<VectorStylePanel>`), `<VectorMaskedNodes>`, `<VectorToolbar>` mask actions & `<VectorCanvas>` mask indicator",
           "svelte": "`<VectorMaskPanel>` (in `<VectorStylePanel>`), `<VectorMaskedNodes>`, `<VectorToolbar>` mask actions & `<VectorCanvas>` mask indicator",
-          "swift": "Planned (#533)"
+          "swift": "Clipping and opacity masks, inverted or off ✅ headless (`VectorEditorController`: `makeMask`, `setMaskOptions`, `releaseMask`; bounds, booleans and the Pathfinder on the masked result); drawing masks in render data and SVG, hit-testing and the views: Planned (#533)"
         },
         {
           "feature": "Vector Live Booleans (boolean groups whose operands stay editable, each with its own operation; prefix-cached fold so an edit recombines only the operands above it; hit-testing by the result, or by the operands while entered; destructive booleans kept)",
@@ -1057,7 +1057,7 @@
           "core": "`setGradient`, `setGradientStop`, `vectorGradientSvgDefs`, `expandVectorGradientStops`, `sampleVectorGradientAt`, `getVectorGradientEditor` & `getVectorOverlayRenderData().gradient`",
           "react": "`<VectorGradientEditor>` (in `<VectorStylePanel>`), `<VectorGradientAnnotator>` & `<VectorGradientDefs>`",
           "svelte": "`<VectorGradientEditor>` (in `<VectorStylePanel>`), `<VectorGradientAnnotator>` & `<VectorGradientDefs>`",
-          "swift": "Planned (#533)"
+          "swift": "Linear and radial gradients ✅ headless (`VectorEditorController`: `setGradient`; drawn in render data and SVG export, imported from SVG); conic and diamond gradients, stop expansion, stroke modes, the gradient tool and the views: Planned (#533)"
         },
         {
           "feature": "Vector Gradient Meshes & Freeform Gradients (meshes of rows × columns smooth Coons patches over a path, their sides Catmull-Rom curves through a lattice of coloured points, colours blended per patch with per-point opacity; freeform gradients of colour points anywhere in a shape with a spread of pure colour, blended by distance, and lines carrying colour along curves; first points placed inside the shape automatically; drawn as SVG pattern tiles (mesh cells, freeform strips each with a gradient) and moved with their paths; Gradient tool editing: drag points, click to add a freeform point, Alt-click to remove; SVG round-trip; agent commands `vector.setMeshGradient`, `vector.setMeshPoint`, `vector.setFreeformGradient`, `vector.addFreeformPoint`, `vector.setFreeformPoint`, `vector.removeFreeformPoint`, `vector.setFreeformLines`, `vector.getShading`)",
@@ -1113,14 +1113,14 @@
           "core": "`createVectorEffect('contour', …)`, `applyVectorEffects`",
           "react": "`<VectorEffectsPanel>` (colour parameters)",
           "svelte": "`<VectorEffectsPanel>` (colour parameters)",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`vector.addEffect` with type `contour`, `expandAppearance`); the views: Planned (#533)"
         },
         {
           "feature": "Vector Block Shadow (CorelDRAW-style live block / long shadow effect: each shape swept `distance` along `angle` (`sweepPath`, a Minkowski sum with a segment) and drawn under the art in a shadow colour or the shape's own, fading to `endOpacity` along the direction for a long shadow; works with every other effect and export, Lottie as drawn; agent path through `vector.addEffect` with type `blockShadow`)",
           "core": "`createVectorEffect('blockShadow', …)`, `sweepPath`, `applyVectorEffects`",
           "react": "`<VectorEffectsPanel>`",
           "svelte": "`<VectorEffectsPanel>`",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`vector.addEffect` with type `blockShadow`, `expandAppearance`); the views: Planned (#533)"
         },
         {
           "feature": "Vector Extrude (CorelDRAW-style live extrude effect: each shape drawn as a solid, its side faces going back `depth` along an angle (parallel) or `toward` percent of the way to a vanishing point (perspective), shaded by how squarely they face a light, drawn back to front in an exact order for concave outlines, under the shape; works with every other effect and export, Lottie as drawn; agent path through `vector.addEffect` with type `extrude`)",
@@ -1141,7 +1141,7 @@
           "core": "`setLens`, `resolveVectorLenses`, `vectorLensDrawn`, `vectorLensColorMap`, `mapVectorPaintColors`, `sanitizeVectorLens`",
           "react": "`<VectorLensPanel>` (in `<VectorToolbar>`)",
           "svelte": "`<VectorLensPanel>` (in `<VectorStylePanel>`)",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController`: `setLens`; backdrops resolved after every edit, `vectorLensDrawn`); drawing lenses in render data and SVG and the views: Planned (#533)"
         },
         {
           "feature": "Vector Live Symmetry (symmetry groups drawing their children with mirrored copies — left / right, top / bottom, four quarters, diagonal — or radial turns, mirrored for a kaleidoscope, about a centre and rotation; copies regenerated on every edit and drawn, hit, bounded, exported (SVG round-trip, Lottie, PDF) as part of the group; Draw inside: pen, pencil, shapes and text go into the group mirrored as they are drawn; axes on the canvas; Release or Expand into real objects; `parentId` on add commands; agent commands `vector.makeSymmetry`, `vector.setSymmetry`, `vector.releaseSymmetry`, `vector.enterSymmetry`, `vector.exitSymmetry`)",

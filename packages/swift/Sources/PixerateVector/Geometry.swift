@@ -266,8 +266,11 @@ public func vectorNodeBounds(_ node: VectorNode, _ parent: VectorMatrix = IDENTI
         if frame["clip"] == .bool(false) { return unionBounds([box] + (try node.children.map { try vectorNodeBounds($0, m) })) }
         return box
     }
-    // not ported yet: mask groups (vectorAppearanceShapes) (#624)
-    if isVectorMaskActive(node) { throw VectorNotPorted("bounds of mask groups (vectorAppearanceShapes)") }
+    if isVectorMaskActive(node) {
+        let m = multiplyMatrices(nodeMatrix(node), parent)
+        let shapes = try vectorAppearanceShapes(node).flatMap { isIdentityMatrix(m) ? $0.path : transformBezierPath(.commands($0.path), m.tuple) }
+        return bezierPathBounds(.commands(shapes)).map(boundsOf)
+    }
     // Live booleans as drawn (`expandVectorAppearance` throws for the live features not ported yet).
     let node = try expandVectorAppearance(node)
     if node.isGroup {
@@ -349,8 +352,7 @@ private func mapAnchor(_ a: VectorAnchor, _ m: VectorMatrix) -> VectorAnchor {
 private func bakeIntoGeometry(_ nodeIn: VectorNode, _ m: VectorMatrix) throws -> VectorNode {
     if isIdentityMatrix(m) { return nodeIn }
     var node = nodeIn
-    // not ported yet: path effects follow the transform (transformVectorEffects) (#624)
-    if let n = arrayLength(node["effects"]), n > 0 { throw VectorNotPorted("transforming nodes with path effects (transformVectorEffects)") }
+    if let effects = node["effects"]?.arrayValue, !effects.isEmpty { node["effects"] = .array(try transformVectorEffects(effects, m)) }
     if isVectorFrame(node) { return try bakeFrame(node, m) }
     if node.isGroup {
         node.children = try node.children.map { try transformVectorNode($0, m) }
