@@ -2478,6 +2478,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`HistoryManager`"
       },
       {
+        "feature": "History Stale-Step Removal (`dropSteps` removes steps by tag or origin without running them, e.g. when remote content replaces what they change)",
+        "core": "`HistoryManager`",
+        "react": "`useHistory`",
+        "svelte": "`createHistory`",
+        "swift": "`HistoryManager`"
+      },
+      {
         "feature": "History Panel & Memory Budget (`getEntries`, `goTo`, `maxBytes` / `sizeOf`)",
         "core": "`HistoryManager`",
         "react": "`useHistory().entries`",

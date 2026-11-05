@@ -65,6 +65,21 @@ describe("Svelte createHistory gestures, marks and entries", () => {
   });
 });
 
+describe("Svelte createHistory dropSteps", () => {
+  it("removes stale steps by tag without running them", () => {
+    const c = counter();
+    const h = createHistory();
+    h.execute(c.set(1, "Stroke"));
+    h.execute({ ...c.set(2, "Move"), tag: "move" });
+    expect(h.entries.map((e) => e.tag)).toEqual(["value", "move"]);
+
+    expect(h.dropSteps((step) => step.tag === "value")).toBe(1);
+    expect(c.doc.value).toBe(2);
+    expect(h.undoCount).toBe(1);
+    expect(h.entries.map((e) => e.label)).toEqual(["Move"]);
+  });
+});
+
 describe("Svelte createHistoryDirty", () => {
   it("clears dirty after undo-to-saved and stops the navigation guard", () => {
     const c = counter();

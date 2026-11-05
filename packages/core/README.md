@@ -573,8 +573,11 @@ const mark = history.mark();
 history.revertTo(mark); // returns the number of steps reverted (0 if the mark is gone)
 
 // History panel
-history.getEntries(); // [{ id, label, index, current, undone }]
+history.getEntries(); // [{ id, label, index, current, undone, origin, tag? }]
 history.goTo(2); // undo / redo until entry 2 is current; goTo(-1) undoes everything
+
+// Stale steps: when remote content replaces what some steps change, remove them unrun.
+history.dropSteps((step) => step.tag === "paint"); // returns how many were removed
 
 // Dirty vs saved: undoing back to the saved state is clean again.
 const dirty = bindDirtyToHistory({
@@ -587,7 +590,7 @@ dirty.markClean(); // after saving
 dirty.dirty; // feed to useNavigationGuard / createNavigationGuard
 ```
 
-Tag-only `executeMerged(cmd)` keeps its 300 ms time-window coalescing. React exposes the same API through `useHistory()` (`entries`, `goTo`, `mark`, `revertTo`, `beginGesture`, `endGesture`) and `useHistoryDirty()`; Svelte through `createHistory()` and `createHistoryDirty()`.
+Tag-only `executeMerged(cmd)` keeps its 300 ms time-window coalescing. React exposes the same API through `useHistory()` (`entries`, `goTo`, `mark`, `revertTo`, `dropSteps`, `beginGesture`, `endGesture`) and `useHistoryDirty()`; Svelte through `createHistory()` and `createHistoryDirty()`.
 
 ## License
 

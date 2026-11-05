@@ -227,6 +227,51 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(later.events()[0].origin, "user")
     }
 
+    func testDropStepsRemovesMatchingStepsWithoutRunningThem() {
+        let h = HistoryManager()
+        let c = Counter()
+        h.execute(c.cmd("A", tag: "paint"))
+        h.execute(c.cmd("B", 10, tag: "node"))
+        h.execute(c.cmd("C", 100, tag: "paint"))
+        h.execute(c.cmd("D", 1000, tag: "node"))
+        h.undo()
+        XCTAssertEqual(c.value, 111)
+        let r = record(h)
+        XCTAssertEqual(h.dropSteps { $0.tag == "paint" }, 2)
+        XCTAssertEqual(c.value, 111)
+        XCTAssertEqual(h.entries.map(\.label), ["B", "D"])
+        XCTAssertEqual(h.entries.map(\.tag), ["node", "node"])
+        XCTAssertEqual(h.entries.map(\.undone), [false, true])
+        XCTAssertEqual(r.events().map(\.kind), [.drop])
+        XCTAssertNil(r.events()[0].entry)
+        h.redo()
+        XCTAssertEqual(c.value, 1111)
+        h.undo()
+        h.undo()
+        XCTAssertEqual(c.value, 101)
+        XCTAssertFalse(h.state.canUndo)
+        XCTAssertEqual(h.dropSteps { _ in false }, 0)
+    }
+
+    func testDropStepsEndsAGestureInvalidatesMarksAndWaitsForBatches() {
+        let h = HistoryManager()
+        let c = Counter()
+        h.executeMerged(c.cmd("Drag", tag: "paint"), key: "drag")
+        let mark = h.mark()
+        h.execute(c.cmd("B", tag: "node"))
+        h.dropSteps { $0.tag == "paint" }
+        XCTAssertFalse(h.isMarkValid(mark))
+        h.executeMerged(c.cmd("Drag", tag: "paint"), key: "drag")
+        XCTAssertEqual(h.entries.map(\.label), ["B", "Drag"])
+        var inBatch = -1
+        h.batch("Batch") {
+            h.execute(c.cmd("E"))
+            inBatch = h.dropSteps { _ in true }
+        }
+        XCTAssertEqual(inBatch, 0)
+        XCTAssertEqual(h.entries.count, 3)
+    }
+
     func testReportsARevertAndStopsAfterUnsubscribing() {
         let h = HistoryManager()
         let c = Counter()

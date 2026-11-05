@@ -26,6 +26,8 @@ export interface UseHistoryResult extends HistoryState {
   mark: () => HistoryMark;
   /** Takes back every step since `mark` without leaving redo (Escape-cancel). */
   revertTo: (mark: HistoryMark) => number;
+  /** Removes the steps `match` picks without running them (stale steps). */
+  dropSteps: (match: (step: HistoryEntry) => boolean) => number;
   /** Joins every merged execute into one step until `endGesture`. */
   beginGesture: (key: string) => void;
   endGesture: () => void;
@@ -85,6 +87,10 @@ export function useHistory(
     (m: HistoryMark) => manager.revertTo(m),
     [manager],
   );
+  const dropSteps = useCallback(
+    (match: (step: HistoryEntry) => boolean) => manager.dropSteps(match),
+    [manager],
+  );
   const beginGesture = useCallback(
     (key: string) => manager.beginGesture(key),
     [manager],
@@ -104,6 +110,7 @@ export function useHistory(
     goTo,
     mark,
     revertTo,
+    dropSteps,
     beginGesture,
     endGesture,
   };
