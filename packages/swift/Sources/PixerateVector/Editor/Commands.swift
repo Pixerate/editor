@@ -116,15 +116,32 @@ private func anchorsOf(_ c: VectorEditorController, _ refs: [VectorAnchorRef]?) 
 /// The style fields of `STYLE_PROPS`, in its order (`pickStyle`).
 private let STYLE_PROPS = ["fills", "strokes", "fill", "stroke", "strokeWidth", "strokeLinecap", "strokeLinejoin", "strokeDasharray", "strokeAlign", "startArrow", "endArrow", "arrowAlign", "startArrowScale", "endArrowScale", "strokeWidthProfile", "fillRule"]
 
-/// The style fields of `params` (`pickStyle`), with their paints checked.
+/// A paint from untrusted params (`checkPaint`): a colour or null as given, a gradient sanitised.
+private func checkPaint(_ paint: JSONValue?, _ where_: String) throws -> JSONValue? {
+    guard let paint, paint.objectValue != nil else { return paint }
+    if let t = paint["type"]?.stringValue, t == "mesh" || t == "freeform" {
+        // not ported yet: mesh and freeform gradients (sanitizeVectorShadedPaint) (#624)
+        throw VectorNotPorted("mesh and freeform gradients")
+    }
+    guard let g = sanitizeVectorGradient(paint) else { throw fail("\(where_) is not a valid gradient: give a type and at least one stop { offset, color }.") }
+    return .object(g)
+}
+
+/// The style fields of `params` (`pickStyle`), with their paints and stack layers checked.
 private func pickStyle(_ params: JSONObject) throws -> JSONObject {
     var out = JSONObject()
     for key in STYLE_PROPS { if let v = params[key] { out[key] = v } }
-    for key in ["fill", "stroke"] {
-        // not ported yet: gradients and shaded paints (sanitizeVectorGradient) (#624)
-        if out[key]?.objectValue != nil { throw VectorNotPorted("gradient paints") }
+    for key in ["fill", "stroke"] { if out[key] != nil { out[key] = try checkPaint(out[key], key) } }
+    for key in ["fills", "strokes"] {
+        guard let stack = out[key]?.arrayValue else { continue }
+        for (i, l) in stack.enumerated() {
+            guard let layer = l.objectValue else { throw fail("\(key)[\(i)] must be a layer object { paint, … }.") }
+            _ = try checkPaint(layer["paint"], "\(key)[\(i)].paint")
+            if let mode = layer["blendMode"], !isVectorBlendMode(mode) {
+                throw fail("\(key)[\(i)].blendMode \"\(mode.stringValue ?? mode.stringified())\" is not one of: \(VECTOR_BLEND_MODES.joined(separator: ", ")).")
+            }
+        }
     }
-    if out["fills"] != nil || out["strokes"] != nil { throw VectorNotPorted("fill and stroke stacks") }
     return out
 }
 
@@ -161,9 +178,8 @@ extension VectorEditorController {
                     // not ported yet: text and instances (#624)
                     throw VectorNotPorted("listing \(n.typeName) nodes")
                 }
-                // not ported yet: blends and mask summaries (#624)
+                // not ported yet: blend summaries (#624)
                 if n.isGroup && truthy(n["blend"]) { throw VectorNotPorted("listing blend groups") }
-                if isVectorMaskGroup(n) { throw VectorNotPorted("listing mask groups") }
                 if truthy(n["blendStep"]) { o["blendStep"] = true }
                 if let e = n["effects"], let c = e.arrayValue?.count, c > 0 { o["effects"] = e }
                 if n.isGroup && truthy(n["liveBoolean"]) { o["liveBoolean"] = n["liveBoolean"] }
@@ -172,6 +188,7 @@ extension VectorEditorController {
                 if n.isPath, let s = n["strokes"], s.arrayValue != nil { o["strokes"] = s }
                 if let m = n["blendMode"]?.stringValue, !m.isEmpty, m != "normal" { o["blendMode"] = .string(m) }
                 if let f = n["filters"], let c = f.arrayValue?.count, c > 0 { o["filters"] = f }
+                if let mask = vectorMaskSummary(n) { o["mask"] = mask }
                 if isVectorFrame(n) { o["frameRect"] = n["frame"] }
                 if truthy(n["resizing"]) { o["resizing"] = n["resizing"] }
                 if n.isPath && truthy(n["connector"]) { o["connector"] = n["connector"] }
@@ -236,8 +253,6 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
         let input = VectorShapeInput(kind: p.str("kind") ?? "", x: p.num("x") ?? 0, y: p.num("y") ?? 0, width: p.num("width") ?? 0, height: p.num("height") ?? 0,
                                      cornerRadius: p.num("cornerRadius"), cornerKind: p.str("cornerKind"), sides: p.num("sides"), points: p.num("points"),
                                      innerRatio: p.num("innerRatio"), name: p.str("name"), style: style)
-        // not ported yet: gradient paints and stacks given to a new shape (#624)
-        _ = try pickStyle(params)
         return ["id": .string(try c.addShape(input, parentOf(c, p.str("parentId"))))]
     }
     r["vector.addPath"] = { c, params in
@@ -256,6 +271,20 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
         if style.isEmpty { throw fail("Pass at least one style property.") }
         try check(c.setStyle(style, ids: targetIds(c, VectorParams(params))))
         return ok()
+    }
+    r["vector.setGradient"] = { c, params in
+        var patch = params
+        patch["ids"] = Optional<JSONValue>.none
+        patch["target"] = Optional<JSONValue>.none
+        let target = params["target"]?.stringValue ?? "fill"
+        if let t = patch["type"], !(t.stringValue.map(VECTOR_GRADIENT_TYPES.contains) ?? false) { throw fail("Unknown gradient type \"\(t.stringValue ?? t.stringified())\".") }
+        if let stops = patch["stops"], (stops.arrayValue?.isEmpty ?? true) { throw fail("stops needs at least one { offset, color }.") }
+        let p = VectorParams(params)
+        try check(c.setGradient(patch, ids: targetIds(c, p), target: target))
+        let id = try targetIds(c, p).first
+        var out = JSONObject([("ok", true)])
+        if let id, let node = c.getNode(id), node.isPath, let g = node[target] { out["gradient"] = g }
+        return .object(out)
     }
     r["vector.rename"] = { c, params in
         let p = VectorParams(params)
@@ -435,5 +464,254 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
         let (id, anchors) = try c.addPathByDimensions(start: start, steps: params["steps"]?.arrayValue ?? [], closed: p.bool("closed") ?? false, name: p.str("name"))
         return .object(JSONObject([("id", .string(id)), ("anchors", .array(anchors.map(\.json)))]))
     }
+    vectorAppearanceRuns(&r)
     return r
+}
+
+// MARK: - Appearance, effects, masks and lenses
+
+/// `FILL_LAYER_PROPS` keys, then `STROKE_SETTING_PROPS` keys (`FILL_KEYS`, `STROKE_KEYS`).
+private let FILL_KEYS = ["paint", "opacity", "blendMode", "visible"]
+private let STROKE_KEYS = FILL_KEYS + VECTOR_STROKE_SETTING_KEYS
+
+/// A path node or a sentence saying it is not one (`pathOf`).
+private func pathOf(_ c: VectorEditorController, _ id: String) throws -> VectorNode {
+    guard let n = c.getNode(id) else { throw fail("There is no node \"\(id)\". Call vector.list for ids.") }
+    if !n.isPath { throw fail("\"\(id)\" is a group; fills and strokes belong to paths (pass a path id, or use ids on vector.addFill / vector.addStroke for every path inside).") }
+    return n
+}
+
+/// Checks that path `id` has layer `index` in its `kind` stack (`layerIndex`).
+private func layerIndex(_ c: VectorEditorController, _ id: String, _ kind: String, _ index: Double?) throws -> Int {
+    let path = try pathOf(c, id)
+    let stack = kind == "fill" ? vectorFills(path) : vectorStrokes(path)
+    let i = index ?? .nan
+    if !(i.rounded() == i && i.isFinite) || !(i >= 0 && Int(i) < stack.count) {
+        throw fail("index \(index.map(JSONValue.jsNumber) ?? "undefined") is out of range: \"\(id)\" has \(stack.count) \(kind)\(stack.count == 1 ? "" : "s") (0 is the bottom). Read them with vector.getAppearance.")
+    }
+    return Int(i)
+}
+
+/// `{ id, fills }` or `{ id, strokes }` (`stackResult`).
+private func stackResult(_ c: VectorEditorController, _ id: String, _ kind: String) throws -> JSONValue {
+    let path = try pathOf(c, id)
+    let stack = kind == "fill" ? vectorFills(path) : vectorStrokes(path)
+    return .object(JSONObject([("id", .string(id)), (kind == "fill" ? "fills" : "strokes", .array(stack.map { .object($0) }))]))
+}
+
+/// The layer fields of `params`, the paint checked (`layerPatchOf`).
+private func layerPatchOf(_ params: JSONObject, _ keys: [String]) throws -> JSONObject {
+    var out = JSONObject()
+    for key in keys { if let v = params[key] { out[key] = key == "paint" ? try checkPaint(v, "paint") ?? .null : v } }
+    return out
+}
+
+/// The paths and text inside `ids` (groups give every one inside; instances none; `pathsUnder`).
+private func pathsUnder(_ c: VectorEditorController, _ ids: [String]) -> [String] {
+    var out: [String] = []
+    func walk(_ n: VectorNode) {
+        if n.isGroup { n.children.forEach(walk) } else if !n.isInstance { out.append(n.id) }
+    }
+    for id in ids { if let n = c.getNode(id) { walk(n) } }
+    return out
+}
+
+/// Fails unless every key of `params` is a parameter of filter `type` (`checkFilterParams`).
+private func checkFilterParams(_ type: String, _ params: JSONObject?) throws {
+    let allowed = vectorFilterParamKeys(type)
+    for key in params?.keys ?? [] where !allowed.contains(key) { throw fail("\(type) has no parameter \"\(key)\"; it takes \(allowed.joined(separator: ", ")).") }
+}
+
+private func filtersResult(_ c: VectorEditorController, _ id: String) -> JSONValue {
+    .object(JSONObject([("id", .string(id)), ("filters", c.getNode(id)?["filters"] ?? .array([]))]))
+}
+
+/// The filter `filterId` of node `nodeId`, or a sentence listing the ones it has (`filterOf`).
+private func filterOf(_ c: VectorEditorController, _ nodeId: String, _ filterId: String) throws -> JSONValue {
+    guard let node = c.getNode(nodeId) else { throw fail("There is no node \"\(nodeId)\".") }
+    let list = node["filters"]?.arrayValue ?? []
+    if let f = list.first(where: { $0["id"]?.stringValue == filterId }) { return f }
+    let has = list.map { "\"\($0["id"]?.stringValue ?? "")\" (\($0["type"]?.stringValue ?? ""))" }.joined(separator: ", ")
+    throw fail("Node \"\(nodeId)\" has no filter \"\(filterId)\"; it has \(has.isEmpty ? "none" : has).")
+}
+
+/// `{ id, mask }` of a mask group (`maskResult`).
+private func maskResult(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let mask = vectorMaskSummary(c.getNode(id)) else { throw fail("\"\(id)\" is not a mask group.") }
+    return .object(JSONObject([("id", .string(id)), ("mask", mask)]))
+}
+
+/// Checks the objects a mask is made of before anything changes (`maskInputs`).
+private func maskInputs(_ c: VectorEditorController, _ p: VectorParams) throws -> [String] {
+    var list: [String] = []
+    for id in try targetIds(c, p) where !list.contains(id) { list.append(id) }
+    if list.count < 2 { throw fail("Masking needs at least two objects (the mask and what it masks); got \(list.count). Pass ids, or select more.") }
+    for id in list where c.getNode(id)!.isLocked { throw fail("\"\(id)\" is locked; ask the user to unlock it, or leave it out of ids.") }
+    if let maskId = p.str("maskId"), !list.contains(maskId) { throw fail("maskId \"\(maskId)\" must be one of ids (\(list.map { "\"\($0)\"" }.joined(separator: ", "))).") }
+    return list
+}
+
+/// The mask groups among `ids` (default: the selection), or a sentence (`maskTargets` of the commands).
+private func maskTargets(_ c: VectorEditorController, _ p: VectorParams) throws -> [String] {
+    let list = try targetIds(c, p)
+    let groups = list.compactMap { c.getNode($0) }.filter { isVectorMaskGroup($0) }
+    if groups.isEmpty { throw fail("None of \(list.map { "\"\($0)\"" }.joined(separator: ", ")) is a mask group. Mask groups have a `mask` in vector.list; make one with vector.makeClippingMask or vector.makeOpacityMask.") }
+    return groups.map(\.id)
+}
+
+private func appearanceOf(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let n = c.getNode(id) else { throw fail("There is no node \"\(id)\".") }
+    var o = JSONObject([("id", .string(n.id)), ("type", .string(n.typeName))])
+    if n.isPath {
+        o["fills"] = .array(vectorFills(n).map { .object($0) })
+        o["strokes"] = .array(vectorStrokes(n).map { .object($0) })
+        o["fillRule"] = .string(n.fillRule ?? "nonzero")
+    }
+    o["blendMode"] = n["blendMode"] ?? "normal"
+    o["opacity"] = .number(n.opacity ?? 1)
+    o["filters"] = n["filters"] ?? .array([])
+    return .object(o)
+}
+
+private func vectorAppearanceRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.getAppearance"] = { c, params in try appearanceOf(c, VectorParams(params).str("id") ?? "") }
+    for kind in ["fill", "stroke"] {
+        let Kind = kind == "fill" ? "Fill" : "Stroke"
+        let keys = kind == "fill" ? FILL_KEYS : STROKE_KEYS
+        r["vector.add\(Kind)"] = { c, params in
+            let p = VectorParams(params)
+            let targets = try targetIds(c, p)
+            try check(c.addPaintLayer(kind, layerPatchOf(params, keys), ids: targets, index: p.num("index")))
+            return ["nodes": .array(try pathsUnder(c, targets).map { try stackResult(c, $0, kind) })]
+        }
+        r["vector.update\(Kind)"] = { c, params in
+            let p = VectorParams(params)
+            let nodeId = p.str("nodeId") ?? ""
+            let index = try layerIndex(c, nodeId, kind, p.num("index"))
+            let patch = try layerPatchOf(params, keys)
+            if patch.isEmpty { throw fail("Pass at least one of: \(keys.joined(separator: ", ")).") }
+            try check(c.updatePaintLayer(kind, index, patch, ids: [nodeId]))
+            return try stackResult(c, nodeId, kind)
+        }
+        r["vector.remove\(Kind)"] = { c, params in
+            let p = VectorParams(params)
+            let nodeId = p.str("nodeId") ?? ""
+            let index = try layerIndex(c, nodeId, kind, p.num("index"))
+            try check(c.removePaintLayer(kind, index, ids: [nodeId]))
+            return try stackResult(c, nodeId, kind)
+        }
+        r["vector.move\(Kind)"] = { c, params in
+            let p = VectorParams(params)
+            let nodeId = p.str("nodeId") ?? ""
+            let index = try layerIndex(c, nodeId, kind, p.num("index"))
+            try check(c.movePaintLayer(kind, index, p.num("to") ?? 0, ids: [nodeId]))
+            return try stackResult(c, nodeId, kind)
+        }
+    }
+    r["vector.setBlendMode"] = { c, params in
+        let p = VectorParams(params)
+        let targets = try targetIds(c, p)
+        try check(c.setBlendMode(p.str("blendMode") ?? "", ids: targets))
+        return ["nodes": .array(targets.map { id in .object(JSONObject([("id", .string(id)), ("blendMode", c.getNode(id)?["blendMode"] ?? "normal")])) })]
+    }
+    r["vector.addFilter"] = { c, params in
+        let p = VectorParams(params)
+        let type = p.str("type") ?? ""
+        if !VECTOR_FILTER_TYPES.contains(type) { throw fail("Unknown filter type \"\(type)\"; use one of \(VECTOR_FILTER_TYPES.joined(separator: ", ")).") }
+        let fp = params["params"]?.objectValue
+        try checkFilterParams(type, fp)
+        let targets = try targetIds(c, p)
+        let created = c.addFilter(type, ids: targets, params: fp, index: p.num("index"))
+        if created.isEmpty { throw fail("Nothing to add the filter to (blend steps take no filters).") }
+        return ["nodes": .array(targets.enumerated().map { i, id in
+            var o = JSONObject([("filterId", i < created.count ? .string(created[i]) : .null)])
+            for (k, v) in filtersResult(c, id).objectValue! { o[k] = v }
+            return .object(o)
+        })]
+    }
+    r["vector.updateFilter"] = { c, params in
+        let p = VectorParams(params)
+        let nodeId = p.str("nodeId") ?? "", filterId = p.str("filterId") ?? ""
+        let filter = try filterOf(c, nodeId, filterId)
+        let fp = params["params"]?.objectValue
+        try checkFilterParams(filter["type"]?.stringValue ?? "", fp)
+        if fp == nil && p.bool("enabled") == nil { throw fail("Pass params or enabled.") }
+        try check(c.updateFilter(nodeId, filterId, params: fp, enabled: p.bool("enabled")))
+        return filtersResult(c, nodeId)
+    }
+    r["vector.removeFilter"] = { c, params in
+        let p = VectorParams(params)
+        let nodeId = p.str("nodeId") ?? "", filterId = p.str("filterId") ?? ""
+        _ = try filterOf(c, nodeId, filterId)
+        try check(c.removeFilter(nodeId, filterId))
+        return filtersResult(c, nodeId)
+    }
+    r["vector.moveFilter"] = { c, params in
+        let p = VectorParams(params)
+        let nodeId = p.str("nodeId") ?? "", filterId = p.str("filterId") ?? ""
+        _ = try filterOf(c, nodeId, filterId)
+        try check(c.moveFilter(nodeId, filterId, p.num("index") ?? 0))
+        return filtersResult(c, nodeId)
+    }
+    r["vector.addEffect"] = { c, params in
+        let p = VectorParams(params)
+        let type = p.str("type") ?? ""
+        if !VECTOR_EFFECT_TYPES.contains(type) { throw fail("Unknown effect type \"\(type)\".") }
+        let targets = try targetIds(c, p)
+        let created = try c.addEffect(type, ids: targets, params: params["params"]?.objectValue, index: p.num("index"))
+        if created.isEmpty { throw fail("Nothing to add the effect to.") }
+        return ["effects": .array(targets.enumerated().map { i, id in .object(JSONObject([("nodeId", .string(id)), ("effectId", i < created.count ? .string(created[i]) : .null)])) })]
+    }
+    r["vector.updateEffect"] = { c, params in
+        let p = VectorParams(params)
+        let nodeId = p.str("nodeId") ?? "", effectId = p.str("effectId") ?? ""
+        let ep = params["params"]?.objectValue
+        if ep != nil || p.bool("enabled") != nil { try check(c.updateEffect(nodeId, effectId, params: ep, enabled: p.bool("enabled"))) }
+        if let index = p.num("index") { try check(c.moveEffect(nodeId, effectId, index)) }
+        return ["effects": c.getNode(nodeId)?["effects"] ?? .array([])]
+    }
+    r["vector.removeEffect"] = { c, params in
+        let p = VectorParams(params)
+        try check(c.removeEffect(p.str("nodeId") ?? "", p.str("effectId") ?? ""))
+        return ok()
+    }
+    r["vector.expandAppearance"] = { c, params in
+        let expanded = try c.expandAppearance(ids: targetIds(c, VectorParams(params)))
+        if expanded.isEmpty { throw fail("Nothing selected has path effects or a live boolean.") }
+        return ["ids": idList(expanded)]
+    }
+    for (command, fixed) in [("vector.makeClippingMask", "clip"), ("vector.makeOpacityMask", nil)] as [(String, String?)] {
+        r[command] = { c, params in
+            let p = VectorParams(params)
+            let list = try maskInputs(c, p)
+            let maskId = p.str("maskId").flatMap { $0.isEmpty ? nil : $0 }
+            let result = c.makeMask(fixed ?? p.str("type") ?? "luminance", ids: list, maskId: maskId, invert: p.bool("invert") ?? false)
+            guard result.ok, let id = result.id else { throw fail(result.message ?? "The command failed.") }
+            return try maskResult(c, id)
+        }
+    }
+    r["vector.setMaskOptions"] = { c, params in
+        let p = VectorParams(params)
+        if !p.has("type") && !p.has("invert") && !p.has("enabled") { throw fail("Pass at least one of type, invert, enabled.") }
+        let groups = try maskTargets(c, p)
+        try check(c.setMaskOptions(type: p.str("type").flatMap { $0.isEmpty ? nil : $0 }, invert: p.bool("invert"), enabled: p.bool("enabled"), ids: groups))
+        return ["groups": .array(try groups.map { try maskResult(c, $0) })]
+    }
+    r["vector.releaseMask"] = { c, params in
+        let groups = try maskTargets(c, VectorParams(params))
+        return ["ids": idList(try c.releaseMask(ids: groups))]
+    }
+    r["vector.setLens"] = { c, params in
+        var patch = params
+        patch["ids"] = Optional<JSONValue>.none
+        if patch.isEmpty { throw fail("Pass at least one of type, amount, color.") }
+        let (result, lenses) = c.setLens(patch, ids: VectorParams(params).strings("ids"))
+        try check(result)
+        return ["lenses": .array(lenses.map { .object(JSONObject([("id", .string($0.id)), ("lens", $0.lens.map { .object($0) } ?? .null)])) })]
+    }
+    r["vector.removeLens"] = { c, params in
+        let (result, lenses) = c.setLens(nil, ids: VectorParams(params).strings("ids"))
+        try check(result)
+        return ["ids": idList(lenses.map(\.id))]
+    }
 }

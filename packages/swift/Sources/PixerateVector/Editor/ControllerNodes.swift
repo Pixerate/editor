@@ -132,10 +132,16 @@ extension VectorEditorController {
         if truthy(d["fillRule"]) { out["fillRule"] = d["fillRule"] }
         if truthy(d["strokeAlign"]), d["strokeAlign"] != "center" { out["strokeAlign"] = d["strokeAlign"] }
         for key in ["startArrow", "endArrow", "arrowAlign", "startArrowScale", "endArrowScale"] where truthy(d[key]) { out[key] = d[key] }
-        // not ported yet: default width profiles and paint stacks (#624)
+        // not ported yet: default width profiles (#624)
         if let n = arrayLength(d["strokeWidthProfile"]), n > 0 { throw VectorNotPorted("default width profiles") }
-        if d["fills"]?.arrayValue != nil || d["strokes"]?.arrayValue != nil { throw VectorNotPorted("default fill and stroke stacks") }
-        return out
+        // Default stacks: new shapes get every layer (open paths no fills).
+        if d["fills"]?.arrayValue == nil && d["strokes"]?.arrayValue == nil { return out }
+        var styled = VectorNode(props: out)
+        if let fills = d["fills"]?.arrayValue { styled = withVectorFills(styled, open ? [] : fills.compactMap(\.objectValue)) }
+        if let strokes = d["strokes"]?.arrayValue { styled = withVectorStrokes(styled, strokes.compactMap(\.objectValue)) }
+        var result = JSONObject()
+        for k in styled.keys { result[k] = styled[k] }
+        return result
     }
 
     // MARK: Style
@@ -196,15 +202,16 @@ extension VectorEditorController {
 
 /// A style applied to a path (`withStyle`); a `null` (or empty) width profile removes it.
 func withStyle(_ node: VectorNode, _ style: JSONObject) throws -> VectorNode {
-    // not ported yet: whole fill and stroke stacks (sanitizeVectorFills / withVectorFills) (#624)
-    if style["fills"] != nil || style["strokes"] != nil { throw VectorNotPorted("fill and stroke stacks") }
     var next = node
-    for (k, v) in style { next[k] = v }
+    for (k, v) in style where k != "fills" && k != "strokes" { next[k] = v }
     if style.contains("strokeWidthProfile") {
         // not ported yet: width profiles (sanitizeWidthProfile) (#624)
         if let p = style["strokeWidthProfile"]?.arrayValue, !p.isEmpty { throw VectorNotPorted("width profiles") }
         next["strokeWidthProfile"] = Optional<JSONValue>.none
     }
     // Shorthands edit the top layer of a stack; whole stacks given replace them.
-    return normalizeVectorPaintStacks(next, prefer: "shorthand")
+    next = normalizeVectorPaintStacks(next, prefer: "shorthand")
+    if let fills = style["fills"] { next = withVectorFills(next, try sanitizeVectorFills(fills)) }
+    if let strokes = style["strokes"] { next = withVectorStrokes(next, try sanitizeVectorStrokes(strokes)) }
+    return next
 }

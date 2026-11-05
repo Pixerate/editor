@@ -7,7 +7,7 @@ import PixerateRaster
 // document-space paths, groups and paint servers React and Svelte draw as SVG, as JSON with the TS
 // field names. Ported for what the controller holds now: paths and groups, transforms, opacity,
 // blend modes, colour and gradient paints (see `Gradient.swift`), paint stacks and live booleans.
-// Text, instances, frames, masks that are on, filters that draw, stroke parts (inside / outside
+// Text, instances, frames, masks that are on, stroke parts (inside / outside
 // alignment, arrowheads, width profiles), brushstroke layers, lenses and the viewport culling
 // options (`viewportSize`, `lod`) throw `VectorNotPorted` (#624). The overlay and the panels'
 // data are not ported: no scenario compares them.
@@ -40,19 +40,6 @@ private func fmtMatrix(_ m: VectorMatrix) -> String {
     return "matrix(\(parts.joined(separator: " ")))"
 }
 
-/// `VECTOR_FILTER_TYPES`.
-public let VECTOR_FILTER_TYPES = ["dropShadow", "innerShadow", "outerGlow", "innerGlow", "layerBlur", "feather"]
-
-/// The filters of a node that draw (`activeVectorFilters`).
-func activeVectorFilters(_ node: VectorNode) -> [JSONValue] {
-    (node["filters"]?.arrayValue ?? []).filter { f in
-        guard f["enabled"] != .bool(false), let type = f["type"]?.stringValue, VECTOR_FILTER_TYPES.contains(type) else { return false }
-        let params = f["params"]
-        if type == "layerBlur" || type == "feather" { return (params?["radius"]?.numberValue ?? .nan) > 0 }
-        return (params?["opacity"]?.numberValue ?? .nan) > 0
-    }
-}
-
 /// Whether a path's stroke needs more than one element (`vectorStrokeSvgParts` returns parts).
 private func checkStrokeParts(_ node: VectorNode) throws {
     // not ported yet: stroke parts (vectorStrokeParts: alignment, arrowheads, width profiles) (#624)
@@ -62,13 +49,16 @@ private func checkStrokeParts(_ node: VectorNode) throws {
 /// Renders nodes into render data, collecting paint servers and filters as the TS does.
 private struct SceneRenderer {
     var defs: [VectorPaintDef] = []
+    var filters: [VectorRenderFilter] = []
     let prefix: String
 
-    /// The blend mode and filter of a node (`nodeFinish`).
-    func finish(_ node: VectorNode, into o: inout JSONObject) throws {
+    /// The blend mode and filter of a node (`nodeFinish`); its filter goes to `filters`.
+    mutating func finish(_ node: VectorNode, into o: inout JSONObject) throws {
         if let blend = vectorBlendModeCss(node["blendMode"]) { o["blendMode"] = .string(blend) }
-        // not ported yet: SVG filters (vectorNodeFilterSvg) (#624)
-        if !activeVectorFilters(node).isEmpty { throw VectorNotPorted("drawing filters") }
+        if let filter = try vectorNodeFilterSvg(node, "\(prefix)filter-\(node.id)") {
+            filters.append(filter)
+            o["filter"] = .string("url(#\(filter.id))")
+        }
     }
 
     /// The SVG line attributes of a (layer) node's stroke (`lineStyle`).
@@ -181,7 +171,7 @@ public func getVectorSceneRenderData(_ document: VectorDocument, viewport: Vecto
     ])
     if let bg = document.background, !bg.isEmpty { o["background"] = .string(bg) }
     o["defs"] = .array(renderer.defs.map(\.json))
-    o["filters"] = .array([])
+    o["filters"] = .array(renderer.filters.map(\.json))
     o["nodes"] = .array(nodes)
     return .object(o)
 }

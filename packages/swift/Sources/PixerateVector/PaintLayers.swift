@@ -273,3 +273,48 @@ public func needsVectorPaintLayers(_ node: VectorNode) -> Bool {
     let strokes = vectorStrokes(node)
     return fills.count > 1 || strokes.count > 1 || fills.contains { !isPlainVectorPaintLayer($0) } || strokes.contains { !isPlainVectorPaintLayer($0) }
 }
+
+// MARK: - Editing stacks
+
+/// Defaults of a new stroke layer (`newVectorStrokeLayer`): the settings of the stack's top
+/// stroke (or the node's width), then `patch`.
+public func newVectorStrokeLayer(_ node: VectorNode, _ patch: JSONObject = JSONObject()) -> JSONObject {
+    let top = vectorStrokes(node).last
+    var out = JSONObject([("paint", "#000000")])
+    if let top, (top["kind"]?.stringValue ?? "paint") == "paint" {
+        for (k, v) in vectorStrokeSettings({ top[$0] }) { out[k] = v }
+    } else {
+        out["strokeWidth"] = .number(node.strokeWidth ?? 1)
+    }
+    for (k, v) in patch { out[k] = v }
+    return out
+}
+
+/// The paint the gradient tool and editor work on (`vectorTargetPaint`): layer `layer` of the
+/// fill or stroke stack, or (nil, or an index the stack doesn't have) the shorthand.
+public func vectorTargetPaint(_ node: VectorNode, _ target: String, _ layer: Int? = nil) -> JSONValue? {
+    guard let layer else { return node[target] }
+    let stack = target == "fill" ? vectorFills(node) : vectorStrokes(node)
+    return stack.indices.contains(layer) ? stack[layer]["paint"] : node[target]
+}
+
+/// The node with `paint` where `vectorTargetPaint` reads it (`withVectorTargetPaint`).
+public func withVectorTargetPaint(_ node: VectorNode, _ target: String, _ layer: Int?, _ paint: JSONValue) -> VectorNode {
+    let stack = target == "fill" ? vectorFills(node) : vectorStrokes(node)
+    var at = layer
+    if at == nil || !stack.indices.contains(at!) {
+        if stack.isEmpty {
+            var next = node
+            next[target] = paint
+            return next
+        }
+        at = stack.count - 1
+    }
+    let next = stack.enumerated().map { i, l -> JSONObject in
+        guard i == at else { return l }
+        var c = l
+        c["paint"] = paint
+        return c
+    }
+    return target == "fill" ? withVectorFills(node, next) : withVectorStrokes(node, next)
+}

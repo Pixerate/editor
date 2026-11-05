@@ -315,13 +315,16 @@ func eraseFromFill(_ path: BezierPathInput, _ fillRule: PolygonFillRule, _ regio
 }
 
 /// The parts of a subpath's outline outside `region`, as open subpaths that keep the original
-/// curves exactly; nil when the outline does not enter the region (`eraseFromOutline`).
-func eraseFromOutline(_ sp: VectorSubpath, _ region: BezierPathInput) -> [VectorSubpath]? {
+/// curves exactly; nil when the outline does not enter the region (`eraseFromOutline`). With
+/// `keep: "inside"` the parts inside the region are kept instead (nil when the outline never
+/// leaves it), as a clipping mask clips an open path.
+func eraseFromOutline(_ sp: VectorSubpath, _ region: BezierPathInput, keep: String = "outside", fillRule: PolygonFillRule = .nonzero) -> [VectorSubpath]? {
     let regionSegs = pathToContours(region).flatMap { closeContour($0, true) }
     if regionSegs.isEmpty { return nil }
     let count = subpathSegmentCount(sp)
     guard let rb = bezierPathBounds(region), count > 0 else { return nil }
-    func removed(_ p: PathPoint) -> Bool { pointInBezierPath(region, p, .nonzero) }
+    let inside = keep == "inside"
+    func removed(_ p: PathPoint) -> Bool { pointInBezierPath(region, p, fillRule) != inside }
     var runs: [[(seg: Int, t0: Double, t1: Double)]] = []
     var cur: [(seg: Int, t0: Double, t1: Double)] = []
     var any = false
