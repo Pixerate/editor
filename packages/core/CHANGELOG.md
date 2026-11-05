@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.269.1
+
+### Patch Changes
+
+- 5a619e0: The selection and masking skill now tells agents to apply a rough result early and refine it afterwards, and to stop once verification passes.
+
 ## 0.269.0
 
 ### Minor Changes
