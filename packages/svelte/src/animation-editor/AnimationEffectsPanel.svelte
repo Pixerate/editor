@@ -16,16 +16,24 @@
   const view = animationEditorStateOf(() => controller);
   const ed = $derived(view.current);
   const provider = $derived(ed.effectsProvider);
-  const nodes = $derived([...indexMotionNodes(ed.scene.artwork.nodes).keys()]);
-  let chosen = $state('');
-  const target = $derived(node && nodes.includes(node) ? node : chosen && nodes.includes(chosen) ? chosen : '');
-  let browse = $state<null | 'motion' | 'vector'>(null);
-  let open = $state<string | null>(null);
-  let message = $state<string | null>(null);
   const applied = $derived.by(() => {
     void ed.scene;
     return controller.appliedEffects();
   });
+  const nodes = $derived([...indexMotionNodes(ed.scene.artwork.nodes).keys()]);
+  const pathNodes = $derived.by(() => {
+    const vectorGroups = new Set(applied.filter((e) => e.kind === 'vector').map((e) => e.instance));
+    const own = ed.scene.artwork.nodes.filter((n) => !vectorGroups.has(n.id));
+    return [...indexMotionNodes(own).values()].filter((e) => e.node.type === 'path').map((e) => e.node.id);
+  });
+  let chosen = $state('');
+  const target = $derived(node && nodes.includes(node) ? node : chosen && nodes.includes(chosen) ? chosen : '');
+  let browse = $state<null | 'motion' | 'vector'>(null);
+  let vectorPathNode = $state('');
+  let vectorWords = $state('');
+  const activeVectorPathNode = $derived(vectorPathNode && pathNodes.includes(vectorPathNode) ? vectorPathNode : '');
+  let open = $state<string | null>(null);
+  let message = $state<string | null>(null);
   const btn = 'rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opacity-40';
   function report(r: MotionEffectResult | Promise<MotionEffectResult>) {
     void Promise.resolve(r).then((x) => (message = x.ok ? (x.notes.length ? x.notes.join(' ') : null) : x.error));
@@ -53,7 +61,46 @@
   {/if}
   <EffectTemplates {provider} disabled={ed.readOnly} fillLabel="New scene from template" onfill={(t, v) => controller.fillTemplate(t, v).then((r) => (r.ok && r.notes.length && (message = r.notes.join(' ')), r))} />
   {#if browse === 'vector'}
-    <EffectsBrowser {provider} kinds={['vector']} title="Vector effects" onpick={(e) => ((browse = null), report(controller.addVectorEffect(e.id)))} />
+    <div class="space-y-1">
+      <div class="flex flex-wrap items-center gap-1" data-effect-part="vector-path">
+        <span class="text-muted-foreground">Path</span>
+        <select
+          class="rounded border border-border bg-transparent px-1 py-0.5 text-[11px]"
+          aria-label="Path node for vector effect"
+          value={activeVectorPathNode}
+          disabled={ed.readOnly || !pathNodes.length}
+          onchange={(e) => (vectorPathNode = e.currentTarget.value)}
+        >
+          <option value="">Default path</option>
+          {#each pathNodes as id (id)}<option value={id}>{id}</option>{/each}
+        </select>
+        {#if provider?.pathFromText}
+          <input
+            class="w-24 rounded border border-border bg-transparent px-1 py-0.5"
+            aria-label="Words for vector effect path"
+            placeholder="Words"
+            bind:value={vectorWords}
+            disabled={ed.readOnly}
+          />
+        {/if}
+      </div>
+      <EffectsBrowser
+        {provider}
+        kinds={['vector']}
+        title="Vector effects"
+        onpick={(e) => {
+          browse = null;
+          const path = e.accepts?.includes('path')
+            ? vectorWords.trim()
+              ? { text: vectorWords }
+              : activeVectorPathNode
+                ? { node: activeVectorPathNode }
+                : undefined
+            : undefined;
+          report(controller.addVectorEffect(e.id, path ? { path } : undefined));
+        }}
+      />
+    </div>
   {/if}
   <ol class="space-y-1">
     {#each applied as e (e.instance)}
@@ -64,7 +111,7 @@
           </button>
           <button type="button" class={btn} disabled={ed.readOnly} aria-label="Remove {e.name ?? e.effect}" onclick={() => report(controller.removeMotionEffect(e.instance))}>✕</button>
         </div>
-        {#if open === e.instance}<div class="mt-1"><AnimationEffectControls {controller} instance={e.instance} effect={e.effect} values={e.values} /></div>{/if}
+        {#if open === e.instance}<div class="mt-1"><AnimationEffectControls {controller} instance={e.instance} effect={e.effect} values={e.values} {pathNodes} defaultPathNode={target} disabled={ed.readOnly} /></div>{/if}
       </li>
     {/each}
   </ol>
