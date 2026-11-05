@@ -42,6 +42,12 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   same two ratios. `get_mixer_brush` reads what the brush carries; `clean_mixer_brush` wipes it.
 - **Grain**: a brush's grain response times the paper's `depth` decides how much light pressure
   skips the valleys. Pencil, pastel and charcoal are grainy; airbrush, marker and ink are not.
+  A brush can also carry its own texture, `tip.grain` (a pattern such as `sanded` or `canvas`, or
+  an image source; `texturised` stays put, `moving` rolls with the tip), which shows on any paper.
+- **Image tips**: a stamp tip whose stamp is an image source (`source:<id>`, added with the
+  brush library's `add_brush_source`) paints every dab as that image in the paint colour, with
+  hardness, roundness, angle, pressure size, `dynamics.count`, `flip` and jitter. Strokes record
+  the source, and the saved painting carries its bytes, so replays and exports match.
 - **Strokes are data.** Every stroke is recorded (brush, colour, raw points, seed, symmetry
   copies) and gets a `strokeId`. `replay_strokes` paints recorded strokes again, exactly or
   varied. That is the main way an agent should make many similar marks.

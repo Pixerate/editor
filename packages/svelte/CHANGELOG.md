@@ -1,5 +1,47 @@
 # @pixerate/editor-svelte
 
+## 0.198.0
+
+### Minor Changes
+
+- 87a74c0: Image brush tips and tip grain, like Procreate's shape and grain sources (#569).
+
+  - Brush image sources: `BrushLibrary.addSource`, `listSources` and `getSource` keep images (a PNG read from its transparency, dark or light parts, stored as a grey mask of at most 512 px with its licence and origin). Library files carry the sources their brushes name. `makeBrushSource`, `readBrushSource`, `decodeBrushSource`, `brushSourceRef`, `addBrushSourceFromFile`, `imageFileToPngDataUrl` and `withBrushSource`.
+  - A stamp tip lays an image source with `tip.stamps: ['source:<id>']` (continuous dabs, sprays and particle dots); its hardness fades it towards its edges. Objects marks still take stickers only.
+  - `tip.grain`: texture inside each dab, a built-in pattern or an image source, `texturised` (fixed to the canvas) or `moving` (rolls with the tip), with `scale`, `depth`, `contrast` and `invert`.
+  - `dynamics.count` (dabs per spacing step) and `dynamics.flip` (random mirroring).
+  - The paint engine's `PaintBrush` gains optional `tipGrain`, `dynamics.count` and `dynamics.flip`; brushes without them resolve as before. Recorded strokes keep the source refs and saved paintings carry the sources (`brushSources`), so replays, time-lapses and high-resolution exports match. `PaintEditorController.brushSources` and `stampArt`; `paintBrushPreviewRenderer(paper, { library })` draws image tips in previews.
+  - Host profiles gain `tipGrain` and `dabCount`: the paint editor paints both; the image editor, canvas and vector strokes paint without them (a warning). `brushEditorSections` adds a Grain section and, for stamp tips, count, scatter, rotation and size jitter and flip, and offers the library's sources.
+  - Agent tools `add_brush_source` and `list_brush_sources`; `create_brush`, `update_brush` and `set_brush` take the new facets, and image sources the library doesn't have are refused with the closest ids.
+  - React and Svelte `BrushEditor`: `sources` and `onAddSource` / `onaddsource`, with "Add image tip…" and "Add grain image…"; `BrushLibraryEditor` and the paint `BrushPanel` store picked images in the library.
+
+### Patch Changes
+
+- Updated dependencies [87a74c0]
+  - @pixerate/editor@0.268.0
+
+## 0.197.0
+
+### Minor Changes
+
+- aeedd05: Add path-node and words controls to `AnimationEffectsPanel` in React and Svelte, plus `AnimationEditorController.setVectorEffectPath` and its `set_vector_effect_path` agent tool in core, so an applied vector effect can be run along a path node (landing on it) or words in place, in one undo step (#496).
+- 3155b37: Canvas and vector get the paint editor's "Keep my colour" lock, and a canvas colour taken from a brush's light / dark default follows the colour scheme (#589).
+
+  - Canvas draw controller: `setColorLocked` / `colorLocked` (and a `colorLocked` option), which `selectBrush` respects; a colour taken from a light / dark default resolves again on `setColorScheme` until another colour is set; `colorScheme` and `brushSettings()`. Agents get `canvas.selectBrush`, `canvas.setColorLocked` and `canvas.setColorScheme` from `createDrawCommands`.
+  - Vector controller: `setColorLocked`, a `colorLocked` option, and `colorScheme` / `colorLocked` in the state; `addBrushstroke` and `setBrushstroke` keep the colour while locked. Strokes already made never change. Agents get `vector.setColorLocked` and `vector.setColorScheme`, and `vector.listBrushes` reports both.
+  - React `useCanvasDraw`: `colorLocked`, `setColorLocked`, `brushSettings` and an `initialColorLocked` option. Svelte `createCanvasDraw`: `colorLocked`, `setColorLocked`, `colorScheme` and `brushSettings`.
+  - `<VectorAppearancePanel>` (React and Svelte) has a "Keep my colour" toggle under brushstrokes.
+
+### Patch Changes
+
+- Updated dependencies [f6b0b95]
+- Updated dependencies [aeedd05]
+- Updated dependencies [3155b37]
+- Updated dependencies [365d86e]
+- Updated dependencies [de3ed2e]
+- Updated dependencies [b5b703d]
+  - @pixerate/editor@0.267.0
+
 ## 0.196.3
 
 ### Patch Changes

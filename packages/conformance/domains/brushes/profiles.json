@@ -47,7 +47,9 @@
       "effect"
     ],
     "velocity": "full",
-    "tilt": "full"
+    "tilt": "full",
+    "tipGrain": "full",
+    "dabCount": "full"
   },
   {
     "id": "image",
@@ -81,7 +83,9 @@
       "gradient"
     ],
     "velocity": "ignored",
-    "tilt": "ignored"
+    "tilt": "ignored",
+    "tipGrain": "ignored",
+    "dabCount": "ignored"
   },
   {
     "id": "canvas",
@@ -112,7 +116,9 @@
       "gradient"
     ],
     "velocity": "ignored",
-    "tilt": "full"
+    "tilt": "full",
+    "tipGrain": "ignored",
+    "dabCount": "ignored"
   },
   {
     "id": "vector",
@@ -148,6 +154,8 @@
       "gradient"
     ],
     "velocity": "ignored",
-    "tilt": "full"
+    "tilt": "full",
+    "tipGrain": "ignored",
+    "dabCount": "ignored"
   }
 ]

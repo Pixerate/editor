@@ -1,7 +1,7 @@
 <script lang="ts">
   import StickerPicker from './StickerPicker.svelte';
   import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-  import { brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+  import { addBrushSourceFromFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
   import BrushEditor from '../brushes/BrushEditor.svelte';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
@@ -38,6 +38,11 @@
   const spec = $derived.by<Brush>(() => {
     void brush;
     return untrack(() => controller.getBrushSpec()!);
+  });
+  // The image sources the editor paints with, read again after every change (sources added to the library).
+  const sources = $derived.by(() => {
+    void snap;
+    return untrack(() => controller.brushSources.all());
   });
   // Previewed in the brush's own default colour when it has one, else the paint colour.
   const own = $derived(typeof spec.colour?.default === 'string' && /^#[0-9a-f]{6}/i.test(spec.colour.default) ? spec.colour.default.slice(0, 7) : undefined);
@@ -92,10 +97,19 @@
   {/if}
 {/snippet}
 
-<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. -->
+<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. Images picked for an image tip or grain go into the brush library as sources. -->
 <div class={`${panel} ${className}`} data-testid="brush-panel">
   <BrushLibraryBrowser {entries} activeId={brush.id} onselect={(id) => controller.setBrush({ id })} thumbnail={(id) => thumbs.get(id) ?? null} {thumbnailWidth} {thumbnailHeight} />
-  <BrushEditor brush={spec} profile={PAINT_PROFILE} {preview} onchange={(next) => run(() => controller.setBrushSpec(next))} onsaveas={(name) => controller.saveBrush({ id: slug(name), name })} {extra} />
+  <BrushEditor
+    brush={spec}
+    profile={PAINT_PROFILE}
+    {preview}
+    onchange={(next) => run(() => controller.setBrushSpec(next))}
+    onsaveas={(name) => controller.saveBrush({ id: slug(name), name })}
+    sources={sources}
+    onaddsource={async (file) => (await addBrushSourceFromFile(controller.brushLibrary, file)).ref}
+    {extra}
+  />
   <div class="flex flex-wrap items-center gap-1">
     <button type="button" class={button} onclick={() => run(async () => downloadBytes(JSON.stringify(await controller.exportBrushes(), null, 2), 'brushes.json', 'application/json'))}>Export</button>
     <button type="button" class={button} onclick={() => fileInput?.click()}>Import…</button>

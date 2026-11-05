@@ -34,8 +34,8 @@ export const BRUSH_TOOLS: readonly BrushTool[] = ['eraser', 'blender', 'smudge',
 
 /**
  * The tip's shape. `round`, `flat` and `chisel` are ellipses (their `roundness` and `angle` set
- * the ellipse; the name is for people); `bristle` is a tuft of bristles; `stamp` lays textured
- * stamps (with `marks` `objects` or `particles`).
+ * the ellipse; the name is for people); `bristle` is a tuft of bristles; `stamp` lays shaped
+ * dabs: an editor stamp, a sticker, or an image source (`source:<id>`, see `brushes/sources.ts`).
  */
 export type BrushTipShape = 'round' | 'flat' | 'chisel' | 'bristle' | 'stamp';
 export const BRUSH_TIP_SHAPES: readonly BrushTipShape[] = ['round', 'flat', 'chisel', 'bristle', 'stamp'];
@@ -49,10 +49,39 @@ export type BrushSurface = 'dry' | 'wet' | 'thick';
 export const BRUSH_SURFACES: readonly BrushSurface[] = ['dry', 'wet', 'thick'];
 
 /**
- * A sticker a `stamp` tip lays: a sticker ref `provider:id` (`editor:star`, or a host library's
- * sticker). Objects marks take any sticker; particle marks only the editor's own stamps.
+ * What a `stamp` tip lays: a sticker ref `provider:id` (`editor:star`, or a host library's
+ * sticker) or an image source `source:<id>` from the brush library. Objects marks take only
+ * stickers (each mark stays a sticker).
  */
 export type BrushStamp = StickerRef;
+
+/**
+ * How tip grain sits: `moving` rolls with the tip along the stroke (it turns with the tip, and
+ * every stroke shows it the same way); `texturised` stays put on the canvas, like a texture under
+ * the paint, so overlapping strokes show the same grain.
+ */
+export type BrushGrainMode = 'moving' | 'texturised';
+export const BRUSH_GRAIN_MODES: readonly BrushGrainMode[] = ['moving', 'texturised'];
+
+/** Mirror each dab at random across these axes of the tip. */
+export type BrushFlip = 'none' | 'x' | 'y' | 'xy';
+export const BRUSH_FLIPS: readonly BrushFlip[] = ['none', 'x', 'y', 'xy'];
+
+/** Texture inside the tip (Procreate's grain source), separate from the paper grain. */
+export interface BrushTipGrain {
+  /** A built-in grain pattern (`rough`, `canvas`, `sanded`…) or an image source `source:<id>` (light parts are peaks). */
+  source: string;
+  /** Default `texturised`. */
+  mode?: BrushGrainMode;
+  /** Grain size: 1 is the pattern's or image's own size, 2 twice as coarse; 0.05..20 (default 1). */
+  scale?: number;
+  /** How much the grain takes out of the mark: 0 none .. 1 only the peaks paint (default 0.6). */
+  depth?: number;
+  /** Height contrast around the middle, 0..3 (default 1). */
+  contrast?: number;
+  /** Swap peaks and valleys (default false). */
+  invert?: boolean;
+}
 
 /** The tuft of a `bristle` tip (each 0..1 unless noted). */
 export interface BrushBristles {
@@ -91,8 +120,10 @@ export interface BrushTip {
   blend?: BlendMode;
   /** `bristle` tips: the tuft. */
   bristle?: BrushBristles;
-  /** `stamp` tips: sticker refs (objects: any sticker, one picked at random per mark; particles: up to 4 editor stamps, in `marks.stampOrder`). */
+  /** `stamp` tips: sticker or source refs (objects: any sticker, one picked at random per mark; particles: up to 4, in `marks.stampOrder`; continuous dabs: the first). */
   stamps?: BrushStamp[];
+  /** Texture inside each dab (continuous and scatter marks). */
+  grain?: BrushTipGrain;
 }
 
 /** Dabs laid along the path (the default). */
@@ -201,6 +232,10 @@ export interface BrushDynamics {
   opacityJitter?: number;
   /** Random offset across the stroke in diameters, 0..4 (default 0). */
   scatter?: number;
+  /** Dabs laid at each spacing step, 1..16, each with its own jitter (default 1). */
+  count?: number;
+  /** Mirror each dab at random across these axes (default `none`): variety for image tips. */
+  flip?: BrushFlip;
 }
 
 /** A Mixer Brush's paint reservoir: the brush is loaded with colour and mixes what it picks up into it. */

@@ -184,6 +184,40 @@
       }
     },
     {
+      "name": "list_brush_sources",
+      "title": "List brush image sources",
+      "description": "Lists the image sources in the brush library: the images image tips and image grain are made from. Returns each source's id, ref (source:<id>, for tip.stamps of a stamp tip or tip.grain.source in create_brush / update_brush), name, width and height in px, licence and origin when it has them, and usedBy (the saved brushes that name it), plus total. Built-in grain patterns need no source. Changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Words in the id, name or origin (each word must match the start of one)."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Skip this many (default 0)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "At most this many (default 100)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "List brush image sources",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "preview_brush",
       "title": "Preview a brush",
       "description": "Draws a sample S-stroke with a brush (by id) on a plain background and returns it as an image, to see a brush before painting with it or after create_brush / update_brush. Returns the image plus id, width and height. Changes nothing.",
@@ -316,7 +350,7 @@
                   "bristle",
                   "stamp"
                 ],
-                "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: textured stamps (see stamps), laid as objects or particles."
+                "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: dabs shaped like a stamp, a sticker or an image source (see stamps), also laid as sprays, objects or particles."
               },
               "size": {
                 "type": "number",
@@ -328,7 +362,7 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1,
-                "description": "Edge hardness, 0 soft .. 1 hard (default 1)."
+                "description": "Edge hardness, 0 soft .. 1 hard (default 1). Image-source stamps fade towards their edges below 1."
               },
               "spacing": {
                 "type": "number",
@@ -447,9 +481,54 @@
                 "items": {
                   "type": "string",
                   "pattern": "^(?:[^:\\s]+:\\S+|dot|star|heart|leaf|flower|confetti|splat|sparkle|ring)$",
-                  "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring). A bare editor stamp (star) means editor:star."
+                  "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring), or an image source source:<id> (list_brush_sources lists them; add_brush_source makes one from an image). A bare editor stamp (star) means editor:star."
                 },
-                "description": "Stamp tips: the stickers. Objects take any sticker and pick one at random per mark (default editor:star; repeats count once); particles take only the editor's stamps, use the first 4 in marks.stampOrder, and repeats weight the order."
+                "description": "Stamp tips: stickers or image sources (source:<id>). Continuous dabs and sprays lay the first; objects take only stickers and pick one at random per mark (default editor:star; repeats count once); particles use the first 4 in marks.stampOrder, and repeats weight the order."
+              },
+              "grain": {
+                "type": "object",
+                "description": "Texture inside the tip (a grain source), separate from the paper's grain: each dab is multiplied by it. Continuous and scatter marks of round and stamp tips.",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "pattern": "^(?:source:[a-z0-9][a-z0-9-]{0,63}|cold-pressed|hot-pressed|rough|vellum|laid|ingres|sanded|canvas|linen|gesso)$",
+                    "description": "The texture: a built-in pattern (cold-pressed, hot-pressed, rough, vellum, laid, ingres, sanded, canvas, linen, gesso) or an image source source:<id> (list_brush_sources); light parts are peaks, which paint."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "moving",
+                      "texturised"
+                    ],
+                    "description": "texturised (default): the grain stays put on the canvas, a texture under the paint; moving: it rolls along with the tip, turning with it."
+                  },
+                  "scale": {
+                    "type": "number",
+                    "minimum": 0.05,
+                    "maximum": 20,
+                    "description": "Grain size: 1 is the pattern's or image's own size, 2 twice as coarse (default 1)."
+                  },
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much the grain takes out of each dab: 0 none, 1 only the peaks paint (default 0.6)."
+                  },
+                  "contrast": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3,
+                    "description": "Height contrast around the middle: below 1 softer, above 1 harsher (default 1)."
+                  },
+                  "invert": {
+                    "type": "boolean",
+                    "description": "Swap peaks and valleys (default false)."
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "additionalProperties": false
               }
             },
             "additionalProperties": false
@@ -784,6 +863,22 @@
                 "minimum": 0,
                 "maximum": 4,
                 "description": "Random offset across the stroke, in diameters (default 0)."
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16,
+                "description": "Dabs laid at each spacing step, each with its own jitter and scatter (default 1). Dab brushes."
+              },
+              "flip": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "x",
+                  "y",
+                  "xy"
+                ],
+                "description": "Mirror each dab at random across x, y or both (default none): variety for image and stamp tips."
               }
             },
             "additionalProperties": false
@@ -1649,7 +1744,7 @@
                   "bristle",
                   "stamp"
                 ],
-                "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: textured stamps (see stamps), laid as objects or particles."
+                "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: dabs shaped like a stamp, a sticker or an image source (see stamps), also laid as sprays, objects or particles."
               },
               "size": {
                 "type": "number",
@@ -1661,7 +1756,7 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1,
-                "description": "Edge hardness, 0 soft .. 1 hard (default 1)."
+                "description": "Edge hardness, 0 soft .. 1 hard (default 1). Image-source stamps fade towards their edges below 1."
               },
               "spacing": {
                 "type": "number",
@@ -1780,9 +1875,54 @@
                 "items": {
                   "type": "string",
                   "pattern": "^(?:[^:\\s]+:\\S+|dot|star|heart|leaf|flower|confetti|splat|sparkle|ring)$",
-                  "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring). A bare editor stamp (star) means editor:star."
+                  "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring), or an image source source:<id> (list_brush_sources lists them; add_brush_source makes one from an image). A bare editor stamp (star) means editor:star."
                 },
-                "description": "Stamp tips: the stickers. Objects take any sticker and pick one at random per mark (default editor:star; repeats count once); particles take only the editor's stamps, use the first 4 in marks.stampOrder, and repeats weight the order."
+                "description": "Stamp tips: stickers or image sources (source:<id>). Continuous dabs and sprays lay the first; objects take only stickers and pick one at random per mark (default editor:star; repeats count once); particles use the first 4 in marks.stampOrder, and repeats weight the order."
+              },
+              "grain": {
+                "type": "object",
+                "description": "Texture inside the tip (a grain source), separate from the paper's grain: each dab is multiplied by it. Continuous and scatter marks of round and stamp tips.",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "pattern": "^(?:source:[a-z0-9][a-z0-9-]{0,63}|cold-pressed|hot-pressed|rough|vellum|laid|ingres|sanded|canvas|linen|gesso)$",
+                    "description": "The texture: a built-in pattern (cold-pressed, hot-pressed, rough, vellum, laid, ingres, sanded, canvas, linen, gesso) or an image source source:<id> (list_brush_sources); light parts are peaks, which paint."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "moving",
+                      "texturised"
+                    ],
+                    "description": "texturised (default): the grain stays put on the canvas, a texture under the paint; moving: it rolls along with the tip, turning with it."
+                  },
+                  "scale": {
+                    "type": "number",
+                    "minimum": 0.05,
+                    "maximum": 20,
+                    "description": "Grain size: 1 is the pattern's or image's own size, 2 twice as coarse (default 1)."
+                  },
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much the grain takes out of each dab: 0 none, 1 only the peaks paint (default 0.6)."
+                  },
+                  "contrast": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 3,
+                    "description": "Height contrast around the middle: below 1 softer, above 1 harsher (default 1)."
+                  },
+                  "invert": {
+                    "type": "boolean",
+                    "description": "Swap peaks and valleys (default false)."
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "additionalProperties": false
               }
             },
             "additionalProperties": false
@@ -2117,6 +2257,22 @@
                 "minimum": 0,
                 "maximum": 4,
                 "description": "Random offset across the stroke, in diameters (default 0)."
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16,
+                "description": "Dabs laid at each spacing step, each with its own jitter and scatter (default 1). Dab brushes."
+              },
+              "flip": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "x",
+                  "y",
+                  "xy"
+                ],
+                "description": "Mirror each dab at random across x, y or both (default none): variety for image and stamp tips."
               }
             },
             "additionalProperties": false
@@ -2919,6 +3075,73 @@
       }
     },
     {
+      "name": "add_brush_source",
+      "title": "Add a brush image source",
+      "description": "Adds an image to the brush library as a source for image tips and image grain (as Procreate's shape and grain sources). The image is a PNG data: URL; the marks are read from its transparency, its dark parts (a scan of marks on paper) or its light parts (white on black), as channel says, and kept as a grey mask at most 512 px on a side. Returns id, ref (source:<id>), the stored source's width and height, problems (the channel auto picked, scaling) and replaced. Then make the brush: create_brush or update_brush with tip { shape: \"stamp\", stamps: [ref] } for an image tip, or tip.grain { source: ref } for grain. A taken id is refused unless overwrite.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Display name, e.g. \"Charcoal scan\"."
+          },
+          "image": {
+            "type": "string",
+            "pattern": "^data:image/png;base64,",
+            "maxLength": 40000000,
+            "description": "The image: a PNG data: URL, at most 16777216 pixels; larger than 512 px it is scaled down."
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "The source id (default: from the name, made unique): lowercase letters, digits and dashes."
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "alpha",
+              "darkness",
+              "lightness"
+            ],
+            "description": "Where the marks are: auto (default: the transparency when the image has any, else the dark parts), alpha, darkness (dark marks on light paper) or lightness (light marks on black)."
+          },
+          "invert": {
+            "type": "boolean",
+            "description": "Swap painted and empty parts (default false)."
+          },
+          "licence": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "The licence or terms the image came with, kept with the source."
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Where it came from: a file name, a pack or a URL."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "Replace the image of a source with the same id (default false); brushes using it change with it."
+          }
+        },
+        "required": [
+          "name",
+          "image"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Add a brush image source",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "duplicate_brush",
       "title": "Duplicate a brush",
       "description": "Copies any brush (built-in presets included) to a new saved brush you can change with update_brush. Returns the new id (default <id>-copy, -copy-2…) and the brush.",
@@ -3020,9 +3243,11 @@
       "describe_brush",
       "check_brush",
       "export_brushes",
+      "list_brush_sources",
       "preview_brush",
       "create_brush",
       "update_brush",
+      "add_brush_source",
       "duplicate_brush",
       "remove_brush",
       "import_brushes"
@@ -3032,9 +3257,11 @@
       "describe_brush",
       "check_brush",
       "export_brushes",
+      "list_brush_sources",
       "preview_brush",
       "create_brush",
       "update_brush",
+      "add_brush_source",
       "duplicate_brush",
       "remove_brush",
       "import_brushes"
@@ -3044,9 +3271,11 @@
       "describe_brush",
       "check_brush",
       "export_brushes",
+      "list_brush_sources",
       "preview_brush",
       "create_brush",
       "update_brush",
+      "add_brush_source",
       "duplicate_brush",
       "remove_brush",
       "import_brushes"
@@ -3056,9 +3285,11 @@
       "describe_brush",
       "check_brush",
       "export_brushes",
+      "list_brush_sources",
       "preview_brush",
       "create_brush",
       "update_brush",
+      "add_brush_source",
       "duplicate_brush",
       "remove_brush",
       "import_brushes"

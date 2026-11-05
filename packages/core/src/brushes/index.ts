@@ -10,7 +10,30 @@
  */
 
 export * from './types';
-export { BRUSH_FACET_SCHEMAS, BRUSH_JSON_SCHEMA, BRUSH_WORD, MAX_BRUSH_PALETTE } from './schema';
+export { BRUSH_FACET_SCHEMAS, BRUSH_GRAIN_SOURCE_PATTERN, BRUSH_JSON_SCHEMA, BRUSH_WORD, MAX_BRUSH_PALETTE, TIP_GRAIN_PATTERNS } from './schema';
+export {
+  BRUSH_SOURCE_CHANNELS,
+  BRUSH_SOURCE_PROVIDER,
+  brushSourceFromMask,
+  brushSourceIdFromName,
+  brushSourceIdOf,
+  brushSourceIds,
+  brushSourceRef,
+  BrushSourceError,
+  decodeBrushSource,
+  isBrushSourceRef,
+  makeBrushSource,
+  MAX_BRUSH_SOURCE_INPUT_PIXELS,
+  MAX_BRUSH_SOURCE_SIZE,
+  MAX_BRUSH_SOURCES,
+  readBrushSource,
+  summarizeBrushSource,
+  type BrushSource,
+  type BrushSourceChannel,
+  type BrushSourceInput,
+  type BrushSourceSummary,
+  type DecodedBrushSource,
+} from './sources';
 export { normalizeBrushSpec, WET_BRUSH_TOOLS } from './normalize';
 export { resolveBrush, resolveCategory, resolveEngine, resolveWetMedium, type ResolveBrushOptions } from './resolve';
 export { migrateBrushV1 } from './migrate';
@@ -24,6 +47,8 @@ export {
   createBrushLibrary,
   isBrushLibrary,
   parseBrushLibrary,
+  parseBrushLibrarySources,
+  type AddBrushSourceResult,
   snapshotBrushLibrary,
   type BrushFilter,
   type BrushLibrary,
@@ -37,8 +62,11 @@ export {
 } from './library';
 export { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, changedBrushPaths, mergeBrushPatch, UNSETTABLE_BRUSH_FACETS, type BrushPatch, type UnsettableBrushFacet } from './patch';
 export {
+  addBrushSourceFromFile,
   brushEditorScope,
   brushEditorSections,
+  imageFileToPngDataUrl,
+  withBrushSource,
   brushIdFromName,
   brushLibraryGroups,
   newBrushFor,
@@ -48,6 +76,7 @@ export {
   type BrushEditorScope,
   type SaveBrushEditOptions,
   type SaveBrushEditResult,
+  type BrushEditorContext,
   type BrushEditorControl,
   type BrushEditorSection,
   type BrushEditorSectionId,

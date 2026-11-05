@@ -2,7 +2,7 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import type { ImageEditorController, RefineOutput, SelectionSource } from './controller';
 import type { AdjustmentKind } from './types';
-import { ADJUSTMENT_KINDS, isAdjustmentKind } from './adjustment-layers';
+import { ADJUSTMENT_KINDS, assertAdjustmentParams, isAdjustmentKind } from './adjustment-layers';
 import { describeSelection } from './selection/tool-options';
 import { SELECTION_MODES, parseSelectionMode, selectionArea, type SelectionChannel } from './selection/mask';
 import { COLOR_RANGE_PRESETS, isColorRangePreset, type ColorRangeSample } from './selection/wand';
@@ -528,7 +528,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       properties: {
         layerId: { type: 'string', description: 'Existing adjustment layer to mask.' },
         kind: { type: 'string', enum: ADJUSTMENT_KINDS.map((k) => k.kind), description: 'Kind of a new layer to add and mask (instead of layerId).' },
-        params: { type: 'object', description: 'Parameters for the new layer (see list_controls).' },
+        params: { type: 'object', description: 'Parameters for the new layer, nested as in add_adjustment_layer: {"master":{"gamma":1.2}}, not dotted control ids.' },
         density: { type: 'number', minimum: 0, maximum: 1, description: 'Mask density 0-1.' },
         feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Mask feather in pixels.' },
       },
@@ -548,6 +548,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         controller.applySelectionAsLayerMask(layerId, props);
         id = layerId;
       } else if (isAdjustmentKind(kind)) {
+        assertAdjustmentParams(kind, params);
         id = controller.addAdjustmentLayer({
           kind: kind as AdjustmentKind,
           params: params as never,
