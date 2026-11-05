@@ -3916,3 +3916,13 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `add_adjustment_layer` with `{ kind: "levels", params: { "master.gamma": 1.18 } }` returned success and a neutral layer. An agent had no sign that its adjustment was lost.
 - **Root Cause**: `normalizeAdjustmentLayer` rebuilds `params` from the keys each kind uses and fills the rest with neutral values. That is right for stored and hand-written documents. `list_controls` also shows dotted ids (`master.gamma`), which only `set_adjustments` resolves, while `params` is nested.
 - **Solution / Workaround**: A tool taking `params` calls `assertAdjustmentParams(kind, params)` before changing anything. It walks them beside `defaultAdjustmentParams(kind)`, so a new parameter only needs its default. Keep the normaliser lenient: documents must still load.
+
+### [conformance] A Paint Scenario Can't Paint with a Brush in the Step After `create_brush`
+- **Issue / Symptom**: A recorded paint scenario that calls `create_brush` and then `paint_stroke` with that `brushId` records `Unknown brush "<id>"` for the stroke, although the brush was saved.
+- **Root Cause**: The TS paint editor reads the shared brush library again when it changes (`refreshBrushes`), and that read is asynchronous: the next tool call can run before the new brush is in the editor's list. The Swift library is synchronous, so a Swift run would paint where the recording says it failed.
+- **Solution / Workaround**: Put a read of the library between them (`describe_brush` with the new id, or `list_brush_sources`), as `stamp-tips.json` and `brush-tips-and-grain.json` do. Check a fresh recording's results for `Unknown brush` before committing it.
+
+### [swift] Dab Flips Ride on `PenDab`, Not on `Dab`
+- **Issue / Symptom**: Porting `dynamics.flip` by adding `flip` to `Dab` would touch every engine that builds dabs, and a spray droplet or a light-paint twin could lose it.
+- **Root Cause**: In TS `PenDab extends Dab`, so `{ ...d }` copies `flip` into every mark made from a dab. In Swift `PenDab` holds a `Dab` (`d.dab`), and the stamp rasterizer takes a `Dab`.
+- **Solution / Workaround**: `flip` is a field of `PenDab`, passed explicitly to `rasterizeStampDab(_:_:…)` with the dab's own index as the stamp seed. `sprayDroplets` copies the whole `PenDab`, so droplets keep it. New per-dab state from the walker belongs on `PenDab` the same way, and engine JSON keeps the TS key order (`dynamics.count` / `flip` after `scatter`, `tipGrain` between `spray` and `paint`), written only when not the default.

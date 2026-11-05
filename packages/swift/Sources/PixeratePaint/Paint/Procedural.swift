@@ -109,6 +109,8 @@ class MarkStroke: CoverageStroke {
     private var penColor = PaintGradientSample()
     /// Effect paint: each pixel of a mark takes its colour (and alpha) from these pixels.
     var effect: EffectPaintPixels?
+    /// The art of image sources a textured dot can lay (`source:<id>`).
+    var stampArt: StampArtLookup?
     private var field: [Float] = []
 
     init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?) {
@@ -197,10 +199,10 @@ class MarkStroke: CoverageStroke {
         giveBack(vals)
     }
 
-    /// Stamps an editor stamp over a square of half-size `r`, turned `rotation` radians clockwise.
+    /// Stamps an editor stamp or an image source over a square of half-size `r`, turned `rotation` radians clockwise (round without art).
     func stamp(_ x: Double, _ y: Double, _ r: Double, _ kind: String, _ rotation: Double, _ seed: Int, _ alpha: Double, _ opacity: Double, _ pressure: Double, _ rects: inout [RasterRect]) {
         if !(r > 0.05) || !(alpha > 0) { return }
-        guard let k = editorStampKind(kind) else { return mark(x, y, r, alpha, opacity, pressure, &rects) }
+        guard let sample = stampSampler(kind, stampArt) else { return mark(x, y, r, alpha, opacity, pressure, &rects) }
         let reach = Swift.max(0.5, r) * 2.0.squareRoot() + 1
         let rx = Int(JS.floor(x - reach)), ry = Int(JS.floor(y - reach))
         let rect = RasterRect(x: rx, y: ry, width: Int(JS.ceil(x + reach)) - rx, height: Int(JS.ceil(y + reach)) - ry)
@@ -218,7 +220,7 @@ class MarkStroke: CoverageStroke {
                     for sx in 0..<ss {
                         let dx = Double(rect.x + xx) + (Double(sx) + 0.5) / Double(ss) - x
                         let dy = Double(rect.y + yy) + (Double(sy) + 0.5) / Double(ss) - y
-                        sum += stampCoverage(k, (dx * c + dy * s) * inv, (dy * c - dx * s) * inv, seed)
+                        sum += sample((dx * c + dy * s) * inv, (dy * c - dx * s) * inv, seed)
                     }
                 }
                 vals[idx] = Float((sum / Double(ss * ss)) * a)

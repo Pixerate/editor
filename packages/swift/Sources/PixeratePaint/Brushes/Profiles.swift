@@ -23,6 +23,10 @@ public struct BrushHostProfile: Sendable {
     public var colours: [String]
     public var velocity: String
     public var tilt: String
+    /// Texture inside the tip (`tip.grain`); nil: `none`.
+    public var tipGrain: String? = nil
+    /// Several dabs per spacing step (`dynamics.count` above 1); nil: `none`.
+    public var dabCount: String? = nil
 }
 
 private let ALL_COLOURS = ["solid", "dual", "gradient", "effect"]
@@ -30,9 +34,9 @@ private let ELLIPSES = ["round", "flat", "chisel"]
 public let BRUSH_TIP_SHAPES = ["round", "flat", "chisel", "bristle", "stamp"]
 public let BRUSH_MARKS_KINDS = ["continuous", "scatter", "particles", "objects"]
 
-public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full")
-public let IMAGE_PROFILE = BrushHostProfile(id: "image", name: "Image editor", kinds: ["mark", "tool"], tools: ["eraser"], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "full", grain: "ignored", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "ignored")
-public let CANVAS_PROFILE = BrushHostProfile(id: "canvas", name: "Canvas", kinds: ["mark"], tools: [], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "none", grain: "full", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "full")
+public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full", tipGrain: "full", dabCount: "full")
+public let IMAGE_PROFILE = BrushHostProfile(id: "image", name: "Image editor", kinds: ["mark", "tool"], tools: ["eraser"], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "full", grain: "ignored", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "ignored", tipGrain: "ignored", dabCount: "ignored")
+public let CANVAS_PROFILE = BrushHostProfile(id: "canvas", name: "Canvas", kinds: ["mark"], tools: [], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "none", grain: "full", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "full", tipGrain: "ignored", dabCount: "ignored")
 /// Vector brushstrokes: as canvas, plus wet paint, the Mixer Brush, smudge and blender (#519); light paints as plain colour.
 public let VECTOR_PROFILE: BrushHostProfile = {
     var p = CANVAS_PROFILE
@@ -87,7 +91,10 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
         add("tool", "error", "\(host) has no \(tool) tool.", profile.tools.isEmpty ? "\(host) has no tools; use a mark brush." : "Use one of: \(list(profile.tools)).")
     }
     let shape = brush.path("tip.shape")?.stringValue ?? ""
-    if !profile.tipShapes.contains(shape) { add("tip.shape", "error", "\(host) can't lay a \(shape) tip.", "Set tip.shape to one of: \(list(profile.tipShapes)).") }
+    if !profile.tipShapes.contains(shape) {
+        let image = shape == "stamp" && (brush.path("tip.stamps")?.arrayValue ?? []).contains { $0.stringValue.map(isBrushSourceRef) ?? false }
+        add("tip.shape", "error", "\(host) can't lay a \(image ? "stamp tip (image tips are stamps)" : "\(shape) tip").", "Set tip.shape to one of: \(list(profile.tipShapes)).")
+    }
     let marks = brush.path("marks.kind")?.stringValue ?? "continuous"
     if !profile.marks.contains(marks) { add("marks", "error", "\(host) can't lay \(marks) marks.", "Use marks \(list(profile.marks)) (remove marks for continuous dabs).") }
     let surface = brush.path("behaviour.surface")?.stringValue ?? "dry"
@@ -101,6 +108,8 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
         feature(profile.motion, m["live"] == .bool(true) || nonZero(m["waveSpeed"]) || m["fps"] != nil, "motion", "animation", "Remove motion.")
     }
     let d = brush["dynamics"]?.objectValue ?? [:]
+    feature(profile.tipGrain ?? "none", brush.path("tip.grain") != nil, "tip.grain", "tip grain", "Remove tip.grain (behaviour.grain textures with the paper instead).")
+    feature(profile.dabCount ?? "none", (d["count"]?.numberValue ?? 1) > 1, "dynamics.count", "several dabs per step", "Set dynamics.count to 1.")
     feature(profile.velocity, nonZero(d["velocitySize"]) || nonZero(d["velocityOpacity"]), "dynamics.velocity", "velocity dynamics (its strokes carry no timing)", "Set dynamics.velocitySize and velocityOpacity to 0.")
     feature(profile.tilt, nonZero(d["tiltSize"]) || nonZero(d["tiltRoundness"]) || nonZero(d["tiltOpacity"]), "dynamics.tilt", "tilt dynamics", "Set dynamics.tiltSize, tiltRoundness and tiltOpacity to 0.")
     let colour = brush["colour"]?.objectValue
@@ -147,6 +156,8 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
             }
         case "behaviour.exchange": edit("behaviour") { $0["exchange"] = nil }
         case "behaviour.grain": edit("behaviour") { $0["grain"] = nil }
+        case "tip.grain": edit("tip") { $0["grain"] = nil }
+        case "dynamics.count": edit("dynamics") { $0["count"] = nil }
         case "light": b["light"] = nil
         case "motion": b["motion"] = nil
         case "dynamics.velocity": edit("dynamics") { o in o["velocitySize"] = nil; o["velocityOpacity"] = nil }
