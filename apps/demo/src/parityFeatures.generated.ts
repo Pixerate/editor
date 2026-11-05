@@ -1116,7 +1116,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`addConstraint`, `removeConstraints`, `setConstraintValue`, `autoConstrain`, `getConstraintDof`, `solveVectorConstraints`, `addVectorConstraint`, `inferVectorConstraints`, `vectorConstraintDof`, `getVectorConstraintPanel` & `getVectorOverlayRenderData().constraints`",
         "react": "`<VectorConstraintsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` glyphs",
         "svelte": "`<VectorConstraintsPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` glyphs",
-        "swift": "Planned (#533)"
+        "swift": "Constraints ✅ headless (`VectorEditorController`: `addConstraint`, `removeConstraints`, `setConstraintValue`, `autoConstrain`, `getConstraintDof`, `constraintPanel`, solved after every edit; `solveVectorConstraints`, `addVectorConstraint`, `inferVectorConstraints`, `vectorConstraintDof`, `vectorConstraintGlyphs`); glyphs and dimension lines on the canvas and the panel's views: Planned (#533)"
       },
       {
         "feature": "Vector Contour (CorelDRAW-style live contour effect: concentric offset steps inside, outside or to the centre, `offset` apart, fill and stroke blending to end colours with acceleration; drawn over the shape inside and under it outside; works with every other effect, export and agent path through `vector.addEffect` with type `contour`)",
