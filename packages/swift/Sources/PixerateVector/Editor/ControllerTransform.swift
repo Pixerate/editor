@@ -307,22 +307,46 @@ func homographyKeepsQuad(_ h: Homography, _ quad: [Vec2]) -> Bool {
     return ws.allSatisfy { $0 > 1e-9 } || ws.allSatisfy { $0 < -1e-9 }
 }
 
+/// Effects after their node's geometry went through a non-affine map (`mapEffects`): envelope
+/// meshes follow it (a preset becomes the mesh it stood for). Nil without effects.
+private func mapDistortedEffects(_ node: VectorNode, _ f: (Vec2) -> Vec2) throws -> JSONValue? {
+    guard let list = node["effects"]?.arrayValue, !list.isEmpty else { return nil }
+    return .array(try list.map { e in
+        guard e["type"] == "envelope", var o = e.objectValue, var params = o["params"]?.objectValue, let id = o["id"]?.stringValue else { return e }
+        if params["style"] == "mesh" {
+            guard let mesh = VectorWarpMesh(json: params["mesh"]) else { return e }
+            params["mesh"] = mapVectorMeshPoints(mesh, f).json
+        } else {
+            guard let bounds = try vectorEffectInputBounds(node, id), vectorEnvelopeMap(params, bounds) != nil else { return e }
+            let mesh = mapVectorMeshPoints(vectorEnvelopeMesh(params, bounds), f)
+            params["style"] = "mesh"
+            params["mesh"] = mesh.json
+        }
+        o["params"] = .object(params)
+        return .object(o)
+    })
+}
+
 /// A node sent through `f`, a map of the space `parentToDoc` maps its parent to (`distortVectorNode`):
 /// every anchor and handle is mapped in the node's own space, and it keeps its rigid `transform`.
+/// Envelope meshes and a blend's spine are mapped too.
 func distortVectorNode(_ node: VectorNode, _ parentToDoc: VectorMatrix, _ f: @escaping (Vec2) -> Vec2, _ tolerance: Double) throws -> VectorNode {
     let toDoc = multiplyMatrices(nodeMatrix(node), parentToDoc)
     let inv = invertMatrix(toDoc)
     let local: (Vec2) -> Vec2 = { p in applyMatrix(inv, f(applyMatrix(toDoc, p))) }
-    // not ported yet: envelope meshes following the map (mapEffects) (#624)
-    if node["effects"]?.arrayValue?.contains(where: { $0["type"] == "envelope" }) == true { throw VectorNotPorted("distorting envelope effects") }
+    let effects = try mapDistortedEffects(node, local)
     var next = node
     if node.isGroup {
         next.children = try node.children.map { try distortVectorNode($0, toDoc, f, tolerance) }
-        // not ported yet: a blend's spine (#624)
-        if truthy(node["blend"]?["spine"]) { throw VectorNotPorted("distorting blend spines") }
+        if let effects { next["effects"] = effects }
+        if var blend = node["blend"]?.objectValue, let raw = blend["spine"], truthy(raw), let spine = try? VectorSubpath(json: raw) {
+            blend["spine"] = mapVectorSubpaths([spine], local, tolerance)[0].toJSON()
+            next["blend"] = .object(blend)
+        }
         return next
     }
     if !node.isPath { throw VectorNotPorted("distorting \(node.typeName) nodes") }
+    if let effects { next["effects"] = effects }
     // Gradients in the node's space have their handles mapped; box ones follow the new bounds.
     if node.fill != nil { next.fill = mapVectorPaint(node.fill, local) }
     if node.stroke != nil { next.stroke = mapVectorPaint(node.stroke, local) }

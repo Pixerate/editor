@@ -3,12 +3,6 @@ import PixerateCore
 import PixerateGeometry
 import PixerateRaster
 
-/// A blend group: a group with `blend` (`isVectorBlendGroup`).
-func isVectorBlendGroup(_ node: VectorNode?) -> Bool {
-    guard let node else { return false }
-    return node.isGroup && truthy(node["blend"])
-}
-
 extension VectorEditorController {
     /// Groups the selected (or given) nodes; they must share a parent. Returns the group id.
     public func group(ids: [String]? = nil, name: String? = nil) throws -> String? {

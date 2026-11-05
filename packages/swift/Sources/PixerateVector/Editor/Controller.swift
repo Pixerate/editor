@@ -145,6 +145,12 @@ public final class VectorEditorController {
     var colorLocked = false
     var applying = false
     var committing = false
+    /// Steps of the live blends, reused while their keys and options stay the same.
+    let blendCache = VectorBlendCache()
+    /// The options new blends get (`blendDefaults`).
+    var blendDefaults = JSONObject()
+    /// The symmetry group new drawn art goes into (`enterSymmetry`), or nil.
+    var symmetryTarget: String?
     /// Bumped on every change listeners hear about.
     public private(set) var revision = 0
     private var listeners: [(id: UUID, fn: () -> Void)] = []
@@ -200,11 +206,13 @@ public final class VectorEditorController {
     }
 
     /// The document with its derived parts brought up to date (`refreshed`): shorthand fills and
-    /// strokes go to the top layer of their stack, and lenses show what is below them. Blends,
-    /// symbols, constraints, connectors and master pages are made only by commands that are not
-    /// ported yet (#624), so there is nothing else to refresh.
+    /// strokes go to the top layer of their stack, blends regenerate their steps, and lenses show
+    /// what is below them. Symbols, constraints, connectors and master pages are made only by
+    /// commands that are not ported yet (#624), so there is nothing else to refresh. A blend whose
+    /// steps cannot be made (a key the port cannot draw) keeps the steps it has.
     func refreshed(_ d: VectorDocument) -> VectorDocument {
-        let nodes = normalizeVectorTree(d.nodes, prefer: "shorthand")
+        let shorthand = normalizeVectorTree(d.nodes, prefer: "shorthand")
+        let nodes = (try? refreshVectorBlends(shorthand, blendCache)) ?? shorthand
         var out = d
         if nodes != d.nodes { out.nodes = nodes }
         return resolveVectorLenses(out)

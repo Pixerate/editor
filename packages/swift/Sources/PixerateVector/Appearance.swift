@@ -5,8 +5,9 @@ import PixerateRaster
 
 // What nodes draw as (`vector/appearance.ts`): path effect stacks, live boolean groups (their
 // operands folded bottom to top into one shape in the bottom operand's style), mask groups (their
-// contents clipped by the mask, `Mask.swift`) and lenses (`Lens.swift`). The Envelope, Extrude and
-// Bevel effects, text, instances, frames and symmetry groups throw `VectorNotPorted` (#624).
+// contents clipped by the mask, `Mask.swift`), lenses (`Lens.swift`), envelopes (`Warp.swift`) and
+// symmetry groups (`Symmetry.swift`). The Extrude and Bevel effects, text, instances and frames
+// throw `VectorNotPorted` (#624).
 
 /// A shape a node draws (`VectorAppearanceShape`): the path whose style paints it, its outline in
 /// the node's own space, an opacity factor and a draw-order key.
@@ -103,10 +104,10 @@ private func isEnabledEffect(_ e: JSONValue) -> Bool {
 /// A mask group draws its contents clipped by its mask; a lens its own shape (what it shows is
 /// drawn by `vectorLensDrawn`).
 public func vectorAppearanceShapes(_ node: VectorNode) throws -> [VectorAppearanceShape] {
-    // not ported yet: instances, frames and symmetry groups (#624)
-    if node.isInstance || isVectorFrame(node) || isVectorSymmetryGroup(node) {
-        throw VectorNotPorted("the appearance of \(node.typeName) nodes with frames or symmetry")
-    }
+    // not ported yet: instances and frames (#624)
+    if node.isInstance || isVectorFrame(node) { throw VectorNotPorted("the appearance of \(node.typeName) nodes with frames") }
+    // A symmetry group draws as its children and their copies.
+    if isVectorSymmetryGroup(node) { return try vectorAppearanceShapes(try vectorSymmetryDrawn(node)) }
     let out = isVectorMaskGroup(node) ? try vectorMaskedShapes(node) : try applyVectorEffects(try baseShapes(node), node["effects"]?.arrayValue)
     return jsSorted(out) { compareOrder($0.order, $1.order) }
 }
@@ -152,9 +153,11 @@ public func vectorAppearanceNodes(_ node: VectorNode) throws -> [VectorNode] {
 /// inside it is live; `expandVectorAppearance`).
 public func expandVectorAppearance(_ node: VectorNode) throws -> VectorNode {
     if !hasVectorAppearance(node) { return node }
-    // not ported yet: instances, frames and symmetry groups (#624)
-    if node.isInstance || isVectorFrame(node) || isVectorSymmetryGroup(node) {
-        throw VectorNotPorted("expanding \(node.typeName) nodes with frames or symmetry")
+    // not ported yet: instances and frames (#624)
+    if node.isInstance || isVectorFrame(node) { throw VectorNotPorted("expanding \(node.typeName) nodes with frames") }
+    if isVectorSymmetryGroup(node) {
+        let drawn = try vectorSymmetryDrawn(node)
+        return hasVectorAppearance(drawn) ? try expandVectorAppearance(drawn) : drawn
     }
     if isVectorLens(node) {
         // A lens draws its changed backdrop; its bounds and hits stay its own shape (vectorAppearanceShapes).
@@ -276,8 +279,8 @@ private func isVec2(_ v: JSONValue) -> Bool {
 }
 
 /// Effect parameters with defaults (or `base`) filled in and invalid values dropped (unknown keys
-/// go too). Nil for an unknown type (`normalizeVectorEffectParams`). Envelope meshes are not
-/// ported yet (#624).
+/// go too). Nil for an unknown type (`normalizeVectorEffectParams`). An envelope keeps a valid
+/// mesh only in the `mesh` style, resized to its rows and columns (a given mesh sets them).
 public func normalizeVectorEffectParams(_ type: String, _ params: JSONObject?, _ base: JSONObject? = nil) throws -> JSONObject? {
     guard var out = VECTOR_EFFECT_DEFAULTS[type], let specs = VECTOR_EFFECT_PARAM_SPECS[type] else { return nil }
     for (k, v) in base ?? JSONObject() { out[k] = v }
@@ -299,10 +302,16 @@ public func normalizeVectorEffectParams(_ type: String, _ params: JSONObject?, _
     if type == "envelope" {
         out["rows"] = .number(JS.round(out["rows"]?.numberValue ?? .nan))
         out["columns"] = .number(JS.round(out["columns"]?.numberValue ?? .nan))
-        // not ported yet: envelope meshes (isValidVectorMesh, resizeVectorMesh) (#624)
         let given = params?["mesh"]
-        if given != nil || (out["style"] == "mesh" && out["mesh"] != nil && out["mesh"] != .null) { throw VectorNotPorted("envelope meshes") }
-        out["mesh"] = .null
+        var mesh: VectorWarpMesh? = given != nil ? VectorWarpMesh(json: given) : VectorWarpMesh(json: out["mesh"])
+        if out["style"] != "mesh" { mesh = nil }
+        if let m = mesh, given != nil {
+            out["columns"] = .number(Double(m.us.count - 1))
+            out["rows"] = .number(Double(m.vs.count - 1))
+        } else if let m = mesh {
+            mesh = resizeVectorMesh(m, out["columns"]?.numberValue ?? .nan, out["rows"]?.numberValue ?? .nan)
+        }
+        out["mesh"] = mesh?.json ?? .null
     }
     return out
 }
@@ -343,25 +352,30 @@ public func sanitizeVectorEffects(_ value: JSONValue?) throws -> [JSONObject] {
 
 /// Effect parameters carried through a linear map baked into a node's geometry
 /// (`transformVectorEffects`): offsets and positions move with it, angles turn the other way when
-/// it mirrors. Envelopes that would turn into meshes are not ported yet (#624).
-public func transformVectorEffects(_ effects: [JSONValue], _ m: VectorMatrix) throws -> [JSONValue] {
+/// it mirrors. An envelope mesh maps like the geometry; a preset follows a move or a scale by
+/// itself, and a skew or a mirror turns it into the mesh it stands for over `node`'s contents.
+public func transformVectorEffects(_ effects: [JSONValue], _ m: VectorMatrix, _ node: VectorNode? = nil) throws -> [JSONValue] {
     func lin(_ v: JSONValue?) -> JSONValue {
         let x = v?["x"]?.numberValue ?? .nan, y = v?["y"]?.numberValue ?? .nan
         return vec(m.a * x + m.c * y, m.b * x + m.d * y)
     }
+    let full = { (v: Vec2) in applyMatrix(m, v) }
     let mirror: Double = m.a * m.d - m.b * m.c < 0 ? -1 : 1
     let axisScale = abs(m.b) < 1e-12 && abs(m.c) < 1e-12 && m.a > 0 && m.d > 0
     return try effects.map { e in
         guard var o = e.objectValue, var params = o["params"]?.objectValue else { return e }
         switch o["type"]?.stringValue {
         case "envelope":
-            // not ported yet: envelope meshes (mapVectorMeshPoints, vectorEnvelopeMesh) (#624)
             if params["style"] == "mesh" {
-                if params["mesh"] == nil || params["mesh"] == .null { return e }
-                throw VectorNotPorted("transforming envelope meshes")
+                guard let mesh = VectorWarpMesh(json: params["mesh"]) else { return e }
+                params["mesh"] = mapVectorMeshPoints(mesh, full).json
+                break
             }
-            if axisScale { return e }
-            throw VectorNotPorted("skewing or mirroring envelopes")
+            guard !axisScale, let node, let id = o["id"]?.stringValue else { return e }
+            guard let bounds = try vectorEffectInputBounds(node, id), vectorEnvelopeMap(params, bounds) != nil else { return e }
+            let mesh = mapVectorMeshPoints(vectorEnvelopeMesh(params, bounds), full)
+            params["style"] = "mesh"
+            params["mesh"] = mesh.json
         case "twist":
             params["center"] = lin(params["center"])
             params["angle"] = .number((params["angle"]?.numberValue ?? .nan) * mirror)
@@ -375,6 +389,79 @@ public func transformVectorEffects(_ effects: [JSONValue], _ m: VectorMatrix) th
         o["params"] = .object(params)
         return .object(o)
     }
+}
+
+// MARK: - Envelopes
+
+/**
+ * The envelope's mesh over `bounds` (the paths' combined bounds), in the node's space
+ * (`vectorEnvelopeMesh`): its own mesh, the flat mesh of `columns × rows` patches, or a preset
+ * split exactly into that many patches.
+ */
+public func vectorEnvelopeMesh(_ params: JSONObject, _ bounds: VectorBounds) -> VectorWarpMesh {
+    let columns = params["columns"]?.numberValue ?? .nan
+    let rows = params["rows"]?.numberValue ?? .nan
+    if params["style"] == "mesh" { return VectorWarpMesh(json: params["mesh"]) ?? vectorIdentityMesh(bounds, columns, rows) }
+    guard let preset = vectorWarpPresetMesh(params, bounds) else { return vectorIdentityMesh(bounds, columns, rows) }
+    return resizeVectorMesh(preset, columns, rows)
+}
+
+/// The envelope as a map of the node's space over `bounds`, or nil when it changes nothing (or the
+/// box is empty; `vectorEnvelopeMap`).
+public func vectorEnvelopeMap(_ params: JSONObject, _ bounds: VectorBounds?) -> ((Vec2) -> Vec2)? {
+    guard let bounds, bounds.width > 0 && bounds.height > 0 else { return nil }
+    guard let mesh = params["style"] == "mesh" ? VectorWarpMesh(json: params["mesh"]) : vectorWarpPresetMesh(params, bounds) else { return nil }
+    let (x, y, width, height) = (bounds.x, bounds.y, bounds.width, bounds.height)
+    return { p in evalVectorMesh(mesh, (p.x - x) / width, (p.y - y) / height) }
+}
+
+/// Combined bounds of paths (`pathsBounds`).
+private func pathsBounds(_ paths: [BezierPath]) -> VectorBounds? {
+    var minX = Double.infinity, minY = Double.infinity, maxX = -Double.infinity, maxY = -Double.infinity
+    for p in paths {
+        guard let b = bezierPathBounds(.commands(p)) else { continue }
+        minX = JS.min(minX, b.minX)
+        minY = JS.min(minY, b.minY)
+        maxX = JS.max(maxX, b.maxX)
+        maxY = JS.max(maxY, b.maxY)
+    }
+    return minX <= maxX ? VectorBounds(x: minX, y: minY, width: maxX - minX, height: maxY - minY) : nil
+}
+
+/// The paths through an envelope, each mapped adaptively within a tolerance relative to their size (`envelopePaths`).
+private func envelopePaths(_ paths: [BezierPath], _ params: JSONObject) -> [BezierPath] {
+    let bounds = pathsBounds(paths)
+    guard let f = vectorEnvelopeMap(params, bounds), let bounds else { return paths }
+    let tol = JS.min(0.25, JS.max(0.01, JS.hypot(bounds.width, bounds.height) / 2000))
+    return paths.map { $0.isEmpty ? $0 : mapBezierPath($0, f, tol) }
+}
+
+/// The paths entering effect `effectId` of the node's stack (those above it applied), in the
+/// node's own space (`vectorEffectInputPaths`).
+public func vectorEffectInputPaths(_ node: VectorNode, _ effectId: String) throws -> [BezierPath]? {
+    let list = node["effects"]?.arrayValue ?? []
+    guard let i = list.firstIndex(where: { $0["id"]?.stringValue == effectId }) else { return nil }
+    return try applyVectorEffects(try baseShapes(node), Array(list[..<i])).map(\.path)
+}
+
+/// The box effect `effectId` (an envelope) bends: the combined bounds of the paths entering it, in
+/// the node's own space (`vectorEffectInputBounds`).
+public func vectorEffectInputBounds(_ node: VectorNode, _ effectId: String) throws -> VectorBounds? {
+    try vectorEffectInputPaths(node, effectId).flatMap(pathsBounds)
+}
+
+/// The node's first enabled envelope effect, or nil (`vectorNodeEnvelope`).
+public func vectorNodeEnvelope(_ node: VectorNode?) -> JSONObject? {
+    node?["effects"]?.arrayValue?.first { $0["type"] == "envelope" && $0["enabled"] != .bool(false) }?.objectValue
+}
+
+/// The editable mesh of a node's envelope (its own mesh, or the preset or flat mesh it stands for)
+/// with the box it bends, in the node's own space; nil without an envelope or contents (`vectorEnvelopeFrame`).
+public func vectorEnvelopeFrame(_ node: VectorNode, _ effectId: String? = nil) throws -> (effectId: String, bounds: VectorBounds, mesh: VectorWarpMesh)? {
+    let e = effectId.map { id in node["effects"]?.arrayValue?.first { $0["id"]?.stringValue == id }?.objectValue } ?? vectorNodeEnvelope(node)
+    guard let e, e["type"] == "envelope", let id = e["id"]?.stringValue else { return nil }
+    guard let bounds = try vectorEffectInputBounds(node, id), bounds.width > 0 && bounds.height > 0 else { return nil }
+    return (id, bounds, vectorEnvelopeMesh(e["params"]?.objectValue ?? JSONObject(), bounds))
 }
 
 // MARK: - The effect stack
@@ -520,6 +607,8 @@ public func applyVectorEffects(_ shapes: [VectorAppearanceShape], _ effects: [JS
             list = try contourShapes(list, p)
         case "blockShadow":
             list = try blockShadowShapes(list, p)
+        case "envelope":
+            list = mapPaths(list) { envelopePaths($0, p) }
         case "repeater":
             let copies = repeatPaths(list.map(\.path), p, addVec(pathsCenter(list.map(\.path)), p["anchor"]))
             let n = copies.count
@@ -531,7 +620,7 @@ public func applyVectorEffects(_ shapes: [VectorAppearanceShape], _ effects: [JS
             }
             list = next
         case let type?:
-            // not ported yet: Envelope (warp meshes), Extrude and Bevel (#624)
+            // not ported yet: Extrude and Bevel (#624)
             throw VectorNotPorted("the \(VECTOR_EFFECT_LABELS[type] ?? type) effect")
         case nil:
             break

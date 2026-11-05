@@ -9,9 +9,9 @@ import PixerateRaster
 // `style` declarations, `transform`s, `fill-opacity` / `stroke-opacity` (as paint stacks),
 // `clip-path` and `mask` references (each a mask group, the clip or mask first), and this editor's
 // own export: live corners, paint stacks, stroke settings kept on a `<g data-vector-path>`, and
-// live boolean groups. Text, `<use>` and symbols, filters, frames, own mask groups, instances,
-// path effects, blends, shading, connectors, generated art, lenses and resizing constraints throw
-// `VectorNotPorted` (#624). Regular expressions are the TS ones with
+// live boolean groups, path effects, symmetry groups and blends. Text, `<use>` and symbols,
+// filters, frames, own mask groups, instances, connectors, generated art, lenses and resizing
+// constraints throw `VectorNotPorted` (#624). Regular expressions are the TS ones with
 // JavaScript's `\s` and `\w` spelled out, since ICU's differ.
 
 /// JavaScript's `\s`.
@@ -644,24 +644,35 @@ private final class SvgImporter {
         return try placed(VectorNode(props: props, subpaths: subpaths), m)
     }
 
-    /// A `<g data-vector-live>` from our own export as the node it came from (`liveNode`): live
-    /// boolean groups; path effects, text and symmetry are not ported.
+    /// A `<g data-vector-live>` from our own export as the node it came from (`liveNode`): paths
+    /// with effects, live boolean groups, groups with effects, symmetry groups and blends. Live
+    /// text is not ported.
     func liveNode(_ g: SvgElement, _ style: SvgStyle, _ m: VectorMatrix, _ meta: JSONObject) throws -> VectorNode? {
         let raw = g.attrs["data-vector-live"].flatMap { try? JSONValue.parse($0) }?.objectValue ?? JSONObject()
         guard let sourceEl = g.children.first(where: { $0.name == "g" && $0.attrs["data-vector-part"] == "source" }) else { return nil }
-        // not ported yet: path effects (sanitizeVectorEffects, transformVectorEffects), symmetry and blends (#624)
-        if let e = raw["effects"]?.arrayValue, !e.isEmpty { throw VectorNotPorted("importing path effects") }
-        if raw["kind"] == "text" || raw["kind"] == "path" { throw VectorNotPorted("importing live \(raw["kind"]!.stringValue!) nodes") }
-        if raw["symmetry"] != nil && raw["symmetry"] != .null { throw VectorNotPorted("importing symmetry groups") }
-        if g.attrs["data-vector-blend"] != nil { throw VectorNotPorted("importing blends") }
+        // not ported yet: text (#624)
+        if raw["kind"] == "text" { throw VectorNotPorted("importing live text nodes") }
         let inner = try visit(sourceEl, style, m)
+        let effects = try sanitizeVectorEffects(raw["effects"]).map { JSONValue.object($0) }
         let liveBoolean = raw["liveBoolean"]?.stringValue.flatMap { BOOLEAN_OPERATIONS.contains($0) ? $0 : nil }
         let id = idFor(g)
+        if raw["kind"] == "path" {
+            guard var path = inner.first(where: \.isPath) else { return nil }
+            let residual = decomposeRigid(m).residual
+            path["visible"] = Optional<JSONValue>.none
+            path.id = id
+            for (k, v) in meta { path[k] = v }
+            if !effects.isEmpty { path["effects"] = .array(try transformVectorEffects(effects, residual)) }
+            return path
+        }
         if inner.isEmpty { return nil }
         var props = JSONObject([("id", .string(id)), ("type", "group")])
         for (k, v) in meta { props[k] = v }
         var group = VectorNode(props: props, children: inner)
+        if !effects.isEmpty { group["effects"] = .array(try transformVectorEffects(effects, m)) }
         if let liveBoolean { group["liveBoolean"] = .string(liveBoolean) }
+        if let symmetry = sanitizeVectorSymmetry(raw["symmetry"]) { group["symmetry"] = .object(transformVectorSymmetry(symmetry, m)) }
+        if let blend = try blendFromAttribute(g.attrs["data-vector-blend"], m) { group["blend"] = .object(blend) }
         return group
     }
 
@@ -774,10 +785,11 @@ private final class SvgImporter {
         if g || child.name == "svg" || child.name == "a" || child.name == "switch" {
             let children = try visit(child, s, m)
             if children.isEmpty { return [] }
-            if g && child.attrs["data-vector-blend"] != nil { throw VectorNotPorted("importing blends") }
             var props = JSONObject([("id", .string(idFor(child))), ("type", "group")])
             for (k, v) in meta { props[k] = v }
-            return [VectorNode(props: props, children: children)]
+            var group = VectorNode(props: props, children: children)
+            if g, let blend = try blendFromAttribute(child.attrs["data-vector-blend"], m) { group["blend"] = .object(blend) }
+            return [group]
         }
         guard let subpaths = shapeOf(child), !subpaths.isEmpty else { return [] }
         var props = JSONObject([("id", .string(idFor(child))), ("type", "path")])
@@ -859,4 +871,26 @@ func widthProfileFromAttribute(_ value: String?) -> [VectorWidthPoint] {
         return .object(JSONObject([("t", .number(t)), ("left", .number(left)), ("right", .number(right))]))
     }
     return sanitizeWidthProfile(.array(points))
+}
+
+/// `data-vector-blend` (a blend group's options as JSON, its spine in the group's space) back to a
+/// blend, the spine carried by `m` (`blendFromAttribute`; import bakes group transforms into the children).
+private func blendFromAttribute(_ value: String?, _ m: VectorMatrix) throws -> JSONObject? {
+    guard let value, !value.isEmpty, let r = (try? JSONValue.parse(value))?.objectValue else { return nil }
+    var out = blendOptionsOf(r)
+    if let starts = r["starts"]?.objectValue {
+        var kept = JSONObject()
+        for (k, v) in starts { if let n = v.numberValue, n.isFinite, n == n.rounded(), n >= 0 { kept[k] = v } }
+        if !kept.isEmpty { out["starts"] = .object(kept) }
+    }
+    if let spine = r["spine"]?.objectValue, let anchors = spine["anchors"]?.arrayValue, anchors.allSatisfy({ a in
+        guard let x = a["x"]?.numberValue, let y = a["y"]?.numberValue else { return false }
+        return x.isFinite && y.isFinite
+    }) {
+        let sp = VectorSubpath(closed: truthy(spine["closed"]), anchors: anchors.map { a in
+            VectorAnchor(x: a["x"]!.numberValue!, y: a["y"]!.numberValue!, in: truthy(a["in"]) ? Vec2(a["in"]?["x"]?.numberValue ?? .nan, a["in"]?["y"]?.numberValue ?? .nan) : nil, out: truthy(a["out"]) ? Vec2(a["out"]?["x"]?.numberValue ?? .nan, a["out"]?["y"]?.numberValue ?? .nan) : nil)
+        })
+        out["spine"] = try transformVectorNode(VectorNode(props: JSONObject([("id", ""), ("type", "path")]), subpaths: [sp]), m).subpaths[0].toJSON()
+    }
+    return out
 }

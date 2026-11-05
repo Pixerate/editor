@@ -352,7 +352,7 @@ private func mapAnchor(_ a: VectorAnchor, _ m: VectorMatrix) -> VectorAnchor {
 private func bakeIntoGeometry(_ nodeIn: VectorNode, _ m: VectorMatrix) throws -> VectorNode {
     if isIdentityMatrix(m) { return nodeIn }
     var node = nodeIn
-    if let effects = node["effects"]?.arrayValue, !effects.isEmpty { node["effects"] = .array(try transformVectorEffects(effects, m)) }
+    if let effects = node["effects"]?.arrayValue, !effects.isEmpty { node["effects"] = .array(try transformVectorEffects(effects, m, nodeIn)) }
     if isVectorFrame(node) { return try bakeFrame(node, m) }
     if node.isGroup {
         node.children = try node.children.map { try transformVectorNode($0, m) }
