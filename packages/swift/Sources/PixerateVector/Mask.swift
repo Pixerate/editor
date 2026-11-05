@@ -61,26 +61,6 @@ private func place(_ path: BezierPath, _ m: VectorMatrix) -> BezierPath { isIden
 
 private func ruleOf(_ node: VectorNode) -> PolygonFillRule { node.fillRule == "evenodd" ? .evenodd : .nonzero }
 
-/// The area of the stroke of `path` in `style` (`vectorStrokeOutlinePath`): its outline, clipped
-/// to the inside or the outside of the fill when aligned. Arrowheads and width profiles are not
-/// ported yet (#624).
-func vectorStrokeOutlinePath(_ path: BezierPath, _ style: VectorNode) throws -> BezierPath {
-    // not ported yet: arrowheads and width profiles (vectorStrokeParts, variableStrokeOutline) (#624)
-    if truthy(style["startArrow"]) || truthy(style["endArrow"]) { throw VectorNotPorted("the outlines of arrowheads") }
-    if let p = style["strokeWidthProfile"]?.arrayValue, !p.isEmpty { throw VectorNotPorted("the outlines of width profiles") }
-    let width = style.strokeWidth ?? 1
-    let contours = pathToContours(.commands(path)).filter { !$0.segments.isEmpty }
-    let closedShape = !contours.isEmpty && contours.allSatisfy(\.closed)
-    let align = closedShape ? (style["strokeAlign"]?.stringValue ?? "center") : "center"
-    let drawWidth = align == "center" ? width : width * 2
-    let dash = style["strokeDasharray"]?.arrayValue.flatMap { $0.isEmpty ? nil : $0.compactMap(\.numberValue) }
-    let stroke = try outlineStroke(.commands(path), OutlineStrokeOptions(width: drawWidth, join: StrokeJoin(rawValue: style["strokeLinejoin"]?.stringValue ?? "miter"), cap: StrokeCap(rawValue: style["strokeLinecap"]?.stringValue ?? "butt"), dash: dash))
-    let fill = PathOperand(.commands(path), fillRule: ruleOf(style))
-    if align == "inside" { return try pathBoolean(.intersection, [PathOperand(.commands(stroke)), fill]).path }
-    if align == "outside" { return try pathBoolean(.difference, [PathOperand(.commands(stroke)), fill]).path }
-    return stroke
-}
-
 private func regionOfPath(_ path: BezierPath, _ style: VectorNode, _ type: String, _ m: VectorMatrix) throws -> [VectorMaskRegionShape] {
     if path.isEmpty { return [] }
     let fillRule = ruleOf(style)

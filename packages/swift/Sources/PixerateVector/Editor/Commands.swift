@@ -465,6 +465,7 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
         return .object(JSONObject([("id", .string(id)), ("anchors", .array(anchors.map(\.json)))]))
     }
     vectorAppearanceRuns(&r)
+    vectorStrokeRuns(&r)
     return r
 }
 
@@ -713,5 +714,93 @@ private func vectorAppearanceRuns(_ r: inout [String: VectorCommandRun]) {
         let (result, lenses) = c.setLens(nil, ids: VectorParams(params).strings("ids"))
         try check(result)
         return ["ids": idList(lenses.map(\.id))]
+    }
+}
+
+// MARK: - Strokes, corners and brushstrokes
+
+/// `{ ok, points }`: the profile of path `id` after a width edit.
+private func profileResult(_ c: VectorEditorController, _ id: String?) -> JSONValue {
+    let node = id.flatMap { c.getNode($0) }
+    let points = node?.isPath == true ? (node?["strokeWidthProfile"] ?? .array([])) : .array([])
+    return .object(JSONObject([("ok", true), ("points", points)]))
+}
+
+/// `{ colorScheme, colorLocked }`.
+private func brushColourResult(_ c: VectorEditorController) -> JSONValue {
+    .object(JSONObject([("colorScheme", .string(c.colorScheme)), ("colorLocked", .bool(c.colorLocked))]))
+}
+
+private func vectorStrokeRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.setCorners"] = { c, params in
+        let p = VectorParams(params)
+        let refs = try p.anchorRefs("anchors").map { try anchorsOf(c, $0) }
+        let ids = p.has("ids") ? try targetIds(c, p) : nil
+        let kind = p.str("kind")
+        if let radius = p.num("radius") { try check(c.setCornerRadius(radius, kind: kind, smoothing: p.num("smoothing"), refs: refs, ids: ids)) }
+        else if let kind, !kind.isEmpty { try check(c.setCornerKind(kind, refs: refs, ids: ids)) }
+        if !p.has("radius"), let smoothing = p.num("smoothing") { try check(c.setCornerSmoothing(smoothing, refs: refs, ids: ids)) }
+        if !p.has("radius") && (kind ?? "").isEmpty && !p.has("smoothing") { throw fail("Pass `radius`, `kind` and / or `smoothing`.") }
+        return ok()
+    }
+    r["vector.setWidthProfile"] = { c, params in
+        let p = VectorParams(params)
+        let ids = try targetIds(c, p)
+        let taper = params["taper"]?.objectValue
+        let wave = params["wave"]?.objectValue
+        if let preset = p.str("preset"), !preset.isEmpty { try check(c.setWidthProfile(preset: preset, ids: ids)) }
+        else if let points = params["points"] { try check(c.setWidthProfile(points: points, ids: ids)) }
+        else if taper != nil || wave != nil { try check(c.setWidthProfile(taper: taper.map(VectorTaperOptions.init(json:)), wave: wave.map(VectorWaveOptions.init(json:)), ids: ids)) }
+        else { throw fail("Pass `preset`, `points`, `taper` or `wave`.") }
+        return profileResult(c, ids.first)
+    }
+    r["vector.setWidthPoint"] = { c, params in
+        let p = VectorParams(params)
+        guard let id = p.str("id"), !id.isEmpty else { throw fail("Pass the path `id`.") }
+        try check(c.setWidthPoint(id, index: p.int("index"), t: p.num("t"), left: p.num("left"), right: p.num("right")))
+        return profileResult(c, id)
+    }
+    r["vector.outlineStroke"] = { c, params in
+        let p = VectorParams(params)
+        let created = try c.outlineStroke(ids: p.has("ids") ? try targetIds(c, p) : nil)
+        if created.isEmpty { throw fail("No selected path has a stroke.") }
+        return ["ids": idList(created)]
+    }
+    r["vector.listBrushes"] = { c, _ in
+        let brushes: [JSONValue] = vectorBrushstrokeBrushes().map { b in
+            .object(JSONObject([("id", .string(b.id)), ("name", .string(b.name)), ("category", .string(b.category)), ("size", .number(b.size)), ("builtin", .bool(b.builtin))]))
+        }
+        var out = JSONObject([("brushes", .array(brushes))])
+        for (k, v) in brushColourResult(c).objectValue! { out[k] = v }
+        return .object(out)
+    }
+    r["vector.addBrushstroke"] = { c, params in
+        let p = VectorParams(params)
+        let targets = p.strings("ids") ?? c.selection
+        var brush = JSONObject([("brushId", params["brushId"] ?? .null)])
+        for key in ["size", "pressure", "seed", "paper", "paint"] { if let v = params[key] { brush[key] = v } }
+        try check(c.addBrushstroke(brush, ids: p.strings("ids"), index: p.num("index"), color: p.str("color").flatMap { $0.isEmpty ? nil : $0 }, keepColour: p.bool("keepColour") == true, opacity: p.num("opacity")))
+        var paths: [JSONValue] = []
+        for id in targets where c.getNode(id)?.isPath == true { paths.append(try stackResult(c, id, "stroke")) }
+        return ["paths": .array(paths)]
+    }
+    r["vector.setBrushstroke"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        var patch = params
+        remove(&patch, "id")
+        remove(&patch, "index")
+        if patch.isEmpty { throw fail("Pass at least one of brushId, size, pressure, color, opacity, seed, paper, paint.") }
+        let index = try layerIndex(c, id, "stroke", p.num("index"))
+        try check(c.setBrushstroke(index, patch, ids: [id]))
+        return try stackResult(c, id, "stroke")
+    }
+    r["vector.setColorLocked"] = { c, params in
+        c.setColorLocked(VectorParams(params).bool("locked") == true)
+        return brushColourResult(c)
+    }
+    r["vector.setColorScheme"] = { c, params in
+        c.setColorScheme(VectorParams(params).str("scheme") ?? "light")
+        return brushColourResult(c)
     }
 }

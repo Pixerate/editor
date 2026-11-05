@@ -10,8 +10,8 @@ import PixerateRaster
 // `clip-path` and `mask` references (each a mask group, the clip or mask first), and this editor's
 // own export: live corners, paint stacks, stroke settings kept on a `<g data-vector-path>`, and
 // live boolean groups. Text, `<use>` and symbols, filters, frames, own mask groups, instances,
-// path effects, blends, shading, connectors, generated art, lenses, resizing constraints and
-// width profiles throw `VectorNotPorted` (#624). Regular expressions are the TS ones with
+// path effects, blends, shading, connectors, generated art, lenses and resizing constraints throw
+// `VectorNotPorted` (#624). Regular expressions are the TS ones with
 // JavaScript's `\s` and `\w` spelled out, since ICU's differ.
 
 /// JavaScript's `\s`.
@@ -618,8 +618,7 @@ private final class SvgImporter {
             let n = v.map(\.jsParseFloat) ?? .nan
             return n > 0 ? n : nil
         }
-        // not ported yet: width profiles (widthProfileFromAttribute, sanitizeWidthProfile) (#624)
-        if let p = a["data-vector-width-profile"], !p.isEmpty { throw VectorNotPorted("importing width profiles") }
+        let profile = widthProfileFromAttribute(a["data-vector-width-profile"])
         func kept(_ key: String, _ values: [String]) -> String? { a[key].flatMap { values.contains($0) ? $0 : nil } }
         var props = JSONObject([("id", .string(idFor(g))), ("type", "path")])
         for (k, v) in meta { props[k] = v }
@@ -635,6 +634,7 @@ private final class SvgImporter {
         if a["data-vector-arrow-align"] == "tip" { props["arrowAlign"] = "tip" }
         if let v = scale(a["data-vector-start-arrow-scale"]) { props["startArrowScale"] = .number(v) }
         if let v = scale(a["data-vector-end-arrow-scale"]) { props["endArrowScale"] = .number(v) }
+        if !profile.isEmpty { props["strokeWidthProfile"] = widthProfileJSON(profile) }
         if let v = kept("data-vector-stroke-linecap", ["round", "square"]) { props["strokeLinecap"] = .string(v) }
         if let v = kept("data-vector-stroke-linejoin", ["round", "bevel"]) { props["strokeLinejoin"] = .string(v) }
         if let v = a["data-vector-stroke-dasharray"], !v.isEmpty {
@@ -848,4 +848,17 @@ extension VectorEditorController {
         }
         return .success
     }
+}
+
+/// Reads `data-vector-width-profile` (`t,left,right;…`; invalid points are dropped; `widthProfileFromAttribute`).
+func widthProfileFromAttribute(_ value: String?) -> [VectorWidthPoint] {
+    guard let value, !value.isEmpty else { return [] }
+    let points: [JSONValue] = value.components(separatedBy: ";").map { part in
+        let n = part.components(separatedBy: ",").map(\.jsParseFloat)
+        let t = n.count > 0 ? n[0] : .nan
+        let left = n.count > 1 ? n[1] : .nan
+        let right = n.count > 2 && n[2].isFinite ? n[2] : left
+        return .object(JSONObject([("t", .number(t)), ("left", .number(left)), ("right", .number(right))]))
+    }
+    return sanitizeWidthProfile(.array(points))
 }

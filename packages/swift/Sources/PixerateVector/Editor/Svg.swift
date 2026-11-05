@@ -29,12 +29,6 @@ func vectorCornersAttribute(_ subpaths: [VectorSubpath], _ precision: Int = 3) -
     return out.joined(separator: " ")
 }
 
-/// Whether the stroke needs more than one element (`hasStrokeExtras`).
-func hasStrokeExtras(_ node: VectorNode) -> Bool {
-    let align = node["strokeAlign"]?.stringValue ?? "center"
-    return align != "center" || truthy(node["startArrow"]) || truthy(node["endArrow"]) || (node["strokeWidthProfile"]?.arrayValue?.isEmpty == false)
-}
-
 /// A paint server's markup (`paintDefMarkup`): the first def of a gradient carries
 /// `data-vector-gradient` (the gradient as JSON) so import restores what SVG cannot say.
 private func paintDefMarkup(_ def: VectorPaintDef, _ gradient: JSONValue?) -> String {

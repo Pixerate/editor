@@ -994,21 +994,21 @@
           "core": "`expandVectorCorners`, `setCornerRadius`, `vectorStrokeParts`, `outlineStroke` & `getVectorOverlayRenderData().cornerWidgets`",
           "react": "`<VectorCanvas>` corner widgets & clipped strokes, `<VectorStylePanel>`",
           "svelte": "`<VectorCanvas>` corner widgets & clipped strokes, `<VectorStylePanel>`",
-          "swift": "Planned (#533)"
+          "swift": "Live corner radius, kind and smoothing, arrowheads and stroke alignment ✅ headless (`VectorEditorController`: `setCornerRadius`, `setCornerKind`, `setCornerSmoothing`; `vectorStrokeParts`, `vectorStrokeOutlinePath`, `hitTestVectorStroke`); drawing aligned or arrowed strokes in render data and SVG export, corner widgets and the views: Planned (#533)"
         },
         {
           "feature": "Vector Variable-Width Strokes (width profiles with left / right side scales and monotone interpolation; taper, bulge, pinch, wave and pressure presets; parametric taper / wave; exact filled outlines refitted to Béziers with caps, joins, dashes, corners, arrowheads and alignment; Width tool (W) with draggable width points, Alt-drag copies, discontinuous points, Shift multi-selection and a numeric Width Point Edit on double-click; arrowheads sized from the profile; pencil pen pressure; SVG round-trip; Outline Stroke bakes them)",
           "core": "`strokeWidthProfile`, `setWidthProfile`, `setWidthPoint`, `widthPointEdit`, `selectedWidthPoints`, `variableStrokeOutline`, `widthProfileAt` & `getVectorOverlayRenderData().widthPoints`",
           "react": "`<VectorCanvas>` width points, filled outlines & `<VectorWidthPointEditor>`, `<VectorStylePanel>` profile picker",
           "svelte": "`<VectorCanvas>` width points, filled outlines & `<VectorWidthPointEditor>`, `<VectorStylePanel>` profile picker",
-          "swift": "Planned (#533)"
+          "swift": "Width profiles, presets, taper / wave generators and exact filled outlines ✅ headless (`VectorEditorController`: `setWidthProfile`, `setWidthPoint`, `outlineStroke`; `variableStrokeOutline`, `widthProfileAt`; SVG import of profiles); drawing profiled strokes in render data and SVG export, the Width tool and the views: Planned (#533)"
         },
         {
           "feature": "Vector Pathfinder, Shape Builder & Paint Bucket (Divide, Trim, Merge, Crop, Outline, Minus Back on rotated shapes with holes, live corners and stroke areas; Shape Builder (M) hover / click / drag merge and Alt delete of faces, line pieces and outline edges (an erased edge opens its path) with a hatched highlight; paint bucket (B) fills the region outlines enclose, islands as holes, optional gap closing)",
           "core": "`pathfinder`, `shapeBuilder`, `fillRegion`, `PlanarMap`, `cutOutPiece`, `hatchPath` & `getVectorOverlayRenderData().builder`",
           "react": "`<VectorCanvas>` hatched face highlights & `<VectorToolbar>` Pathfinder group",
           "svelte": "`<VectorCanvas>` hatched face highlights & `<VectorToolbar>` Pathfinder group",
-          "swift": "✅ headless for filled shapes (`VectorEditorController`; `vector.pathfinder`, `vector.shapeBuilderFaces`, `vector.shapeBuilder`, `vector.fillRegion`); stroke areas as operands and the tools: Planned (#533)"
+          "swift": "✅ headless for filled shapes and stroke areas (`VectorEditorController`; `vector.pathfinder`, `vector.shapeBuilderFaces`, `vector.shapeBuilder`, `vector.fillRegion`); the tools: Planned (#533)"
         },
         {
           "feature": "Vector Blends & Path Morphing (live blend groups regenerated whenever a key changes; specified steps, specified distance or smooth colour; replace spine with orient to spine; Expand and Release; Blend tool (J) with clicked start anchors; morphs with arc-length anchor insertion, start and winding chosen by fit and shape context, Procrustes in-betweens that turn rather than collapse, holes growing from points, OKLab colours, resampled gradients, width profiles and rigid transforms; path keyframes for animation; SVG round-trip)",
@@ -1029,7 +1029,7 @@
           "core": "`addPaintLayer`, `updatePaintLayer`, `movePaintLayer`, `setBlendMode`, `addFilter`, `vectorFills`, `vectorStrokes`, `vectorFilterSvg`, `hitTestVectorPaintLayer` & `getVectorAppearancePanel`",
           "react": "`<VectorAppearancePanel>` (in `<VectorStylePanel>`), `<VectorFilterDefs>` & `<VectorCanvas>` layers",
           "svelte": "`<VectorAppearancePanel>` (in `<VectorStylePanel>`), `<VectorFilterDefs>` & `<VectorCanvas>` layers",
-          "swift": "Fill and stroke stacks, node blend modes and filters ✅ headless (`VectorEditorController`: `addPaintLayer`, `updatePaintLayer`, `movePaintLayer`, `setBlendMode`, `addFilter`; filters drawn in render data and SVG export); brushstroke layers, per-layer width profiles and the views: Planned (#533)"
+          "swift": "Fill and stroke stacks, per-layer width profiles, node blend modes and filters ✅ headless (`VectorEditorController`: `addPaintLayer`, `updatePaintLayer`, `movePaintLayer`, `setBlendMode`, `addFilter`; filters drawn in render data and SVG export); brushstroke layers are kept and edited, not drawn; the views: Planned (#533)"
         },
         {
           "feature": "Vector Masks & Clipping (mask groups whose first child masks the rest: clipping masks by outline, alpha and luminance opacity masks, inverted masks (an even-odd clip of a rectangle with the mask's union cut out; a colour-matrix filter for opacity masks); a hidden mask turns it off; hit-testing, bounds, snapping, booleans and the Pathfinder on the masked result, open paths cut where they cross; the group's filters, opacity and blend mode apply to the masked result and its path effects to the contents; Make Clipping Mask (Mod+7), Make Opacity Mask, Release (Mod+Alt+7), Edit Mask / Edit Contents; SVG export as `<clipPath>` / `<mask>` with a lossless round-trip and import of foreign `clip-path` / `mask` references (user space and `objectBoundingBox` units); agent commands `vector.makeClippingMask`, `vector.makeOpacityMask`, `vector.setMaskOptions`, `vector.releaseMask`)",
@@ -1197,7 +1197,7 @@
           "core": "`addBrushstroke`, `setBrushstroke` (`seed`, `paper`, `paint`), `brushLibrary`, `listBrushstrokeBrushes`, `vectorBrushstrokeBrushes`, `vectorBrushstrokeImages`, `onVectorBrushstrokesSettled`, `settleVectorBrushstrokes`, `WetBrushstrokeJob`, `renderBackdropBrushstroke`, `rasterizeVectorBackdrop`, `randomVectorBrushstrokeSeed`",
           "react": "`<VectorAppearancePanel>` brushstroke rows (grain toggle) & `<VectorCanvas>` images",
           "svelte": "`<VectorAppearancePanel>` brushstroke rows (grain toggle) & `<VectorCanvas>` images",
-          "swift": "Planned (#533)"
+          "swift": "Brushstroke layers as data ✅ headless (`VectorEditorController`: `addBrushstroke`, `setBrushstroke`, `setColorScheme`, `setColorLocked`; `vectorBrushstrokeBrushes`, `sanitizeVectorBrushstroke`); rendering them (the raster brush engine along a path), saved library brushes and the views: Planned (#533)"
         },
         {
           "feature": "Vector Connectors (open paths whose ends are glued to other objects' connection sites — the middle of each side of their own bounds, through their rotation, or the centre — or left free; `auto` sides pick the side facing the other end; straight, elbow (right angles leaving along the sides, optional bend radius) and curved routes; routed again after every edit, including constraint solves, so connectors follow moved, resized and turned objects in the same undo step, with glue to deleted objects dropped; Connector tool (X) showing the sites under the pointer; SVG round-trip; agent commands `vector.connect`, `vector.setConnector`, `vector.listConnectors`, `vector.listConnectionSites`)",

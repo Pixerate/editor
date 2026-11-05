@@ -6,9 +6,6 @@
     "width": 300,
     "height": 200
   },
-  "skip": {
-    "swift": "Width profiles, live corner commands, outline stroke, colour schemes and brushstrokes are not ported yet (#624)."
-  },
   "steps": [
     {
       "tool": "run_command",
