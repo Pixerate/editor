@@ -217,6 +217,12 @@
   },
   "typesVersions": {
     "*": {
+      "effects": [
+        "./dist/effects/index.d.ts"
+      ],
+      "stickers": [
+        "./dist/stickers/index.d.ts"
+      ],
       "spreadsheet": [
         "./dist/spreadsheet/index.d.ts"
       ],
