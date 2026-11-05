@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.266.1
+
+### Patch Changes
+
+- 69c6c8e: The paint editor's `BUILTIN_BRUSHES` is now derived from the facet presets (`BRUSH_PRESETS`) instead of a hand-written copy, so a built-in brush is defined once. The brushes, their order, ids and categories are unchanged.
+
 ## 0.266.0
 
 ### Minor Changes
