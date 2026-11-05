@@ -1,0 +1,427 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "constraints",
+  "description": "Constraints between anchors and segments, values, auto-constraining and removal.",
+  "setup": {
+    "width": 300,
+    "height": 200
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M20 20 L120 30 L110 120 Z",
+          "stroke": "#111827"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addConstraint",
+        "params": {
+          "kind": "horizontal",
+          "refs": [
+            {
+              "nodeId": "n1",
+              "subpath": 0,
+              "index": 0,
+              "segment": true
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addConstraint",
+          "ok": true,
+          "result": {
+            "constraint": {
+              "id": "k1",
+              "kind": "horizontal",
+              "refs": [
+                {
+                  "anchor": "a1",
+                  "nodeId": "n1",
+                  "segment": true
+                }
+              ]
+            },
+            "id": "k1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addConstraint",
+        "params": {
+          "kind": "distance",
+          "refs": [
+            {
+              "nodeId": "n1",
+              "subpath": 0,
+              "index": 0
+            },
+            {
+              "nodeId": "n1",
+              "subpath": 0,
+              "index": 1
+            }
+          ],
+          "value": 120,
+          "name": "side"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addConstraint",
+          "ok": true,
+          "result": {
+            "constraint": {
+              "id": "k2",
+              "kind": "distance",
+              "name": "side",
+              "refs": [
+                {
+                  "anchor": "a1",
+                  "nodeId": "n1"
+                },
+                {
+                  "anchor": "a2",
+                  "nodeId": "n1"
+                }
+              ],
+              "value": "120"
+            },
+            "id": "k2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.listConstraints"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.listConstraints",
+          "ok": true,
+          "result": {
+            "constraints": [
+              {
+                "id": "k1",
+                "kind": "horizontal",
+                "refs": [
+                  {
+                    "anchor": "a1",
+                    "nodeId": "n1",
+                    "segment": true
+                  }
+                ],
+                "satisfied": true
+              },
+              {
+                "evaluated": 120,
+                "id": "k2",
+                "kind": "distance",
+                "name": "side",
+                "refs": [
+                  {
+                    "anchor": "a1",
+                    "nodeId": "n1"
+                  },
+                  {
+                    "anchor": "a2",
+                    "nodeId": "n1"
+                  }
+                ],
+                "satisfied": true,
+                "value": "120"
+              }
+            ],
+            "dof": {
+              "constraints": 2,
+              "dof": 2,
+              "message": "2 degrees of freedom remaining",
+              "nodes": [
+                {
+                  "dof": 4,
+                  "nodeId": "n1",
+                  "params": 4,
+                  "status": "under"
+                }
+              ],
+              "redundant": 0,
+              "status": "under"
+            },
+            "issues": null,
+            "parameters": []
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setConstraintValue",
+        "params": {
+          "key": "side",
+          "value": 90
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setConstraintValue",
+          "ok": true,
+          "result": {
+            "constraints": [
+              {
+                "id": "k1",
+                "kind": "horizontal",
+                "refs": [
+                  {
+                    "anchor": "a1",
+                    "nodeId": "n1",
+                    "segment": true
+                  }
+                ],
+                "satisfied": true
+              },
+              {
+                "evaluated": 90,
+                "id": "k2",
+                "kind": "distance",
+                "name": "side",
+                "refs": [
+                  {
+                    "anchor": "a1",
+                    "nodeId": "n1"
+                  },
+                  {
+                    "anchor": "a2",
+                    "nodeId": "n1"
+                  }
+                ],
+                "satisfied": true,
+                "value": "90"
+              }
+            ],
+            "dof": {
+              "constraints": 2,
+              "dof": 2,
+              "message": "2 degrees of freedom remaining",
+              "nodes": [
+                {
+                  "dof": 4,
+                  "nodeId": "n1",
+                  "params": 4,
+                  "status": "under"
+                }
+              ],
+              "redundant": 0,
+              "status": "under"
+            },
+            "issues": null,
+            "parameters": []
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.autoConstrain",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "kinds": [
+            "vertical",
+            "horizontal"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.autoConstrain",
+          "ok": true,
+          "result": {
+            "ids": []
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.removeConstraint",
+        "params": {
+          "ids": [
+            "k1"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.removeConstraint",
+          "ok": true,
+          "result": {
+            "ids": [
+              "k1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addConstraint",
+        "params": {
+          "kind": "fix",
+          "refs": [
+            {
+              "nodeId": "missing",
+              "subpath": 0,
+              "index": 0
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "refs[0]: there is no node \"missing\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.listConstraints"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.listConstraints",
+          "ok": true,
+          "result": {
+            "constraints": [
+              {
+                "evaluated": 90,
+                "id": "k2",
+                "kind": "distance",
+                "name": "side",
+                "refs": [
+                  {
+                    "anchor": "a1",
+                    "nodeId": "n1"
+                  },
+                  {
+                    "anchor": "a2",
+                    "nodeId": "n1"
+                  }
+                ],
+                "satisfied": true,
+                "value": "90"
+              }
+            ],
+            "dof": {
+              "constraints": 1,
+              "dof": 3,
+              "message": "3 degrees of freedom remaining",
+              "nodes": [
+                {
+                  "dof": 4,
+                  "nodeId": "n1",
+                  "params": 4,
+                  "status": "under"
+                }
+              ],
+              "redundant": 0,
+              "status": "under"
+            },
+            "issues": null,
+            "parameters": []
+          }
+        },
+        "document": {
+          "document": {
+            "constraints": [
+              {
+                "id": "k2",
+                "kind": "distance",
+                "name": "side",
+                "refs": [
+                  {
+                    "anchor": "a1",
+                    "nodeId": "n1"
+                  },
+                  {
+                    "anchor": "a2",
+                    "nodeId": "n1"
+                  }
+                ],
+                "value": "90"
+              }
+            ],
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#d4d4d8",
+                "id": "n1",
+                "name": "Path",
+                "stroke": "#111827",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "id": "a1",
+                        "x": 25.000000018217264,
+                        "y": 24.999999998519705
+                      },
+                      {
+                        "id": "a2",
+                        "x": 115.00000008289666,
+                        "y": 24.9999999985197
+                      },
+                      {
+                        "id": "a3",
+                        "x": 110,
+                        "y": 120
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   BRUSH_JSON_SCHEMA,
@@ -24,9 +25,12 @@ describe('brush presets', () => {
     expect(new Set(BRUSH_PRESETS.map((b) => b.id)).size).toBe(BRUSH_PRESETS.length);
   });
 
-  it.each(BUILTIN_BRUSHES.map((b) => [b.id, b] as const))('%s resolves to the built-in brush', (id, old) => {
-    const spec = BRUSH_PRESETS.find((b) => b.id === id)!;
-    expect(json(resolveBrush(spec, { builtin: true }))).toEqual(json(old));
+  // The built-in brushes are the presets resolved, so they are pinned to the committed contract:
+  // a preset change that changes what a brush paints shows here (rerun `pnpm contracts`).
+  const resolved = JSON.parse(readFileSync(new URL('../../conformance/domains/brushes/resolved.json', import.meta.url), 'utf8')) as Array<{ id: string; category: string; brush: PaintBrush }>;
+  it.each(BUILTIN_BRUSHES.map((b, i) => [b.id, b, i] as const))('%s is its committed resolution, built in', (id, brush, i) => {
+    expect(resolved[i]).toMatchObject({ id, category: brush.category });
+    expect(json(brush)).toEqual({ ...resolved[i].brush, builtin: true });
   });
 
   it('gives every mark preset a medium or variety, and every tool a tool', () => {
