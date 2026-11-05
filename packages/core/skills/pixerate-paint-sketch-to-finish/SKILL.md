@@ -66,6 +66,7 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
 | Clean geometric lines (curves, circles, borders) | `stroke_path` with SVG path data and a `pressure` taper, on the Ink layer |
 | Flats | `marker` or a flat brush on a layer under the ink |
 | Patterned or textured flats (sky, gradient, galaxy) | `set_effect_paint` with a provider generator, then a flat dry brush on the Flats layer; `set_color` after |
+| Textured passes (dry brush, sponge, foliage) | A brush with `tip.grain` (`set_brush` `{ tip: { grain: { source: "sanded", depth: 0.6 } } }`) or an image tip from the brush library, with `dynamics.angleJitter` and `flip` so repeats don't show |
 | Shadows | Clipped layer, `multiply` or `shadow`, a cool colour |
 | Light, glow | Clipped layer, `highlight` or `screen` |
 | Warm or cool a whole area | Clipped layer in `tint` |

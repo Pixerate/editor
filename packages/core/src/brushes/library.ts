@@ -17,6 +17,7 @@ import { migrateBrushV1 } from './migrate';
 import { normalizeBrushSpec } from './normalize';
 import { checkBrush, type BrushHostProfile } from './profiles';
 import { BRUSH_PRESETS } from './presets';
+import { brushSourceIdFromName, brushSourceIds, BrushSourceError, makeBrushSource, MAX_BRUSH_SOURCES, readBrushSource, type BrushSource, type BrushSourceInput } from './sources';
 import type { Brush, BrushKind, BrushMedium, BrushTool } from './types';
 
 /** The JSON file a brush library exports to and imports from. */
@@ -24,9 +25,11 @@ export interface BrushLibraryFile {
   format: 'pixerate-brushes';
   version: 2;
   brushes: Brush[];
+  /** The image sources the brushes lay or texture with (`source:<id>`), bytes included. */
+  sources?: BrushSource[];
 }
 
-export type BrushLibraryErrorCode = 'unknown_brush' | 'builtin' | 'exists' | 'invalid';
+export type BrushLibraryErrorCode = 'unknown_brush' | 'unknown_source' | 'builtin' | 'exists' | 'invalid';
 
 /** A refusal; the message says what to do instead. */
 export class BrushLibraryError extends Error {
@@ -74,6 +77,17 @@ export interface ImportBrushesResult {
   replaced: string[];
   skipped: string[];
   problems: string[];
+  /** Image sources added or replaced (only when there were any). */
+  sources?: string[];
+}
+
+export interface AddBrushSourceResult {
+  /** The source as stored. */
+  source: BrushSource;
+  /** What reading the image changed (the channel picked, scaling). */
+  problems: string[];
+  /** It replaced a source of the same id. */
+  replaced: boolean;
 }
 
 export interface BrushLibraryOptions {
@@ -103,6 +117,15 @@ export interface BrushLibrary {
   exportFile(ids?: readonly string[]): Promise<BrushLibraryFile>;
   /** Adds the brushes of a library file (version 1 or 2, or a bare array). Built-in ids are skipped; taken ids too, unless `overwrite`. */
   importFile(raw: unknown, options?: { overwrite?: boolean }): Promise<ImportBrushesResult>;
+  /** The image sources brushes lay (`tip.stamps` `source:<id>`) or texture with (`tip.grain.source`), in the order added. */
+  listSources(): Promise<BrushSource[]>;
+  getSource(id: string): Promise<BrushSource | null>;
+  /**
+   * Stores an image source: an uploaded image (`BrushSourceInput`, read by `makeBrushSource`) or a
+   * source as stored. Without an id it gets one from its name; a taken id is refused unless
+   * `overwrite`.
+   */
+  addSource(input: BrushSourceInput | BrushSource, options?: { overwrite?: boolean }): Promise<AddBrushSourceResult>;
   /** Called after every change. Returns an unsubscribe function. */
   subscribe(listener: () => void): () => void;
 }
@@ -117,6 +140,17 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 /** Whether a stored brush is version 1 (the flat `PaintBrush`). */
 const isV1 = (item: Record<string, unknown>) => 'engine' in item || 'category' in item || !('kind' in item);
+
+/** The image sources of a library file (`sources`), each checked; bad ones are skipped and reported. */
+export function parseBrushLibrarySources(raw: unknown, problems: string[] = []): BrushSource[] {
+  const file = isObject(raw) ? raw : null;
+  if (!file || file.sources === undefined) return [];
+  if (!Array.isArray(file.sources)) {
+    problems.push('sources is not a list; skipped.');
+    return [];
+  }
+  return file.sources.map((s, i) => readBrushSource(s, `sources[${i}]`, problems)).filter((s): s is BrushSource => s !== null);
+}
 
 /**
  * Brushes read from a library file: `{ format: 'pixerate-brushes', version: 1 | 2, brushes }` or
@@ -182,8 +216,10 @@ export function createBrushLibrary(options: BrushLibraryOptions = {}): BrushLibr
   const presets = (options.presets ?? BRUSH_PRESETS).map(copy);
   const builtinIds = new Set(presets.map((b) => b.id));
   const key = `${options.namespace ?? 'pixerate.brushes'}:user`;
+  const sourcesKey = `${options.namespace ?? 'pixerate.brushes'}:sources`;
   const listeners = new Set<() => void>();
   let user: Brush[] | null = null;
+  let sources: BrushSource[] | null = null;
   let queue: Promise<unknown> = Promise.resolve();
 
   const run = <T>(task: () => Promise<T>): Promise<T> => {
@@ -211,6 +247,46 @@ export function createBrushLibrary(options: BrushLibraryOptions = {}): BrushLibr
     const file: BrushLibraryFile = { format: 'pixerate-brushes', version: 2, brushes };
     if (options.storage) await options.storage.set(key, JSON.stringify(file));
     user = brushes;
+  };
+  const loadSources = async (): Promise<BrushSource[]> => {
+    if (sources) return sources;
+    const raw = options.storage ? await options.storage.get(sourcesKey) : null;
+    let list: BrushSource[] = [];
+    if (raw) {
+      try {
+        list = parseBrushLibrarySources(JSON.parse(raw));
+      } catch {
+        // An unreadable store starts empty rather than failing every call.
+      }
+    }
+    sources = list;
+    return sources;
+  };
+  const storeSources = async (list: BrushSource[]) => {
+    if (options.storage) await options.storage.set(sourcesKey, JSON.stringify({ format: 'pixerate-brush-sources', version: 1, sources: list }));
+    sources = list;
+  };
+  /** Adds or replaces sources in one write; returns the ids that changed and what was skipped. */
+  const putSources = async (incoming: readonly BrushSource[], overwrite: boolean, problems: string[]): Promise<string[]> => {
+    let list = [...(await loadSources())];
+    const changed: string[] = [];
+    for (const src of incoming) {
+      const at = list.findIndex((x) => x.id === src.id);
+      if (at === -1) {
+        if (list.length >= MAX_BRUSH_SOURCES) {
+          problems.push(`Source "${src.id}" skipped: the library holds at most ${MAX_BRUSH_SOURCES} sources.`);
+          continue;
+        }
+        list.push(src);
+        changed.push(src.id);
+      } else if (list[at].image === src.image) continue;
+      else if (overwrite) {
+        list = list.map((x, i) => (i === at ? src : x));
+        changed.push(src.id);
+      } else problems.push(`Source "${src.id}" exists already with another image; skipped (pass overwrite to replace it).`);
+    }
+    if (changed.length) await storeSources(list);
+    return changed;
   };
   const entries = async (): Promise<BrushLibraryEntry[]> => [...presets.map((brush) => ({ brush, builtin: true })), ...(await load()).map((brush) => ({ brush, builtin: false }))];
   const find = async (id: string): Promise<BrushLibraryEntry> => {
@@ -279,13 +355,19 @@ export function createBrushLibrary(options: BrushLibraryOptions = {}): BrushLibr
     exportFile: (ids) =>
       run(async () => {
         const brushes = ids ? await Promise.all(ids.map(async (id) => (await find(id)).brush)) : await load();
-        return { format: 'pixerate-brushes' as const, version: 2 as const, brushes: brushes.map(copy) };
+        const used = new Set(brushes.flatMap(brushSourceIds));
+        const withSources = (await loadSources()).filter((s) => used.has(s.id));
+        return { format: 'pixerate-brushes' as const, version: 2 as const, brushes: brushes.map(copy), ...(withSources.length ? { sources: withSources.map(copy) } : {}) };
       }),
     importFile: (raw, o = {}) =>
       run(async () => {
         const problems: string[] = [];
         const incoming = parseBrushLibrary(raw, problems);
         const result: ImportBrushesResult = { added: [], replaced: [], skipped: [], problems };
+        // Sources first, so the brushes that name them can paint as soon as they are listed.
+        const fileSources = parseBrushLibrarySources(typeof raw === 'string' ? JSON.parse(raw) : raw, problems);
+        const changedSources = fileSources.length ? await putSources(fileSources, !!o.overwrite, problems) : [];
+        if (changedSources.length) result.sources = changedSources;
         let brushes = [...(await load())];
         for (const brush of incoming) {
           if (builtinIds.has(brush.id)) {
@@ -305,11 +387,46 @@ export function createBrushLibrary(options: BrushLibraryOptions = {}): BrushLibr
             problems.push(`"${brush.id}" exists already; skipped (pass overwrite to replace it).`);
           }
         }
-        if (result.added.length || result.replaced.length) {
-          await store(brushes);
-          notify();
-        }
+        if (result.added.length || result.replaced.length) await store(brushes);
+        if (result.added.length || result.replaced.length || changedSources.length) notify();
         return result;
+      }),
+    listSources: () => run(async () => (await loadSources()).map(copy)),
+    getSource: (id) =>
+      run(async () => {
+        const s = (await loadSources()).find((x) => x.id === id);
+        return s ? copy(s) : null;
+      }),
+    addSource: (input, o = {}) =>
+      run(async () => {
+        const problems: string[] = [];
+        let source: BrushSource;
+        if (isObject(input) && 'width' in input) {
+          const read = readBrushSource(input, 'source', problems);
+          if (!read) throw new BrushLibraryError('invalid', problems.join(' '));
+          source = read;
+        } else {
+          const given = input as BrushSourceInput;
+          const taken = new Set((await loadSources()).map((x) => x.id));
+          let id = given.id;
+          if (id === undefined && typeof given.name === 'string') {
+            const stem = brushSourceIdFromName(given.name);
+            id = stem;
+            for (let n = 2; taken.has(id); n++) id = `${stem}-${n}`;
+          }
+          try {
+            source = makeBrushSource({ ...given, id }, problems);
+          } catch (e) {
+            throw new BrushLibraryError('invalid', (e as BrushSourceError).message);
+          }
+        }
+        const list = await loadSources();
+        const at = list.findIndex((x) => x.id === source.id);
+        if (at !== -1 && !o.overwrite) throw new BrushLibraryError('exists', `A source "${source.id}" exists already; pick another id, or pass overwrite to replace its image (brushes using it change too).`);
+        if (at === -1 && list.length >= MAX_BRUSH_SOURCES) throw new BrushLibraryError('invalid', `The library holds at most ${MAX_BRUSH_SOURCES} sources.`);
+        await storeSources(at === -1 ? [...list, source] : list.map((x, i) => (i === at ? source : x)));
+        notify();
+        return { source: copy(source), problems, replaced: at !== -1 };
       }),
     subscribe(listener) {
       listeners.add(listener);

@@ -57,7 +57,8 @@ Ask when you cannot tell from the request; say what you assumed when you can.
 | For canvas strokes | Base on a dry preset (pencil, pastel, charcoal, marker, ink); no wet surface, particles, stickers or tools; no light. |
 | For vector strokes | As canvas, but a wet surface (watercolour, gouache, wet oil), the Mixer Brush and the smudge and blender tools work too; no thick paint, particles, stickers, erasers or wet tools. |
 | A brush that must work in another editor | `check_brush` with that `host`, then `create_brush` from its `degraded` brush under a new id. |
-| A texture (chalk, charcoal, dry brush) | Raise `behaviour.grain` (0.8..1) and add `dynamics.sizeJitter`; test on rough paper. |
+| A texture (chalk, charcoal, dry brush) | Raise `behaviour.grain` (0.8..1) and add `dynamics.sizeJitter`; test on rough paper. For texture that shows on any paper, give the tip its own grain: `tip.grain` `{ source: "sanded", depth: 0.6 }` (paint editor; other hosts paint without it). |
+| A brush from an image (a scanned mark, a leaf, a texture) | `list_brush_sources`, or `add_brush_source` with the PNG (keep its `licence`); then `tip` `{ shape: "stamp", stamps: ["source:<id>"] }`, spacing 0.2–0.4, `dynamics.angleJitter`, `flip` and a little `scatter`. The image as grain instead: `tip.grain.source`. Paint editor only. |
 | A light brush (neon, glow) | `light.amount`, and paint it on dark paper; a highlighter keeps `light.spill.radius` 0. |
 | A colour that depends on the background (chalk, white ink) | `colour.default` as a light / dark pair `{ light, dark }`: the editor takes the side for its colour scheme when the brush is chosen. |
 | A shape as the tip (stars, leaves, a logo) | `tip.shape` stamp with `stamps` (an editor stamp or a ref from `find_stickers`), continuous marks; it paints in the user's colour. Keep the sticker's colours with `marks` objects. Paint editor only. |
@@ -73,6 +74,11 @@ basedOn: "highlighter", colour: { default: "#ff6ec7" } }`, then `check_brush`.
 **Chalk on a blackboard, for canvas strokes.** On the canvas host, `create_brush`
 `{ id: "board-chalk", name: "Board chalk", basedOn: "chalk", colour: { default: { light:
 "#334155", dark: "#f8fafc" } } }`: white chalk in dark mode, slate on light paper.
+
+**A charcoal brush from a scan.** `add_brush_source` `{ name: "Charcoal scan", image: <PNG>,
+channel: "darkness" }` → `create_brush` `{ id: "scan-charcoal", name: "Scan charcoal", basedOn:
+"charcoal-stick", tip: { shape: "stamp", stamps: ["source:charcoal-scan"], spacing: 0.25, grain:
+{ source: "rough", depth: 0.5 } }, dynamics: { angleJitter: 0.3, flip: "xy" } }` → `preview_brush`.
 
 **Port a wet brush to vector.** `check_brush` `{ id, host: "vector" }`; `create_brush` from the
 `degraded` brush with `id` `<id>-vector`; `check_brush` again.
@@ -94,3 +100,4 @@ basedOn: "highlighter", colour: { default: "#ff6ec7" } }`, then `check_brush`.
 - `create_brush`, `update_brush`, `duplicate_brush`: make and tune the brush.
 - `check_brush`: prove it works for the host, and get a degraded spec when it doesn't.
 - `preview_brush`: look at a sample stroke when the host renders previews.
+- `add_brush_source`, `list_brush_sources`: images for image tips and grain.

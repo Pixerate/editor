@@ -123,9 +123,11 @@ public enum PaintToolName: String, CaseIterable, Sendable {
     case describeBrush = "describe_brush"
     case checkBrush = "check_brush"
     case exportBrushes = "export_brushes"
+    case listBrushSources = "list_brush_sources"
     case previewBrush = "preview_brush"
     case createBrush = "create_brush"
     case updateBrush = "update_brush"
+    case addBrushSource = "add_brush_source"
     case duplicateBrush = "duplicate_brush"
     case removeBrush = "remove_brush"
     case importBrushes = "import_brushes"
@@ -139,7 +141,7 @@ public enum PaintToolName: String, CaseIterable, Sendable {
         switch self {
         case .getCanvasInfo, .newCanvas, .setCanvas, .extendCanvas, .listPapers, .getPaper, .setPaper, .listLayers, .addLayer, .updateLayer, .listBlendModes, .setActiveLayer, .removeLayer, .duplicateLayer, .moveLayer, .mergeLayerDown, .fillLayer, .clearLayer, .getBrush, .setBrush, .setColor, .setPaint, .pickColor, .getMixerBrush, .loadMixerBrush, .cleanMixerBrush, .paintStroke, .strokePath, .getLiveStroke, .listStrokes, .strokeAt, .updateStroke, .editStrokePoints, .reorderStroke, .removeStrokes, .convertToStrokeLayer, .rasterizeStrokeLayer, .replayStrokes, .setView, .setHand, .undoPaint, .redoPaint, .renderPreview, .exportImage, .exportPsd, .getGuides, .setSymmetry, .setPerspectiveGuide, .setTracingImage, .updateTracingImage, .clearTracingImage, .addReferenceImage, .listReferenceImages, .updateReferenceImage, .removeReferenceImage, .pickReferenceColor, .colorHarmony, .listSwatches, .addSwatch, .removeSwatch, .mixingPadStroke, .pickMixingPadColor, .clearMixingPad, .mixOnPad, .saveMixingPad, .listMixingPads, .loadMixingPad, .removeMixingPad, .renderMixingPad, .addStencil, .updateStencil, .removeStencils, .getWetPaint, .advanceWetPaint, .dryPaint, .wetPaper, .setWetSettings, .setFlowMap, .setCanvasTilt, .pauseWetPaint, .setWetEngine, .setWaterOverlay, .getLight, .setLightSpill, .clearLight, .setLighting, .getRelief, .flattenRelief, .setInstantDry, .exportTimeLapse, .exportHighRes, .listStickers, .stickerAt, .addStickers, .updateSticker, .arrangeStickers, .removeStickers, .mixColors, .findStickers, .describeSticker, .listLayerEffects, .addLayerEffect, .updateLayerEffect, .removeLayerEffect, .setLayerEffectsEnabled: "paint-editor"
         case .searchEffects, .describeEffect, .listAppliedEffects, .applyEffect, .updateEffect, .removeEffect, .setPaperEffect, .setEffectPaint, .setEffectPlayback, .addEffectLayer, .fillLayerWithEffect: "paint-effects"
-        case .listBrushPresets, .describeBrush, .checkBrush, .exportBrushes, .previewBrush, .createBrush, .updateBrush, .duplicateBrush, .removeBrush, .importBrushes: "brushes"
+        case .listBrushPresets, .describeBrush, .checkBrush, .exportBrushes, .listBrushSources, .previewBrush, .createBrush, .updateBrush, .addBrushSource, .duplicateBrush, .removeBrush, .importBrushes: "brushes"
         case .proposePaint, .listPaintProposals, .acceptPaintProposal, .rejectPaintProposal: "paint-proposals"
         }
     }

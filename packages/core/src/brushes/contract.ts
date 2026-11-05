@@ -18,6 +18,8 @@ import { BRUSH_PRESETS } from './presets';
 import { BRUSH_HOST_PROFILES, checkBrush } from './profiles';
 import { resolveBrush, resolveCategory, resolveEngine } from './resolve';
 import { BRUSH_JSON_SCHEMA, MAX_BRUSH_PALETTE } from './schema';
+import { MAX_BRUSH_SOURCE_SIZE, MAX_BRUSH_SOURCES } from './sources';
+import { BRUSH_ID } from '../paint-editor/brush-model';
 import { createBrushLibraryTools } from './tools';
 import { brushEditorSections } from './ui';
 import { BRUSH_KINDS, BRUSH_MARKS_KINDS, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS } from './types';
@@ -47,6 +49,8 @@ export const BRUSH_PROFILE_JSON_SCHEMA: JsonSchema = {
     colours: { type: 'array', items: { type: 'string', enum: ['solid', 'dual', 'gradient', 'effect'] }, description: 'Colour kinds a default colour may be.' },
     velocity: { ...SUPPORT, description: 'Velocity dynamics.' },
     tilt: { ...SUPPORT, description: 'Tilt dynamics.' },
+    tipGrain: { ...SUPPORT, description: 'Texture inside the tip (tip.grain); missing: none.' },
+    dabCount: { ...SUPPORT, description: 'Several dabs per spacing step (dynamics.count); missing: none.' },
   },
   required: ['id', 'name', 'kinds', 'tools', 'tipShapes', 'marks', 'surfaces', 'exchange', 'reservoir', 'grain', 'light', 'motion', 'colours', 'velocity', 'tilt'],
   additionalProperties: false,
@@ -60,6 +64,26 @@ export const BRUSH_LIBRARY_FILE_JSON_SCHEMA: JsonSchema = {
     format: { type: 'string', const: 'pixerate-brushes', description: 'Always "pixerate-brushes".' },
     version: { type: 'integer', const: 2, description: 'Always 2.' },
     brushes: { type: 'array', items: { $ref: 'brush.schema.json' } as JsonSchema, description: 'The brushes, each a facet brush (brush.schema.json).' },
+    sources: {
+      type: 'array',
+      maxItems: MAX_BRUSH_SOURCES,
+      description: 'The image sources the brushes name (source:<id> in tip.stamps or tip.grain.source), bytes included.',
+      items: {
+        type: 'object',
+        description: 'An image source: a grey mask, 255 paints (or is a grain peak).',
+        properties: {
+          id: { type: 'string', pattern: BRUSH_ID.source, description: 'Source id.' },
+          name: { type: 'string', maxLength: 80, description: 'Display name.' },
+          width: { type: 'integer', minimum: 1, maximum: MAX_BRUSH_SOURCE_SIZE, description: 'Width in px.' },
+          height: { type: 'integer', minimum: 1, maximum: MAX_BRUSH_SOURCE_SIZE, description: 'Height in px.' },
+          image: { type: 'string', pattern: '^data:image/png;base64,', description: 'The mask as a greyscale PNG data: URL.' },
+          licence: { type: 'string', maxLength: 2000, description: 'The licence or terms it came with.' },
+          origin: { type: 'string', maxLength: 200, description: 'Where it came from (a file or pack name).' },
+        },
+        required: ['id', 'name', 'width', 'height', 'image'],
+        additionalProperties: false,
+      },
+    },
   },
   required: ['format', 'version', 'brushes'],
   additionalProperties: false,

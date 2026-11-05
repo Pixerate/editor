@@ -5,6 +5,7 @@ import type { AdjustmentKind, ImageAdjustments } from './types';
 import { normalizeProcessVersion } from './color';
 import {
   ADJUSTMENT_KINDS,
+  assertAdjustmentParams,
   isAdjustmentKind,
 } from './adjustment-layers';
 import { BLEND_MODES, isBlendMode } from './blend';
@@ -233,12 +234,12 @@ export function createImageEditorToolProvider(
     description:
       'Adds a non-destructive adjustment layer on top of the stack (one undoable step) and returns it; with a selection it is masked by it (useSelection, default true; masked in the result says so). clipped clips it to the layer directly below in the same step, so it adjusts only that layer (clipped in the result). Kinds: ' +
       ADJUSTMENT_KINDS.map((k) => k.kind).join(', ') +
-      '. Omitted params are neutral.',
+      '. Omitted params are neutral; an unknown or mistyped key is refused with the accepted shape.',
     inputSchema: {
       type: 'object',
       properties: {
         kind: { type: 'string', enum: ADJUSTMENT_KINDS.map((k) => k.kind), description: 'Adjustment kind.' },
-        params: { type: 'object', description: 'Initial parameters (see list_controls); merged with neutral defaults.' },
+        params: { type: 'object', description: 'Initial parameters, merged with neutral defaults. Nested, not dotted control ids: levels gamma is {"master":{"gamma":1.2}}, not {"master.gamma":1.2}. See list_controls for the ranges.' },
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0-1 (default 1).' },
         blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal).' },
         name: { type: 'string', description: 'Layer name shown in the layers panel.' },
@@ -265,6 +266,7 @@ export function createImageEditorToolProvider(
         if (ref !== undefined && !controller.getLayer(ref as string)) throw new Error(`Unknown layer "${ref}". Call list_layers for ids.`);
       }
       if (parentId !== undefined && controller.getLayer(parentId as string)?.type !== 'group') throw new Error(`Layer "${parentId}" is not a group.`);
+      assertAdjustmentParams(kind, params);
       const id = controller.addAdjustmentLayer({ kind: kind as AdjustmentKind, params, opacity, blend, name, aboveId, parentId, useSelection: useSelection !== false, clipped: clipped === true });
       const layer = controller.getAdjustmentLayer(id)!;
       return { layer: JSON.parse(JSON.stringify(layer)), index: controller.getAdjustmentLayers().findIndex((l) => l.id === id), masked: Boolean(layer.mask), clipped: Boolean(controller.getLayer(id)?.clipped) };

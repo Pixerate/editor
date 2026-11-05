@@ -211,7 +211,35 @@ export interface BrushDynamics {
   opacityJitter: number;
   /** Random offset across the stroke in diameters, 0..4 (default 0). */
   scatter: number;
+  /** Dabs laid at each spacing step, 1..16, each with its own jitter (missing: 1). */
+  count?: number;
+  /** Mirror each dab at random across these axes (missing: `none`). */
+  flip?: DabFlip;
 }
+
+/** Random mirroring of dabs. */
+export type DabFlip = 'none' | 'x' | 'y' | 'xy';
+export const DAB_FLIPS: readonly DabFlip[] = ['none', 'x', 'y', 'xy'];
+
+export type TipGrainMode = 'moving' | 'texturised';
+export const TIP_GRAIN_MODES: readonly TipGrainMode[] = ['moving', 'texturised'];
+
+/** Texture inside the tip (dab engines): each dab's coverage is multiplied by it. */
+export interface TipGrainSettings {
+  /** A grain pattern (`rough`, `canvas`…) or an image source `source:<id>`. */
+  source: string;
+  /** `texturised` (default): fixed to the canvas; `moving`: rolls along with the tip. */
+  mode: TipGrainMode;
+  /** 0.05..20: 1 the source's own size (default 1). */
+  scale: number;
+  /** 0..1: how much it takes out of the dab (default 0.6). */
+  depth: number;
+  /** 0..3 around the middle (default 1). */
+  contrast: number;
+  invert: boolean;
+}
+
+export const DEFAULT_TIP_GRAIN: Readonly<Omit<TipGrainSettings, 'source'>> = { mode: 'texturised', scale: 1, depth: 0.6, contrast: 1, invert: false };
 
 export const DEFAULT_DYNAMICS: Readonly<BrushDynamics> = {
   minSize: 0,
@@ -271,6 +299,8 @@ export interface PaintBrush {
   stamp: string | null;
   /** Dab engine: spray marks. Each dab lays a seeded scatter of droplets across the tip; `null` (default): one mark per dab. */
   spray: SpraySettings | null;
+  /** Dab engines: texture inside the tip (missing: none). Recorded with the stroke, source ref included, so replays match. */
+  tipGrain?: TipGrainSettings;
   /**
    * The brush's own gradient paint (`@pixerate/editor/paint` `PaintGradientSource`), used instead
    * of the editor's paint; `null` (default): the editor's paint. Stops may be `paint` / `secondary`
@@ -297,6 +327,7 @@ export function normalizeDynamics(raw: Partial<BrushDynamics> = {}, base: BrushD
     angleJitter: unit(raw.angleJitter, base.angleJitter),
     opacityJitter: unit(raw.opacityJitter, base.opacityJitter),
     scatter: range(raw.scatter, 0, 4, base.scatter),
+    ...countAndFlip(raw, base),
   };
 }
 
@@ -328,6 +359,33 @@ export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehav
   };
 }
 
+/** `count` and `flip`, kept only when they are not the defaults (one dab, no flip), so brushes that don't use them read as before. */
+function countAndFlip(raw: Partial<BrushDynamics>, base: BrushDynamics): Pick<BrushDynamics, 'count' | 'flip'> {
+  const n = typeof raw.count === 'number' && Number.isFinite(raw.count) ? Math.min(16, Math.max(1, Math.round(raw.count))) : (base.count ?? 1);
+  const flip = DAB_FLIPS.includes(raw.flip as DabFlip) ? (raw.flip as DabFlip) : (base.flip ?? 'none');
+  return { ...(n > 1 ? { count: n } : {}), ...(flip !== 'none' ? { flip } : {}) };
+}
+
+const withTipGrain = (g: TipGrainSettings | null): { tipGrain?: TipGrainSettings } => (g ? { tipGrain: g } : {});
+
+/** Tip grain settings in range, `null` to clear, or `base` when `raw` is missing or has no usable source. */
+function readTipGrain(raw: unknown, base: TipGrainSettings | null): TipGrainSettings | null {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Partial<TipGrainSettings>;
+  const source = typeof r.source === 'string' && /^\S{1,200}$/.test(r.source) ? r.source : base?.source;
+  if (!source) return base;
+  const b = base ?? { source, ...DEFAULT_TIP_GRAIN };
+  return {
+    source,
+    mode: TIP_GRAIN_MODES.includes(r.mode as TipGrainMode) ? (r.mode as TipGrainMode) : b.mode,
+    scale: range(r.scale, 0.05, 20, b.scale),
+    depth: unit(r.depth, b.depth),
+    contrast: range(r.contrast, 0, 3, b.contrast),
+    invert: typeof r.invert === 'boolean' ? r.invert : b.invert,
+  };
+}
+
 /** Brush settings to change or read: any subset of a brush and of its blocks. */
 /** Spray marks (dab engine). */
 export interface SpraySettings {
@@ -355,8 +413,10 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'spray'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'spray' | 'tipGrain'>> & {
   spray?: Partial<SpraySettings> | null;
+  /** Tip grain (`null` removes it). */
+  tipGrain?: Partial<TipGrainSettings> | null;
   light?: Partial<LightSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
@@ -506,6 +566,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     light: normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
+    ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),
     paint,
     ...(raw.builtin ? { builtin: true } : {}),
   };

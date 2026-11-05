@@ -3846,6 +3846,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In Svelte's `usePromptEditor`, changing an unrelated prop (e.g. `placeholder`) reset the editor to the parent's `content`, throwing away text the parent had not taken up from `onContentChange`. React's hook did not do this.
 - **Root Cause**: A Svelte `$effect` re-reads the whole props getter whenever any prop changes, whereas React's content `useEffect` only runs when `content` changes. Comparing `content` against the editor's text on every run therefore overwrote un-echoed edits.
 - **Solution / Workaround**: `syncPromptEditor(editor, config, previous)` in core applies content only when `config.content !== previous.content` and it differs from the editor's text. Pass the previous config from both bindings.
+### [monorepo] Node10 Consumers Need `typesVersions` for Every Subpath, and the Check Needs `esModuleInterop`
+- **Issue / Symptom**: With `moduleResolution: "node"` (node10), `import … from "@pixerate/editor/grammar"` had no types, and the first node10 consumer in `scripts/check-packages.mjs` reported 166 errors like "Module react can only be default-imported using the 'allowSyntheticDefaultImports' flag".
+- **Root Cause**: node10 ignores `exports`, so it only finds subpath declarations through `typesVersions["*"]`. Separately, our emitted React declarations use `import React from "react"`, which node10 only accepts with `allowSyntheticDefaultImports` (on by default for `bundler` and `node16`, off for node10).
+- **Solution / Workaround**: Every non-root `exports` key needs a matching `typesVersions["*"]` entry (`check-packages` fails otherwise). The node10 consumer sets `esModuleInterop: true`, which `tsc --init` writes and which implies `allowSyntheticDefaultImports`.
 ### [core/vector] Regenerating Vector Art Without a Seed Picks a Random One
 - **Issue / Symptom**: The vector scenario recorder refused `effects-and-generation`: the document after `regenerate_vector_art` differed between its two runs, in the generation provenance's `seed`.
 - **Root Cause**: Without a `seed`, generation and regeneration draw a fresh random seed (so a new take looks different), and record it in the provenance.
@@ -3861,6 +3865,24 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The shared CI simulator can stall for the length of a whole measurement round, so even the best of five alternating runs can catch the large input in a slow stretch.
 - **Solution / Workaround**: `TimingBudget.growth` measures up to four rounds while the ratio is above 5 and keeps the best times. A linear parse settles near ×4; a quadratic one stays near ×16 in every round, so it still fails. As with the TS `measureGrowth`, never fix such a flake by raising the limit alone.
 
+### [core/brushes] Brush Image Sources Are `source:` Stamp Refs, Not Stickers
+
+- **Issue / Symptom**: An image tip (`tip.stamps: ['source:leaf']`) painted round, or `create_brush` refused it with "can't load sticker", or objects marks dropped it.
+- **Root Cause**: Image tips reuse the stamp-tip path, so a source ref goes wherever sticker refs go. The sticker art cache (`StickerArtCache`) knows nothing about the brush library, and a sticker provider called with `source:…` fails. Objects marks lay editable stickers on a sticker layer, which an image source is not.
+- **Solution / Workaround**: Read stamp art through one lookup that sends `source:` refs to `BrushSourceArtCache` and everything else to the sticker cache (`PaintEditorController.stampArt`; preview renderers take `paintBrushPreviewRenderer(paper, { library })`). `brushStickerRefs` leaves `source:` refs out, and the library tools check them against `library.getSource`, not the sticker provider. `normalizeBrushSpec` drops source refs from objects marks with a problem. The provider id `source` is reserved, like `editor`.
+
+### [core/paint-editor] New Engine Fields Stay Off Brushes That Don't Use Them
+
+- **Issue / Symptom**: Adding `dynamics.count`, `dynamics.flip` or `tipGrain` to every resolved `PaintBrush` changed `resolved.json`, the recorded paint documents and every Swift contract test, though no preset used them.
+- **Root Cause**: The conformance contracts and documents compare the whole resolved brush, so a new always-present field with a default is a change for every brush.
+- **Solution / Workaround**: `normalizePaintBrush` writes `count`, `flip` and `tipGrain` only when they are not the defaults (one dab, no flip, no grain), and the facet → engine map (`BRUSH_FIELDS`) maps them like any other field. Keep later engine additions optional the same way, so ports (Swift) only need them for the brushes that use them.
+
+### [core/brushes] Tip Grain Hardness and Flip Only Apply to Image Sources and Stamps
+
+- **Issue / Symptom**: Lowering hardness on an editor-stamp or sticker tip changes nothing, while an image-source tip fades towards its edges.
+- **Root Cause**: Stamp tips never read hardness; applying it to every stamp would change the pixels of strokes already recorded with stamp brushes, so replays would no longer match.
+- **Solution / Workaround**: `stampSampler(ref, art, hardness)` softens only `source:` refs. `dynamics.flip` mirrors any dab, but only stamps and image tips look different mirrored.
+
 ### [core/vector] Wet Brushstrokes Settle in the Background, So the Scene Shows Them as Laid First
 - **Issue / Symptom**: A watercolour brushstroke looked like a soft marker on the canvas for a few seconds, then bled and granulated; an early test of `vectorBrushstrokeImages` got the "as laid" image, not the final one.
 - **Root Cause**: A wet vector brushstroke runs the wet simulation in its own small `WetWorld` for `VECTOR_WET_STEPS` (120) steps and then dries it. On the TypeScript kernel a step costs about 25 ms per 256 px tile, so a stroke takes seconds. Rendering is synchronous, so `vectorBrushstrokeImages` returns the step-0 bake at once and queues a `WetBrushstrokeJob` that runs in 12 ms slices on timers; `onVectorBrushstrokesSettled` fires when one is done, and the controller notifies its subscribers so the canvases redraw.
@@ -3875,3 +3897,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Wet and mixer vector brushstrokes cut corners and lagged behind the end of the path.
 - **Root Cause**: `PaintDabStroke` and `WetStrokeDriver` smooth pen input (`PenSmoother` with `tip.smoothing` and `pressureSmoothing`), which suits a hand but not a path that is already exact data.
 - **Solution / Workaround**: `brushstrokeMedia.ts` places the stroke with `tip.smoothing` and `pressureSmoothing` set to 0 (and the tip size scaled to image pixels) before handing the brush to the engines.
+
+### [core] `normalizeAdjustmentLayer` Drops What It Does Not Know, So Tools Must Check `params` First
+- **Issue / Symptom**: `add_adjustment_layer` with `{ kind: "levels", params: { "master.gamma": 1.18 } }` returned success and a neutral layer. An agent had no sign that its adjustment was lost.
+- **Root Cause**: `normalizeAdjustmentLayer` rebuilds `params` from the keys each kind uses and fills the rest with neutral values. That is right for stored and hand-written documents. `list_controls` also shows dotted ids (`master.gamma`), which only `set_adjustments` resolves, while `params` is nested.
+- **Solution / Workaround**: A tool taking `params` calls `assertAdjustmentParams(kind, params)` before changing anything. It walks them beside `defaultAdjustmentParams(kind)`, so a new parameter only needs its default. Keep the normaliser lenient: documents must still load.

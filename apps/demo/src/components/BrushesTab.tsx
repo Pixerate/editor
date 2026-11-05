@@ -19,7 +19,7 @@ const HOSTS: Array<{ id: Host; label: string; hint: string }> = [
 ];
 
 /** Each host's preview: the paint engine for paint and image, the brushstroke renderer for canvas and vector strokes. */
-const paintPreview = paintBrushPreviewRenderer();
+const paintPreview = paintBrushPreviewRenderer(undefined, { library: demoBrushLibrary });
 const PREVIEWS: Record<Host, BrushPreviewRenderer> = { paint: paintPreview, image: paintPreview, canvas: renderCanvasBrushPreview, vector: renderCanvasBrushPreview };
 
 /** What the transparent canvas / vector previews are shown on: the panel's colour (the paint engine brings its paper). */

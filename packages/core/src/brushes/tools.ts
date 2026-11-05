@@ -17,6 +17,7 @@ import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, withKeptIssues
 import { resolveCategory, resolveEngine } from './resolve';
 import { BRUSH_JSON_SCHEMA } from './schema';
 import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_TOOLS, type Brush } from './types';
+import { BRUSH_SOURCE_CHANNELS, brushSourceIdOf, brushSourceIds, brushSourceRef, isBrushSourceRef, MAX_BRUSH_SOURCE_INPUT_PIXELS, MAX_BRUSH_SOURCE_SIZE, summarizeBrushSource } from './sources';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -111,14 +112,21 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     const ids = (await library.list()).map((e) => e.brush.id);
     throw new BrushLibraryError('unknown_brush', `No brush "${id}". ${closest(id, ids)}list_brush_presets lists them.`);
   };
-  /** `checkBrush`, plus a stamp tip's stickers checked against the host's sticker library. */
+  /** `checkBrush`, plus image sources checked against the library and a stamp tip's stickers against the host's sticker library. */
   const checkFor = async (brush: Brush, p: BrushHostProfile): Promise<BrushCheck> => {
     const check = checkBrush(brush, p);
-    const provider = options.stickers?.();
-    if (!provider || brush.tip.shape !== 'stamp') return check;
     const issues = [...check.issues];
+    const refs: [string, string][] = [...(brush.tip.stamps ?? []).map((r): [string, string] => ['tip.stamps', r]), ...(brush.tip.grain ? [['tip.grain.source', brush.tip.grain.source] as [string, string]] : [])];
+    for (const [facet, ref] of refs) {
+      const id = brushSourceIdOf(ref);
+      if (id === null || (await library.getSource(id))) continue;
+      const ids = (await library.listSources()).map((x) => x.id);
+      issues.push({ facet, severity: 'error', reason: `There is no image source "${id}" in the brush library. ${closest(id, ids)}`.trim(), fix: 'Add it with add_brush_source, or use a ref list_brush_sources lists.' });
+    }
+    const provider = options.stickers?.();
+    if (!provider || brush.tip.shape !== 'stamp') return { ok: !issues.some((i) => i.severity === 'error'), issues };
     for (const ref of brush.tip.stamps ?? []) {
-      if (ref.startsWith('editor:')) continue;
+      if (ref.startsWith('editor:') || isBrushSourceRef(ref)) continue;
       try {
         await describeStickerRef(provider, ref);
       } catch (e) {
@@ -229,7 +237,36 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     handler: async ({ ids }) => ({ file: await library.exportFile(ids as string[] | undefined) }),
   };
 
-  const tools: AgentTool[] = [list, describe, check, exportTool];
+  const listSources: AgentTool = {
+    name: 'list_brush_sources',
+    title: 'List brush image sources',
+    description:
+      'Lists the image sources in the brush library: the images image tips and image grain are made from. Returns each source\'s id, ref (source:<id>, for tip.stamps of a stamp tip or tip.grain.source in create_brush / update_brush), name, width and height in px, licence and origin when it has them, and usedBy (the saved brushes that name it), plus total. Built-in grain patterns need no source. Changes nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', maxLength: 200, description: 'Words in the id, name or origin (each word must match the start of one).' },
+        offset: { type: 'integer', minimum: 0, description: 'Skip this many (default 0).' },
+        limit: { type: 'integer', minimum: 1, maximum: 200, description: 'At most this many (default 100).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'List brush image sources', ...READ },
+    handler: async ({ text, offset, limit }) => {
+      const brushes = (await library.list({ source: 'user' })).map((e) => e.brush);
+      const wordsOf = (v: string) => v.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+      const want = typeof text === 'string' ? wordsOf(text) : [];
+      const found = (await library.listSources()).filter((x) => {
+        const have = wordsOf([x.id, x.name, x.origin ?? ''].join(' '));
+        return want.every((w) => have.some((h) => h.startsWith(w)));
+      });
+      const start = (offset as number | undefined) ?? 0;
+      const page = found.slice(start, start + ((limit as number | undefined) ?? 100));
+      return { total: found.length, sources: page.map((x) => ({ ...summarizeBrushSource(x), usedBy: brushes.filter((b) => brushSourceIds(b).includes(x.id)).map((b) => b.id) })) };
+    },
+  };
+
+  const tools: AgentTool[] = [list, describe, check, exportTool, listSources];
 
   if (options.renderPreview) {
     const render = options.renderPreview;
@@ -311,6 +348,31 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
         for (const k of (unset as string[] | undefined) ?? []) delete base[k];
         const saved = await store(merge(base, { ...patch, id }), true, e.brush);
         return { id, brush: saved.brush, changed: changedPaths(e.brush, saved.brush), problems: saved.problems, warnings: warnings(saved.check), ...(saved.check.kept.length ? { kept: saved.check.kept } : {}) };
+      },
+    },
+    {
+      name: 'add_brush_source',
+      title: 'Add a brush image source',
+      description: `Adds an image to the brush library as a source for image tips and image grain (as Procreate's shape and grain sources). The image is a PNG data: URL; the marks are read from its transparency, its dark parts (a scan of marks on paper) or its light parts (white on black), as channel says, and kept as a grey mask at most ${MAX_BRUSH_SOURCE_SIZE} px on a side. Returns id, ref (source:<id>), the stored source's width and height, problems (the channel auto picked, scaling) and replaced. Then make the brush: create_brush or update_brush with tip { shape: "stamp", stamps: [ref] } for an image tip, or tip.grain { source: ref } for grain. A taken id is refused unless overwrite.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name, e.g. "Charcoal scan".' },
+          image: { type: 'string', pattern: '^data:image/png;base64,', maxLength: 40_000_000, description: `The image: a PNG data: URL, at most ${MAX_BRUSH_SOURCE_INPUT_PIXELS} pixels; larger than ${MAX_BRUSH_SOURCE_SIZE} px it is scaled down.` },
+          id: { type: 'string', pattern: String(FACETS.id!.pattern), description: 'The source id (default: from the name, made unique): lowercase letters, digits and dashes.' },
+          channel: { type: 'string', enum: [...BRUSH_SOURCE_CHANNELS], description: 'Where the marks are: auto (default: the transparency when the image has any, else the dark parts), alpha, darkness (dark marks on light paper) or lightness (light marks on black).' },
+          invert: { type: 'boolean', description: 'Swap painted and empty parts (default false).' },
+          licence: { type: 'string', maxLength: 2000, description: 'The licence or terms the image came with, kept with the source.' },
+          origin: { type: 'string', maxLength: 200, description: 'Where it came from: a file name, a pack or a URL.' },
+          overwrite: { type: 'boolean', description: 'Replace the image of a source with the same id (default false); brushes using it change with it.' },
+        },
+        required: ['name', 'image'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Add a brush image source', ...WRITE },
+      handler: async ({ overwrite, ...input }) => {
+        const r = await library.addSource(input as unknown as Parameters<BrushLibrary['addSource']>[0], { overwrite: !!overwrite });
+        return { id: r.source.id, ref: brushSourceRef(r.source.id), width: r.source.width, height: r.source.height, problems: r.problems, replaced: r.replaced };
       },
     },
     {
