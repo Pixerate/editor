@@ -67,17 +67,20 @@ public struct BrushSource: Equatable, Sendable {
 public struct BrushSourceInput: Sendable {
     public var id: String?
     public var name: String
-    /// A PNG as a `data:image/png;base64,…` URL.
+    /// A PNG as a `data:image/png;base64,…` URL (or empty, with `bytes`).
     public var image: String
+    /// The PNG's bytes, read instead of `image` when given.
+    public var bytes: [UInt8]?
     public var channel: String?
     public var invert: Bool
     public var licence: String?
     public var origin: String?
 
-    public init(id: String? = nil, name: String, image: String, channel: String? = nil, invert: Bool = false, licence: String? = nil, origin: String? = nil) {
+    public init(id: String? = nil, name: String, image: String = "", bytes: [UInt8]? = nil, channel: String? = nil, invert: Bool = false, licence: String? = nil, origin: String? = nil) {
         self.id = id
         self.name = name
         self.image = image
+        self.bytes = bytes
         self.channel = channel
         self.invert = invert
         self.licence = licence
@@ -166,9 +169,9 @@ public func makeBrushSource(_ input: BrushSourceInput, _ problems: inout [String
     guard let name = text(input.name, 80) else { throw BrushSourceError("A brush source needs a name.") }
     let id = input.id ?? brushSourceIdFromName(name)
     if !isBrushId(id) { throw BrushSourceError("Source id \(JSONValue.string(id).stringified()) is not valid: use lowercase letters, digits and dashes (up to 64), starting with a letter or digit.") }
-    guard let parsed = parseDataUrl(input.image) else { throw BrushSourceError("image must be a data: URL (data:image/png;base64,…) or PNG bytes.") }
+    guard let bytes = input.bytes ?? parseDataUrl(input.image)?.bytes else { throw BrushSourceError("image must be a data: URL (data:image/png;base64,…) or PNG bytes.") }
     let png: DecodedPng
-    do { png = try decodePng(parsed.bytes, maxPixels: MAX_BRUSH_SOURCE_INPUT_PIXELS) } catch {
+    do { png = try decodePng(bytes, maxPixels: MAX_BRUSH_SOURCE_INPUT_PIXELS) } catch {
         throw BrushSourceError("The image can't be read as a PNG (\((error as? PngError)?.message ?? error.localizedDescription)); convert it to PNG, at most \(MAX_BRUSH_SOURCE_INPUT_PIXELS) pixels.")
     }
     let width = png.width, height = png.height, data = png.data

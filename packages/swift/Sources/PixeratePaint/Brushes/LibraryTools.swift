@@ -259,6 +259,25 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
             return .object(o)
         })]
     }
+    h["import_brush_pack"] = { a in
+        let text = (a["file"]?.stringValue ?? "").replacingOccurrences(of: "^data:[^,]*,", with: "", options: .regularExpression)
+        let bytes: [UInt8]
+        do { bytes = try base64ToBytes(text) } catch { throw BrushLibraryError(.invalid, "file is not base64: pass the pack's bytes as base64 (a data: URL works too).") }
+        let r: ImportBrushPackResult
+        do {
+            r = try importBrushPack(library, bytes, fileName: a["fileName"]?.stringValue ?? "", format: a["format"]?.stringValue, prefix: a["prefix"]?.stringValue, licence: a["licence"]?.stringValue, overwrite: a["overwrite"] == .bool(true))
+        } catch let e as BrushLibraryError {
+            throw e
+        } catch {
+            throw BrushLibraryError(.invalid, "\(error.localizedDescription) Nothing was imported.")
+        }
+        let strings = { (v: [String]) in JSONValue.array(v.map { .string($0) }) }
+        return [
+            "format": .string(r.format),
+            "brushes": .array(r.brushes.map { b in ["id": .string(b.id), "name": .string(b.name), "renderable": .bool(library.get(b.id).map { checkBrush($0.brush, profile).ok } ?? false)] }),
+            "sources": strings(r.sources), "skipped": strings(r.skipped), "unsupported": strings(r.unsupported), "licence": strings(r.licence), "problems": strings(r.problems),
+        ]
+    }
     h["add_brush_source"] = { a in
         let input = BrushSourceInput(id: a["id"]?.stringValue, name: a["name"]?.stringValue ?? "", image: a["image"]?.stringValue ?? "", channel: a["channel"]?.stringValue, invert: a["invert"]?.boolValue ?? false, licence: a["licence"]?.stringValue, origin: a["origin"]?.stringValue)
         let r = try library.addSource(input, overwrite: a["overwrite"] == .bool(true))
