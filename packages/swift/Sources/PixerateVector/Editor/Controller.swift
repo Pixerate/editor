@@ -476,18 +476,6 @@ func normalizeVectorTree(_ nodes: [VectorNode], prefer: String) -> [VectorNode] 
     }
 }
 
-/// `normalizeVectorPaintStacks` for nodes without paint stacks: `fills: null` / `strokes: null`
-/// are dropped. Stacks themselves (`fills` / `strokes` arrays) are made only by commands that are
-/// not ported yet (#624) and are left as they are.
-func normalizeVectorPaintStacks(_ node: VectorNode, prefer: String) -> VectorNode {
-    if node["fills"]?.arrayValue != nil || node["strokes"]?.arrayValue != nil { return node }
-    if !node.has("fills") && !node.has("strokes") { return node }
-    var next = node
-    next["fills"] = Optional<JSONValue>.none
-    next["strokes"] = Optional<JSONValue>.none
-    return next
-}
-
 /// A document as loaded (`loadedDocument`): a copy, stacks preferred over stale shorthands.
 func loadedDocument(_ d: VectorDocument) throws -> VectorDocument {
     var copy = try cloneVectorDocument(d)

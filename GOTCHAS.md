@@ -3968,3 +3968,23 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Hand-editing a fixture to add `"skip": { "swift": … }` can make `node scripts/record-conformance.mjs --check` report the file out of date.
 - **Root Cause**: The recorder rewrites each scenario as `JSON.stringify({ ...scenario, steps }, null, 2) + "\n"`, keeping the scenario's own key order. Any other spacing or key order differs from what it writes.
 - **Solution / Workaround**: Add skips with a script that parses the file, inserts `skip` (the vector fixtures put it after `setup`, before `steps`) and writes `JSON.stringify(value, null, 2) + "\n"`. The reason names what is missing and the issue, e.g. `"Symbols and instances are not ported yet (#624)."`.
+
+### [swift] `swift test --skip-build` Replays the Fixtures of the Last Build
+- **Issue / Symptom**: After editing a recorded scenario (`packages/conformance/domains/*/fixtures`), `swift test --skip-build` still passed against the old expectations; a deliberately broken expectation was not caught.
+- **Root Cause**: `PixerateContracts` ships the conformance package as SwiftPM resources, which are copied into the test bundle when it is built. `--skip-build` reuses the copies from the last build.
+- **Solution / Workaround**: Run `swift build --build-tests` (with the same flags as `swift test`) after re-recording or adding a scenario, then `swift test --skip-build`. To check that a comparison really bites, break an expectation, rebuild, run, and restore the file.
+
+### [core/vector] Gradient Paint Servers Mix Number and String Attributes, and Render Steps Compare Their Types
+- **Issue / Symptom**: A port of `vectorGradientSvgDefs` whose attributes were all numbers (or all strings) fails the `render: true` steps of the vector scenarios, though the SVG it would draw is the same.
+- **Root Cause**: The TS writes some attributes through `fmt` (`x1: "0.5"`, `fx`, `fy`, `fr`: strings rounded to 6 places, `-0` as `"0"`) and others as plain numbers (`cx: 0`, `cy: 0`, `r: 1`, and `x1: 0 … x2: 1` for a skewed frame). Render data is compared as JSON, where `"0"` is not `0`; only the SVG export turns both into the same text.
+- **Solution / Workaround**: Keep each attribute's JS type: `SvgGradientDef.attrs` is a `JSONObject` filled in the TS order with the TS value type (`gradientFmt` returns a string). Stop offsets are strings (`"50%"`) and `stopOpacity` a number.
+
+### [core/vector] SVG Import Never Sees `IDENTITY_MATRIX` Itself, So Every Shape Is Transformed and Normalised
+- **Issue / Symptom**: Porting `parseVectorSvg`'s `placed` with its `m === IDENTITY_MATRIX` shortcut taken for untransformed shapes would skip `transformVectorNode` and `normalizeVectorPaintStacks(…, 'stack')`, and could leave stacks or key order different from the TS.
+- **Root Cause**: `visitOne` always builds `m` with `multiplyMatrices`, which returns a new array, so the identity-object check in `placed` is never true there; only `parseSvgTransform` returns the shared `IDENTITY_MATRIX` (for an attribute with no transform in it).
+- **Solution / Workaround**: The Swift importer always runs `placed` (transform, stroke scaling, normalisation), and `parseSvgTransform` returns `nil` where the TS returns the identity object, so callers that compare by identity can tell. Port other `=== IDENTITY_MATRIX` checks by asking where the matrix came from, not by comparing values.
+
+### [swift] ICU's `\s` and `\w` Are Not JavaScript's, and Neither Is `String.split`
+- **Issue / Symptom**: Regular expressions copied from the TS SVG importer into `NSRegularExpression` matched differently on non-ASCII input (`\w` took accented letters in tag names, `\s` missed U+FEFF and vertical tab), and splitting number lists with `(?=-)(?<![eE])` gave an empty first token.
+- **Root Cause**: ICU's `\w` is Unicode word characters and its `\s` is `[\t\n\f\r\p{Z}]`; JavaScript's are `[A-Za-z0-9_]` and its WhiteSpace + LineTerminator set. JavaScript's `split` skips an empty match at the start of the remaining string (ECMA-262 `@@split`), which a naive loop over matches does not.
+- **Solution / Workaround**: `SvgImport.swift` spells the classes out (`WS`, `W`) and splits with `NSRegularExpression.split`, a port of `@@split` (anchored matches with transparent bounds, so lookbehinds see the text before). Numbers read from markup go through `String.jsParseFloat` and `String.jsToNumber` (`PixerateCore`), not `Double(_:)`, which refuses `"5."`, `" 12 "`, `"0x1F"` and `"3px"`.

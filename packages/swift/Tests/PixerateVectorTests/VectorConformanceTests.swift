@@ -11,7 +11,7 @@ import XCTest
 final class VectorConformanceTests: XCTestCase {
     func testVectorScenarios() async throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        XCTAssertEqual(scenarios.count, 14)
+        XCTAssertEqual(scenarios.count, 15)
         var passed: [String] = []
         var skipped: [(String, String)] = []
         var failures: [ConformanceMismatch] = []
@@ -33,6 +33,7 @@ final class VectorConformanceTests: XCTestCase {
                     let step = scenario.steps[i]
                     if let path = firstDifference(outputs[i].result, step.expect["result"] ?? .null) { print("\(scenario.id) step \(m.step) result: \(path)") }
                     if step.document, let path = firstDifference(outputs[i].document ?? .null, step.expect["document"] ?? .null) { print("\(scenario.id) step \(m.step) document: \(path)") }
+                    if step.render, let path = firstDifference(outputs[i].render ?? .null, step.expect["render"] ?? .null) { print("\(scenario.id) step \(m.step) render: \(path)") }
                 }
             }
         }
@@ -40,12 +41,53 @@ final class VectorConformanceTests: XCTestCase {
         VectorConformanceReport.write(passed: passed, skipped: skipped, failed: Set(failures.map(\.scenario)).count)
     }
 
-    /// The four scenarios this port covers stay unskipped.
+    /// The scenarios this port covers stay unskipped.
     func testPortedScenariosAreNotSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing"] {
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip"] {
             let scenario = try XCTUnwrap(scenarios.first { $0.id == id })
             XCTAssertNil(scenario.skip["swift"], id)
+        }
+    }
+
+    /// The render steps of the ported scenarios are compared (the render data is not left out).
+    func testPortedScenariosCompareRenderData() throws {
+        let scenarios = try ConformanceScenario.load(domain: "vector")
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip"] {
+            let scenario = try XCTUnwrap(scenarios.first { $0.id == id })
+            let steps = scenario.steps.filter(\.render)
+            XCTAssertFalse(steps.isEmpty, id)
+            for step in steps { XCTAssertNotNil(step.expect["render"], id) }
+        }
+    }
+
+    /// `import-export` is skipped for PDF, Lottie and tracing; its SVG steps (import, export and a
+    /// failed import) replay on their own.
+    func testImportExportSvgSteps() async throws {
+        var scenario = try XCTUnwrap(ConformanceScenario.load(domain: "vector").first { $0.id == "import-export" })
+        XCTAssertNotNil(scenario.skip["swift"])
+        scenario.steps = [scenario.steps[0], scenario.steps[1], scenario.steps[10]]
+        XCTAssertEqual(scenario.steps.map { $0.arguments["id"]?.stringValue }, ["vector.importSvg", "vector.exportSvg", "vector.importSvg"])
+        let outputs = try await runConformanceScenario(scenario, host: VectorConformanceHost(setup: scenario.setup))
+        for m in compareConformance(scenario, outputs, decodePNG: { _ in throw ContractError("no pixels") }) { XCTFail(m.description) }
+    }
+
+    /// A render step fails on a host without render data.
+    func testRenderStepNeedsRenderData() async throws {
+        struct NoRender: ConformanceHost {
+            let inner: VectorConformanceHost
+            func callTool(_ name: String, _ args: JSONObject) async -> McpToolResult { await inner.callTool(name, args) }
+            func document() throws -> JSONValue { try inner.document() }
+            func pixels(paper: Bool?) throws -> ConformanceImage { try inner.pixels(paper: paper) }
+            func isGeneratedId(_ value: String) -> Bool { false }
+        }
+        var scenario = try XCTUnwrap(ConformanceScenario.load(domain: "vector").first { $0.id == "shapes-and-paths" })
+        scenario.steps = Array(scenario.steps.prefix(7))
+        do {
+            _ = try await runConformanceScenario(scenario, host: NoRender(inner: VectorConformanceHost(setup: scenario.setup)))
+            XCTFail("ran without render data")
+        } catch {
+            XCTAssertEqual("\(error)".contains("asks for render data, which this host does not have"), true, "\(error)")
         }
     }
 

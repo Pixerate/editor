@@ -220,6 +220,12 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     r["vector.exportSvg"] = { c, params in
         ["svg": .string(try c.toSvg(precision: VectorParams(params).int("precision")))]
     }
+    r["vector.importSvg"] = { c, params in
+        let p = VectorParams(params)
+        let svg = p.str("svg") ?? ""
+        try check(p.bool("replace") == true ? c.loadSvg(svg) : c.importSvg(svg))
+        return .object(JSONObject([("nodes", .number(Double(c.document.nodes.count))), ("selection", idList(c.selection))]))
+    }
 
     // Adding and styling
 
