@@ -208,6 +208,7 @@
           "name": "Blob"
         }
       },
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.addPath",
@@ -215,6 +216,80 @@
           "result": {
             "id": "n6"
           }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M28 20L112 20C116.418 20 120 23.582 120 28L120 72C120 76.418 116.418 80 112 80L28 80C23.582 80 20 76.418 20 72L20 28C20 23.582 23.582 20 28 20Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M190 30C212.091 30 230 47.909 230 70C230 92.091 212.091 110 190 110C167.909 110 150 92.091 150 70C150 47.909 167.909 30 190 30Z",
+              "fill": "#e11d48",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M305 30L343.971 50L343.971 90L305 110L266.029 90L266.029 50Z",
+              "fill": "#16a34a",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M85 140L96.903 168.617L127.798 171.094L104.259 191.258L111.45 221.406L85 205.25L58.55 221.406L65.741 191.258L42.202 171.094L73.097 168.617Z",
+              "fill": "#d97706",
+              "fillRule": "nonzero",
+              "id": "n4",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M160 160L280 200",
+              "fill": "none",
+              "fillRule": "nonzero",
+              "id": "n5",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeWidth": 3
+            },
+            {
+              "d": "M300 150C340 130 370 190 330 220L290 210Z",
+              "fill": "#7c3aed",
+              "fillRule": "nonzero",
+              "id": "n6",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 6
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
         }
       }
     },
@@ -484,6 +559,7 @@
           "name": "Hexagon"
         }
       },
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.rename",
@@ -492,6 +568,94 @@
             "id": "n3",
             "name": "Hexagon"
           }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M28 20L112 20C116.418 20 120 23.582 120 28L120 72C120 76.418 116.418 80 112 80L28 80C23.582 80 20 76.418 20 72L20 28C20 23.582 23.582 20 28 20Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M190 30C212.091 30 230 47.909 230 70C230 92.091 212.091 110 190 110C167.909 110 150 92.091 150 70C150 47.909 167.909 30 190 30Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M305 30L343.971 50L343.971 90L305 110L266.029 90L266.029 50Z",
+              "fill": "#16a34a",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M85 140L96.903 168.617L127.798 171.094L104.259 191.258L111.45 221.406L85 205.25L58.55 221.406L65.741 191.258L42.202 171.094L73.097 168.617Z",
+              "fill": "#d97706",
+              "fillRule": "nonzero",
+              "id": "n4",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M160 160L280 200",
+              "fill": "none",
+              "fillRule": "nonzero",
+              "id": "n5",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeWidth": 3
+            },
+            {
+              "d": "M300 150C340 130 370 190 330 220L290 210Z",
+              "fill": "#7c3aed",
+              "fillRule": "nonzero",
+              "id": "n6",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M0 0L0 0L0 10L0 10Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n7",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 7
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
         }
       }
     },
@@ -612,6 +776,7 @@
         }
       },
       "document": true,
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.exportSvg",
@@ -941,6 +1106,94 @@
           "format": "pixerate.editor-document",
           "formatVersion": 1,
           "kind": "vector"
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M28 20L112 20C116.418 20 120 23.582 120 28L120 72C120 76.418 116.418 80 112 80L28 80C23.582 80 20 76.418 20 72L20 28C20 23.582 23.582 20 28 20Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#111827",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M190 30C212.091 30 230 47.909 230 70C230 92.091 212.091 110 190 110C167.909 110 150 92.091 150 70C150 47.909 167.909 30 190 30Z",
+              "fill": "#0ea5e9",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeDasharray": "6 3",
+              "strokeLinecap": "round",
+              "strokeWidth": 4
+            },
+            {
+              "d": "M305 30L343.971 50L343.971 90L305 110L266.029 90L266.029 50Z",
+              "fill": "#16a34a",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M85 140L96.903 168.617L127.798 171.094L104.259 191.258L111.45 221.406L85 205.25L58.55 221.406L65.741 191.258L42.202 171.094L73.097 168.617Z",
+              "fill": "#d97706",
+              "fillRule": "nonzero",
+              "id": "n4",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M300 150C340 130 370 190 330 220L290 210Z",
+              "fill": "#7c3aed",
+              "fillRule": "nonzero",
+              "id": "n6",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M0 0L0 0L0 10L0 10Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n7",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M10 250L40 250L40 280L10 280Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n8",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 7
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
         }
       }
     }

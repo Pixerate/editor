@@ -7,7 +7,7 @@
     "height": 200
   },
   "skip": {
-    "swift": "Gradients, paint stacks, filters, path effects, masks and lenses are not ported yet (#624)."
+    "swift": "The gradient, fill, stroke, blend mode, filter, effect, mask and lens commands are not ported yet (#624); gradients and paint stacks already render, export and import."
   },
   "steps": [
     {

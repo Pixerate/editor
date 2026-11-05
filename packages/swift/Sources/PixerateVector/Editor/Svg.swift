@@ -3,10 +3,14 @@ import PixerateCore
 import PixerateGeometry
 import PixerateRaster
 
-// SVG export (`vectorDocumentToSvg` in `vector/svg.ts`) for documents of plain paths and groups:
-// colour paints, live corners, transforms, opacity and visibility. Gradients, paint stacks, stroke
-// parts (alignment, arrowheads, width profiles), filters, blend modes, masks, frames, text,
-// instances and live appearances throw `VectorNotPorted` (#624).
+// SVG export and import (`vectorDocumentToSvg` and `parseVectorSvg` in `vector/svg.ts`).
+//
+// Export writes plain paths and groups with colour and gradient paints (linear and radial, see
+// `Gradient.swift`), paint stacks, live corners, live booleans (drawn shapes plus the hidden
+// source), transforms, opacity, visibility, blend modes and filter stacks that draw nothing.
+// Stroke parts (inside / outside alignment, arrowheads, width profiles), filters that draw, masks,
+// frames, text, instances, symbols, path effects, blends, shading, connectors, generated art,
+// lenses and brushstrokes throw `VectorNotPorted` (#624).
 
 private func escapeAttr(_ value: String) -> String {
     value.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
@@ -31,15 +35,32 @@ func hasStrokeExtras(_ node: VectorNode) -> Bool {
     return align != "center" || truthy(node["startArrow"]) || truthy(node["endArrow"]) || (node["strokeWidthProfile"]?.arrayValue?.isEmpty == false)
 }
 
-/// The CSS name of a blend mode, or nil for normal (`vectorBlendModeCss`).
-private func blendModeCss(_ mode: JSONValue?) -> String? {
-    guard let m = mode?.stringValue, !m.isEmpty, m != "normal" else { return nil }
-    return m == "linear-dodge" ? "plus-lighter" : m
+/// A paint server's markup (`paintDefMarkup`): the first def of a gradient carries
+/// `data-vector-gradient` (the gradient as JSON) so import restores what SVG cannot say.
+private func paintDefMarkup(_ def: VectorPaintDef, _ gradient: JSONValue?) -> String {
+    let tag = def.type == "radial" ? "radialGradient" : "linearGradient"
+    let attrs = def.attrs.map { k, v in " \(k)=\"\(escapeAttr(v.stringValue ?? v.numberValue.map(JSONValue.jsNumber) ?? v.stringified()))\"" }.joined()
+    let extra = gradient.map { " data-vector-gradient=\"\(escapeAttr($0.stringified()))\"" } ?? ""
+    let stops = def.stops.map { s in
+        "<stop offset=\"\(s.offset)\" stop-color=\"\(escapeAttr(s.stopColor))\"\(s.stopOpacity.map { " stop-opacity=\"\(JSONValue.jsNumber($0))\"" } ?? "")/>"
+    }.joined()
+    return "<\(tag) id=\"\(escapeAttr(def.id))\"\(attrs)\(extra)>\(stops)</\(tag)>"
 }
 
+/// Markup of a paint's defs, the gradient's data attribute on the first (`paintMarkup`).
+private func paintMarkup(_ paint: JSONValue?, _ defs: [VectorPaintDef]) -> [String] {
+    defs.enumerated().map { i, d in paintDefMarkup(d, i == 0 && isVectorGradient(paint) ? paint : nil) }
+}
+
+/// Members a live path's hidden source leaves out (they stay on the live group).
+private let LIVE_SOURCE_DROPPED = ["effects", "transform", "opacity", "visible", "booleanOperation", "blendStep", "blendMode", "filters", "lens", "lensView"]
+
 /// The document as SVG markup (`vectorDocumentToSvg`), `precision` decimals (default 3).
-public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pretty: Bool = true, includeHidden: Bool = false) throws -> String {
+/// `idPrefix` prefixes paint server ids (default `vg-`).
+public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pretty: Bool = true, includeHidden: Bool = false, background: Bool = true, idPrefix: String = "vg-") throws -> String {
     let precision = precision ?? 3
+    let prefix = idPrefix
+    var defs: [String] = []
     var lines: [String] = []
     func num(_ n: Double) -> String { formatNumber(n, precision) }
     func indent(_ depth: Int) -> String { pretty ? String(repeating: "  ", count: depth) : "" }
@@ -52,20 +73,24 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
         if truthy(node["blendStep"]) { out += " data-vector-blend-step=\"\"" }
         if let op = node["booleanOperation"]?.stringValue, !op.isEmpty { out += " data-vector-boolean-operation=\"\(op)\"" }
         if truthy(node["resizing"]) { out += " data-vector-resizing=\"\(escapeAttr(node["resizing"]!.stringified()))\"" }
-        // not ported yet: blends, shading, connectors, generated art, lenses, filters (#624)
+        // not ported yet: blends, shading, connectors, generated art, lenses (#624)
         for key in ["blend", "connector", "generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
-        if isVectorShadedPaint(node.fill) { throw VectorNotPorted("exporting shaded paints to SVG") }
-        if let blend = blendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
-        if let n = arrayLength(node["filters"]), n > 0 { throw VectorNotPorted("exporting filters to SVG") }
+        if node.isPath && isVectorShadedPaint(node.fill) { throw VectorNotPorted("exporting shaded paints to SVG") }
+        if let blend = vectorBlendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
+        if let filters = node["filters"], let n = arrayLength(filters), n > 0 {
+            // not ported yet: filters that draw (vectorNodeFilterSvg, vectorFilterMarkup) (#624)
+            if !activeVectorFilters(node).isEmpty { throw VectorNotPorted("exporting filters to SVG") }
+            out += " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""
+        }
         return out
     }
 
-    func paintValue(_ paint: JSONValue?) throws -> String {
-        if !hasPaint(paint) { return "none" }
-        if let s = paint?.stringValue { return s }
-        // not ported yet: gradients (vectorGradientSvgDefs) (#624)
-        if isVectorGradient(paint) || isVectorShadedPaint(paint) { throw VectorNotPorted("exporting gradients to SVG") }
-        return "none"
+    /// Opacity and blend mode of one paint layer, as attributes.
+    func layerAttrs(_ layer: JSONObject) -> String {
+        var out = ""
+        if let o = layer["opacity"]?.numberValue, o < 1 { out += " opacity=\"\(num(o))\"" }
+        if let blend = vectorBlendModeCss(layer["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
+        return out
     }
 
     func lineAttrs(_ node: VectorNode, _ stroke: String, _ width: Double) -> String {
@@ -76,15 +101,85 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
         return out
     }
 
+    /// `data-vector-d` / `data-vector-corners` of a path with live corners ("" without).
+    func liveCorners(_ node: VectorNode) -> String {
+        let corners = vectorCornersAttribute(node.subpaths, precision)
+        return corners.isEmpty ? "" : " data-vector-d=\"\(bezierPathToSvg(.commands(subpathsToBezier(node.subpaths, corners: false)), BezierPathToSvgOptions(precision: precision)))\" data-vector-corners=\"\(corners)\""
+    }
+
+    func checkStroke(_ node: VectorNode, _ stroke: String) throws {
+        // not ported yet: stroke parts (vectorStrokeSvgParts, strokePartLines) (#624)
+        if stroke != "none" && hasStrokeExtras(node) { throw VectorNotPorted("exporting aligned, arrowed or profiled strokes to SVG") }
+    }
+
+    /// A path painted through its stacks: a `<g data-vector-path>` carrying the stacks (JSON),
+    /// holding each drawn layer bottom to top (`emitStacked`).
+    func emitStacked(_ node: VectorNode, _ depth: Int) throws {
+        let d = vectorPathData(node, precision: precision)
+        let rule = node.fillRule == "evenodd" ? " fill-rule=\"evenodd\"" : ""
+        let stack = { (list: [JSONObject]) in escapeAttr(JSONValue.array(list.map { .object($0) }).stringified()) }
+        var data = " data-vector-path=\"\" data-vector-fills=\"\(stack(vectorFills(node)))\" data-vector-strokes=\"\(stack(vectorStrokes(node)))\""
+        if node.fillRule == "evenodd" { data += " data-vector-fill-rule=\"evenodd\"" }
+        lines.append("\(indent(depth))<g\(try common(node))\(data)>")
+        let layers = try vectorPaintLayerNodes(node).filter { l in
+            if l.kind == "stroke", l.layer["kind"] == "brushstroke", l.layer["visible"] != .bool(false) {
+                // not ported yet: brushstroke images (vectorBrushstrokeImages) (#624)
+                throw VectorNotPorted("exporting brushstrokes to SVG")
+            }
+            return l.drawn
+        }
+        var geometry = liveCorners(node)
+        if !layers.contains(where: { $0.kind == "fill" }) {
+            lines.append("\(indent(depth + 1))<path data-vector-part=\"fill\" d=\"\(d)\" fill=\"none\"\(rule)\(geometry)/>")
+            geometry = ""
+        }
+        for l in layers {
+            let paint = try vectorPaintToSvg(l.layer["paint"], "\(prefix)\(l.kind)-\(node.id)-\(l.index)", node: l.node, role: l.kind)
+            defs += paintMarkup(l.layer["paint"], paint.defs)
+            let attrs = " data-vector-layer=\"\(l.index)\"\(layerAttrs(l.layer))"
+            if l.kind == "fill" {
+                lines.append("\(indent(depth + 1))<path data-vector-part=\"fill\"\(attrs) d=\"\(d)\" fill=\"\(escapeAttr(paint.value))\"\(rule)\(geometry)/>")
+                geometry = ""
+                continue
+            }
+            try checkStroke(l.node, paint.value)
+            lines.append("\(indent(depth + 1))<path data-vector-part=\"stroke\"\(attrs) d=\"\(d)\" fill=\"none\"\(lineAttrs(l.node, paint.value, l.node.strokeWidth ?? 1))/>")
+        }
+        lines.append("\(indent(depth))</g>")
+    }
+
     func emit(_ node: VectorNode, _ depth: Int) throws {
         if !node.isVisible && !includeHidden { return }
         try emitNode(node, depth)
     }
 
     func emitNode(_ node: VectorNode, _ depth: Int) throws {
-        // not ported yet: frames, masks, instances, text and live appearances (#624)
-        if isVectorFrame(node) || isVectorMaskGroup(node) || node.isInstance || node.isText || hasOwnVectorAppearance(node) {
-            throw VectorNotPorted("exporting \(node.typeName) nodes with a live appearance to SVG")
+        // not ported yet: frames, masks, instances, text and lenses (#624)
+        if isVectorFrame(node) || isVectorMaskGroup(node) || node.isInstance || node.isText || isVectorLens(node) {
+            throw VectorNotPorted("exporting \(node.typeName) nodes with frames, masks or lenses to SVG")
+        }
+        if hasOwnVectorAppearance(node) {
+            // Live: what it draws, then the editable source (hidden) for import.
+            var live = JSONObject([("kind", .string(node.typeName))])
+            if let e = node["effects"], arrayLength(e).map({ $0 > 0 }) == true { live["effects"] = e }
+            if node.isGroup, truthy(node["liveBoolean"]) { live["liveBoolean"] = node["liveBoolean"]! }
+            if node.isGroup, truthy(node["symmetry"]) { live["symmetry"] = node["symmetry"]! }
+            lines.append("\(indent(depth))<g\(try common(node)) data-vector-live=\"\(escapeAttr(JSONValue.object(live).stringified()))\">")
+            lines.append("\(indent(depth + 1))<g data-vector-part=\"appearance\">")
+            for shape in try vectorAppearanceNodes(node) { try emit(shape, depth + 2) }
+            lines.append("\(indent(depth + 1))</g>")
+            lines.append("\(indent(depth + 1))<g data-vector-part=\"source\" display=\"none\">")
+            if node.isPath {
+                var source = node
+                for key in LIVE_SOURCE_DROPPED { source[key] = Optional<JSONValue>.none }
+                source.id = "\(node.id)~src"
+                try emit(source, depth + 2)
+            } else {
+                for child in node.children { try emit(child, depth + 2) }
+            }
+            lines.append("\(indent(depth + 1))</g>")
+            lines.append("\(indent(depth))</g>")
+            return
         }
         if node.isGroup {
             lines.append("\(indent(depth))<g\(try common(node))>")
@@ -92,16 +187,17 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
             lines.append("\(indent(depth))</g>")
             return
         }
-        // not ported yet: paint stacks and stroke parts (#624)
-        if node["fills"]?.arrayValue != nil || node["strokes"]?.arrayValue != nil { throw VectorNotPorted("exporting paint stacks to SVG") }
-        let fill = try paintValue(node.fill)
-        let stroke = try paintValue(node.stroke)
-        if stroke != "none" && hasStrokeExtras(node) { throw VectorNotPorted("exporting aligned, arrowed or profiled strokes to SVG") }
+        if needsVectorPaintLayers(node) {
+            try emitStacked(node, depth)
+            return
+        }
+        let fill = try vectorPaintToSvg(node.fill, "\(prefix)fill-\(node.id)", node: node)
+        let stroke = try vectorPaintToSvg(node.stroke, "\(prefix)stroke-\(node.id)", node: node, role: "stroke")
+        defs += paintMarkup(node.fill, fill.defs) + paintMarkup(node.stroke, stroke.defs)
+        try checkStroke(node, stroke.value)
         let d = vectorPathData(node, precision: precision)
-        let corners = vectorCornersAttribute(node.subpaths, precision)
-        let live = corners.isEmpty ? "" : " data-vector-d=\"\(bezierPathToSvg(.commands(subpathsToBezier(node.subpaths, corners: false)), BezierPathToSvgOptions(precision: precision)))\" data-vector-corners=\"\(corners)\""
-        let fillAttrs = " fill=\"\(escapeAttr(fill))\"\(node.fillRule == "evenodd" ? " fill-rule=\"evenodd\"" : "")"
-        lines.append("\(indent(depth))<path\(try common(node)) d=\"\(d)\"\(fillAttrs)\(stroke != "none" ? lineAttrs(node, stroke, node.strokeWidth ?? 1) : "")\(live)/>")
+        let fillAttrs = " fill=\"\(escapeAttr(fill.value))\"\(node.fillRule == "evenodd" ? " fill-rule=\"evenodd\"" : "")"
+        lines.append("\(indent(depth))<path\(try common(node)) d=\"\(d)\"\(fillAttrs)\(stroke.value != "none" ? lineAttrs(node, stroke.value, node.strokeWidth ?? 1) : "")\(liveCorners(node))/>")
     }
 
     for node in doc.nodes { try emit(node, 1) }
@@ -110,7 +206,8 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
     let w = num(doc.width)
     let h = num(doc.height)
     var out = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"\(w)\" height=\"\(h)\" viewBox=\"0 0 \(w) \(h)\">"]
-    if let bg = doc.background, hasPaint(.string(bg)) { out.append("\(indent(1))<rect width=\"\(w)\" height=\"\(h)\" fill=\"\(escapeAttr(bg))\"/>") }
+    if !defs.isEmpty { out.append("\(indent(1))<defs>\(defs.joined())</defs>") }
+    if let bg = doc.background, background, hasPaint(.string(bg)) { out.append("\(indent(1))<rect width=\"\(w)\" height=\"\(h)\" fill=\"\(escapeAttr(bg))\"/>") }
     out += lines
     out.append("</svg>")
     return out.joined(separator: pretty ? "\n" : "")

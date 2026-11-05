@@ -16,6 +16,13 @@ public protocol ConformanceHost {
     func pixels(paper: Bool?) throws -> ConformanceImage
     /// Whether a string is an id this implementation generated in its own format.
     func isGeneratedId(_ value: String) -> Bool
+    /// What the canvases draw, as plain data (the vector scene), for steps with `render: true`;
+    /// nil (the default) for an editor without render data.
+    func render() throws -> JSONValue?
+}
+
+extension ConformanceHost {
+    public func render() throws -> JSONValue? { nil }
 }
 
 /// Straight (not premultiplied) 8-bit RGBA, rows top to bottom.
@@ -37,6 +44,8 @@ public struct ConformanceStep: Sendable {
     public var tool: String
     public var arguments: JSONObject
     public var document: Bool
+    /// Also compare the render data (`render: true`).
+    public var render: Bool
     /// nil: no snapshot; otherwise the `paper` option (nil when unset).
     public var pixels: PixelSnapshot?
     public var ignore: [String]
@@ -71,7 +80,7 @@ public struct ConformanceScenario: Sendable {
             case .object(let p): pixels = .init(paper: p["paper"]?.boolValue)
             default: pixels = nil
             }
-            return ConformanceStep(tool: tool, arguments: s["arguments"]?.objectValue ?? JSONObject(), document: s["document"]?.boolValue == true, pixels: pixels, ignore: (s["ignore"]?.arrayValue ?? []).compactMap(\.stringValue), expect: expect)
+            return ConformanceStep(tool: tool, arguments: s["arguments"]?.objectValue ?? JSONObject(), document: s["document"]?.boolValue == true, render: s["render"]?.boolValue == true, pixels: pixels, ignore: (s["ignore"]?.arrayValue ?? []).compactMap(\.stringValue), expect: expect)
         }
     }
 
@@ -235,6 +244,7 @@ public struct ConformanceStepOutput: Sendable {
     public var result: JSONValue
     public var isError: Bool
     public var document: JSONValue?
+    public var render: JSONValue?
     public var pixels: ConformanceImage?
 }
 
@@ -249,6 +259,10 @@ public func runConformanceScenario(_ scenario: ConformanceScenario, host: some C
         if !step.ignore.isEmpty { result = omitConformancePaths(result, step.ignore) }
         var output = ConformanceStepOutput(result: result, isError: isError)
         if step.document { output.document = normalizeConformanceValue(try host.document(), ids, isGeneratedId: host.isGeneratedId) }
+        if step.render {
+            guard let render = try host.render() else { throw ContractError("Step \(outputs.count + 1) (\(step.tool)) asks for render data, which this host does not have.") }
+            output.render = normalizeConformanceValue(render, ids, isGeneratedId: host.isGeneratedId)
+        }
         if let snapshot = step.pixels { output.pixels = try host.pixels(paper: snapshot.paper) }
         outputs.append(output)
     }
@@ -313,6 +327,9 @@ public func compareConformance(_ scenario: ConformanceScenario, _ outputs: [Conf
         }
         if step.document, let expected = step.expect["document"], !conformanceValuesMatch(out.document ?? .null, expected) {
             fail("document differs from the recording")
+        }
+        if step.render, let expected = step.expect["render"], !conformanceValuesMatch(out.render ?? .null, expected) {
+            fail("render data differs from the recording")
         }
         if step.pixels != nil, let recorded = step.expect["pixels"]?.objectValue, let file = recorded["file"]?.stringValue {
             guard let image = out.pixels else { fail("no pixels"); continue }

@@ -63,6 +63,7 @@ describe('the vector conformance scenarios', () => {
 			if (!conformanceValuesMatch(out.result, step.expect!.result)) expect(out.result, label).toEqual(step.expect!.result);
 			expect(out.isError, label).toBe(step.expect!.isError === true);
 			if (step.document && !conformanceValuesMatch(out.document, step.expect!.document)) expect(out.document, `${label} document`).toEqual(step.expect!.document);
+			if (step.render && !conformanceValuesMatch(out.render, step.expect!.render)) expect(out.render, `${label} render`).toEqual(step.expect!.render);
 		});
 	}, 60_000);
 });

@@ -28,6 +28,11 @@ export interface ConformanceStep {
 	 */
 	pixels?: boolean | { paper?: boolean; tolerance?: { maxDelta?: number; meanDelta?: number } };
 	/**
+	 * Also compare the render data after this call: what the canvases draw, for editors whose
+	 * picture is data rather than pixels (the vector editor's scene). Normalized like a result.
+	 */
+	render?: boolean;
+	/**
 	 * Parts of the result left out of the comparison because they describe this implementation
 	 * rather than the contract (the wet engine's backend): JSON pointers like `/backend`, where a
 	 * `*` segment stands for every array element or object member.
@@ -42,6 +47,8 @@ export interface ConformanceExpectation {
 	result: unknown;
 	isError?: true;
 	document?: unknown;
+	/** The normalized render data (steps with `render: true`). */
+	render?: unknown;
 	pixels?: ConformancePixels;
 }
 
@@ -76,6 +83,11 @@ export interface ConformanceHost {
 	callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
 	document(): unknown;
 	pixels(options: { paper?: boolean }): { width: number; height: number; data: Uint8Array | Uint8ClampedArray };
+	/**
+	 * What the canvases draw, as plain data (the vector editor's scene render data), for steps with
+	 * `render: true`. Editors without render data leave it out.
+	 */
+	render?(): unknown;
 	/** Whether a string is an id this implementation generated in its own format (default: none). */
 	isGeneratedId?(value: string): boolean;
 	dispose?(): void;
@@ -86,6 +98,7 @@ export interface ConformanceStepOutput {
 	result: unknown;
 	isError: boolean;
 	document?: unknown;
+	render?: unknown;
 	pixels?: { width: number; height: number; data: Uint8Array };
 }
 
@@ -284,6 +297,10 @@ export async function runConformanceScenario(scenario: ConformanceScenario, host
 			const result = normalizeConformanceValue(value, ids, isId);
 			const output: ConformanceStepOutput = { result: step.ignore ? omitConformancePaths(result, step.ignore) : result, isError };
 			if (step.document) output.document = normalizeConformanceValue(host.document(), ids, isId);
+			if (step.render) {
+				if (!host.render) throw new Error(`Step ${outputs.length + 1} (${step.tool}) asks for render data, which this host does not have.`);
+				output.render = normalizeConformanceValue(host.render(), ids, isId);
+			}
 			if (step.pixels) {
 				const image = host.pixels({ paper: typeof step.pixels === 'object' ? step.pixels.paper : undefined });
 				output.pixels = { width: image.width, height: image.height, data: new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength) };

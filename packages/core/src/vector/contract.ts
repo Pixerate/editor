@@ -49,7 +49,8 @@ import {
 	VECTOR_PATH_ACTIONS,
 	VECTOR_PATHFINDER_ACTIONS,
 	VECTOR_STROKE_ALIGN_LABELS,
-	VECTOR_STROKE_GRADIENT_MODE_LABELS
+	VECTOR_STROKE_GRADIENT_MODE_LABELS,
+	getVectorSceneRenderData
 } from './render.js';
 import { VECTOR_STYLIZE_LABELS } from './stylize.js';
 import { VECTOR_SYMMETRY_MODE_LABELS } from './symmetry.js';
@@ -248,7 +249,8 @@ export function vectorContracts(options: { effects: EffectProvider }): Record<st
  * A fresh vector editor for replaying a conformance scenario (`domains/vector/fixtures`): every
  * vector tool provider in one registry that validates arguments, and the saved document. Node ids
  * come from a counter (`n1`, `n2`, …), so they are part of the contract; text uses the metric
- * shaper, the one every implementation can match. `setup` is the scenario's artboard size
+ * shaper, the one every implementation can match. `render` is the scene the canvases draw
+ * (`getVectorSceneRenderData` with its defaults). `setup` is the scenario's artboard size
  * (`{ width, height }`, default the editor's); `effects` is the effect provider the effect tools use.
  */
 export function createVectorConformanceHost(setup: { width?: number; height?: number }, options: { effects: EffectProvider }): ConformanceHost {
@@ -265,8 +267,10 @@ export function createVectorConformanceHost(setup: { width?: number; height?: nu
 		callTool: (name, args) => registry.callTool(name, args),
 		document: () => toEditorDocumentFile(document),
 		pixels: () => {
-			throw new Error('The vector editor has no pixels; compare its document, results and SVG export.');
+			throw new Error('The vector editor has no pixels; compare its document, results, render data and SVG export.');
 		},
+		// What the React and Svelte canvases draw, with the default options (no viewport culling).
+		render: () => getVectorSceneRenderData(controller.getState()),
 		dispose: () => {
 			document.destroy?.();
 			setVectorTextShaper(shaper);

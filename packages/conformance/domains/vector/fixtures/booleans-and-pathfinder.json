@@ -66,6 +66,7 @@
         }
       },
       "document": true,
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.boolean",
@@ -153,6 +154,30 @@
           "format": "pixerate.editor-document",
           "formatVersion": 1,
           "kind": "vector"
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 1
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
         }
       }
     },
@@ -257,6 +282,7 @@
           "live": true
         }
       },
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.boolean",
@@ -264,6 +290,47 @@
           "result": {
             "id": "n6"
           }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "children": [
+                {
+                  "d": "M160 20L240 20L240 40C217.909 40 200 57.909 200 80C200 87.286 201.948 94.117 205.351 100L160 100Z",
+                  "fill": "#16a34a",
+                  "fillRule": "nonzero",
+                  "id": "n6~fx0",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n6",
+              "kind": "group",
+              "opacity": 1
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 2
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
         }
       }
     },
@@ -503,6 +570,7 @@
           ]
         }
       },
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.fillRegion",
@@ -510,6 +578,114 @@
           "result": {
             "id": "n16"
           }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "children": [
+                {
+                  "d": "M160 20L240 20L240 40C217.909 40 200 57.909 200 80C200 87.286 201.948 94.117 205.351 100L160 100Z",
+                  "fill": "#16a34a",
+                  "fillRule": "nonzero",
+                  "id": "n6~fx0",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n6",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "children": [
+                {
+                  "d": "M80 180L80 130C96.569 130 110 143.431 110 160C110 176.569 96.569 190 80 190C71.115 190 63.132 186.137 57.639 180Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n9",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M20 120L80 120L80 130C63.431 130 50 143.431 50 160C50 167.684 52.889 174.692 57.639 180L20 180Z",
+                  "fill": "#0ea5e9",
+                  "fillRule": "nonzero",
+                  "id": "n10",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n11",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n12",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n16",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "none",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M150 120L210 120L210 180L150 180Z",
+              "fill": "#14b8a6",
+              "fillRule": "nonzero",
+              "id": "n15",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M210 130C226.569 130 240 143.431 240 160C240 176.569 226.569 190 210 190C193.431 190 180 176.569 180 160C180 143.431 193.431 130 210 130Z",
+              "fill": "#f43f5e",
+              "fillRule": "nonzero",
+              "id": "n14",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 6
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
         }
       }
     },
@@ -540,6 +716,7 @@
         "id": "vector.list"
       },
       "document": true,
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.list",
@@ -1279,6 +1456,114 @@
           "format": "pixerate.editor-document",
           "formatVersion": 1,
           "kind": "vector"
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 200,
+          "nodes": [
+            {
+              "d": "M20 20L100 20L100 40C122.091 40 140 57.909 140 80C140 102.091 122.091 120 100 120C85.194 120 72.267 111.956 65.351 100L20 100Z",
+              "fill": "#2563eb",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "children": [
+                {
+                  "d": "M160 20L240 20L240 40C217.909 40 200 57.909 200 80C200 87.286 201.948 94.117 205.351 100L160 100Z",
+                  "fill": "#16a34a",
+                  "fillRule": "nonzero",
+                  "id": "n6~fx0",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n6",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "children": [
+                {
+                  "d": "M80 180L80 130C96.569 130 110 143.431 110 160C110 176.569 96.569 190 80 190C71.115 190 63.132 186.137 57.639 180Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n9",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M20 120L80 120L80 130C63.431 130 50 143.431 50 160C50 167.684 52.889 174.692 57.639 180L20 180Z",
+                  "fill": "#0ea5e9",
+                  "fillRule": "nonzero",
+                  "id": "n10",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+                  "fill": "#a855f7",
+                  "fillRule": "nonzero",
+                  "id": "n11",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                }
+              ],
+              "id": "n12",
+              "kind": "group",
+              "opacity": 1
+            },
+            {
+              "d": "M80 130L80 180L57.639 180C52.889 174.692 50 167.684 50 160C50 143.431 63.431 130 80 130Z",
+              "fill": "#d4d4d8",
+              "fillRule": "nonzero",
+              "id": "n16",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "none",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M150 120L210 120L210 180L150 180Z",
+              "fill": "#14b8a6",
+              "fillRule": "nonzero",
+              "id": "n15",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M210 130C226.569 130 240 143.431 240 160C240 176.569 226.569 190 210 190C193.431 190 180 176.569 180 160C180 143.431 193.431 130 210 130Z",
+              "fill": "#f43f5e",
+              "fillRule": "nonzero",
+              "id": "n14",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 6
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 300
         }
       }
     }
