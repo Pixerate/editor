@@ -133,6 +133,7 @@
           "ay": 0
         }
       },
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.skew",
@@ -140,6 +141,52 @@
           "result": {
             "ok": true
           }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M25 15L65 15L65 55L25 55Z",
+              "fill": "#ef4444",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2,
+              "transform": "matrix(0.866025 0.5 -0.5 0.866025 23.528857 -17.810889)"
+            },
+            {
+              "d": "M90 45L150 45L150 75L90 75Z",
+              "fill": "#22c55e",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M227.188 102.33L286.218 113.073L293.38 155.033L234.349 144.291Z",
+              "fill": "#3b82f6",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2,
+              "transform": "matrix(0.983841 -0.179044 0.179044 0.983841 -29.117619 0)"
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 3
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
         }
       }
     },
@@ -285,6 +332,7 @@
           "parentId": "n4"
         }
       },
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.moveLayer",
@@ -292,6 +340,59 @@
           "result": {
             "ok": true
           }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "children": [
+                {
+                  "d": "M227.188 102.33L286.218 113.073L293.38 155.033L234.349 144.291Z",
+                  "fill": "#3b82f6",
+                  "fillRule": "nonzero",
+                  "id": "n3",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2,
+                  "transform": "matrix(0.983841 -0.179044 0.179044 0.983841 -29.117619 -52.320508)"
+                },
+                {
+                  "d": "M112.521 7.679L172.521 7.679L172.521 37.679L112.521 37.679Z",
+                  "fill": "#22c55e",
+                  "fillRule": "nonzero",
+                  "id": "n2",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2
+                },
+                {
+                  "d": "M25 15L65 15L65 55L25 55Z",
+                  "fill": "#ef4444",
+                  "fillRule": "nonzero",
+                  "id": "n1",
+                  "kind": "path",
+                  "opacity": 1,
+                  "stroke": "#18181b",
+                  "strokeWidth": 2,
+                  "transform": "matrix(0.866025 0.5 -0.5 0.866025 23.528857 -17.810889)"
+                }
+              ],
+              "id": "n4",
+              "kind": "group",
+              "opacity": 1
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 1
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
         }
       }
     },
@@ -446,6 +547,7 @@
           ]
         }
       },
+      "render": true,
       "expect": {
         "result": {
           "id": "vector.distort",
@@ -459,6 +561,52 @@
             },
             "ok": true
           }
+        },
+        "render": {
+          "defs": [],
+          "filters": [],
+          "height": 300,
+          "nodes": [
+            {
+              "d": "M207.095 141.689L292.329 161.96L302.785 230.253L200.516 187.779Z",
+              "fill": "#3b82f6",
+              "fillRule": "nonzero",
+              "id": "n3",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2,
+              "transform": "matrix(0.983841 -0.179044 0.179044 0.983841 -29.117619 -52.320508)"
+            },
+            {
+              "d": "M112.521 7.679L172.521 7.679L172.521 37.679L112.521 37.679Z",
+              "fill": "#22c55e",
+              "fillRule": "nonzero",
+              "id": "n2",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2
+            },
+            {
+              "d": "M25 15L65 15L65 55L25 55Z",
+              "fill": "#ef4444",
+              "fillRule": "nonzero",
+              "id": "n1",
+              "kind": "path",
+              "opacity": 1,
+              "stroke": "#18181b",
+              "strokeWidth": 2,
+              "transform": "matrix(0.866025 0.5 -0.5 0.866025 23.528857 -17.810889)"
+            }
+          ],
+          "stats": {
+            "collapsed": 0,
+            "culled": 0,
+            "nodes": 3
+          },
+          "transform": "translate(0 0) scale(1)",
+          "width": 400
         }
       }
     },

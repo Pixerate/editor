@@ -27,6 +27,7 @@
           "tool": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Tool name, unprefixed." },
           "arguments": { "type": "object", "description": "Tool arguments; a string @n stands for the id numbered n." },
           "document": { "type": "boolean", "description": "Also compare the saved document after this call." },
+          "render": { "type": "boolean", "description": "Also compare the render data after this call (what the canvases draw, for editors without pixels: the vector scene)." },
           "pixels": {
             "description": "Also compare the rendered pixels after this call.",
             "oneOf": [
@@ -59,6 +60,7 @@
               "result": { "description": "The normalized structuredContent, or { error: { code, message, details? } }." },
               "isError": { "const": true },
               "document": { "description": "The normalized saved document." },
+              "render": { "description": "The normalized render data." },
               "pixels": {
                 "type": "object",
                 "required": ["file", "width", "height", "sha256", "maxDelta", "meanDelta"],

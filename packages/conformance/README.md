@@ -101,7 +101,9 @@ The vector editor of `@pixerate/editor/vector` (`vectorContracts()`, #618).
   and `type` (path, group, text or instance).
 
 The vector editor has no pixel renderer of its own (React and Svelte draw its render data as
-SVG), so its scenarios compare results, documents and SVG export, never `pixels`.
+SVG), so its scenarios compare results, documents, render data and SVG export, never `pixels`.
+Its host's render data is the scene the canvases draw: `getVectorSceneRenderData` of the
+controller's state with the default options (id prefix `ve-`, no viewport culling).
 `createVectorConformanceHost` makes node ids from a counter (`n1`, `n2`, …), which makes them
 part of the contract, and lays out text with the metric shaper (`createMetricTextShaper`).
 Generation runs `fakeVectorArtGenerator`, a fixed SVG from the prompt.
@@ -118,7 +120,7 @@ a small diff. Objects keep the key order of the code. Lists are in library order
 implementation passes when it replays every scenario and gets the same results. The format is
 `schema/fixture.schema.json`.
 
-A step is `{ tool, arguments?, document?, pixels?, ignore?, expect }`:
+A step is `{ tool, arguments?, document?, render?, pixels?, ignore?, expect }`:
 
 - `tool` is the unprefixed tool name, called with `arguments` through a registry that validates
   them against the tool's `inputSchema`.
@@ -127,6 +129,10 @@ A step is `{ tool, arguments?, document?, pixels?, ignore?, expect }`:
   contract: agents act on them.
 - With `document: true`, `expect.document` is the saved document after the call (for paint, the
   `pixerate.editor-document` envelope).
+- With `render: true`, `expect.render` is the host's render data after the call: what the canvases
+  draw, for editors whose picture is data rather than pixels (the vector editor's scene, its
+  document-space paths, groups and paint servers). It is normalized and compared like a result. A
+  host without render data fails such a step; implementations that don't read the flag ignore it.
 - With `pixels`, `expect.pixels` is the composited canvas after the call (`paper: false` leaves the
   paper out): a PNG under `fixtures/png/`, its size, the SHA-256 of its RGBA bytes, and the most
   another implementation may differ by: `maxDelta` in any channel of any pixel and `meanDelta` over
@@ -138,7 +144,7 @@ A scenario with `skip: { "swift": "reason" }` is reported as skipped by that imp
 
 ### Normalization
 
-Results and documents are compared after these rules, which every implementation applies the same
+Results, documents and render data are compared after these rules, which every implementation applies the same
 way (`normalizeConformanceValue` in `@pixerate/editor/tools`):
 
 1. **Generated ids.** Ids an implementation makes in its own format (in this core: layers `pl…`,
@@ -177,11 +183,11 @@ when a vector command is not run by any scenario (through `run_command` or a ste
 `run_commands`): a new command needs a scenario too.
 
 To add a scenario, write `{ "$schema", "id", "description", "setup", "steps": [{ "tool", "arguments" }] }`
-with the steps you want compared (`document`, `pixels`), then record it.
+with the steps you want compared (`document`, `render`, `pixels`), then record it.
 
 Vector scenarios run commands as `{ "tool": "run_command", "arguments": { "id": "vector.addShape",
 "params": { … } } }`. Node ids come from a counter (`n1`, `n2`, … in creation order), so later steps
-use them as they are, without placeholders. They never take `pixels`; compare results, documents
-and `vector.exportSvg`. Give `generate_vector_art` and `regenerate_vector_art` a `seed`, or the
+use them as they are, without placeholders. They never take `pixels`; compare results, documents,
+render data (`render: true`, at points where the scene holds varied content) and `vector.exportSvg`. Give `generate_vector_art` and `regenerate_vector_art` a `seed`, or the
 fake generator's seed is random. Each scenario also makes one deliberate mistake (an unknown id, a
 value out of range), because error messages are part of the contract.

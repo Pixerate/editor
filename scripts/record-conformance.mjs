@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Records the conformance scenarios of `@pixerate/conformance` from the built core: replays each
 // scenario's tool calls (packages/conformance/domains/<domain>/fixtures/*.json) and writes what
-// every step returned into its `expect`, with a PNG for each pixel snapshot. Run after
+// every step returned into its `expect` (with the document and render data the step asks for), with
+// a PNG for each pixel snapshot. Run after
 // `pnpm --filter @pixerate/editor build`, then commit what changed. A core test
 // (`tests/paint-conformance.test.ts`) replays the scenarios and fails when the core no longer
 // produces what is recorded.
@@ -74,10 +75,11 @@ for (const [domain, createHost] of Object.entries(DOMAINS)) {
       const out = first[i];
       const again = second[i];
       const label = `${domain}/${scenario.id} step ${i + 1} (${step.tool})`;
-      if (JSON.stringify([out.result, out.document]) !== JSON.stringify([again.result, again.document])) throw new Error(`${label} is not deterministic: pass a seed or avoid clock-dependent values.`);
+      if (JSON.stringify([out.result, out.document, out.render]) !== JSON.stringify([again.result, again.document, again.render])) throw new Error(`${label} is not deterministic: pass a seed or avoid clock-dependent values.`);
       const expect = { result: out.result };
       if (out.isError) expect.isError = true;
       if (step.document) expect.document = out.document;
+      if (step.render) expect.render = out.render;
       if (out.pixels) {
         const hash = sha256(out.pixels.data);
         if (hash !== sha256(again.pixels.data)) throw new Error(`${label}: the pixels are not deterministic.`);
