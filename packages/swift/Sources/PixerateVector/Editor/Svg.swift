@@ -10,9 +10,9 @@ import PixerateRaster
 // source), path effects and symmetry groups (drawn shapes plus the hidden source), blends (their
 // options on `data-vector-blend`), instances (a `<use>` of a `<symbol>` in `defs`, or their drawn
 // art in a `<g data-vector-instance>`), symbols, transforms, opacity, visibility, blend modes and
-// filters. Stroke parts (inside / outside alignment, arrowheads, width profiles), masks,
-// frames, text, connectors, generated art,
-// lenses and brushstrokes throw `VectorNotPorted` (#624).
+// filters, frames (with a page's master art) and connectors. Stroke parts (inside / outside
+// alignment, arrowheads, width profiles), masks, text, generated art, lenses and brushstrokes
+// throw `VectorNotPorted` (#624).
 
 private func escapeAttr(_ value: String) -> String {
     value.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
@@ -67,8 +67,8 @@ private let LIVE_SOURCE_DROPPED = ["effects", "transform", "opacity", "visible",
 /// The document as SVG markup (`vectorDocumentToSvg`), `precision` decimals (default 3).
 /// `idPrefix` prefixes paint server ids (default `vg-`).
 public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, pretty: Bool = true, includeHidden: Bool = false, background: Bool = true, idPrefix: String = "vg-") throws -> String {
-    // Instances draw their symbol's art: resolve it when the caller's document has not.
-    let doc = resolveVectorSymbols(docIn)
+    // Instances draw their symbol's art and pages their master's: resolve them when the caller's document has not.
+    let doc = resolveVectorMasterPages(resolveVectorSymbols(docIn))
     let precision = precision ?? 3
     let prefix = idPrefix
     var defs: [String] = []
@@ -86,8 +86,9 @@ public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, 
         if let op = node["booleanOperation"]?.stringValue, !op.isEmpty { out += " data-vector-boolean-operation=\"\(op)\"" }
         if truthy(node["resizing"]) { out += " data-vector-resizing=\"\(escapeAttr(node["resizing"]!.stringified()))\"" }
         if node.isPath && isVectorShadedPaint(node.fill) { out += " data-vector-shading=\"\(escapeAttr(node.fill!.stringified()))\"" }
-        // not ported yet: connectors, generated art, lenses (#624)
-        for key in ["connector", "generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
+        if node.isPath && truthy(node["connector"]) { out += " data-vector-connector=\"\(escapeAttr(node["connector"]!.stringified()))\"" }
+        // not ported yet: generated art, lenses (#624)
+        for key in ["generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
         if let blend = vectorBlendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
         if let filters = node["filters"], let n = arrayLength(filters), n > 0 {
             let data = " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""
@@ -213,14 +214,51 @@ public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, 
         lines.append("\(indent(depth))</g>")
     }
 
+    /// A frame: a `<g data-vector-frame>` (the frame as JSON, with the group's effects, which the
+    /// export does not draw) holding its fill (`data-vector-part="frame-fill"`) and its children in
+    /// a `<g data-vector-part="frame-contents">` clipped to the frame's rectangle (`emitFrame`).
+    func emitFrame(_ node: VectorNode, _ depth: Int) throws {
+        let f = node.frame ?? JSONObject()
+        var data = f
+        if let e = node["effects"], (arrayLength(e) ?? 0) > 0 { data["effects"] = e }
+        lines.append("\(indent(depth))<g\(try common(node)) data-vector-frame=\"\(escapeAttr(JSONValue.object(data).stringified()))\">")
+        let rect = vectorFrameRectPath(f)
+        if vectorFrameHasFill(f) {
+            lines.append("\(indent(depth + 1))<g data-vector-part=\"frame-fill\">")
+            try emitNode(VectorNode(props: JSONObject([("id", .string("\(node.id)~frame-fill")), ("type", "path"), ("fill", f["fill"]!), ("stroke", .null)]), subpaths: rect), depth + 2)
+            lines.append("\(indent(depth + 1))</g>")
+        }
+        var ref = ""
+        if f["clip"] != .bool(false) {
+            let id = "\(prefix)frame-\(node.id)"
+            let r = vectorFrameRect(f)
+            defs.append("<clipPath id=\"\(escapeAttr(id))\"><rect x=\"\(num(r.x))\" y=\"\(num(r.y))\" width=\"\(num(r.width))\" height=\"\(num(r.height))\"/></clipPath>")
+            ref = " clip-path=\"url(#\(escapeAttr(id)))\""
+        }
+        lines.append("\(indent(depth + 1))<g data-vector-part=\"frame-contents\"\(ref)>")
+        // A page's master art, drawn under its own (left out on import: it is resolved again).
+        if let art = vectorFrameMasterArt(node), !art.isEmpty {
+            lines.append("\(indent(depth + 2))<g data-vector-part=\"frame-master\">")
+            for child in art { try emit(child, depth + 3) }
+            lines.append("\(indent(depth + 2))</g>")
+        }
+        for child in node.children { try emit(child, depth + 2) }
+        lines.append("\(indent(depth + 1))</g>")
+        lines.append("\(indent(depth))</g>")
+    }
+
     func emitNode(_ node: VectorNode, _ depth: Int) throws {
+        if isVectorFrame(node) {
+            try emitFrame(node, depth)
+            return
+        }
         if node.isInstance {
             try emitInstance(node, depth)
             return
         }
-        // not ported yet: frames, masks, text and lenses (#624)
-        if isVectorFrame(node) || isVectorMaskGroup(node) || node.isText || isVectorLens(node) {
-            throw VectorNotPorted("exporting \(node.typeName) nodes with frames, masks or lenses to SVG")
+        // not ported yet: masks, text and lenses (#624)
+        if isVectorMaskGroup(node) || node.isText || isVectorLens(node) {
+            throw VectorNotPorted("exporting \(node.typeName) nodes with masks or lenses to SVG")
         }
         if hasOwnVectorAppearance(node) {
             // Live: what it draws, then the editable source (hidden) for import.

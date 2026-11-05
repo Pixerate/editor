@@ -83,6 +83,8 @@ final class VectorModelTests: XCTestCase {
         XCTAssertThrowsError(try transformVectorNode(text, translateMatrix(1, 0)))
         XCTAssertNoThrow(try transformVectorNode(text, rotateMatrix(30)), "a rigid move only sets the transform")
         let frameMask = try node(#"{"id":"m","type":"group","mask":{"type":"clip"},"children":[{"id":"f","type":"group","frame":{"x":0,"y":0,"width":4,"height":4},"children":[]},{"id":"a","type":"path","subpaths":[{"anchors":[{"x":0,"y":0},{"x":4,"y":4}],"closed":false}]}]}"#)
-        XCTAssertThrowsError(try vectorNodeBounds(frameMask)) { XCTAssertTrue($0 is VectorNotPorted) }
+        // A frame as a mask covers what it draws (its fill and children, clipped): an empty frame
+        // without a fill draws nothing, so it hides everything.
+        XCTAssertNil(try vectorNodeBounds(frameMask))
     }
 }

@@ -9,11 +9,15 @@ import PixerateRaster
 // `style` declarations, `transform`s, `fill-opacity` / `stroke-opacity` (as paint stacks),
 // `clip-path` and `mask` references (each a mask group, the clip or mask first), and this editor's
 // own export: live corners, paint stacks, stroke settings kept on a `<g data-vector-path>`, and
-// live boolean groups, path effects, symmetry groups and blends; `<use>` as instances of the
+// live boolean groups, path effects, symmetry groups, blends, frames, resizing constraints and
+// connectors; `<use>` as instances of the
 // element it refers to (our own `<symbol data-vector-symbol>`s, any other element as a symbol of
-// its own) and our own `<g data-vector-instance>`. Text, filters, frames, own mask groups,
-// connectors, generated art, lenses and resizing constraints throw `VectorNotPorted` (#624). Regular expressions are the TS ones with
+// its own) and our own `<g data-vector-instance>`. Text, filters, own mask groups, generated art
+// and lenses throw `VectorNotPorted` (#624). Regular expressions are the TS ones with
 // JavaScript's `\s` and `\w` spelled out, since ICU's differ.
+
+/// `tidy`: whole numbers stay whole (`Math.round(v) + 0` within 1e-9).
+private func tidyNumber(_ v: Double) -> Double { abs(v - JS.round(v)) < 1e-9 ? JS.round(v) + 0 : v }
 
 /// JavaScript's `\s`.
 private let WS = "\\t\\n\\x{0B}\\f\\r \\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}\\x{FEFF}"
@@ -682,6 +686,39 @@ private final class SvgImporter {
         return group
     }
 
+    /// A `<g data-vector-frame>` from our own export as its frame (`frameGroup`): the contents from
+    /// the `frame-contents` part (the fill part is regenerated, a page's master art resolved again),
+    /// the frame's rotation kept as the group's transform and the rest of `m` mapped into its rectangle.
+    func frameGroup(_ g: SvgElement, _ style: SvgStyle, _ m: VectorMatrix, _ meta: JSONObject) throws -> VectorNode? {
+        let raw = json(g.attrs["data-vector-frame"])
+        let frame = sanitizeVectorFrame(raw)
+        var children: [VectorNode] = []
+        if let contentsEl = g.children.first(where: { $0.name == "g" && $0.attrs["data-vector-part"] == "frame-contents" }) {
+            let copy = SvgElement(name: contentsEl.name, attrs: contentsEl.attrs)
+            copy.children = contentsEl.children.filter { $0.attrs["data-vector-part"] != "frame-master" }
+            copy.content = contentsEl.content
+            children = try visit(copy, style, m)
+        }
+        let id = idFor(g)
+        var props = JSONObject([("id", .string(id)), ("type", "group")])
+        for (k, v) in meta { props[k] = v }
+        guard let frame else { return children.isEmpty ? nil : VectorNode(props: props, children: children) }
+        let (rigid, residual) = decomposeRigid(m)
+        let r = bezierPathBounds(.commands(transformBezierPath(.commands(subpathsToBezier(vectorFrameRectPath(frame))), residual.tuple)))!
+        let back = invertMatrix(rigid)
+        let effects = try sanitizeVectorEffects(raw?["effects"]).map { JSONValue.object($0) }
+        if !isIdentityMatrix(rigid) { props["transform"] = rigid.json }
+        // Whole numbers stay whole (the rotation split leaves float noise).
+        var f = frame
+        f["x"] = .number(tidyNumber(r.minX))
+        f["y"] = .number(tidyNumber(r.minY))
+        f["width"] = .number(tidyNumber(r.maxX - r.minX))
+        f["height"] = .number(tidyNumber(r.maxY - r.minY))
+        props["frame"] = .object(f)
+        if !effects.isEmpty { props["effects"] = .array(try transformVectorEffects(effects, residual)) }
+        return VectorNode(props: props, children: isIdentityMatrix(rigid) ? children : try children.map { try transformVectorNode($0, back) })
+    }
+
     /// An attribute's JSON, or nil when absent or unreadable (`json`).
     func json(_ value: String?) -> JSONValue? { value.flatMap { try? JSONValue.parse($0) } }
 
@@ -868,13 +905,15 @@ private final class SvgImporter {
         // A blend's in-betweens are regenerated from its keys.
         if child.attrs["data-vector-blend-step"] != nil { return [] }
         if let op = child.attrs["data-vector-boolean-operation"], BOOLEAN_OPERATIONS.contains(op) { meta["booleanOperation"] = .string(op) }
-        // not ported yet: resizing constraints, connectors, generated art and lenses (#624)
-        for (attr, what) in [("data-vector-resizing", "resizing constraints"), ("data-vector-connector", "connectors"), ("data-vector-generation", "generated art"), ("data-vector-lens", "lenses")] where child.attrs[attr] != nil {
+        if child.attrs["data-vector-resizing"] != nil, let resizing = sanitizeVectorResizing(json(child.attrs["data-vector-resizing"])) { meta["resizing"] = .object(resizing) }
+        if child.attrs["data-vector-connector"] != nil, let connector = sanitizeVectorConnector(json(child.attrs["data-vector-connector"])) { meta["connector"] = .object(connector) }
+        // not ported yet: generated art and lenses (#624)
+        for (attr, what) in [("data-vector-generation", "generated art"), ("data-vector-lens", "lenses")] where child.attrs[attr] != nil {
             throw VectorNotPorted("importing \(what)")
         }
         let g = child.name == "g"
-        // not ported yet: frames, own mask groups, text (#624)
-        if g && child.attrs["data-vector-frame"] != nil { throw VectorNotPorted("importing frames") }
+        if g && child.attrs["data-vector-frame"] != nil { return try frameGroup(child, s, m, meta).map { [$0] } ?? [] }
+        // not ported yet: own mask groups, text (#624)
         if g && child.attrs["data-vector-mask"] != nil { throw VectorNotPorted("importing mask groups") }
         if g && child.attrs["data-vector-live"] != nil { return try liveNode(child, s, m, meta).map { [$0] } ?? [] }
         if child.name == "use" { return try useInstance(child, m, meta).map { [$0] } ?? [] }

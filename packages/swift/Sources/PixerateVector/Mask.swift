@@ -82,10 +82,10 @@ private func regionOfPath(_ path: BezierPath, _ style: VectorNode, _ type: Strin
 /// The area `node` covers as a mask of `type`, in the space `parent` maps it to
 /// (`vectorMaskRegionShapes`): for a clip, the outline of every visible path inside it; for an
 /// opacity mask, where it paints. `isSelf` counts the node even when hidden (the mask itself).
-public func vectorMaskRegionShapes(_ node: VectorNode, _ type: String, _ parent: VectorMatrix = IDENTITY_MATRIX, isSelf: Bool = true) throws -> [VectorMaskRegionShape] {
-    if !isSelf && !node.isVisible { return [] }
-    // not ported yet: frames (vectorFrameDrawn) (#624)
-    if isVectorFrame(node) { throw VectorNotPorted("frames as masks") }
+public func vectorMaskRegionShapes(_ nodeIn: VectorNode, _ type: String, _ parent: VectorMatrix = IDENTITY_MATRIX, isSelf: Bool = true) throws -> [VectorMaskRegionShape] {
+    if !isSelf && !nodeIn.isVisible { return [] }
+    // A frame covers what it draws: its fill and its children, clipped to its rectangle.
+    let node = isVectorFrame(nodeIn) ? vectorFrameDrawn(nodeIn) : nodeIn
     let m = multiplyMatrices(nodeMatrix(node), parent)
     if isVectorMaskActive(node) || (node.isGroup && (arrayLength(node["effects"]) ?? 0) > 0) {
         // Drawn as shapes: a nested mask's masked result, or a group's effects applied.

@@ -7,7 +7,8 @@ import PixerateRaster
 // document-space paths, groups and paint servers React and Svelte draw as SVG, as JSON with the TS
 // field names. Ported for what the controller holds now: paths and groups, transforms, opacity,
 // blend modes, colour, gradient, mesh and freeform paints (see `Gradient.swift`, `Shading.swift`), paint stacks, live booleans and instances (as their drawn art).
-// Text, frames, masks that are on, stroke parts (inside / outside
+// Frames draw as clip groups (their clip as render data). Text, inverted clips and opacity masks
+// that are on, stroke parts (inside / outside
 // alignment, arrowheads, width profiles), brushstroke layers, lenses and the viewport culling
 // options (`viewportSize`, `lod`) throw `VectorNotPorted` (#624). The overlay and the panels'
 // data are not ported: no scenario compares them.
@@ -113,8 +114,7 @@ private struct SceneRenderer {
             try finish(node, into: &o)
             var list = node.children
             if isVectorMaskGroup(node) {
-                // not ported yet: clip paths and masks (vectorMaskRenderData) (#624)
-                if isVectorMaskActive(node) { throw VectorNotPorted("drawing masks") }
+                if let mask = try renderMask(node, prefix) { o["mask"] = mask }
                 // A mask group without a working mask draws its contents whole.
                 list = Array(list.dropFirst())
             }
@@ -148,6 +148,21 @@ private struct SceneRenderer {
     }
 }
 
+/// A mask group's mask as render data (`renderMask` and `vectorMaskRenderData`), or nil while it is
+/// off. Ported for clipping masks that are not inverted (what frames draw with); inverted clips and
+/// opacity masks throw `VectorNotPorted` (#624).
+private func renderMask(_ group: VectorNode, _ idPrefix: String) throws -> JSONValue? {
+    if !isVectorMaskActive(group) || group.children.count < 2 { return nil }
+    let type = group["mask"]?["type"]?.stringValue ?? "clip"
+    let invert = truthy(group["mask"]?["invert"])
+    // not ported yet: inverted clips and opacity masks (vectorMaskContentBounds, invertFilter) (#624)
+    if type != "clip" || invert { throw VectorNotPorted("drawing \(invert ? "inverted " : "")\(type) masks") }
+    let clip: [JSONValue] = try vectorMaskRegion(group).map { s in
+        .object(JSONObject([("d", .string(bezierPathToSvg(.commands(s.path), BezierPathToSvgOptions(precision: 3)))), ("clipRule", .string(s.fillRule.rawValue))]))
+    }
+    return .object(JSONObject([("type", "clip"), ("invert", false), ("id", .string("\(idPrefix)mask-\(group.id)")), ("clip", .array(clip))]))
+}
+
 /// Whether nodes hold a lens anywhere.
 private func hasLens(_ nodes: [VectorNode]) -> Bool {
     nodes.contains { isVectorLens($0) || ($0.isGroup && hasLens($0.children)) }
@@ -159,8 +174,9 @@ private func hasLens(_ nodes: [VectorNode]) -> Bool {
  * the ids of defs and filters (default `ve-`).
  */
 public func getVectorSceneRenderData(_ document: VectorDocument, viewport: VectorViewport = VectorViewport(), idPrefix: String = "ve-") throws -> JSONValue {
-    // not ported yet: lens backdrops (resolveVectorLenses) (#624). Master pages only change frames, which throw below.
+    // not ported yet: lens backdrops (resolveVectorLenses) (#624).
     if hasLens(document.nodes) { throw VectorNotPorted("drawing lenses") }
+    let document = resolveVectorMasterPages(document)
     var renderer = SceneRenderer(prefix: idPrefix)
     let nodes = try document.nodes.compactMap { try renderer.node($0) }
     var o = JSONObject([
@@ -179,6 +195,6 @@ public func getVectorSceneRenderData(_ document: VectorDocument, viewport: Vecto
 extension VectorEditorController {
     /// The scene the canvases draw (`getVectorSceneRenderData(controller.getState())`).
     public func sceneRenderData(idPrefix: String = "ve-") throws -> JSONValue {
-        try getVectorSceneRenderData(doc, viewport: VectorViewport(zoom: zoom), idPrefix: idPrefix)
+        try getVectorSceneRenderData(doc, viewport: viewport, idPrefix: idPrefix)
     }
 }

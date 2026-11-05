@@ -108,8 +108,8 @@ private func isEnabledEffect(_ e: JSONValue) -> Bool {
 public func vectorAppearanceShapes(_ node: VectorNode) throws -> [VectorAppearanceShape] {
     // In the space of the drawn group (the instance's rotation and translation not applied).
     if node.isInstance { return try vectorAppearanceShapes(try vectorInstanceDrawn(node)) }
-    // not ported yet: frames (#624)
-    if isVectorFrame(node) { throw VectorNotPorted("the appearance of \(node.typeName) nodes with frames") }
+    // A frame draws as its clip group (its fill and children inside its rectangle).
+    if isVectorFrame(node) { return try vectorAppearanceShapes(vectorFrameDrawn(node)) }
     // A symmetry group draws as its children and their copies.
     if isVectorSymmetryGroup(node) { return try vectorAppearanceShapes(try vectorSymmetryDrawn(node)) }
     let out = isVectorMaskGroup(node) ? try vectorMaskedShapes(node) : try applyVectorEffects(try baseShapes(node), node["effects"]?.arrayValue)
@@ -158,8 +158,10 @@ public func vectorAppearanceNodes(_ node: VectorNode) throws -> [VectorNode] {
 public func expandVectorAppearance(_ node: VectorNode) throws -> VectorNode {
     if !hasVectorAppearance(node) { return node }
     if node.isInstance { return try expandVectorAppearance(try vectorInstanceDrawn(node)) }
-    // not ported yet: frames (#624)
-    if isVectorFrame(node) { throw VectorNotPorted("expanding \(node.typeName) nodes with frames") }
+    if isVectorFrame(node) {
+        let drawn = vectorFrameDrawn(node)
+        return hasVectorAppearance(drawn) ? try expandVectorAppearance(drawn) : drawn
+    }
     if isVectorSymmetryGroup(node) {
         let drawn = try vectorSymmetryDrawn(node)
         return hasVectorAppearance(drawn) ? try expandVectorAppearance(drawn) : drawn

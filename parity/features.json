@@ -959,7 +959,7 @@
           "core": "`VectorSnapTargets`, `setSnap` & `getVectorOverlayRenderData().guides`",
           "react": "`<VectorCanvas>` guides & `<VectorToolbar>` snapping toggle",
           "svelte": "`<VectorCanvas>` guides & `<VectorToolbar>` snapping toggle",
-          "swift": "Planned (#533)"
+          "swift": "Snap options ✅ headless (`VectorEditorController.setSnap`, `vector.getSnapOptions`, `vector.setSnapOptions` with polar increments, `vectorPolarAngles`); snapping at the pointer, guides and the toggle: Planned (#533)"
         },
         {
           "feature": "Vector CAD Tracking & Typed Dimensions (object snap tracking: anchors, centres and crossings acquired by resting the pointer on them, up to seven, sending horizontal / vertical or polar alignment paths and an open path's extension, snapping where paths cross, cross the drawing or onto them; polar tracking by increment (90°, 45°, 30°, 15° or custom angles), optionally relative to the last segment; typed distance, length<angle, @offset and position entry while the pen draws; draw by dimensions; agent commands `vector.getSnapOptions`, `vector.setSnapOptions`, `vector.addPathByDimensions`)",
@@ -1169,14 +1169,14 @@
           "core": "`setPerspective`, `setPerspectivePlane`, `attachToPerspective`, `vectorPerspectivePlaneMap`, `vectorPerspectiveFlatToPlane`, `vectorPerspectiveMapPath`, `vectorPerspectivePreset` & `getVectorOverlayRenderData().perspective`",
           "react": "`<VectorPerspectivePanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` grid",
           "svelte": "`<VectorPerspectivePanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` grid",
-          "swift": "Planned (#533)"
+          "swift": "Perspective grids ✅ headless (`VectorEditorController`: `setPerspective`, `setPerspectivePlane`, `attachToPerspective`; `vectorPerspectivePlaneMap`, `vectorPerspectiveFlatToPlane`, `vectorPerspectiveMapPath`, `vectorPerspectiveGridLines`, `vectorPerspectivePreset`); drawing shapes on a plane, the grid on the canvas and the panel: Planned (#533)"
         },
         {
           "feature": "Vector Frames & Artboards (a group becomes a frame with a rectangle, a background fill and clipping; top-level frames are artboards with their names on the canvas; Frame tool (F) that takes in the objects it encloses, Frame Selection with padding, position and size fields; resizing constraints per child — left, right, left & right (stretch), centre or scale horizontally, top, bottom, top & bottom, centre or scale vertically — applied whenever the frame is resized (panel, selection handles or scale), text keeping its font size; frames select, snap and bound by their rectangle; SVG export with a clip path and a lossless round-trip, and Export Frame as an SVG of its own size; agent commands `vector.listFrames`, `vector.addFrame`, `vector.frameSelection`, `vector.setFrame`, `vector.setResizing`, `vector.exportFrameSvg`)",
           "core": "`addFrame`, `frameSelection`, `setFrame`, `setResizing`, `getFrames`, `frameToSvg`, `vectorFrameChildMatrix`, `vectorFrameDocument`, `getVectorFramePanel` & `getVectorOverlayRenderData().frames`",
           "react": "`<VectorFramePanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` frame labels",
           "svelte": "`<VectorFramePanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` frame labels",
-          "swift": "Planned (#533)"
+          "swift": "Frames and resizing constraints ✅ headless (`VectorEditorController`: `addFrame`, `frameSelection`, `setFrame`, `setResizing`, `getFrames`, `frameToSvg`; `vectorFrameDrawn`, `vectorFrameChildMatrix`, `vectorFrameDocument`; frames in bounds, masks, render data and the SVG round trip); the Frame tool, labels and the panel: Planned (#533)"
         },
         {
           "feature": "Vector Generative Prompts (through `@pixerate/editor/generation`: a prompt planned against a model's capabilities and sent to the host's generator; SVG from text models is read with the SVG importer, pictures from image models are traced or stylised (mosaic, halftone, low poly, engraving); the art goes into a box on the artboard as one editable group holding the generation's provenance, so it can be regenerated in place with a new seed or prompt; every request takes an idempotency key; agent tools `list_vector_art_models`, `generate_vector_art`, `regenerate_vector_art`)",
@@ -1190,7 +1190,7 @@
           "core": "`addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`, `vectorPages`, `vectorMasterPages`, `resolveVectorMasterPages`",
           "react": "`<VectorPagesPanel>` (in `<VectorToolbar>`)",
           "svelte": "`<VectorPagesPanel>` (in `<VectorStylePanel>`)",
-          "swift": "Planned (#533)"
+          "swift": "Pages and master pages ✅ headless (`VectorEditorController`: `addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`; `vectorPages`, `vectorMasterPages`, `resolveVectorMasterPages` after every edit, in render data and SVG); master text tokens need text (#624); the panel: Planned (#533)"
         },
         {
           "feature": "Vector Brushstrokes (natural-media brushes — pencils, pastels, charcoal, markers, inks, wet paint (watercolour, gouache, wet oils), the Mixer Brush, smudge and blender: the presets `VECTOR_PROFILE` admits and, with a `brushLibrary`, saved brushes from the shared brush library, kept in the layer so the document renders without it — laid along vector paths as stroke layers of kind `brushstroke`: the path stays the data and the rendered brush images are a cache, through the shared `renderBrushstroke` / `BrushstrokeCache` renderer the canvas uses; colour from the layer's paint, or gradient paint sampled dab by dab along the path (`brush.paint`; a gradient layer paint along, across or within the stroke; a brush's own gradient), a size and a pressure profile along the length; wet paint simulated in the stroke's own wet area for a fixed number of steps and dried (shown as laid until it settles in the background; exports wait); the Mixer Brush, smudge and blender acting on a CPU backdrop of the fills, strokes and brushstrokes beneath, re-rendered when that changes; opt-in brush character with a `seed` (seeded jitter and a procedural paper grain, `paper` to pick it or `null` for none; seedless layers render as before, panel-added layers get a random seed); drawn on both canvases, exported to SVG as images (the layer data round-trips) and to PDF as image objects with soft masks; brush, size, colour and a grain toggle in the appearance panel; agent commands `vector.listBrushes`, `vector.addBrushstroke`, `vector.setBrushstroke` and the brush library tools with `VECTOR_PROFILE`)",
@@ -1204,7 +1204,7 @@
           "core": "`addConnector`, `setConnector`, `getConnectors`, `getConnectionSites`, `setConnectorRoute`, `rerouteVectorConnectors`, `vectorConnectionSites`, `getVectorConnectorPanel` & `getVectorOverlayRenderData().connectorSites`",
           "react": "`<VectorConnectorPanel>` (in `<VectorToolbar>`) & `<VectorCanvas>` site dots",
           "svelte": "`<VectorConnectorPanel>` (in `<VectorStylePanel>`) & `<VectorCanvas>` site dots",
-          "swift": "Planned (#533)"
+          "swift": "Connectors ✅ headless (`VectorEditorController`: `addConnector`, `setConnector`, `getConnectors`, `getConnectionSites`, `setConnectorRoute`; `vectorConnectionSites`, `routeVectorConnector`, `rerouteVectorConnectors` after every edit; the SVG round trip); arrowheads in render data and SVG wait on stroke parts (#624); the Connector tool and the panel: Planned (#533)"
         },
         {
           "feature": "Vector Style Panel (fill, stroke, gradient editor, width, alignment, width profile, arrowheads, corner radius and kind, opacity, fill and stroke stacks, blend mode, filters, effects, envelope; defaults for new shapes)",
