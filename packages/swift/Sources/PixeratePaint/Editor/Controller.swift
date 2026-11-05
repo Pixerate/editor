@@ -1449,7 +1449,7 @@ public final class PaintEditorController {
 }
 
 /// A brush's default colour as #rrggbb for a colour scheme, or nil when it is not a solid colour.
-func brushColourHex(_ value: JSONValue, _ scheme: String) -> String? {
+public func brushColourHex(_ value: JSONValue, _ scheme: String) -> String? {
     var v = value
     if let o = value.objectValue, o["type"] == nil, let side = o[scheme == "dark" ? "dark" : "light"] { v = side }
     guard let s = v.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else { return nil }

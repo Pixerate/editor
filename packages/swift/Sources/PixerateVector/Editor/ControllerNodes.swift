@@ -132,8 +132,7 @@ extension VectorEditorController {
         if truthy(d["fillRule"]) { out["fillRule"] = d["fillRule"] }
         if truthy(d["strokeAlign"]), d["strokeAlign"] != "center" { out["strokeAlign"] = d["strokeAlign"] }
         for key in ["startArrow", "endArrow", "arrowAlign", "startArrowScale", "endArrowScale"] where truthy(d[key]) { out[key] = d[key] }
-        // not ported yet: default width profiles (#624)
-        if let n = arrayLength(d["strokeWidthProfile"]), n > 0 { throw VectorNotPorted("default width profiles") }
+        if let n = arrayLength(d["strokeWidthProfile"]), n > 0 { out["strokeWidthProfile"] = d["strokeWidthProfile"] }
         // Default stacks: new shapes get every layer (open paths no fills).
         if d["fills"]?.arrayValue == nil && d["strokes"]?.arrayValue == nil { return out }
         var styled = VectorNode(props: out)
@@ -205,9 +204,8 @@ func withStyle(_ node: VectorNode, _ style: JSONObject) throws -> VectorNode {
     var next = node
     for (k, v) in style where k != "fills" && k != "strokes" { next[k] = v }
     if style.contains("strokeWidthProfile") {
-        // not ported yet: width profiles (sanitizeWidthProfile) (#624)
-        if let p = style["strokeWidthProfile"]?.arrayValue, !p.isEmpty { throw VectorNotPorted("width profiles") }
-        next["strokeWidthProfile"] = Optional<JSONValue>.none
+        let p = truthy(style["strokeWidthProfile"]) ? sanitizeWidthProfile(style["strokeWidthProfile"]) : []
+        if p.isEmpty { next["strokeWidthProfile"] = Optional<JSONValue>.none } else { next["strokeWidthProfile"] = widthProfileJSON(p) }
     }
     // Shorthands edit the top layer of a stack; whole stacks given replace them.
     next = normalizeVectorPaintStacks(next, prefer: "shorthand")

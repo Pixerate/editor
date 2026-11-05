@@ -295,33 +295,13 @@ public func vectorFilterMarkup(_ filter: VectorRenderFilter, _ extra: String = "
 
 // MARK: - Node filters
 
-/// How far a stroke reaches past its path (`vectorStrokeReach`): half its width centred, all of it
-/// outside, none inside; four times that for miter joins; arrowheads reach further. Width
-/// profiles are not ported yet (#624).
-func vectorStrokeReach(_ style: VectorNode) throws -> Double {
-    // not ported yet: width profiles (widthProfileMaxScale) (#624)
-    if let p = style["strokeWidthProfile"]?.arrayValue, !p.isEmpty { throw VectorNotPorted("the reach of width profiles") }
-    let width = style.strokeWidth ?? 1
-    let align = style["strokeAlign"]?.stringValue ?? "center"
-    var reach = align == "center" ? width / 2 : align == "outside" ? width : 0
-    let join = style["strokeLinejoin"]?.stringValue
-    if join != "round" && join != "bevel" { reach *= 4 }
-    for (arrow, scaleKey) in [("startArrow", "startArrowScale"), ("endArrow", "endArrowScale")] where truthy(style[arrow]) {
-        let scale = style[scaleKey]?.numberValue ?? .nan
-        let s = scale > 0 && scale.isFinite ? scale : 1
-        reach = JS.max(reach, 8 * JS.max(0.25, width * s) + width)
-    }
-    return reach
-}
-
-/// The furthest any drawn stroke layer of a path reaches (`vectorStrokeStackReach`). Brushstrokes
-/// are not ported yet (#624).
+/// The furthest any drawn stroke layer of a path reaches (`vectorStrokeStackReach`); a brushstroke
+/// reaches half its brush size past the path.
 func vectorStrokeStackReach(_ node: VectorNode) throws -> Double {
     var reach = 0.0
     for l in vectorPaintLayerNodes(node) where l.kind == "stroke" {
-        if l.drawn { reach = JS.max(reach, try vectorStrokeReach(l.node)) }
-        // not ported yet: brushstroke reach (vectorBrushstrokeReach) (#624)
-        else if l.layer["visible"] != .bool(false) && l.layer["kind"] == "brushstroke" { throw VectorNotPorted("the reach of brushstrokes") }
+        if l.drawn { reach = JS.max(reach, vectorStrokeReach(l.node)) }
+        else if l.layer["visible"] != .bool(false) { reach = JS.max(reach, vectorBrushstrokeReach(l.layer)) }
     }
     return reach
 }

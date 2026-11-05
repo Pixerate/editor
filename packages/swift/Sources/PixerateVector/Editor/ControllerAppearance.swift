@@ -62,7 +62,7 @@ extension VectorEditorController {
     // MARK: Fill and stroke stacks
 
     /// Paths (and text) of the selected (or given) nodes whose stacks can be edited (`stackTargets`).
-    private func stackTargets(_ ids: [String]?) -> Result<[VectorNode], VectorEditorError> {
+    func stackTargets(_ ids: [String]?) -> Result<[VectorNode], VectorEditorError> {
         let list = ids ?? selection
         if list.isEmpty { return .failure(VectorEditorError("Nothing is selected.")) }
         var out = OrderedPaths()
@@ -76,7 +76,7 @@ extension VectorEditorController {
 
     /// Applies `fn` to the `kind` stack of every target path as one undo step; an error string from
     /// any path cancels it (`editStacks`).
-    private func editStacks(_ kind: String, _ ids: [String]?, _ label: String, _ fn: ([JSONObject], VectorNode) throws -> Result<[JSONObject], VectorEditorError>) throws -> VectorActionResult {
+    func editStacks(_ kind: String, _ ids: [String]?, _ label: String, _ fn: ([JSONObject], VectorNode) throws -> Result<[JSONObject], VectorEditorError>) throws -> VectorActionResult {
         let targets: [VectorNode]
         switch stackTargets(ids) {
         case .failure(let e): return .failure(e.message)

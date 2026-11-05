@@ -6,7 +6,7 @@ import PixerateGeometry
 // opacity, blend mode and visibility, and each stroke with its own settings. The stacks live in
 // `fills` / `strokes`, bottom to top; `fill` / `stroke` (and the stroke settings) mirror their top
 // layers. Layers are JSON objects (`{ paint, opacity?, blendMode?, visible?, …settings }`), so
-// their key order is the TS order. Brushstroke layers throw `VectorNotPorted` (#624).
+// their key order is the TS order. Brushstroke layers keep their settings (`brushstroke.swift`).
 
 /// The stroke settings each stroke layer has of its own (`VECTOR_STROKE_SETTING_KEYS`).
 public let VECTOR_STROKE_SETTING_KEYS = ["strokeWidth", "strokeLinecap", "strokeLinejoin", "strokeDasharray", "strokeAlign", "startArrow", "endArrow", "arrowAlign", "startArrowScale", "endArrowScale", "strokeWidthProfile"]
@@ -208,8 +208,10 @@ public func sanitizeVectorStrokeSettings(_ raw: JSONObject) throws -> JSONObject
     for key in ["startArrow", "endArrow"] { if let v = raw[key]?.stringValue, VECTOR_ARROWHEADS.contains(v) { out[key] = .string(v) } }
     if let v = raw["arrowAlign"]?.stringValue, ["extend", "tip"].contains(v) { out["arrowAlign"] = .string(v) }
     for key in ["startArrowScale", "endArrowScale"] { if let n = num(raw[key]), n > 0 { out[key] = .number(n) } }
-    // not ported yet: width profiles (sanitizeWidthProfile) (#624)
-    if let p = raw["strokeWidthProfile"]?.arrayValue, !p.isEmpty { throw VectorNotPorted("width profiles") }
+    if raw["strokeWidthProfile"]?.arrayValue != nil {
+        let p = sanitizeWidthProfile(raw["strokeWidthProfile"])
+        if !p.isEmpty { out["strokeWidthProfile"] = widthProfileJSON(p) }
+    }
     return out
 }
 
@@ -218,8 +220,12 @@ public func sanitizeVectorStrokeSettings(_ raw: JSONObject) throws -> JSONObject
 public func sanitizeVectorStrokes(_ value: JSONValue?) throws -> [JSONObject] {
     guard let list = value?.arrayValue else { return [] }
     return try list.compactMap(\.objectValue).map { raw in
-        // not ported yet: brushstroke layers (sanitizeVectorBrushstroke) (#624)
-        if raw["kind"] == "brushstroke" { throw VectorNotPorted("brushstroke layers") }
+        if raw["kind"] == "brushstroke", let brush = sanitizeVectorBrushstroke(raw["brush"]) {
+            var out = try sanitizeLayerBase(raw)
+            out["kind"] = "brushstroke"
+            out["brush"] = .object(brush)
+            return out
+        }
         if let kind = raw["kind"], kind != "paint" { return raw }
         var out = try sanitizeLayerBase(raw)
         for (k, v) in try sanitizeVectorStrokeSettings(raw) { out[k] = v }

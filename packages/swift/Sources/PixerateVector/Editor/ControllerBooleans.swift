@@ -104,8 +104,10 @@ private func vectorPathfinderShape(_ entry: VectorPathEntry, _ op: String) throw
     let open = !subpaths.isEmpty && subpaths.allSatisfy { !$0.closed }
     if op == "divide" && open { return (PathfinderShape(path: .commands(try entryWorld(entry, subpaths)), line: true), .line) }
     if hasPaint(node.stroke) && (node.strokeWidth ?? 1) > 0 {
-        // not ported yet: a stroke's painted area (vectorStrokeOutline) (#624)
-        throw VectorNotPorted("Pathfinder on unfilled stroked paths (vectorStrokeOutline)")
+        // Node transforms are rigid, so the stroke laid out in document space keeps its width.
+        var n = node
+        n.subpaths = subpaths
+        return (PathfinderShape(path: .commands(try vectorStrokeOutline(n, entry.parent)), fillRule: .nonzero, key: .string("fill:\(paintKey(node.stroke))")), .stroke)
     }
     return (PathfinderShape(path: .commands(try entryWorld(entry, closed)), fillRule: rule, key: .string("none")), .outline)
 }

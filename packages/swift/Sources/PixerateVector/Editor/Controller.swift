@@ -139,6 +139,10 @@ public final class VectorEditorController {
     let hitRadius: Double
     let zoom: Double = 1
     let createId: () -> String
+    /// The side of a brush's light / dark default colour brushstrokes take (`light` or `dark`).
+    var colorScheme = "light"
+    /// "Keep my colour": brushstrokes keep their colour instead of taking a brush's default.
+    var colorLocked = false
     var applying = false
     var committing = false
     /// Bumped on every change listeners hear about.
@@ -180,6 +184,10 @@ public final class VectorEditorController {
     public var snapOptions: JSONObject { snap }
     /// The defaults new shapes get (`state.defaults`).
     public var shapeDefaults: JSONObject { defaults }
+    /// The colour scheme brushstrokes pick default colours for (`state.colorScheme`).
+    public var brushColorScheme: String { colorScheme }
+    /// Whether brushstrokes keep their colour (`state.colorLocked`).
+    public var brushColorLocked: Bool { colorLocked }
 
     public func getNode(_ id: String) -> VectorNode? { findVectorNode(doc.nodes, id) }
 

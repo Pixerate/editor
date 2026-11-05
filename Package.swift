@@ -59,7 +59,7 @@ let package = Package(
         // trips that keep key order and unknown members, anchors ↔ Bézier, bounds, transforms, anchor
         // edits, shape builders), the controller, its commands (metadata from the contracts) and the
         // conformance host. Foundation only.
-        .target(name: "PixerateVector", dependencies: ["PixerateCore", "PixerateContracts", "PixerateGeometry", "PixerateRaster", "PixerateConformance"], path: "packages/swift/Sources/PixerateVector", swiftSettings: settings),
+        .target(name: "PixerateVector", dependencies: ["PixerateCore", "PixerateContracts", "PixerateGeometry", "PixerateRaster", "PixerateConformance", "PixeratePaint"], path: "packages/swift/Sources/PixerateVector", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
