@@ -83,6 +83,8 @@ struct VectorSnapshot {
     var anchors: [VectorAnchorRef]
     var editingId: String?
     var pen: VectorPenState?
+    /// The symbol being edited in isolation when the snapshot was taken (`doc` is then its art).
+    var symbolEdit: VectorSymbolEditContext?
 }
 
 /// Every vector tool, in toolbar order (`VECTOR_TOOLS`).
@@ -151,6 +153,8 @@ public final class VectorEditorController {
     var blendDefaults = JSONObject()
     /// The symmetry group new drawn art goes into (`enterSymmetry`), or nil.
     var symmetryTarget: String?
+    /// Isolation mode: `doc` holds a symbol's art (`editSymbol`), or nil.
+    var symbolEdit: VectorSymbolEditContext?
     /// Bumped on every change listeners hear about.
     public private(set) var revision = 0
     private var listeners: [(id: UUID, fn: () -> Void)] = []
@@ -206,16 +210,28 @@ public final class VectorEditorController {
     }
 
     /// The document with its derived parts brought up to date (`refreshed`): shorthand fills and
-    /// strokes go to the top layer of their stack, blends regenerate their steps, and lenses show
-    /// what is below them. Symbols, constraints, connectors and master pages are made only by
-    /// commands that are not ported yet (#624), so there is nothing else to refresh. A blend whose
-    /// steps cannot be made (a key the port cannot draw) keeps the steps it has.
+    /// strokes go to the top layer of their stack, blends regenerate their steps, in isolation mode
+    /// the edited symbol's art follows the document, instances carry their symbols' art, and lenses
+    /// show what is below them. Constraints, connectors and master pages are made only by commands
+    /// that are not ported yet (#624), so there is nothing else to refresh. A blend whose steps
+    /// cannot be made (a key the port cannot draw) keeps the steps it has.
     func refreshed(_ d: VectorDocument) -> VectorDocument {
         let shorthand = normalizeVectorTree(d.nodes, prefer: "shorthand")
         let nodes = (try? refreshVectorBlends(shorthand, blendCache)) ?? shorthand
         var out = d
         if nodes != d.nodes { out.nodes = nodes }
-        return resolveVectorLenses(out)
+        // In isolation mode the edited symbol's art is the document's nodes.
+        if let edit = symbolEdit, let symbols = out.symbols, symbols.contains(where: { $0.id == edit.symbolId && $0.nodes != out.nodes }) {
+            let art = out.nodes
+            out.symbols = symbols.map { s in
+                guard s.id == edit.symbolId else { return s }
+                var c = s
+                c.nodes = art
+                return c
+            }
+        }
+        // Instances draw their symbols' art.
+        return resolveVectorLenses(resolveVectorSymbols(out))
     }
 
     func notify() {
@@ -241,13 +257,15 @@ public final class VectorEditorController {
     // MARK: Undoable changes
 
     func snapshot() -> VectorSnapshot {
-        VectorSnapshot(doc: doc, selection: selection, anchors: anchors, editingId: editingId, pen: pen)
+        VectorSnapshot(doc: doc, selection: selection, anchors: anchors, editingId: editingId, pen: pen, symbolEdit: symbolEdit)
     }
 
     func restore(_ s: VectorSnapshot) {
         committing = false
         applying = true
         doc = s.doc
+        // Undo and redo step in and out of isolation mode with the edits made there.
+        symbolEdit = s.symbolEdit
         selection = s.selection.filter { getNode($0) != nil }
         anchors = s.anchors.filter { getAnchor(doc, $0) != nil }
         editingId = s.editingId.flatMap { getNode($0) != nil ? $0 : nil }
@@ -282,6 +300,7 @@ public final class VectorEditorController {
             anchors = before.anchors
             editingId = before.editingId
             pen = before.pen
+            symbolEdit = before.symbolEdit
             throw error
         }
         commit(name, before)
@@ -418,7 +437,7 @@ public final class VectorEditorController {
     // MARK: Document
 
     /// The document as saved (`toJSON`): a copy.
-    public func toJSON() throws -> VectorDocument { try cloneVectorDocument(stripVectorLensViews(doc)) }
+    public func toJSON() throws -> VectorDocument { try cloneVectorDocument(stripVectorLensViews(stripVectorSymbolArt(storedDocument()))) }
 
     /// The `pixerate.editor-document` envelope of kind `vector` (`createVectorEditorDocument`).
     public func editorDocument() throws -> JSONValue {
@@ -491,11 +510,19 @@ func normalizeVectorTree(_ nodes: [VectorNode], prefer: String) -> [VectorNode] 
     }
 }
 
-/// A document as loaded (`loadedDocument`): a copy, stacks preferred over stale shorthands.
+/// A document as loaded (`loadedDocument`): a copy, stacks preferred over stale shorthands, its
+/// instances carrying their symbols' art.
 func loadedDocument(_ d: VectorDocument) throws -> VectorDocument {
-    var copy = try cloneVectorDocument(d)
+    var copy = try cloneVectorDocument(stripVectorSymbolArt(d))
     copy.nodes = normalizeVectorTree(copy.nodes, prefer: "stack")
-    return copy
+    if let symbols = copy.symbols {
+        copy.symbols = symbols.map { s in
+            var c = s
+            c.nodes = normalizeVectorTree(s.nodes, prefer: "stack")
+            return c
+        }
+    }
+    return resolveVectorSymbols(copy)
 }
 
 /// `Math.round(n * 100) / 100`.

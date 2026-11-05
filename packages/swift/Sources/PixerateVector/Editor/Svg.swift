@@ -8,9 +8,10 @@ import PixerateRaster
 // Export writes plain paths and groups with colour, gradient, mesh and freeform paints (see
 // `Gradient.swift` and `Shading.swift`), paint stacks, live corners, live booleans (drawn shapes plus the hidden
 // source), path effects and symmetry groups (drawn shapes plus the hidden source), blends (their
-// options on `data-vector-blend`), transforms, opacity, visibility, blend modes and filters.
-// Stroke parts (inside / outside alignment, arrowheads, width profiles), masks,
-// frames, text, instances, symbols, connectors, generated art,
+// options on `data-vector-blend`), instances (a `<use>` of a `<symbol>` in `defs`, or their drawn
+// art in a `<g data-vector-instance>`), symbols, transforms, opacity, visibility, blend modes and
+// filters. Stroke parts (inside / outside alignment, arrowheads, width profiles), masks,
+// frames, text, connectors, generated art,
 // lenses and brushstrokes throw `VectorNotPorted` (#624).
 
 private func escapeAttr(_ value: String) -> String {
@@ -65,7 +66,9 @@ private let LIVE_SOURCE_DROPPED = ["effects", "transform", "opacity", "visible",
 
 /// The document as SVG markup (`vectorDocumentToSvg`), `precision` decimals (default 3).
 /// `idPrefix` prefixes paint server ids (default `vg-`).
-public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pretty: Bool = true, includeHidden: Bool = false, background: Bool = true, idPrefix: String = "vg-") throws -> String {
+public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, pretty: Bool = true, includeHidden: Bool = false, background: Bool = true, idPrefix: String = "vg-") throws -> String {
+    // Instances draw their symbol's art: resolve it when the caller's document has not.
+    let doc = resolveVectorSymbols(docIn)
     let precision = precision ?? 3
     let prefix = idPrefix
     var defs: [String] = []
@@ -166,9 +169,57 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
         try emitNode(node, depth)
     }
 
+    /// What `fn` writes, as one line of trimmed lines (`capture`).
+    func capture(_ fn: () throws -> Void) rethrows -> String {
+        let at = lines.count
+        try fn()
+        let out = lines[at...].map(\.jsTrimmed).joined()
+        lines.removeSubrange(at...)
+        return out
+    }
+
+    /// Symbols referenced by `<use>`: written once into `defs` as `<symbol>`.
+    var symbolIds: [String: String] = [:]
+    func symbolRef(_ symbolId: String) throws -> String? {
+        if let hit = symbolIds[symbolId] { return hit }
+        guard let sym = doc.symbols?.first(where: { $0.id == symbolId }) else { return nil }
+        let id = "\(prefix)symbol-\(symbolId)"
+        symbolIds[symbolId] = id
+        let inner = try capture { for n in sym.nodes { try emit(n, 2) } }
+        let data = JSONValue.object(JSONObject([("id", .string(sym.id)), ("name", .string(sym.name))])).stringified()
+        defs.append("<symbol id=\"\(escapeAttr(id))\" data-vector-symbol=\"\(escapeAttr(data))\" overflow=\"visible\">\(inner)</symbol>")
+        return id
+    }
+
+    /// An instance: a `<use>` of its symbol through its transform when that draws it exactly, else
+    /// its drawn art (overrides, unscaled strokes, effects or filters, which would be placed in the
+    /// symbol's space) in a `<g data-vector-instance>` that keeps what import needs.
+    func emitInstance(_ node: VectorNode, _ depth: Int) throws {
+        var data = JSONObject([("symbolId", node["symbolId"] ?? .null)])
+        if node["scaleStrokes"] == .bool(false) { data["scaleStrokes"] = false }
+        if truthy(node["overrides"]) { data["overrides"] = node["overrides"] }
+        let hasEffects = (arrayLength(node["effects"]) ?? 0) > 0
+        let exact = !truthy(node["overrides"]) && node["scaleStrokes"] != .bool(false) && !hasEffects && (arrayLength(node["filters"]) ?? 0) == 0
+        let ref = try symbolRef(node.symbolId)
+        if exact, let ref {
+            lines.append("\(indent(depth))<use\(try common(node)) href=\"#\(escapeAttr(ref))\" data-vector-instance=\"\(escapeAttr(JSONValue.object(data).stringified()))\"/>")
+            return
+        }
+        var full = data
+        if truthy(node["transform"]) { full["transform"] = node["transform"] }
+        if hasEffects { full["effects"] = node["effects"] }
+        lines.append("\(indent(depth))<g data-vector-instance=\"\(escapeAttr(JSONValue.object(full).stringified()))\">")
+        try emitNode(try vectorInstanceDrawn(node), depth + 1)
+        lines.append("\(indent(depth))</g>")
+    }
+
     func emitNode(_ node: VectorNode, _ depth: Int) throws {
-        // not ported yet: frames, masks, instances, text and lenses (#624)
-        if isVectorFrame(node) || isVectorMaskGroup(node) || node.isInstance || node.isText || isVectorLens(node) {
+        if node.isInstance {
+            try emitInstance(node, depth)
+            return
+        }
+        // not ported yet: frames, masks, text and lenses (#624)
+        if isVectorFrame(node) || isVectorMaskGroup(node) || node.isText || isVectorLens(node) {
             throw VectorNotPorted("exporting \(node.typeName) nodes with frames, masks or lenses to SVG")
         }
         if hasOwnVectorAppearance(node) {
@@ -214,8 +265,8 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
     }
 
     for node in doc.nodes { try emit(node, 1) }
-    // not ported yet: symbols (#624)
-    if let symbols = doc.symbols, !symbols.isEmpty { throw VectorNotPorted("exporting symbols to SVG") }
+    // Symbols no instance uses still go into `defs`, so they come back on import.
+    for sym in doc.symbols ?? [] { _ = try symbolRef(sym.id) }
     let w = num(doc.width)
     let h = num(doc.height)
     var out = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"\(w)\" height=\"\(h)\" viewBox=\"0 0 \(w) \(h)\">"]
@@ -228,5 +279,5 @@ public func vectorDocumentToSvg(_ doc: VectorDocument, precision: Int? = nil, pr
 
 extension VectorEditorController {
     /// The document as SVG markup (`toSvg`).
-    public func toSvg(precision: Int? = nil) throws -> String { try vectorDocumentToSvg(doc, precision: precision) }
+    public func toSvg(precision: Int? = nil) throws -> String { try vectorDocumentToSvg(storedDocument(), precision: precision) }
 }

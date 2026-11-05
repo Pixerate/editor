@@ -6,8 +6,8 @@ import PixerateRaster
 // What nodes draw as (`vector/appearance.ts`): path effect stacks, live boolean groups (their
 // operands folded bottom to top into one shape in the bottom operand's style), mask groups (their
 // contents clipped by the mask, `Mask.swift`), lenses (`Lens.swift`), envelopes (`Warp.swift`) and
-// symmetry groups (`Symmetry.swift`). The Extrude and Bevel effects, text, instances and frames
-// throw `VectorNotPorted` (#624).
+// symmetry groups (`Symmetry.swift`); instances draw their symbol's art (`Symbols.swift`). The
+// Extrude and Bevel effects, text and frames throw `VectorNotPorted` (#624).
 
 /// A shape a node draws (`VectorAppearanceShape`): the path whose style paints it, its outline in
 /// the node's own space, an opacity factor and a draw-order key.
@@ -57,9 +57,10 @@ private func compareOrder(_ a: [Int], _ b: [Int]) -> Double {
 }
 
 /// The shapes of a child in its parent's space (hidden children have none), ordered by its index.
-func vectorChildAppearanceShapes(_ child: VectorNode, _ index: Int) throws -> [VectorAppearanceShape] {
-    if !child.isVisible { return [] }
-    if child.isInstance { throw VectorNotPorted("the appearance of instances") }
+func vectorChildAppearanceShapes(_ childIn: VectorNode, _ index: Int) throws -> [VectorAppearanceShape] {
+    if !childIn.isVisible { return [] }
+    // An instance's transform may scale: its drawn group's is rigid.
+    let child = childIn.isInstance ? try vectorInstanceDrawn(childIn) : childIn
     let m = child.transform
     let k = child.opacity ?? 1
     return try vectorAppearanceShapes(child).map { s in
@@ -86,7 +87,8 @@ private func liveBooleanShapes(_ group: VectorNode) throws -> [VectorAppearanceS
 /// What a node's effect stack starts from: its own outline, its live boolean result or its children's shapes.
 private func baseShapes(_ node: VectorNode) throws -> [VectorAppearanceShape] {
     if node.isPath { return [VectorAppearanceShape(source: node, path: subpathsToBezier(node.subpaths), opacity: 1, order: [])] }
-    if node.isText || node.isInstance { throw VectorNotPorted("the appearance of \(node.typeName) nodes") }
+    if node.isText { throw VectorNotPorted("the appearance of \(node.typeName) nodes") }
+    if node.isInstance { return try baseShapes(try vectorInstanceDrawn(node)) }
     if truthy(node["liveBoolean"]) { return try liveBooleanShapes(node) }
     // A mask group's effects act on its contents (the mask stays as it is).
     if isVectorMaskGroup(node) { return try node.children.enumerated().flatMap { i, c in i == 0 ? [] : try vectorChildAppearanceShapes(c, i) } }
@@ -104,8 +106,10 @@ private func isEnabledEffect(_ e: JSONValue) -> Bool {
 /// A mask group draws its contents clipped by its mask; a lens its own shape (what it shows is
 /// drawn by `vectorLensDrawn`).
 public func vectorAppearanceShapes(_ node: VectorNode) throws -> [VectorAppearanceShape] {
-    // not ported yet: instances and frames (#624)
-    if node.isInstance || isVectorFrame(node) { throw VectorNotPorted("the appearance of \(node.typeName) nodes with frames") }
+    // In the space of the drawn group (the instance's rotation and translation not applied).
+    if node.isInstance { return try vectorAppearanceShapes(try vectorInstanceDrawn(node)) }
+    // not ported yet: frames (#624)
+    if isVectorFrame(node) { throw VectorNotPorted("the appearance of \(node.typeName) nodes with frames") }
     // A symmetry group draws as its children and their copies.
     if isVectorSymmetryGroup(node) { return try vectorAppearanceShapes(try vectorSymmetryDrawn(node)) }
     let out = isVectorMaskGroup(node) ? try vectorMaskedShapes(node) : try applyVectorEffects(try baseShapes(node), node["effects"]?.arrayValue)
@@ -153,8 +157,9 @@ public func vectorAppearanceNodes(_ node: VectorNode) throws -> [VectorNode] {
 /// inside it is live; `expandVectorAppearance`).
 public func expandVectorAppearance(_ node: VectorNode) throws -> VectorNode {
     if !hasVectorAppearance(node) { return node }
-    // not ported yet: instances and frames (#624)
-    if node.isInstance || isVectorFrame(node) { throw VectorNotPorted("expanding \(node.typeName) nodes with frames") }
+    if node.isInstance { return try expandVectorAppearance(try vectorInstanceDrawn(node)) }
+    // not ported yet: frames (#624)
+    if isVectorFrame(node) { throw VectorNotPorted("expanding \(node.typeName) nodes with frames") }
     if isVectorSymmetryGroup(node) {
         let drawn = try vectorSymmetryDrawn(node)
         return hasVectorAppearance(drawn) ? try expandVectorAppearance(drawn) : drawn

@@ -6,8 +6,8 @@ import PixerateRaster
 // The scene render data of a vector editor (`getVectorSceneRenderData` in `vector/render.ts`): the
 // document-space paths, groups and paint servers React and Svelte draw as SVG, as JSON with the TS
 // field names. Ported for what the controller holds now: paths and groups, transforms, opacity,
-// blend modes, colour, gradient, mesh and freeform paints (see `Gradient.swift`, `Shading.swift`), paint stacks and live booleans.
-// Text, instances, frames, masks that are on, stroke parts (inside / outside
+// blend modes, colour, gradient, mesh and freeform paints (see `Gradient.swift`, `Shading.swift`), paint stacks, live booleans and instances (as their drawn art).
+// Text, frames, masks that are on, stroke parts (inside / outside
 // alignment, arrowheads, width profiles), brushstroke layers, lenses and the viewport culling
 // options (`viewportSize`, `lod`) throw `VectorNotPorted` (#624). The overlay and the panels'
 // data are not ported: no scenario compares them.
