@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-import { brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+import { addBrushSourceFromFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
 import { BrushEditor } from '../brushes/BrushEditor';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
 import { PaintGradientEditor } from './PaintGradientEditor';
@@ -21,7 +21,8 @@ export interface BrushPanelProps {
  * grouped by medium and variety, tools apart) and the active brush in the `BrushEditor`: its
  * facets with a live preview, and "Save brush" into the editor's brush library. The paint
  * editor adds the brush's own gradient, the sticker stamps, what the brush carries (Load /
- * Clean), and import and export of library files.
+ * Clean), and import and export of library files. Images picked for an image tip or grain are
+ * added to the brush library as sources.
  */
 export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWidth = 112, thumbnailHeight = 32, className }) => {
   const state = usePaintEditorState(controller);
@@ -57,6 +58,8 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
         preview={preview}
         onChange={(next) => attempt(() => controller.setBrushSpec(next))}
         onSaveAs={(name) => controller.saveBrush({ id: slug(name), name })}
+        sources={controller.brushSources.all()}
+        onAddSource={async (file) => (await addBrushSourceFromFile(controller.brushLibrary, file)).ref}
         renderExtra={(section) => {
           if (section === 'shape' && brush.engine === 'sticker')
             return <StickerPicker controller={controller} label="Sticker stamps" selected={brush.sticker.stamps} onPick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />;
