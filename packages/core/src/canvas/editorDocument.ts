@@ -202,21 +202,69 @@ export interface CanvasGestureRecorderOptions<TNode extends CanvasNode = CanvasN
 	history: Pick<HistoryManager, 'execute'>;
 }
 
+/** What a gesture did to one node or edge: its saved form before and after (absent = not there). */
+interface GestureChange<T> {
+	before?: T;
+	after?: T;
+	beforeIndex: number;
+	afterIndex: number;
+}
+
+/** The nodes or edges a gesture added, removed or changed (runtime fields aside), by id. */
+function gestureChanges<T extends { id: string }>(
+	before: readonly T[],
+	after: readonly T[],
+	runtimeKeys: readonly string[]
+): Map<string, GestureChange<T>> {
+	const key = (item: T) => JSON.stringify(omit(item, runtimeKeys));
+	const changes = new Map<string, GestureChange<T>>();
+	before.forEach((item, i) => changes.set(item.id, { before: item, beforeIndex: i, afterIndex: -1 }));
+	after.forEach((item, i) => {
+		const change = changes.get(item.id);
+		if (!change) changes.set(item.id, { after: item, beforeIndex: -1, afterIndex: i });
+		else if (key(change.before!) === key(item)) changes.delete(item.id);
+		else Object.assign(change, { after: item, afterIndex: i });
+	});
+	return changes;
+}
+
+/**
+ * Puts the gesture's `side` back into `current`, touching only what the gesture changed: a node
+ * it changed is replaced if it is still there, one it added or removed is removed or put back at
+ * its index. Everything else (added, moved or deleted since by a collaborator or an agent) stays.
+ */
+function applyGestureSide<T extends { id: string }>(
+	current: readonly T[],
+	changes: Map<string, GestureChange<T>>,
+	side: 'before' | 'after'
+): T[] {
+	const next = current
+		.filter((item) => {
+			const change = changes.get(item.id);
+			return !change || change[side] !== undefined;
+		})
+		.map((item) => changes.get(item.id)?.[side] ?? item);
+	const present = new Set(next.map((item) => item.id));
+	const index = side === 'before' ? 'beforeIndex' : 'afterIndex';
+	const missing = [...changes.values()]
+		.filter((c) => c[side] !== undefined && !present.has(c[side]!.id) && (side === 'before' ? !c.after : !c.before))
+		.sort((a, b) => a[index] - b[index]);
+	for (const change of missing) next.splice(Math.min(change[index], next.length), 0, change[side]!);
+	return next;
+}
+
 /**
  * Makes a gesture the flow library applies directly (a node drag, a resize) one undo step:
  * call `begin()` when it starts (e.g. `onNodeDragStart`) and `end("Move")` when it stops. If
- * the nodes or edges changed in between, the change is recorded; otherwise nothing is.
+ * the nodes or edges changed in between, the change is recorded; otherwise nothing is. Undo and
+ * redo put back only the nodes and edges the gesture changed, so work added since by a
+ * collaborator or an agent is kept.
  */
 export function createCanvasGestureRecorder<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdgeLike = CanvasEdge>(
 	options: CanvasGestureRecorderOptions<TNode, TEdge>
 ) {
 	let before: { nodes: TNode[]; edges?: TEdge[] } | null = null;
 	const take = () => ({ nodes: options.getNodes(), edges: options.getEdges?.() });
-	const key = (s: { nodes: TNode[]; edges?: TEdge[] }) => canvasDocumentContentKey(s.nodes, s.edges ?? []);
-	const restore = (s: { nodes: TNode[]; edges?: TEdge[] }) => {
-		options.setNodes(s.nodes);
-		if (s.edges && options.setEdges) options.setEdges(s.edges);
-	};
 	return {
 		/** Remembers the canvas as it is before the gesture. */
 		begin() {
@@ -228,8 +276,19 @@ export function createCanvasGestureRecorder<TNode extends CanvasNode = CanvasNod
 			before = null;
 			if (!start) return false;
 			const after = take();
-			if (key(start) === key(after)) return false;
-			options.history.execute({ name, execute: () => restore(after), undo: () => restore(start) });
+			const nodes = gestureChanges(start.nodes, after.nodes, RUNTIME_NODE_KEYS);
+			const edges =
+				start.edges && after.edges && options.setEdges
+					? gestureChanges(start.edges, after.edges, RUNTIME_EDGE_KEYS)
+					: new Map<string, GestureChange<TEdge>>();
+			if (nodes.size === 0 && edges.size === 0) return false;
+			const apply = (side: 'before' | 'after') => {
+				if (nodes.size) options.setNodes(applyGestureSide(options.getNodes(), nodes, side));
+				if (edges.size && options.getEdges && options.setEdges) {
+					options.setEdges(applyGestureSide(options.getEdges(), edges, side));
+				}
+			};
+			options.history.execute({ name, execute: () => apply('after'), undo: () => apply('before') });
 			return true;
 		},
 		/** Forgets a gesture without recording it. */

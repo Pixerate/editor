@@ -120,6 +120,33 @@ describe("useHistory gestures, marks and entries", () => {
   });
 });
 
+describe("useHistory dropSteps", () => {
+  it("removes stale steps by tag without running them and re-renders", async () => {
+    const c = counter();
+    let h: ReturnType<typeof useHistory> | null = null;
+    function Panel() {
+      h = useHistory();
+      return <span data-testid="count">{h.undoCount}</span>;
+    }
+    await act(async () => root.render(<Panel />));
+
+    await act(async () => {
+      h!.execute(c.set(1, "Stroke"));
+      h!.execute({ ...c.set(2, "Move"), tag: "move" });
+    });
+    expect(h!.entries.map((e) => e.tag)).toEqual(["value", "move"]);
+
+    let dropped = 0;
+    await act(async () => {
+      dropped = h!.dropSteps((step) => step.tag === "value");
+    });
+    expect(dropped).toBe(1);
+    expect(c.doc.value).toBe(2);
+    expect(container.textContent).toBe("1");
+    expect(h!.entries.map((e) => e.label)).toEqual(["Move"]);
+  });
+});
+
 describe("useHistoryDirty", () => {
   it("clears dirty when undoing to the saved state and stops the navigation guard", async () => {
     const c = counter();
