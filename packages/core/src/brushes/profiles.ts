@@ -9,6 +9,7 @@
  */
 
 import { BRUSH_PRESETS } from './presets';
+import { isBrushSourceRef } from './sources';
 import { BRUSH_MARKS_KINDS, BRUSH_TIP_SHAPES, BRUSH_TOOLS, type Brush, type BrushKind, type BrushMarksKind, type BrushPaint, type BrushSurface, type BrushTipShape, type BrushTool } from './types';
 
 export type BrushSupport = 'full' | 'ignored' | 'none';
@@ -40,6 +41,10 @@ export interface BrushHostProfile {
   velocity: BrushSupport;
   /** Tilt dynamics (needs pen tilt). */
   tilt: BrushSupport;
+  /** Texture inside the tip (`tip.grain`); missing: `none`. */
+  tipGrain?: BrushSupport;
+  /** Several dabs per spacing step (`dynamics.count` above 1); missing: `none`. */
+  dabCount?: BrushSupport;
 }
 
 export interface BrushIssue {
@@ -77,6 +82,8 @@ export const PAINT_PROFILE: BrushHostProfile = {
   colours: ALL_COLOURS,
   velocity: 'full',
   tilt: 'full',
+  tipGrain: 'full',
+  dabCount: 'full',
 };
 
 /** The image editor's brush: dry dabs on pixels, its Mixer Brush and the eraser. */
@@ -96,6 +103,8 @@ export const IMAGE_PROFILE: BrushHostProfile = {
   colours: ['solid', 'dual', 'gradient'],
   velocity: 'ignored',
   tilt: 'ignored',
+  tipGrain: 'ignored',
+  dabCount: 'ignored',
 };
 
 /**
@@ -118,6 +127,8 @@ export const CANVAS_PROFILE: BrushHostProfile = {
   colours: ['solid', 'dual', 'gradient'],
   velocity: 'ignored',
   tilt: 'full',
+  tipGrain: 'ignored',
+  dabCount: 'ignored',
 };
 
 /** Vector brushstrokes: dry dab brushes along a path; light brushes paint as plain colour. */
@@ -152,7 +163,10 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   else if (brush.kind === 'tool' && brush.tool && !profile.tools.includes(brush.tool)) {
     add('tool', 'error', `${host} has no ${brush.tool} tool.`, profile.tools.length ? `Use one of: ${list(profile.tools)}.` : `${host} has no tools; use a mark brush.`);
   }
-  if (!profile.tipShapes.includes(brush.tip.shape)) add('tip.shape', 'error', `${host} can't lay a ${brush.tip.shape} tip.`, `Set tip.shape to one of: ${list(profile.tipShapes)}.`);
+  if (!profile.tipShapes.includes(brush.tip.shape)) {
+    const image = brush.tip.shape === 'stamp' && (brush.tip.stamps ?? []).some(isBrushSourceRef);
+    add('tip.shape', 'error', `${host} can't lay a ${image ? 'stamp tip (image tips are stamps)' : `${brush.tip.shape} tip`}.`, `Set tip.shape to one of: ${list(profile.tipShapes)}.`);
+  }
   const marks = brush.marks?.kind ?? 'continuous';
   if (!profile.marks.includes(marks)) add('marks', 'error', `${host} can't lay ${marks} marks.`, `Use marks ${list(profile.marks)} (remove marks for continuous dabs).`);
   const surface = brush.behaviour?.surface ?? 'dry';
@@ -166,6 +180,8 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   const m = brush.motion;
   feature(profile.motion, !!m && (!!m.live || nonZero(m.waveSpeed) || m.fps !== undefined), 'motion', 'animation', 'Remove motion.');
   const d = brush.dynamics ?? {};
+  feature(profile.tipGrain ?? 'none', !!brush.tip.grain, 'tip.grain', 'tip grain', 'Remove tip.grain (behaviour.grain textures with the paper instead).');
+  feature(profile.dabCount ?? 'none', (d.count ?? 1) > 1, 'dynamics.count', 'several dabs per step', 'Set dynamics.count to 1.');
   feature(profile.velocity, nonZero(d.velocitySize) || nonZero(d.velocityOpacity), 'dynamics.velocity', 'velocity dynamics (its strokes carry no timing)', 'Set dynamics.velocitySize and velocityOpacity to 0.');
   feature(profile.tilt, nonZero(d.tiltSize) || nonZero(d.tiltRoundness) || nonZero(d.tiltOpacity), 'dynamics.tilt', 'tilt dynamics', 'Set dynamics.tiltSize, tiltRoundness and tiltOpacity to 0.');
 
@@ -258,6 +274,12 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         break;
       case 'behaviour.grain':
         delete b.behaviour!.grain;
+        break;
+      case 'tip.grain':
+        delete b.tip.grain;
+        break;
+      case 'dynamics.count':
+        delete b.dynamics!.count;
         break;
       case 'light':
         delete b.light;

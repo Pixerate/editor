@@ -11,6 +11,7 @@ import { validateJsonSchema, type JsonSchema } from '../tools/schema';
 import { editorStampOf, normalizeStickerRef } from '../stickers/helpers';
 import { BRUSH_ID } from '../paint-editor/brushes';
 import { BRUSH_FACET_SCHEMAS, BRUSH_JSON_SCHEMA, MAX_BRUSH_PALETTE } from './schema';
+import { isBrushSourceRef } from './sources';
 import { BRUSH_TOOLS, type Brush, type BrushKind, type BrushPaint, type BrushTool } from './types';
 
 /** The tools that work on the wet layer. */
@@ -211,12 +212,37 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   }
   if (brush.tip.stamps) {
     // Stamps are sticker refs: a bare editor stamp becomes `editor:<stamp>`. Any sticker the host's
-    // sticker library can load works (its art is loaded before painting).
-    const stamps = brush.tip.stamps.map((s) => normalizeStickerRef(s));
+    // sticker library can load works (its art is loaded before painting), and so does an image
+    // source of the brush library, except as objects: each object mark stays a sticker.
+    let stamps = brush.tip.stamps.map((s) => normalizeStickerRef(s));
+    if (brush.marks?.kind === 'objects' && stamps.some(isBrushSourceRef)) {
+      problems.push('tip.stamps: image sources (source:…) dropped: objects marks lay stickers; use continuous, scatter or particles marks for an image tip.');
+      stamps = stamps.filter((s) => !isBrushSourceRef(s));
+    }
     if (stamps.length) brush.tip.stamps = stamps;
     else {
       drop('tip.stamps', 'none of the stamps can be laid');
       delete brush.tip.stamps;
+    }
+  }
+  if (brush.tip.grain) {
+    // Tip grain textures dabs: not bristles, particles or objects, nor the wet and thick engines, which lay their own marks.
+    const surface = brush.behaviour?.surface;
+    const marks = brush.marks?.kind;
+    const why = !brush.tip.grain.source
+      ? 'it needs a source (a grain pattern or source:<id>)'
+      : brush.tip.shape === 'bristle'
+        ? 'bristle tips lay their own marks'
+        : marks === 'particles' || marks === 'objects'
+          ? `${marks} marks are not dabs`
+          : surface === 'wet' || surface === 'thick'
+            ? `${surface} paint lays its own texture`
+            : kind === 'tool' && WET_BRUSH_TOOLS.includes(brush.tool!)
+              ? 'the wet tools work on the wet layer'
+              : null;
+    if (why) {
+      drop('tip.grain', why);
+      delete brush.tip.grain;
     }
   }
   const b = brush.behaviour;

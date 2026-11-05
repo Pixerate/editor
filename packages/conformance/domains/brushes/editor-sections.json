@@ -302,6 +302,65 @@
         ]
       },
       {
+        "id": "grain",
+        "title": "Tip grain",
+        "controls": [
+          {
+            "kind": "choice",
+            "path": "tip.grain.source",
+            "label": "Texture",
+            "ariaLabel": "Tip grain",
+            "options": [
+              {
+                "value": "",
+                "label": "None"
+              },
+              {
+                "value": "cold-pressed",
+                "label": "Cold pressed"
+              },
+              {
+                "value": "hot-pressed",
+                "label": "Hot pressed"
+              },
+              {
+                "value": "rough",
+                "label": "Rough"
+              },
+              {
+                "value": "vellum",
+                "label": "Vellum"
+              },
+              {
+                "value": "laid",
+                "label": "Laid"
+              },
+              {
+                "value": "ingres",
+                "label": "Ingres"
+              },
+              {
+                "value": "sanded",
+                "label": "Sanded"
+              },
+              {
+                "value": "canvas",
+                "label": "Canvas"
+              },
+              {
+                "value": "linen",
+                "label": "Linen"
+              },
+              {
+                "value": "gesso",
+                "label": "Gesso"
+              }
+            ],
+            "value": ""
+          }
+        ]
+      },
+      {
         "id": "marks",
         "title": "Marks",
         "controls": [
@@ -2104,6 +2163,65 @@
               }
             ],
             "value": "normal"
+          }
+        ]
+      },
+      {
+        "id": "grain",
+        "title": "Tip grain",
+        "controls": [
+          {
+            "kind": "choice",
+            "path": "tip.grain.source",
+            "label": "Texture",
+            "ariaLabel": "Tip grain",
+            "options": [
+              {
+                "value": "",
+                "label": "None"
+              },
+              {
+                "value": "cold-pressed",
+                "label": "Cold pressed"
+              },
+              {
+                "value": "hot-pressed",
+                "label": "Hot pressed"
+              },
+              {
+                "value": "rough",
+                "label": "Rough"
+              },
+              {
+                "value": "vellum",
+                "label": "Vellum"
+              },
+              {
+                "value": "laid",
+                "label": "Laid"
+              },
+              {
+                "value": "ingres",
+                "label": "Ingres"
+              },
+              {
+                "value": "sanded",
+                "label": "Sanded"
+              },
+              {
+                "value": "canvas",
+                "label": "Canvas"
+              },
+              {
+                "value": "linen",
+                "label": "Linen"
+              },
+              {
+                "value": "gesso",
+                "label": "Gesso"
+              }
+            ],
+            "value": ""
           }
         ]
       },
@@ -6542,6 +6660,65 @@
         ]
       },
       {
+        "id": "grain",
+        "title": "Tip grain",
+        "controls": [
+          {
+            "kind": "choice",
+            "path": "tip.grain.source",
+            "label": "Texture",
+            "ariaLabel": "Tip grain",
+            "options": [
+              {
+                "value": "",
+                "label": "None"
+              },
+              {
+                "value": "cold-pressed",
+                "label": "Cold pressed"
+              },
+              {
+                "value": "hot-pressed",
+                "label": "Hot pressed"
+              },
+              {
+                "value": "rough",
+                "label": "Rough"
+              },
+              {
+                "value": "vellum",
+                "label": "Vellum"
+              },
+              {
+                "value": "laid",
+                "label": "Laid"
+              },
+              {
+                "value": "ingres",
+                "label": "Ingres"
+              },
+              {
+                "value": "sanded",
+                "label": "Sanded"
+              },
+              {
+                "value": "canvas",
+                "label": "Canvas"
+              },
+              {
+                "value": "linen",
+                "label": "Linen"
+              },
+              {
+                "value": "gesso",
+                "label": "Gesso"
+              }
+            ],
+            "value": ""
+          }
+        ]
+      },
+      {
         "id": "marks",
         "title": "Marks",
         "controls": [
@@ -7884,6 +8061,65 @@
         ]
       },
       {
+        "id": "grain",
+        "title": "Tip grain",
+        "controls": [
+          {
+            "kind": "choice",
+            "path": "tip.grain.source",
+            "label": "Texture",
+            "ariaLabel": "Tip grain",
+            "options": [
+              {
+                "value": "",
+                "label": "None"
+              },
+              {
+                "value": "cold-pressed",
+                "label": "Cold pressed"
+              },
+              {
+                "value": "hot-pressed",
+                "label": "Hot pressed"
+              },
+              {
+                "value": "rough",
+                "label": "Rough"
+              },
+              {
+                "value": "vellum",
+                "label": "Vellum"
+              },
+              {
+                "value": "laid",
+                "label": "Laid"
+              },
+              {
+                "value": "ingres",
+                "label": "Ingres"
+              },
+              {
+                "value": "sanded",
+                "label": "Sanded"
+              },
+              {
+                "value": "canvas",
+                "label": "Canvas"
+              },
+              {
+                "value": "linen",
+                "label": "Linen"
+              },
+              {
+                "value": "gesso",
+                "label": "Gesso"
+              }
+            ],
+            "value": ""
+          }
+        ]
+      },
+      {
         "id": "feel",
         "title": "Feel",
         "controls": [
@@ -8925,6 +9161,65 @@
               }
             ],
             "value": "normal"
+          }
+        ]
+      },
+      {
+        "id": "grain",
+        "title": "Tip grain",
+        "controls": [
+          {
+            "kind": "choice",
+            "path": "tip.grain.source",
+            "label": "Texture",
+            "ariaLabel": "Tip grain",
+            "options": [
+              {
+                "value": "",
+                "label": "None"
+              },
+              {
+                "value": "cold-pressed",
+                "label": "Cold pressed"
+              },
+              {
+                "value": "hot-pressed",
+                "label": "Hot pressed"
+              },
+              {
+                "value": "rough",
+                "label": "Rough"
+              },
+              {
+                "value": "vellum",
+                "label": "Vellum"
+              },
+              {
+                "value": "laid",
+                "label": "Laid"
+              },
+              {
+                "value": "ingres",
+                "label": "Ingres"
+              },
+              {
+                "value": "sanded",
+                "label": "Sanded"
+              },
+              {
+                "value": "canvas",
+                "label": "Canvas"
+              },
+              {
+                "value": "linen",
+                "label": "Linen"
+              },
+              {
+                "value": "gesso",
+                "label": "Gesso"
+              }
+            ],
+            "value": ""
           }
         ]
       },

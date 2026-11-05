@@ -3851,3 +3851,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `MarkdownSpecTests.testParseTimeGrowth` failed on the iOS simulator job of unrelated PRs: "growth angle brackets 5k 15.8 ms 20k 171.2 ms ×10.8", over the limit of 10. The same parse is ×4.0 locally, in both debug and release builds.
 - **Root Cause**: The shared CI simulator can stall for the length of a whole measurement round, so even the best of five alternating runs can catch the large input in a slow stretch.
 - **Solution / Workaround**: `TimingBudget.growth` measures up to four rounds while the ratio is above 5 and keeps the best times. A linear parse settles near ×4; a quadratic one stays near ×16 in every round, so it still fails. As with the TS `measureGrowth`, never fix such a flake by raising the limit alone.
+
+### [core/brushes] Brush Image Sources Are `source:` Stamp Refs, Not Stickers
+
+- **Issue / Symptom**: An image tip (`tip.stamps: ['source:leaf']`) painted round, or `create_brush` refused it with "can't load sticker", or objects marks dropped it.
+- **Root Cause**: Image tips reuse the stamp-tip path, so a source ref goes wherever sticker refs go. The sticker art cache (`StickerArtCache`) knows nothing about the brush library, and a sticker provider called with `source:…` fails. Objects marks lay editable stickers on a sticker layer, which an image source is not.
+- **Solution / Workaround**: Read stamp art through one lookup that sends `source:` refs to `BrushSourceArtCache` and everything else to the sticker cache (`PaintEditorController.stampArt`; preview renderers take `paintBrushPreviewRenderer(paper, { library })`). `brushStickerRefs` leaves `source:` refs out, and the library tools check them against `library.getSource`, not the sticker provider. `normalizeBrushSpec` drops source refs from objects marks with a problem. The provider id `source` is reserved, like `editor`.
+
+### [core/paint-editor] New Engine Fields Stay Off Brushes That Don't Use Them
+
+- **Issue / Symptom**: Adding `dynamics.count`, `dynamics.flip` or `tipGrain` to every resolved `PaintBrush` changed `resolved.json`, the recorded paint documents and every Swift contract test, though no preset used them.
+- **Root Cause**: The conformance contracts and documents compare the whole resolved brush, so a new always-present field with a default is a change for every brush.
+- **Solution / Workaround**: `normalizePaintBrush` writes `count`, `flip` and `tipGrain` only when they are not the defaults (one dab, no flip, no grain), and the facet → engine map (`BRUSH_FIELDS`) maps them like any other field. Keep later engine additions optional the same way, so ports (Swift) only need them for the brushes that use them.
+
+### [core/brushes] Tip Grain Hardness and Flip Only Apply to Image Sources and Stamps
+
+- **Issue / Symptom**: Lowering hardness on an editor-stamp or sticker tip changes nothing, while an image-source tip fades towards its edges.
+- **Root Cause**: Stamp tips never read hardness; applying it to every stamp would change the pixels of strokes already recorded with stamp brushes, so replays would no longer match.
+- **Solution / Workaround**: `stampSampler(ref, art, hardness)` softens only `source:` refs. `dynamics.flip` mirrors any dab, but only stamps and image tips look different mirrored.

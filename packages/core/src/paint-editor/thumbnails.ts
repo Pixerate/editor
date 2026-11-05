@@ -18,6 +18,7 @@ import { pigmentOf } from '../paint/wet/film';
 import { WetStrokeDriver, wetPaperInput } from './wet';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, type ThickChannels } from './thick';
 import { computeSpill, emptyLight, LightCache } from './light';
+import type { StickerArtLookup } from './sticker-art';
 
 /** One small wet world reused for wet brush thumbnails (by size). */
 let thumbWorld: WetWorld | null = null;
@@ -79,7 +80,7 @@ export function thumbnailStroke(width: number, height: number): PenPoint[] {
 }
 
 /** Paints the test stroke with `brush` onto `surface`; returns the new pixels. */
-function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number): { surface: TiledSurface; light: TiledSurface | null } {
+function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number, stampArt?: StickerArtLookup): { surface: TiledSurface; light: TiledSurface | null } {
   const [r, g, b] = hexToRgb8(color);
   let result = surface;
   let thick: ThickChannels | null = null;
@@ -111,6 +112,7 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       thick: brush.engine === 'impasto' ? { channels: emptyThickChannels() } : undefined,
       sticker: brush.engine === 'sticker' ? { nextId: 1 } : undefined,
       light: brush.light.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' ? { surface: emptyLight() } : null,
+      stampArt,
     }
   );
   session.push(thumbnailStroke(width, height));
@@ -120,7 +122,11 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
   return { surface: light || thick ? new LightCache().glow(lit, light ?? undefined, thick ?? undefined) : lit, light };
 }
 
-export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperSettings; width?: number; height?: number; color: string }): BrushThumbnail {
+/**
+ * A sample stroke with `brush` on `paper`. `stampArt` draws stamp tips of stickers and image
+ * sources, and image tip grain (without it they paint round, and without the grain).
+ */
+export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperSettings; width?: number; height?: number; color: string; stampArt?: StickerArtLookup }): BrushThumbnail {
   const width = Math.max(16, Math.min(512, Math.round(options.width ?? 160)));
   const height = Math.max(16, Math.min(512, Math.round(options.height ?? 48)));
   // Fit the tip in the thumbnail: big brushes are drawn smaller.
@@ -141,7 +147,7 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
   }
   let light: TiledSurface | null = null;
   if (b.engine === 'wet') surface = paintWetTestStroke(b, options.paper, options.color, width, height);
-  else ({ surface, light } = paintTestStroke(surface, b, options.paper, options.color, width, height));
+  else ({ surface, light } = paintTestStroke(surface, b, options.paper, options.color, width, height, options.stampArt));
   const layer: ViewLayer = { type: 'pixel', id: 'thumbnail', name: 'thumbnail', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 } };
   // Light paint reads on dark paper, with its spill; a multiply light brush (a highlighter) is a tint on paper.
   const paper = light && brushPreviewsOnDark(b) ? { ...options.paper, color: BRUSH_PREVIEW_DARK_PAPER } : options.paper;
