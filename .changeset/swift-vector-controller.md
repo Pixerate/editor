@@ -1,5 +1,6 @@
 ---
 "@pixerate/swift": minor
+"@pixerate/editor": patch
 ---
 
 **Swift vector editor: the controller and its commands (#622).**
@@ -8,3 +9,5 @@
 - `createVectorCommands`: all 150 vector commands, with their label, group, keywords, description, params schema and shortcut read from the contract (`commands.json`) and their TS enablement. The commands the controller does not have yet fail with "not ported to Swift yet (#624)".
 - `VectorConformanceHost` and `VectorConformanceTests`: the `shapes-and-paths`, `arrange-and-transform`, `booleans-and-pathfinder` and `path-editing` scenarios pass; the other ten are skipped (#624).
 - Live boolean groups now draw and are bounded as their folded operands (`expandVectorAppearance`, `vectorAppearanceShapes`).
+
+**Core:** `vectorContracts()` now writes each command's own `undoable` and `readOnly` flags, and `params` only for commands that take some. Before, 31 commands that run outside history were listed as undoable, and `vector.list` had an empty params schema.
