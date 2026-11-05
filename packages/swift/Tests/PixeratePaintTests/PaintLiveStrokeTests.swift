@@ -1,5 +1,6 @@
 import Foundation
 import PixerateCore
+import PixerateRaster
 import XCTest
 @testable import PixeratePaint
 
@@ -64,6 +65,48 @@ final class PaintLiveStrokeTests: XCTestCase {
         XCTAssertEqual(c.compositePixels().data, blank)
         XCTAssertNil(c.undoLabel)
         XCTAssertTrue(c.strokes.isEmpty)
+    }
+
+    func testALiveStrokeRedrawsAViewOnlyWhereItPaintedAndMatchesAFullComposite() throws {
+        let c = try PaintEditorController(width: 600, height: 400)
+        let compositor = createPaintCompositor()
+        var shown = [UInt8](repeating: 0, count: 600 * 400 * 4)
+        func draw() {
+            c.compositeTiles(using: compositor) { tx, ty, data, changed in
+                guard changed else { return }
+                for y in 0..<TILE where ty * TILE + y < 400 {
+                    for x in 0..<TILE where tx * TILE + x < 600 {
+                        for k in 0..<4 { shown[((ty * TILE + y) * 600 + tx * TILE + x) * 4 + k] = data[(y * TILE + x) * 4 + k] }
+                    }
+                }
+            }
+        }
+        draw()
+        let since = c.version
+        XCTAssertNil(c.dirtySince(since), "nothing changed since")
+        var i = PaintStrokeInit(seed: 5)
+        i.snapToPerspective = false
+        let live = try c.beginStroke(i)
+        XCTAssertEqual(c.dirtySince(since), nil, "beginning a stroke may change anything")
+        draw()
+        // Across tile corners, a batch at a time, drawing after each.
+        let path = [PenPoint(x: 200, y: 200, pressure: 0.5), PenPoint(x: 250, y: 240, pressure: 0.7), PenPoint(x: 270, y: 270, pressure: 0.9), PenPoint(x: 330, y: 250, pressure: 0.6), PenPoint(x: 520, y: 300, pressure: 1)]
+        var painted: [RasterRect] = []
+        for p in path {
+            let before = c.version
+            live.push([p])
+            painted += try XCTUnwrap(c.dirtySince(before), "a dab stroke says where it painted")
+            draw()
+        }
+        XCTAssertFalse(painted.isEmpty)
+        XCTAssertEqual(shown, c.compositePixels(wet: "display").data, "the view drawn from dirty rectangles is the full composite")
+        // Anything else redraws everything.
+        let before = c.version
+        _ = try c.setColor("#336699")
+        XCTAssertNil(c.dirtySince(before))
+        try live.end()
+        draw()
+        XCTAssertEqual(shown, c.compositePixels(wet: "display").data)
     }
 
     func testViewMathsAndPenInput() {

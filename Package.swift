@@ -58,7 +58,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PixeratePaintTests",
-            dependencies: ["PixeratePaint", "PixerateContracts", "PixerateCore", "PixerateConformance"],
+            dependencies: ["PixeratePaint", "PixerateContracts", "PixerateCore", "PixerateConformance", "PixerateRaster"],
             path: "packages/swift/Tests/PixeratePaintTests",
             swiftSettings: settings
         ),

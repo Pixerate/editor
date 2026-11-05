@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import PixerateCore
 import PixeratePaint
@@ -158,6 +159,60 @@ final class PaintEditorModelTests: XCTestCase {
         let image = try XCTUnwrap(presenter.image())
         XCTAssertEqual(image.width, 1024)
         XCTAssertEqual(image.height, 768)
+    }
+
+    func testThePresenterDrawsTileImagesAndRebuildsOnlyTheChangedOnes() throws {
+        let model = try makeModel(width: 600, height: 300)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        let first = presenter.tiles()
+        // Rows top to bottom, each reaching 2 pixels into its right and lower neighbours (clipped to the canvas).
+        XCTAssertEqual(first.map { [$0.tx, $0.ty] }, [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]])
+        XCTAssertEqual(first.map(\.rect), [
+            CGRect(x: 0, y: 0, width: 258, height: 258), CGRect(x: 256, y: 0, width: 258, height: 258), CGRect(x: 512, y: 0, width: 88, height: 258),
+            CGRect(x: 0, y: 256, width: 258, height: 44), CGRect(x: 256, y: 256, width: 258, height: 44), CGRect(x: 512, y: 256, width: 88, height: 44),
+        ])
+        XCTAssertTrue(presenter.tiles().elementsEqual(first) { $0.image === $1.image }, "nothing changed: the same images")
+        // A stroke inside tile (1, 0) rebuilds it and the tile to its left, whose image reaches into it.
+        _ = try model.controller.paintStroke(PaintStrokeInit(seed: 3), points: [PenPoint(x: 300, y: 100), PenPoint(x: 400, y: 150)])
+        let next = presenter.tiles()
+        XCTAssertEqual(presenter.lastTilesDrawn, 1)
+        XCTAssertEqual(zip(first, next).filter { $0.image !== $1.image }.map { [$1.tx, $1.ty] }, [[0, 0], [1, 0]])
+        // The tiles hold the composite, premultiplied BGRA.
+        let composite = model.controller.compositePixels(wet: "display").data
+        for tile in next {
+            let bytes = try XCTUnwrap(tile.image.dataProvider?.data as Data?)
+            XCTAssertEqual(tile.image.bitmapInfo, CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue))
+            let w = Int(tile.rect.width)
+            for y in 0..<Int(tile.rect.height) {
+                for x in 0..<w {
+                    let s = ((Int(tile.rect.minY) + y) * 600 + Int(tile.rect.minX) + x) * 4
+                    let d = (y * w + x) * 4
+                    let a = UInt16(composite[s + 3])
+                    let expect = [2, 1, 0].map { UInt8((UInt16(composite[s + $0]) * a + 127) / 255) } + [UInt8(a)]
+                    if Array(bytes[d..<(d + 4)]) != expect { return XCTFail("tile (\(tile.tx), \(tile.ty)) pixel (\(x), \(y))") }
+                }
+            }
+        }
+    }
+
+    func testTileLayersKeepTheirImagesUntilTheirTileChanges() throws {
+        let model = try makeModel(width: 600, height: 300)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        let view = PaintTilesLayerView()
+        let t = CGAffineTransform(a: 0.5, b: 0, c: 0, d: 0.5, tx: 10, ty: 20)
+        view.update(PaintTilesView(tiles: presenter.tiles(), transform: t, smooth: true))
+        let layers = view.tileLayers
+        XCTAssertEqual(layers.map(\.frame), presenter.tiles().map(\.rect), "one layer per tile, in drawing order")
+        XCTAssertEqual(layers.first?.superlayer?.affineTransform(), t)
+        XCTAssertEqual(layers.first?.magnificationFilter, .linear)
+        let before = layers.map { $0.contents as AnyObject? }
+        _ = try model.controller.paintStroke(PaintStrokeInit(seed: 3), points: [PenPoint(x: 300, y: 100), PenPoint(x: 400, y: 150)])
+        view.update(PaintTilesView(tiles: presenter.tiles(), transform: .identity, smooth: false))
+        XCTAssertTrue(view.tileLayers.elementsEqual(layers) { $0 === $1 }, "the same layers")
+        let changed = zip(before, view.tileLayers).enumerated().filter { $1.0 !== ($1.1.contents as AnyObject?) }.map(\.offset)
+        XCTAssertEqual(changed, [0, 1], "only the painted tile and the one reaching into it get new images")
+        XCTAssertEqual(view.tileLayers.first?.magnificationFilter, .nearest, "zoomed in: square pixels")
+        XCTAssertTrue(zip(view.tileLayers, presenter.tiles()).allSatisfy { ($0.contents as AnyObject?) === $1.image })
     }
 
     func testRefusalsShowAsErrorsAndOtherToolsDoNotPaint() throws {

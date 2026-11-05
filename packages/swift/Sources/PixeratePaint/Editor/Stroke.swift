@@ -109,6 +109,7 @@ final class PaintStrokeSession: PaintTileTarget {
     /// The tiles shown while the stroke is painted (`currentSurface`), and the keys changed since.
     private var shown: OrderedMap<TileKey, Tile>?
     private var stale: [TileKey] = []
+    private var staleSet = Set<TileKey>()
 
     /// Sticker brushes: the stickers the stroke sprayed, or nil.
     var sprayedStickers: [Sticker]? { spray.flatMap { $0.stickers.isEmpty ? nil : $0.stickers } }
@@ -210,26 +211,30 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Impasto strokes: the layer's thick-paint channels with the stroke so far.
     func thickChannels() -> ThickChannels? { thickDriver?.channels() }
 
-    /// Adds raw pen samples (document pixels).
-    func push(_ pts: [PenPoint]) throws {
-        if closed || pts.isEmpty { return }
+    /// Adds raw pen samples (document pixels); returns the rectangles they painted.
+    @discardableResult
+    func push(_ pts: [PenPoint]) throws -> [RasterRect] {
+        if closed || pts.isEmpty { return [] }
         let filtered = initValues.inputFilter.map { pts.map($0) } ?? pts
         points += filtered
         if let w = wetDriver {
-            for r in try w.push(filtered) { bounds = unionRect(bounds, r) }
-            return
+            let rects = try w.push(filtered)
+            for r in rects { bounds = unionRect(bounds, r) }
+            return rects
         }
         try lightTwin?.push(filtered)
         let rects = dry != nil ? dry!.push(filtered) : thickDriver != nil ? thickDriver!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
         update(rects)
         markStale(rects)
+        return rects
     }
 
     /// Notes the tiles `rects` (document pixels) touched, for `currentSurface`.
     private func markStale(_ rects: [RasterRect]) {
         let off = initValues.offset
         for r in rects {
-            for t in tilesInRect(RasterRect(x: r.x - off.x, y: r.y - off.y, width: r.width, height: r.height)) { stale.append(tileKey(t.tx, t.ty)) }
+            // Once per tile: a push lays many dabs on the same tiles.
+            for t in tilesInRect(RasterRect(x: r.x - off.x, y: r.y - off.y, width: r.width, height: r.height)) where staleSet.insert(tileKey(t.tx, t.ty)).inserted { stale.append(tileKey(t.tx, t.ty)) }
         }
     }
 
@@ -245,6 +250,7 @@ final class PaintStrokeSession: PaintTileTarget {
             if let tile = finishTile(t.data, base.channels, base.defaultValue) { tiles.set(key, tile) } else { _ = tiles.delete(key) }
         }
         stale = []
+        staleSet = []
         shown = tiles
         return TiledSurface(channels: base.channels, tiles: tiles, defaultValue: base.defaultValue)
     }
