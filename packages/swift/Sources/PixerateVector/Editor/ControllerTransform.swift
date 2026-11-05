@@ -322,9 +322,10 @@ func distortVectorNode(_ node: VectorNode, _ parentToDoc: VectorMatrix, _ f: @es
         if truthy(node["blend"]?["spine"]) { throw VectorNotPorted("distorting blend spines") }
         return next
     }
-    // not ported yet: gradients follow the map (mapVectorPaint) (#624)
-    if node.fill?.objectValue != nil || node.stroke?.objectValue != nil { throw VectorNotPorted("distorting gradient paints") }
     if !node.isPath { throw VectorNotPorted("distorting \(node.typeName) nodes") }
+    // Gradients in the node's space have their handles mapped; box ones follow the new bounds.
+    if node.fill != nil { next.fill = mapVectorPaint(node.fill, local) }
+    if node.stroke != nil { next.stroke = mapVectorPaint(node.stroke, local) }
     next.subpaths = mapVectorSubpaths(node.subpaths, local, tolerance)
     return next
 }

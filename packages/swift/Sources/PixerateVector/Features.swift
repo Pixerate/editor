@@ -132,24 +132,6 @@ public func transformVectorGradient(_ g: JSONObject, _ m: VectorMatrix) -> JSONO
     return out
 }
 
-/// A mesh or freeform paint moved by `m` (it lives in the node's own space).
-public func transformVectorShadedPaint(_ paint: JSONObject, _ m: VectorMatrix) -> JSONObject {
-    var out = paint
-    let points = paint["points"]?.arrayValue ?? []
-    if isVectorMeshGradient(.object(paint)) {
-        out["points"] = .array(points.map { applyMatrix(m, Vec2(coord($0, "x"), coord($0, "y"))).json })
-    } else {
-        out["points"] = .array(points.map { p in
-            let q = applyMatrix(m, Vec2(coord(p, "x"), coord(p, "y")))
-            var o = p.objectValue ?? JSONObject()
-            o["x"] = .number(q.x)
-            o["y"] = .number(q.y)
-            return .object(o)
-        })
-    }
-    return out
-}
-
 /// A paint after its node's geometry is mapped by `m` (colours unchanged).
 public func transformVectorPaint(_ paint: JSONValue?, _ m: VectorMatrix) -> JSONValue? {
     if isVectorShadedPaint(paint), let o = paint?.objectValue { return .object(transformVectorShadedPaint(o, m)) }

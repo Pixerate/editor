@@ -352,7 +352,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "✅",
         "react": "`useFileImport` + `fileImport`",
         "svelte": "`createFileImport` + `fileImport` prop",
-        "swift": "Planned (#533)"
+        "swift": "Meshes and freeform gradients ✅ headless (`VectorEditorController`: `setMeshGradient`, `setMeshPoint`, `setFreeformGradient`, `addFreeformPoint`, `setFreeformPoint`, `removeFreeformPoint`, `setFreeformLines`, `getShading`; drawn as pattern tiles in render data and SVG export, imported from SVG); the Gradient tool's points on the canvas and the views: Planned (#533)"
       },
       {
         "feature": "Drag-and-Drop File Import at Drop Position",
@@ -1067,7 +1067,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`setGradient`, `setGradientStop`, `vectorGradientSvgDefs`, `expandVectorGradientStops`, `sampleVectorGradientAt`, `getVectorGradientEditor` & `getVectorOverlayRenderData().gradient`",
         "react": "`<VectorGradientEditor>` (in `<VectorStylePanel>`), `<VectorGradientAnnotator>` & `<VectorGradientDefs>`",
         "svelte": "`<VectorGradientEditor>` (in `<VectorStylePanel>`), `<VectorGradientAnnotator>` & `<VectorGradientDefs>`",
-        "swift": "Linear and radial gradients ✅ headless (`VectorEditorController`: `setGradient`; drawn in render data and SVG export, imported from SVG); conic and diamond gradients, stop expansion, stroke modes, the gradient tool and the views: Planned (#533)"
+        "swift": "Every style (linear, radial, conic, reflected, diamond), stop midpoints, smoothness and linear / Oklab interpolation, pad / reflect / repeat, and gradients along or across strokes ✅ headless (`VectorEditorController`: `setGradient`; `vectorGradientSvgDefs`, `vectorStrokeGradientDefs`; drawn in render data and SVG export, imported from SVG); the Gradient tool and the views: Planned (#533)"
       },
       {
         "feature": "Vector Gradient Meshes & Freeform Gradients (meshes of rows × columns smooth Coons patches over a path, their sides Catmull-Rom curves through a lattice of coloured points, colours blended per patch with per-point opacity; freeform gradients of colour points anywhere in a shape with a spread of pure colour, blended by distance, and lines carrying colour along curves; first points placed inside the shape automatically; drawn as SVG pattern tiles (mesh cells, freeform strips each with a gradient) and moved with their paths; Gradient tool editing: drag points, click to add a freeform point, Alt-click to remove; SVG round-trip; agent commands `vector.setMeshGradient`, `vector.setMeshPoint`, `vector.setFreeformGradient`, `vector.addFreeformPoint`, `vector.setFreeformPoint`, `vector.removeFreeformPoint`, `vector.setFreeformLines`, `vector.getShading`)",

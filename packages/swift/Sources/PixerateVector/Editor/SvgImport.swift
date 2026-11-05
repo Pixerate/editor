@@ -780,12 +780,10 @@ private final class SvgImporter {
             return [VectorNode(props: props, children: children)]
         }
         guard let subpaths = shapeOf(child), !subpaths.isEmpty else { return [] }
-        // not ported yet: mesh and freeform fills (sanitizeVectorShadedPaint) (#624)
-        if child.attrs["data-vector-shading"] != nil { throw VectorNotPorted("importing mesh and freeform gradients") }
         var props = JSONObject([("id", .string(idFor(child))), ("type", "path")])
         for (k, v) in meta { props[k] = v }
         props["subpaths"] = .null
-        props["fill"] = child.name == "line" ? .null : paint(s["fill"] ?? "")
+        props["fill"] = child.name == "line" ? .null : (sanitizeVectorShadedPaint(child.attrs["data-vector-shading"].flatMap { try? JSONValue.parse($0) }).map { .object($0) } ?? paint(s["fill"] ?? ""))
         props["stroke"] = paint(s["stroke"] ?? "")
         strokeStyle(s, into: &props)
         return [try placed(withOpacities(VectorNode(props: props, subpaths: subpaths), s), m)]
