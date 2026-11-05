@@ -26,7 +26,8 @@ private let ENABLED_FOR: Set<String> = [
 /**
  * Palette and agent commands for a vector editor (`createVectorCommands`): list, select, add
  * shapes and paths, style, transform, align, arrange, group, boolean operations, Pathfinder, path
- * editing, appearance, blends, envelopes, symmetry and SVG export. Register them in a
+ * editing, appearance, blends, envelopes, symmetry, symbols, constraints, frames, pages,
+ * connectors, snapping options, perspective grids and SVG export. Register them in a
  * `CommandRegistry` whose context is the controller
  * and whose history is `controller.history`; agents get them through `createCommandToolProvider`.
  * Failures throw sentences, which the registry returns as `{ ok: false, code: 'failed', message }`.
@@ -478,6 +479,7 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     vectorBlendRuns(&r)
     vectorSymbolRuns(&r)
     vectorConstraintRuns(&r)
+    vectorFrameRuns(&r)
     return r
 }
 
@@ -1137,5 +1139,187 @@ private func vectorSymbolRuns(_ r: inout [String: VectorCommandRun]) {
         let id = c.symbolEdit?.symbolId
         c.exitSymbolEdit()
         return .object(JSONObject([("symbolId", id.map { .string($0) } ?? .null)]))
+    }
+}
+
+// MARK: - Frames, pages, connectors, snapping and perspective
+
+/// A frame as `vector.listFrames` lists it, or a failure (`frameResult`).
+private func frameResult(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let f = try c.getFrames().first(where: { $0["id"] == .string(id) }) else { throw fail("\"\(id)\" is not a frame.") }
+    return .object(f)
+}
+
+/// A connector as `vector.listConnectors` lists it, or a failure (`connectorResult`).
+private func connectorResult(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let x = c.getConnectors().first(where: { $0["id"] == .string(id) }) else { throw fail("\"\(id)\" is not a connector.") }
+    return .object(x)
+}
+
+/// The snap options as `vector.getSnapOptions` returns them (`snapResult`).
+private func snapResult(_ c: VectorEditorController) -> JSONValue {
+    let s = c.snap
+    return .object(JSONObject([
+        ("grid", s["grid"] ?? .null), ("objects", s["objects"] ?? .null), ("guides", s["guides"] ?? .null), ("threshold", s["threshold"] ?? .null),
+        ("angles", s["angles"] ?? .array([])), ("tracking", .bool(s["tracking"] != .bool(false))), ("trackPolar", .bool(truthy(s["trackPolar"]))),
+        ("polarRelative", .bool(truthy(s["polarRelative"]))),
+    ]))
+}
+
+/// The grid as `vector.getPerspective` returns it (`perspectiveResult`).
+private func perspectiveResult(_ c: VectorEditorController) -> JSONValue {
+    let grid = c.getPerspective()
+    return .object(JSONObject([
+        ("perspective", grid.map { .object($0) } ?? .null),
+        ("planes", .array((grid.map(vectorPerspectivePlanes) ?? []).map { .string($0) })),
+        ("drawingOn", c.perspectivePlane.map { .string($0) } ?? .null),
+    ]))
+}
+
+private func vectorFrameRuns(_ r: inout [String: VectorCommandRun]) {
+    // Frames
+
+    r["vector.listFrames"] = { c, _ in .object(JSONObject([("frames", .array(try c.getFrames().map { .object($0) }))])) }
+    r["vector.addFrame"] = { c, params in
+        let p = VectorParams(params)
+        let made = try c.addFrame(x: p.num("x") ?? .nan, y: p.num("y") ?? .nan, width: p.num("width") ?? .nan, height: p.num("height") ?? .nan, name: p.str("name"), fill: params["fill"], clip: p.bool("clip"), adopt: p.bool("adopt") ?? false)
+        try check(made.result)
+        return try frameResult(c, made.id!)
+    }
+    r["vector.frameSelection"] = { c, params in
+        let p = VectorParams(params)
+        let made = try c.frameSelection(ids: try targetIds(c, p), padding: p.num("padding"), name: p.str("name"), fill: params["fill"], clip: p.bool("clip"))
+        try check(made.result)
+        return try frameResult(c, made.id!)
+    }
+    r["vector.setFrame"] = { c, params in
+        var patch = params
+        patch["ids"] = Optional<JSONValue>.none
+        if patch.isEmpty { throw fail("Pass at least one of x, y, width, height, fill, clip.") }
+        let list = VectorParams(params).strings("ids")
+        let before = Set(try c.getFrames().compactMap { $0["id"]?.stringValue })
+        try check(try c.setFrame(patch, ids: list))
+        let targets = try list ?? c.getFrames().filter { f in
+            guard let id = f["id"]?.stringValue, before.contains(id) else { return false }
+            return c.selection.contains(id) || (f["children"]?.arrayValue ?? []).contains { ch in ch["id"]?.stringValue.map { c.selection.contains($0) } ?? false }
+        }.compactMap { $0["id"]?.stringValue }
+        return .object(JSONObject([("frames", .array(try targets.map { try frameResult(c, $0) }))]))
+    }
+    r["vector.setResizing"] = { c, params in
+        let p = VectorParams(params)
+        let list = try targetIds(c, p)
+        let h = p.str("horizontal").flatMap { $0.isEmpty ? nil : $0 }
+        let v = p.str("vertical").flatMap { $0.isEmpty ? nil : $0 }
+        try check(c.setResizing(horizontal: h, vertical: v, ids: list))
+        return .object(JSONObject([("nodes", .array(list.map { id in
+            let n = c.getNode(id)
+            return .object(JSONObject([("id", .string(id)), ("horizontal", n?["resizing"]?["horizontal"] ?? "left"), ("vertical", n?["resizing"]?["vertical"] ?? "top")]))
+        }))]))
+    }
+    r["vector.exportFrameSvg"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        let f = try frameResult(c, id)
+        let svg = try c.frameToSvg(id, precision: p.int("precision")) ?? ""
+        return .object(JSONObject([("svg", .string(svg)), ("width", f["frame"]?["width"] ?? .null), ("height", f["frame"]?["height"] ?? .null)]))
+    }
+
+    // Pages
+
+    r["vector.listPages"] = { c, _ in .object(c.getPages()) }
+    r["vector.addPage"] = { c, params in
+        let p = VectorParams(params)
+        let made = c.addPage(name: p.str("name"), masterId: params["masterId"], after: p.str("after"))
+        try check(made.result)
+        var o = JSONObject([("id", .string(made.id!))])
+        for (k, v) in c.getPages() { o[k] = v }
+        return .object(o)
+    }
+    r["vector.addMasterPage"] = { c, params in
+        let made = c.addMasterPage(name: VectorParams(params).str("name"), assignTo: params["assignTo"])
+        try check(made.result)
+        var o = JSONObject([("id", .string(made.id!))])
+        for (k, v) in c.getPages() { o[k] = v }
+        return .object(o)
+    }
+    r["vector.setPageMaster"] = { c, params in
+        let p = VectorParams(params)
+        try check(c.setPageMaster(p.str("masterId"), ids: p.strings("ids")))
+        return .object(c.getPages())
+    }
+    r["vector.movePage"] = { c, params in
+        let p = VectorParams(params)
+        try check(c.movePage(p.str("id") ?? "", p.num("index") ?? .nan).result)
+        return .object(c.getPages())
+    }
+    r["vector.goToPage"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        // `canvasWidth && canvasHeight`: both given and neither 0.
+        let size = p.num("canvasWidth").flatMap { w in p.num("canvasHeight").flatMap { h in w != 0 && h != 0 && !w.isNaN && !h.isNaN ? (width: w, height: h) : nil } }
+        try check(try c.goToPage(id, size: size))
+        return .object(JSONObject([("id", .string(id))]))
+    }
+
+    // Connectors
+
+    r["vector.listConnectors"] = { c, _ in .object(JSONObject([("connectors", .array(c.getConnectors().map { .object($0) }))])) }
+    r["vector.listConnectionSites"] = { c, params in
+        let id = VectorParams(params).str("id") ?? ""
+        guard let sites = try c.getConnectionSites(id) else { throw fail("There is no node \"\(id)\".") }
+        return .object(JSONObject([("sites", .array(sites.map(\.json)))]))
+    }
+    r["vector.connect"] = { c, params in
+        let made = try c.addConnector(params)
+        try check(made.result)
+        return try connectorResult(c, made.id!)
+    }
+    r["vector.setConnector"] = { c, params in
+        var patch = params
+        patch["ids"] = Optional<JSONValue>.none
+        if patch.isEmpty { throw fail("Pass at least one of start, end, route, radius, gap.") }
+        let targets = try targetIds(c, VectorParams(params))
+        try check(try c.setConnector(patch, ids: targets))
+        return .object(JSONObject([("connectors", .array(try targets.map { try connectorResult(c, $0) }))]))
+    }
+
+    // Snapping
+
+    r["vector.getSnapOptions"] = { c, _ in snapResult(c) }
+    r["vector.setSnapOptions"] = { c, params in
+        if params.isEmpty { throw fail("Pass at least one option.") }
+        var rest = params
+        rest["polarIncrement"] = Optional<JSONValue>.none
+        rest["additionalAngles"] = Optional<JSONValue>.none
+        if let angles = rest["angles"]?.arrayValue, angles.contains(where: { !($0.numberValue?.isFinite ?? false) }) { throw fail("angles must be numbers (degrees).") }
+        let additional = params["additionalAngles"]?.arrayValue
+        if additional != nil && params["polarIncrement"] == nil { throw fail("additionalAngles go with polarIncrement.") }
+        if rest["angles"] == nil, let increment = params["polarIncrement"]?.numberValue {
+            rest["angles"] = .array(vectorPolarAngles(increment, (additional ?? []).compactMap(\.numberValue)).map { .number($0) })
+        }
+        c.setSnap(rest)
+        return snapResult(c)
+    }
+
+    // Perspective
+
+    r["vector.getPerspective"] = { c, _ in perspectiveResult(c) }
+    r["vector.setPerspective"] = { c, params in
+        try check(c.setPerspective(.object(params)).result)
+        return perspectiveResult(c)
+    }
+    r["vector.removePerspective"] = { c, _ in
+        try check(c.setPerspective(nil).result)
+        return .object(JSONObject([("perspective", .null)]))
+    }
+    r["vector.setPerspectivePlane"] = { c, params in
+        try check(c.setPerspectivePlane(VectorParams(params).str("plane")))
+        return perspectiveResult(c)
+    }
+    r["vector.attachToPerspective"] = { c, params in
+        let p = VectorParams(params)
+        let made = try c.attachToPerspective(p.str("plane") ?? "", ids: p.strings("ids"))
+        try check(made.result)
+        return .object(JSONObject([("ids", idList(made.ids))]))
     }
 }

@@ -6,7 +6,8 @@ import PixerateRaster
 // The vector editor's headless state (`VectorEditorController` in `vector/controller.ts`): the
 // document, selection, tool, history and editing options the commands work on. It is ported
 // method by method as the commands need it; pointer handling, the viewport and the features
-// that are not ported yet (#624) are left out.
+// that are not ported yet (#624) are left out; the viewport only moves through `setViewport`,
+// `zoomToFit` and `goToPage`.
 //
 // The TS controller replaces its document object on every change and compares documents with
 // `===`. The Swift document is a value, so "the document changed" is `!=` here: an edit that
@@ -107,9 +108,10 @@ private let DEFAULT_VECTOR_PATH_EDIT = JSONObject([
     ("distortMode", "smudge"), ("distortSize", 20), ("distortStrength", 0.5), ("pencilPressure", "pen"), ("fillGap", 0),
 ])
 
-/// Smart guides and the grid (`DEFAULT_VECTOR_SNAP`).
+/// Smart guides, the grid, construction angles and tracking (`DEFAULT_VECTOR_SNAP`).
 private let DEFAULT_VECTOR_SNAP = JSONObject([
-    ("grid", 0), ("objects", true), ("guides", true), ("threshold", 6), ("angles", .array([])),
+    ("grid", 0), ("objects", true), ("guides", true), ("threshold", 5), ("angles", .array(VECTOR_CONSTRUCTION_ANGLES.map { .number($0) })),
+    ("tracking", true), ("trackPolar", false), ("polarRelative", false),
 ])
 
 nonisolated(unsafe) private var idCounter = 0
@@ -139,7 +141,10 @@ public final class VectorEditorController {
     var snap: JSONObject
     var editing: JSONObject
     let hitRadius: Double
-    let zoom: Double = 1
+    /// The view onto the document (`viewport`): only `goToPage`, `setViewport` and `zoomToFit` move it.
+    public internal(set) var viewport = VectorViewport()
+    /// The view's zoom: pick distances are screen pixels divided by it.
+    var zoom: Double { viewport.zoom }
     let createId: () -> String
     /// The side of a brush's light / dark default colour brushstrokes take (`light` or `dark`).
     var colorScheme = "light"
@@ -159,6 +164,10 @@ public final class VectorEditorController {
     var lastSolved: VectorDocument?
     /// What the last solve could not satisfy or interpret, or nil when all hold (`state.constraintIssues`).
     public internal(set) var constraintIssues: VectorConstraintIssues?
+    /// The plane `setPerspectivePlane` chose (`perspectivePlane`), whether or not the grid still has it.
+    var drawingPlane: String?
+    /// The route new connectors get (the Connector tool and `addConnector`).
+    var connectorRoute = "straight"
     /// Bumped on every change listeners hear about.
     public private(set) var revision = 0
     private var listeners: [(id: UUID, fn: () -> Void)] = []
@@ -216,9 +225,9 @@ public final class VectorEditorController {
     /// The document with its derived parts brought up to date (`refreshed`): shorthand fills and
     /// strokes go to the top layer of their stack, blends regenerate their steps, in isolation mode
     /// the edited symbol's art follows the document, instances carry their symbols' art, and lenses
-    /// have their constraints solved, and lenses show what is below them. Connectors and master
-    /// pages are made only by commands that are not ported yet (#624), so there is nothing else to
-    /// refresh. A blend whose steps cannot be made (a key the port cannot draw) keeps the steps it has.
+    /// have their constraints solved, connectors follow what they are glued to, pages draw their
+    /// master page's art and lenses show what is below them. A blend whose steps cannot be made (a
+    /// key the port cannot draw) keeps the steps it has.
     func refreshed(_ d: VectorDocument) -> VectorDocument {
         let shorthand = normalizeVectorTree(d.nodes, prefer: "shorthand")
         let nodes = (try? refreshVectorBlends(shorthand, blendCache)) ?? shorthand
@@ -234,8 +243,13 @@ public final class VectorEditorController {
                 return c
             }
         }
-        // Instances draw their symbols' art; lenses show what is below them (after the constraints have moved it).
-        return resolveVectorLenses(solved(resolveVectorSymbols(out)))
+        // Instances draw their symbols' art. Connectors follow what they are glued to (after the
+        // constraints have moved it), pages draw their master page's art, and lenses show what is
+        // below them (after connectors have moved).
+        var routed = solved(resolveVectorSymbols(out))
+        let rerouted = rerouteVectorConnectors(routed.nodes)
+        if rerouted != routed.nodes { routed.nodes = rerouted }
+        return resolveVectorLenses(resolveVectorMasterPages(routed))
     }
 
     /// `d` with its constraints solved (geometry edited since the last solve moving least) and
@@ -460,7 +474,7 @@ public final class VectorEditorController {
     // MARK: Document
 
     /// The document as saved (`toJSON`): a copy.
-    public func toJSON() throws -> VectorDocument { try cloneVectorDocument(stripVectorLensViews(stripVectorSymbolArt(storedDocument()))) }
+    public func toJSON() throws -> VectorDocument { try cloneVectorDocument(stripVectorMasterArt(stripVectorLensViews(stripVectorSymbolArt(storedDocument())))) }
 
     /// The `pixerate.editor-document` envelope of kind `vector` (`createVectorEditorDocument`).
     public func editorDocument() throws -> JSONValue {
