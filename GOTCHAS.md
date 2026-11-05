@@ -3864,11 +3864,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: V8's `Math.sin` / `Math.cos` are fdlibm ports compiled per CPU, and clang fuses multiply-adds on arm64 but not on x64, so results can differ in the last bits. Anything stored straight from trig (orient-to-spine transforms, rotations) is then machine-dependent.
 - **Solution / Workaround**: The TS replay tests compare with `conformanceValuesMatch` (numbers equal within a relative `CONFORMANCE_NUMBER_TOLERANCE`, 1e-9), as the Swift runner always has; on a mismatch they fall back to `toEqual` to show the diff. Recordings stay exact. Strings are still compared exactly, so text that formats such a number (SVG path data, messages) should round it, as `exportSvg`'s `precision` does.
 
-### [swift] PixerateMarkdown's Growth Checks Remeasure While the Ratio Looks Superlinear
-- **Issue / Symptom**: `MarkdownSpecTests.testParseTimeGrowth` failed on the iOS simulator job of unrelated PRs: "growth angle brackets 5k 15.8 ms 20k 171.2 ms ×10.8", over the limit of 10. The same parse is ×4.0 locally, in both debug and release builds.
-- **Root Cause**: The shared CI simulator can stall for the length of a whole measurement round, so even the best of five alternating runs can catch the large input in a slow stretch.
-- **Solution / Workaround**: `TimingBudget.growth` measures up to four rounds while the ratio is above 5 and keeps the best times. A linear parse settles near ×4; a quadratic one stays near ×16 in every round, so it still fails. As with the TS `measureGrowth`, never fix such a flake by raising the limit alone.
-
+### [swift] PixerateMarkdown's Timing Checks Use Thread CPU Time, Not the Wall Clock
+- **Issue / Symptom**: `MarkdownSpecTests.testParseTimeGrowth` kept failing on the iOS simulator job: "angle brackets ×10.8", then, after remeasuring up to four rounds, "open brackets 5k 4.3 ms 20k 93.9 ms ×22.0" (×4.0 locally in debug and release).
+- **Root Cause**: Not a stall but CPU contention: other suites run alongside on the simulator, and the wet-paint tests step tiles on every core. A 90 ms parse kept being interrupted while a 4 ms one slipped through between interruptions, and wall-clock time counted the interruptions, so even the best of 20 runs was ~5× slow.
+- **Solution / Workaround**: Every timing in the checks uses `TimingBudget.cpuMilliseconds`, the calling thread's CPU time (`CLOCK_THREAD_CPUTIME_ID`), which leaves out time other threads and processes held the CPU. With twice as many busy processes as cores the ratios stay ×4.0–4.1. Time any growth or budget check this way; never raise the limit to fix such a flake.
 ### [core/brushes] Brush Image Sources Are `source:` Stamp Refs, Not Stickers
 
 - **Issue / Symptom**: An image tip (`tip.stamps: ['source:leaf']`) painted round, or `create_brush` refused it with "can't load sticker", or objects marks dropped it.
