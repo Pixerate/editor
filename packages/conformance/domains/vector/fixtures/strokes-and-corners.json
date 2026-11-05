@@ -376,7 +376,9 @@
                 "name": "Chalk",
                 "size": 18
               }
-            ]
+            ],
+            "colorLocked": false,
+            "colorScheme": "light"
           }
         }
       }
@@ -474,6 +476,44 @@
                 "paint": "#7c3aed"
               }
             ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setColorScheme",
+        "params": {
+          "scheme": "dark"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setColorScheme",
+          "ok": true,
+          "result": {
+            "colorLocked": false,
+            "colorScheme": "dark"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setColorLocked",
+        "params": {
+          "locked": true
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setColorLocked",
+          "ok": true,
+          "result": {
+            "colorLocked": true,
+            "colorScheme": "dark"
           }
         }
       }
