@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.199.2
+
+### Patch Changes
+
+- 9641f05: Fix `FloatingHorizontalScrollbar` keeping a stale `left` and `width` when its target resizes without a window or target event. It now re-measures through a `ResizeObserver` on `targetElement`, which follows the prop and disconnects on destroy.
+
 ## 0.199.1
 
 ### Patch Changes
