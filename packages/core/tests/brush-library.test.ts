@@ -243,9 +243,9 @@ describe('brush library tools', () => {
 
   it('registers the read and write tools, and preview_brush only with a renderer', () => {
     const names = (o?: Parameters<typeof setup>[0]) => setup(o).registry.listTools().tools.map((t) => t.name).sort();
-    expect(names()).toEqual(['check_brush', 'create_brush', 'describe_brush', 'duplicate_brush', 'export_brushes', 'import_brushes', 'list_brush_presets', 'remove_brush', 'update_brush']);
+    expect(names()).toEqual(['add_brush_source', 'check_brush', 'create_brush', 'describe_brush', 'duplicate_brush', 'export_brushes', 'import_brushes', 'list_brush_presets', 'list_brush_sources', 'remove_brush', 'update_brush']);
     expect(names({ renderPreview: () => ({ data: '', mimeType: 'image/png' }) })).toContain('preview_brush');
-    expect(names({ readOnly: true })).toEqual(['check_brush', 'describe_brush', 'export_brushes', 'list_brush_presets']);
+    expect(names({ readOnly: true })).toEqual(['check_brush', 'describe_brush', 'export_brushes', 'list_brush_presets', 'list_brush_sources']);
   });
 
   it('lists what the host renders, with summaries', async () => {

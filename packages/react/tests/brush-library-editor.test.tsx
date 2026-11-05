@@ -2,7 +2,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BRUSH_PRESETS, CANVAS_PROFILE, createBrushLibrary, type Brush } from '@pixerate/editor/brushes';
+import { BRUSH_PRESETS, CANVAS_PROFILE, createBrushLibrary, PAINT_PROFILE, type Brush } from '@pixerate/editor/brushes';
+import { base64ToBytes, pngDataUrl } from '@pixerate/editor/raster';
 import { ImageEditorController } from '@pixerate/editor/image-editor';
 import { VectorEditorController } from '@pixerate/editor/vector';
 import { BrushEditor, BrushLibraryEditor } from '../src/brushes';
@@ -130,5 +131,50 @@ describe('the shared brush editor (React)', () => {
     await press(byText('Save'));
     await act(settle);
     expect(stroke().spec.tip.size).toBe(4);
+  });
+});
+
+describe('image tips and grain in the brush editor (React)', () => {
+  /** A 12 px PNG file of a dark disc on white, as a person would pick it. */
+  const pngFile = () => {
+    const d = new Uint8ClampedArray(12 * 12 * 4);
+    for (let i = 0; i < 144; i++) {
+      const ink = Math.hypot((i % 12) - 5.5, Math.floor(i / 12) - 5.5) < 4;
+      d.set(ink ? [20, 20, 20, 255] : [255, 255, 255, 255], i * 4);
+    }
+    return new File([base64ToBytes(pngDataUrl(12, 12, d).split(',')[1])], 'Charcoal dab.png', { type: 'image/png' });
+  };
+
+  it('adds a picked image as a source, makes it the tip, and offers grain', async () => {
+    const lib = createBrushLibrary();
+    await lib.save({ ...ink, id: 'my-ink', name: 'My ink' });
+    await act(async () => {
+      root.render(<BrushLibraryEditor library={lib} brushId="my-ink" profile={PAINT_PROFILE} />);
+      await settle();
+    });
+    const grain = q<HTMLSelectElement>('select[aria-label="Tip grain"]');
+    expect([...grain.options].map((o) => o.value)).toEqual(expect.arrayContaining(['', 'rough', 'canvas']));
+    setValue(grain, 'canvas');
+    await act(settle);
+    expect(q('[aria-label="Grain depth"]')).toBeTruthy();
+
+    setValue(q<HTMLSelectElement>('select[aria-label="Brush tip"]'), 'stamp');
+    await act(settle);
+    const input = q<HTMLInputElement>('input[type="file"][aria-label="Add image tip…"]');
+    Object.defineProperty(input, 'files', { value: [pngFile()], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await settle();
+      await settle();
+    });
+    expect((await lib.listSources()).map((s) => [s.id, s.name, s.origin])).toEqual([['charcoal-dab', 'Charcoal dab', 'Charcoal dab.png']]);
+    const chip = [...container.querySelectorAll('[aria-label="Brush stamps"] button')].find((b) => b.textContent === 'Charcoal dab')!;
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    // The image is offered as grain too.
+    expect([...q<HTMLSelectElement>('select[aria-label="Tip grain"]').options].map((o) => o.value)).toContain('source:charcoal-dab');
+    // Canvas paints neither: no grain or image picker there.
+    act(() => root.render(<BrushEditor brush={ink} profile={CANVAS_PROFILE} onChange={() => {}} onAddSource={async () => 'source:x'} />));
+    expect(q('select[aria-label="Tip grain"]')).toBeNull();
+    expect(q('input[type="file"]')).toBeNull();
   });
 });

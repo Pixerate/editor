@@ -107,7 +107,9 @@ import {
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
 import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
 import { normalizeStickerUpdate, stickerAt as hitSticker, stickerRect, stickerStamp, stickerSurface, type Sticker } from './stickers';
-import { defaultStickerRasterizer, StickerArtCache, type StickerRasterizer } from './sticker-art';
+import { defaultStickerRasterizer, StickerArtCache, type StickerArtLookup, type StickerRasterizer } from './sticker-art';
+import { BrushSourceArtCache, engineBrushSourceIds } from './brush-source-art';
+import { isBrushSourceRef, readBrushSource } from '../brushes/sources';
 import { editorStickers } from '../stickers/editor';
 import { editorStampOf, normalizeStickerRef, StickersSlot } from '../stickers/helpers';
 import type { StickerProvider, StickerRef, StickerVariant } from '../stickers/types';
@@ -598,6 +600,10 @@ export class PaintEditorController {
   /** The sticker library slot (see `setStickersProvider`). */
   readonly stickers = new StickersSlot(editorStickers());
   private readonly stickerArt = new StickerArtCache();
+  /** Image sources strokes draw with: the brush library's and the open painting's (saved with it). */
+  readonly brushSources = new BrushSourceArtCache();
+  /** Art for stamp tips and tip grain: image sources from `brushSources`, stickers from the sticker library. */
+  readonly stampArt: StickerArtLookup = (ref, variant) => (isBrushSourceRef(ref) ? this.brushSources.get(ref) : this.stickerArt.get(ref, variant));
   private readonly rasterizeSticker: StickerRasterizer;
   private readonly effectsRenderer = new PaintEffectsRenderer();
   private paperEffectNodeCache: ImageNode | null = null;
@@ -2089,7 +2095,10 @@ export class PaintEditorController {
 
   /** Reads the library again (after a change anywhere it is shared). */
   private refreshBrushes(): Promise<void> {
-    const run = this.brushLibrary.list().then((entries) => {
+    const library = this.brushLibrary;
+    const sources = typeof library.listSources === 'function' ? library.listSources().catch(() => []) : Promise.resolve([]);
+    const run = Promise.all([library.list(), sources]).then(([entries, list]) => {
+      this.brushSources.set(list);
       this.brushEntries = entries.map((e) => libraryBrush(e.brush, e.builtin));
       this.library = null;
       const pending = this.pendingBrushId;
@@ -2256,7 +2265,7 @@ export class PaintEditorController {
   /** A thumbnail of a brush: a test stroke on the current paper. */
   brushThumbnail(id: string, options: { width?: number; height?: number; color?: string } = {}): BrushThumbnail {
     const b = id === this.brush.id ? this.brush : this.requireBrush(id);
-    return renderBrushThumbnail(b, { paper: this.doc.paper, width: options.width, height: options.height, color: options.color ? parseColor(options.color) : this.color });
+    return renderBrushThumbnail(b, { paper: this.doc.paper, width: options.width, height: options.height, color: options.color ? parseColor(options.color) : this.color, stampArt: this.stampArt });
   }
 
   // --- Colour --------------------------------------------------------------------
@@ -2591,7 +2600,7 @@ export class PaintEditorController {
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get, variant: (ref) => this.stickerArt.variantFor(ref, this.colorScheme === 'dark') } : undefined,
-      stampArt: this.stickerArt.get,
+      stampArt: this.stampArt,
       paint: effect ? null : this.strokeGradient(init, brush, color),
       effect,
     });
@@ -2998,6 +3007,7 @@ export class PaintEditorController {
     if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
     const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions });
     target.brushEntries = this.brushEntries;
+    target.brushSources.set(this.brushSources.all());
     const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
     target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
@@ -3483,6 +3493,12 @@ export class PaintEditorController {
     for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) if (findLayer(this.doc.layers, id)) liveStrokes[id] = list.map(strokeToJSON) as unknown as RecordedStroke[];
     if (Object.keys(liveStrokes).length) ext.liveStrokes = liveStrokes;
     else delete ext.liveStrokes;
+    // The image sources the strokes draw with, bytes included, so replays and repaints match anywhere.
+    const strokes = [...this.doc.strokes, ...Object.values(this.doc.liveStrokes ?? {}).flat()];
+    const sourceIds = [...new Set(strokes.flatMap((st) => engineBrushSourceIds(st.brush)))];
+    const sources = sourceIds.map((id) => this.brushSources.source(id)).filter((x) => x !== undefined);
+    if (sources.length) ext.brushSources = sources.map((x) => ({ ...x }));
+    else delete ext.brushSources;
     const light: Record<string, unknown> = {};
     for (const [id, t] of Object.entries(this.doc.light ?? {})) {
       if (!findLayer(this.doc.layers, id)) continue;
@@ -3507,6 +3523,7 @@ export class PaintEditorController {
 
   /** Reads `layerChannels` and `lighting` from loaded extensions into the document. */
   private readThick(state: PaintDocumentState, ext: PaintDocumentExtensions, problems: string[]): PaintDocumentState {
+    if (Array.isArray(ext.brushSources)) this.brushSources.set(ext.brushSources.map((x, i) => readBrushSource(x, `brushSources[${i}]`, problems)).filter((x) => x !== null));
     this.lighting = normalizeLighting((ext.lighting as Partial<PaintLighting>) ?? {}, DEFAULT_LIGHTING);
     this.litCaches.clear();
     if (ext.stickers && typeof ext.stickers === 'object') {
@@ -3629,6 +3646,7 @@ export class PaintEditorController {
     delete this.extensions.lighting;
     delete this.extensions.stickers;
     delete this.extensions.liveStrokes;
+    delete this.extensions.brushSources;
     delete this.extensions.effectLayers;
     delete this.extensions.paperEffect;
     this.viewCompositor.clear();

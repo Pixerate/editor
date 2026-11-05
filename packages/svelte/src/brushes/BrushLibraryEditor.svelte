@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { brushPreviewColours, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
+  import { addBrushSourceFromFile, brushPreviewColours, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer, type BrushSource } from '@pixerate/editor/brushes';
   import { button } from './styles.js';
   import BrushEditor from './BrushEditor.svelte';
 
@@ -32,6 +32,20 @@
   let draft = $state<Brush | null>(null);
   let status = $state<string | null>(null);
   let preview = $state<string | null>(null);
+  let sources = $state<BrushSource[]>([]);
+
+  // The library's image sources, for image tips and grain (kept current as sources are added).
+  $effect(() => {
+    const lib = library;
+    let live = true;
+    const read = () => void lib.listSources().then((list) => live && (sources = list), () => undefined);
+    read();
+    const off = lib.subscribe(read);
+    return () => {
+      live = false;
+      off();
+    };
+  });
 
   $effect(() => {
     const lib = library;
@@ -91,7 +105,7 @@
   BrushEditor on a brush library for one host: loads the brush, edits a draft and saves it with saveBrushEdit. A saved
   brush is changed in place, a built-in is saved as a copy, "Save brush" saves under a new name, and "New brush" starts
   from the current one with only what the host uses. Facets the host can't use are kept on save; a new brush must pass
-  the host's check.
+  the host's check. Images added for an image tip or grain are stored in the library as sources.
 -->
 {#if draft}
   <div class={`flex flex-col gap-2 text-xs text-slate-200 ${className}`} data-testid="brush-library-editor">
@@ -114,6 +128,8 @@
       onsave={original ? () => save() : undefined}
       saveLabel={builtin ? 'Save a copy' : 'Save'}
       onsaveas={(name) => save(name)}
+      {sources}
+      onaddsource={async (file) => (await addBrushSourceFromFile(library, file)).ref}
     />
     {#if errors.length}
       <ul class="text-[11px] text-rose-400" data-testid="brush-library-editor-issues">

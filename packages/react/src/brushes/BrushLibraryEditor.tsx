@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { brushPreviewColours, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
+import { addBrushSourceFromFile, brushPreviewColours, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer, type BrushSource } from '@pixerate/editor/brushes';
 import { button } from '../paint-editor/shared';
 import { BrushEditor } from './BrushEditor';
 
@@ -28,7 +28,7 @@ export interface BrushLibraryEditorProps {
 
 /**
  * `BrushEditor` on a brush library for one host: loads the brush, edits a draft and saves it with
- * `saveBrushEdit`. A saved brush is changed in place, a built-in is saved as a copy, "Save brush"
+ * `saveBrushEdit`. Images added for an image tip or grain are stored in the library as sources. A saved brush is changed in place, a built-in is saved as a copy, "Save brush"
  * saves under a new name, and "New brush" starts from the current one with only what the host
  * uses. Facets the host can't use are kept on save; a new brush must pass the host's check.
  */
@@ -38,6 +38,19 @@ export const BrushLibraryEditor: React.FC<BrushLibraryEditorProps> = ({ library,
   const [draft, setDraft] = useState<Brush | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [sources, setSources] = useState<BrushSource[]>([]);
+
+  // The library's image sources, for image tips and grain (kept current as sources are added).
+  useEffect(() => {
+    let live = true;
+    const read = () => void library.listSources().then((list) => live && setSources(list), () => undefined);
+    read();
+    const off = library.subscribe(read);
+    return () => {
+      live = false;
+      off();
+    };
+  }, [library]);
 
   useEffect(() => {
     let live = true;
@@ -121,6 +134,8 @@ export const BrushLibraryEditor: React.FC<BrushLibraryEditorProps> = ({ library,
         onSave={original ? () => save() : undefined}
         saveLabel={builtin ? 'Save a copy' : 'Save'}
         onSaveAs={(name) => save(name)}
+        sources={sources}
+        onAddSource={async (file) => (await addBrushSourceFromFile(library, file)).ref}
       />
       {errors.length > 0 && (
         <ul className="text-[11px] text-rose-400" data-testid="brush-library-editor-issues">

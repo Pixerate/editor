@@ -1,0 +1,408 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "brush-tips-and-grain",
+  "description": "Image brush sources, image stamp tips with tip grain, several dabs per step and flips, painted and saved with the painting.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "skip": {
+    "swift": "Image brush sources, stamp and image tips, tip grain, dab count and flip are not ported yet (#646)"
+  },
+  "steps": [
+    {
+      "tool": "add_brush_source",
+      "arguments": {
+        "name": "Dry brush scan",
+        "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAUUlEQVR4Ab2QSwoAIAhEKzqF9z+bh3BTFBQqGrrp7WT8zVQiGiVB8yWb9EDnBQAIERFFvbgedLPFWrBfijQfPpv24Ob3BSuNg9buS9bQM9YoEx19H6lk0NoNAAAAAElFTkSuQmCC",
+        "licence": "Made for this scenario; CC0.",
+        "origin": "brush-tips-and-grain"
+      },
+      "expect": {
+        "result": {
+          "height": 12,
+          "id": "dry-brush-scan",
+          "problems": [
+            "channel auto read the marks from the dark parts (dark marks on a light background)."
+          ],
+          "ref": "source:dry-brush-scan",
+          "replaced": false,
+          "width": 12
+        }
+      }
+    },
+    {
+      "tool": "list_brush_sources",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "sources": [
+            {
+              "height": 12,
+              "id": "dry-brush-scan",
+              "licence": "Made for this scenario; CC0.",
+              "name": "Dry brush scan",
+              "origin": "brush-tips-and-grain",
+              "ref": "source:dry-brush-scan",
+              "usedBy": [],
+              "width": 12
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "dry-scan",
+        "name": "Dry scan",
+        "kind": "mark",
+        "medium": "dry",
+        "tip": {
+          "shape": "stamp",
+          "size": 10,
+          "spacing": 0.3,
+          "stamps": [
+            "source:dry-brush-scan"
+          ],
+          "grain": {
+            "source": "rough",
+            "depth": 0.6,
+            "mode": "moving"
+          }
+        },
+        "dynamics": {
+          "count": 2,
+          "flip": "xy",
+          "angleJitter": 0.3,
+          "scatter": 0.2
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "angleJitter": 0.3,
+              "count": 2,
+              "flip": "xy",
+              "scatter": 0.2
+            },
+            "id": "dry-scan",
+            "kind": "mark",
+            "medium": "dry",
+            "name": "Dry scan",
+            "tip": {
+              "grain": {
+                "depth": 0.6,
+                "mode": "moving",
+                "source": "rough"
+              },
+              "shape": "stamp",
+              "size": 10,
+              "spacing": 0.3,
+              "stamps": [
+                "source:dry-brush-scan"
+              ]
+            }
+          },
+          "engine": "dab",
+          "id": "dry-scan",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "missing-source",
+        "name": "Missing source",
+        "kind": "mark",
+        "tip": {
+          "shape": "stamp",
+          "stamps": [
+            "source:dry-brush"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Paint editor can't use this brush: tip.stamps: There is no image source \"dry-brush\" in the brush library. Closest: dry-brush-scan. Add it with add_brush_source, or use a ref list_brush_sources lists. (check_brush lists every issue; nothing was saved.)"
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 8,
+            "pressure": 0.4
+          },
+          {
+            "x": 16,
+            "y": 14,
+            "pressure": 0.8
+          },
+          {
+            "x": 30,
+            "y": 20,
+            "pressure": 0.9
+          },
+          {
+            "x": 44,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "brushId": "dry-scan",
+        "color": "#203060",
+        "seed": 120
+      },
+      "pixels": {
+        "paper": false
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 29,
+            "width": 51,
+            "x": -1,
+            "y": 3
+          },
+          "dabs": 44,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:14m-1hh22p4t35a"
+            },
+            "brushSources": [
+              {
+                "height": 12,
+                "id": "dry-brush-scan",
+                "image": "<binary>",
+                "licence": "Made for this scenario; CC0.",
+                "name": "Dry brush scan",
+                "origin": "brush-tips-and-grain",
+                "width": 12
+              }
+            ],
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 5
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "angleJitter": 0.3,
+                    "count": 2,
+                    "flip": "xy",
+                    "scatter": 0.2
+                  },
+                  "id": "dry-scan",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "Dry scan",
+                  "tip": {
+                    "grain": {
+                      "contrast": 1,
+                      "depth": 0.6,
+                      "invert": false,
+                      "mode": "moving",
+                      "scale": 1,
+                      "source": "rough"
+                    },
+                    "shape": "stamp",
+                    "size": 10,
+                    "spacing": 0.3,
+                    "stamps": [
+                      "source:dry-brush-scan"
+                    ]
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#203060",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.4,
+                    "x": 4,
+                    "y": 8
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 16,
+                    "y": 14
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 30,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.5,
+                    "x": 44,
+                    "y": 26
+                  }
+                ],
+                "seed": 120
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/brush-tips-and-grain.5.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "88678f8fafbdde3f88bf0af460358005eef10d1f69f12ece510de398dfe6f357",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_brush_sources",
+      "arguments": {
+        "text": "scan"
+      },
+      "expect": {
+        "result": {
+          "sources": [
+            {
+              "height": 12,
+              "id": "dry-brush-scan",
+              "licence": "Made for this scenario; CC0.",
+              "name": "Dry brush scan",
+              "origin": "brush-tips-and-grain",
+              "ref": "source:dry-brush-scan",
+              "usedBy": [
+                "dry-scan"
+              ],
+              "width": 12
+            }
+          ],
+          "total": 1
+        }
+      }
+    }
+  ]
+}
