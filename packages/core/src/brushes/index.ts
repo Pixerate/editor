@@ -83,3 +83,18 @@ export {
   type BrushLibraryGroup,
 } from './ui';
 export { createBrushLibraryToolProvider, createBrushLibraryTools, type BrushLibraryToolProviderOptions, type BrushPreviewImage, type BrushPreviewRenderer } from './tools';
+export {
+  BRUSH_PACK_FORMATS,
+  brushPackFormat,
+  BrushPackError,
+  importBrushFile,
+  importBrushPack,
+  MAX_BRUSH_PACK_BYTES,
+  MAX_PACK_BRUSHES,
+  readBrushPack,
+  type BrushPack,
+  type BrushPackFormat,
+  type ImportBrushPackResult,
+  type ReadBrushPackOptions,
+} from './import/pack';
+export { AbrError, readAbr, type AbrFile, type AbrTip } from './import/abr';

@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.268.0",
+  "version": "0.268.1",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -373,6 +373,115 @@
         "types": "./dist/bridge/index.d.cts",
         "default": "./dist/bridge/index.cjs"
       }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "grammar": [
+        "./dist/grammar/index.d.ts"
+      ],
+      "extensions": [
+        "./dist/extensions/index.d.ts"
+      ],
+      "serializers": [
+        "./dist/serializers/index.d.ts"
+      ],
+      "spreadsheet": [
+        "./dist/spreadsheet/index.d.ts"
+      ],
+      "history": [
+        "./dist/history/index.d.ts"
+      ],
+      "animation": [
+        "./dist/animation/index.d.ts"
+      ],
+      "animation-editor": [
+        "./dist/animation-editor/index.d.ts"
+      ],
+      "video-editor": [
+        "./dist/video-editor/index.d.ts"
+      ],
+      "canvas": [
+        "./dist/canvas/index.d.ts"
+      ],
+      "agent": [
+        "./dist/agent/index.d.ts"
+      ],
+      "tools": [
+        "./dist/tools/index.d.ts"
+      ],
+      "raster": [
+        "./dist/raster/index.d.ts"
+      ],
+      "cms": [
+        "./dist/cms/index.d.ts"
+      ],
+      "paint": [
+        "./dist/paint/index.d.ts"
+      ],
+      "image-editor": [
+        "./dist/image-editor/index.d.ts"
+      ],
+      "image-editor/selection-worker": [
+        "./dist/image-editor/selection-worker.d.ts"
+      ],
+      "paint-editor": [
+        "./dist/paint-editor/index.d.ts"
+      ],
+      "brushes": [
+        "./dist/brushes/index.d.ts"
+      ],
+      "commands": [
+        "./dist/commands/index.d.ts"
+      ],
+      "persistence": [
+        "./dist/persistence/index.d.ts"
+      ],
+      "generation": [
+        "./dist/generation/index.d.ts"
+      ],
+      "compare": [
+        "./dist/compare/index.d.ts"
+      ],
+      "tokens": [
+        "./dist/tokens/index.d.ts"
+      ],
+      "color": [
+        "./dist/color/index.d.ts"
+      ],
+      "typography": [
+        "./dist/typography/index.d.ts"
+      ],
+      "gradient": [
+        "./dist/gradient/index.d.ts"
+      ],
+      "export": [
+        "./dist/export/index.d.ts"
+      ],
+      "parameters": [
+        "./dist/parameters/index.d.ts"
+      ],
+      "vector": [
+        "./dist/vector/index.d.ts"
+      ],
+      "chart": [
+        "./dist/chart/index.d.ts"
+      ],
+      "chart-maps": [
+        "./dist/chart-maps/index.d.ts"
+      ],
+      "effects": [
+        "./dist/effects/index.d.ts"
+      ],
+      "stickers": [
+        "./dist/stickers/index.d.ts"
+      ],
+      "diagram": [
+        "./dist/diagram/index.d.ts"
+      ],
+      "bridge": [
+        "./dist/bridge/index.d.ts"
+      ]
     }
   },
   "bin": {

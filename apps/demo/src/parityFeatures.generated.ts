@@ -102,38 +102,45 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#546)"
       },
       {
+        "feature": "Prompt Editor (plain-text editor: echo-safe controlled `content`, milestones, live `isEditing` / `placeholder` / `className`)",
+        "core": "`createPromptEditorOptions` & `syncPromptEditor`",
+        "react": "`usePromptEditor`",
+        "svelte": "`usePromptEditor`",
+        "swift": "Planned (#546)"
+      },
+      {
         "feature": "Plain Text Clipboard & Linebreak Parser",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Live Animated Gradient Text",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Slash Command Trigger (`/command`)",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Template Autocomplete (`{{`)",
         "core": "✅",
         "react": "✅",
-        "svelte": "Via core¹",
+        "svelte": "✅",
         "swift": "Planned (#546)"
       },
       {
         "feature": "Loading Placeholder (`loadingNode`: SVG spinner in `currentColor`, `role=\"status\"` with a label, custom indicator or component)",
         "core": "`LoadingNode.configure({ label, renderIndicator, nodeView })`",
         "react": "`usePromptEditor({ loadingIndicator, loadingLabel })` & `createReactLoadingNodeView`",
-        "svelte": "`createSvelteLoadingNodeView`",
+        "svelte": "`usePromptEditor({ loadingIndicator, loadingLabel })` & `createSvelteLoadingNodeView`",
         "swift": "Planned (#546)"
       },
       {
@@ -1998,6 +2005,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#646): stamp and image tips, tip grain, count and flip need the stamp tip engine (#545)"
       },
       {
+        "feature": "Brush Pack Import (Photoshop `.abr` versions 1, 2, 6, 7 and 10 and Procreate `.brush` / `.brushset` packs people already own: sampled `.abr` tips and Procreate shapes become image sources and stamp-tip brushes, Procreate grain becomes tip grain, computed `.abr` tips round or flat brushes; preset names and spacing where the file has them; licence and terms files and the licence given are kept on every source; what isn't mapped (dynamics, pencil curves, patterns, dual brushes, wet mixing) is reported as `unsupported`; untrusted files read defensively with size limits; one library import; Import in the paint brush panel and the demo's Brushes tab; `import_brush_pack` agent tool)",
+        "core": "`importBrushPack`, `readBrushPack`, `importBrushFile`, `readAbr`",
+        "react": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
+        "svelte": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
+        "swift": "Planned (#646)"
+      },
+      {
         "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
         "core": "`getStrokes`, `replayStrokes`, `varyStroke`",
         "react": "Via core (`replayStrokes`); `useAgentToolProvider`",
@@ -2624,6 +2638,4 @@ export const PARITY_AREAS: ParityArea[] = [
   }
 ];
 
-export const PARITY_NOTES: string[] = [
-  "¹ Svelte doesn't have a prompt-editor equivalent of React's `usePromptEditor` yet. Configure the core extensions (`GradientText`, `TemplateSuggestions`, `SlashCommands`) and pass them to `EditableTextNodeEditor` via `extensions`, or use `createEditor({ plainTextMode: true })` from `@pixerate/editor`."
-];
+export const PARITY_NOTES: string[] = [];

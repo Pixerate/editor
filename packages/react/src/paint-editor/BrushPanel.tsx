@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-import { addBrushSourceFromFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+import { addBrushSourceFromFile, importBrushFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
 import { BrushEditor } from '../brushes/BrushEditor';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
 import { PaintGradientEditor } from './PaintGradientEditor';
@@ -21,7 +21,8 @@ export interface BrushPanelProps {
  * grouped by medium and variety, tools apart) and the active brush in the `BrushEditor`: its
  * facets with a live preview, and "Save brush" into the editor's brush library. The paint
  * editor adds the brush's own gradient, the sticker stamps, what the brush carries (Load /
- * Clean), and import and export of library files. Images picked for an image tip or grain are
+ * Clean), and import and export of library files; import also reads brush packs (`.abr`,
+ * `.brush`, `.brushset`). Images picked for an image tip or grain are
  * added to the brush library as sources.
  */
 export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWidth = 112, thumbnailHeight = 32, className }) => {
@@ -119,12 +120,12 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
         <input
           ref={fileRef}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.abr,.brush,.brushset,application/json"
           aria-label="Import brushes"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) attempt(async () => controller.importBrushes(JSON.parse(await f.text())));
+            if (f) attempt(async () => (/\.json$/i.test(f.name) ? controller.importBrushes(JSON.parse(await f.text())) : importBrushFile(controller.brushLibrary, f)));
             e.target.value = '';
           }}
         />

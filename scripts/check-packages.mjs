@@ -104,11 +104,21 @@ for (const { pkg, target } of packages) {
     ...targets(pkg.exports),
     ...targets(pkg.bin ?? {}),
     ...targets(pkg.types ?? []),
+    ...targets(pkg.typesVersions ?? {}),
   ];
   for (const file of new Set(files)) {
     if (!fs.existsSync(path.join(target, file)))
       fail(
         `${pkg.name}: ${file} is referenced by package.json but not in the tarball`,
+      );
+  }
+  const tv = pkg.typesVersions?.["*"] ?? {};
+  for (const key of Object.keys(pkg.exports)) {
+    if (key === "." || key === "./package.json") continue;
+    const subpath = key.slice(2);
+    if (!Array.isArray(tv[subpath]) || !tv[subpath].length)
+      fail(
+        `${pkg.name}: exports["${key}"] is missing from typesVersions["*"]["${subpath}"]`,
       );
   }
 }
@@ -153,6 +163,18 @@ const consumers = [
     packages: packages.filter(({ pkg }) =>
       targets(pkg.exports).some((file) => file.endsWith(".cjs")),
     ),
+  },
+  {
+    name: "node10",
+    file: "consumer-node10.ts",
+    // `esModuleInterop` is what `tsc --init` writes, and our declarations use React's default
+    // export (`import React from "react"`), which node10 only allows with it.
+    options: {
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeJs,
+      esModuleInterop: true,
+    },
+    packages: packages,
   },
 ];
 const ours = (fileName) =>
