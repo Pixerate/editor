@@ -6,9 +6,6 @@
     "width": 48,
     "height": 32
   },
-  "skip": {
-    "swift": "Brush pack import, image sources and stamp tips are not ported yet (#646)"
-  },
   "steps": [
     {
       "tool": "import_brush_pack",

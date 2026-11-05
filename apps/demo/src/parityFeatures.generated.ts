@@ -2009,7 +2009,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`importBrushPack`, `readBrushPack`, `importBrushFile`, `readAbr`",
         "react": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
         "svelte": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
-        "swift": "Planned (#646)"
+        "swift": "✅ (`importBrushPack`, `readBrushPack`, `readAbr`; `import_brush_pack`); the Import button: Planned (#533)"
       },
       {
         "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
