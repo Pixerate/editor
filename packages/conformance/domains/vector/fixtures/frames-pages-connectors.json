@@ -6,6 +6,9 @@
     "width": 400,
     "height": 300
   },
+  "skip": {
+    "swift": "Frames, pages, connectors, snapping options and perspective grids are not ported yet (#624)."
+  },
   "steps": [
     {
       "tool": "run_command",

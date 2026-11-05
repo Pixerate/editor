@@ -110,7 +110,7 @@ let PI = Double.pi
 
 /// `Array.prototype.sort` with a comparator: stable (V8's TimSort keeps equal elements in
 /// order), and an element moves before another only when `compare` is positive.
-func jsSorted<T>(_ items: [T], _ compare: (T, T) -> Double) -> [T] {
+public func jsSorted<T>(_ items: [T], _ compare: (T, T) -> Double) -> [T] {
     if items.count < 2 { return items }
     var a = items
     var b = items
