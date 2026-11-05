@@ -976,28 +976,28 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`acquireTrackingPoint`, `clearTracking`, `placePenPoint`, `addPathByDimensions`, `vectorPolarAngles`, `vectorTrackingPaths`, `snapFrom(…, tracking)` & `getVectorOverlayRenderData().trackingPoints` / `typedEntry`",
         "react": "`<VectorCanvas>` tracking markers and typed entry, `<VectorToolbar>` polar picker",
         "svelte": "`<VectorCanvas>` tracking markers and typed entry, `<VectorToolbar>` polar picker",
-        "swift": "Planned (#533)"
+        "swift": "Typed dimensions ✅ headless (`VectorEditorController`, `vector.addPathByDimensions`); tracking and the canvas: Planned (#533)"
       },
       {
         "feature": "Vector Transforms (move, resize and rotate handles with a selection box that stays rotated, set rotation, flip, align, distribute, arrange, group / ungroup, duplicate, copy / paste)",
         "core": "`transform`, `setRotation`, `align`, `distribute`, `arrange`, `group`",
         "react": "`<VectorToolbar>`",
         "svelte": "`<VectorToolbar>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController`: move, scale, rotate, set rotation, align, distribute, arrange, group / ungroup, layer moves; `createVectorCommands`); flip, duplicate, copy / paste, the selection box and the views: Planned (#533)"
       },
       {
         "feature": "Vector Path Editing (move points and handles, add / delete points, convert corner ↔ smooth, close / open, reverse) and Boolean Operations",
         "core": "`insertAnchorAt`, `convertAnchors`, `booleanOp`",
         "react": "`<VectorCanvas>` & `<VectorToolbar>`",
         "svelte": "`<VectorCanvas>` & `<VectorToolbar>`",
-        "swift": "Planned (#533)"
+        "swift": "Point moves, segment bending, point deletion and booleans ✅ headless (`VectorEditorController`; `vector.moveAnchor`, `vector.bendSegment`, `vector.deleteAnchors`, `vector.boolean`); handles, adding and converting points, close / open, reverse and the canvas: Planned (#533)"
       },
       {
         "feature": "Vector Path Clean-Up & Cutting (shape-keeping point deletion, segment bending, Curvature point moves, Join, Average, Remove Redundant Points, Smooth, Scissors, gap-free Knife, Eraser; all in each node's own space)",
         "core": "`deleteAnchors`, `bendSegment`, `joinPaths`, `knife`, `erase`, `setEditing` & `pathEdit` / `pathCut` helpers",
         "react": "`<VectorCanvas>` strokes & `<VectorToolbar>` path-editing group",
         "svelte": "`<VectorCanvas>` strokes & `<VectorToolbar>` path-editing group",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController`; `vector.join`, `vector.average`, `vector.removeRedundantPoints`, `vector.smooth`, `vector.cut`, `vector.knife`, `vector.erase`); the tools on the canvas: Planned (#533)"
       },
       {
         "feature": "Vector Live Corners & Stroke Options (per-anchor corner radius drawn round / inverted / chamfered at render, squircle corner smoothing (Figma / iOS style, any corner angle), hit-test, bounds, boolean, outline and export time; rectangle, polygon and star tools keep editable corners; draggable corner widgets in the direct tool; centre / inside / outside stroke alignment; arrowheads with tip / extend alignment and per-end scale; Outline Stroke)",
@@ -1018,7 +1018,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`pathfinder`, `shapeBuilder`, `fillRegion`, `PlanarMap`, `cutOutPiece`, `hatchPath` & `getVectorOverlayRenderData().builder`",
         "react": "`<VectorCanvas>` hatched face highlights & `<VectorToolbar>` Pathfinder group",
         "svelte": "`<VectorCanvas>` hatched face highlights & `<VectorToolbar>` Pathfinder group",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless for filled shapes (`VectorEditorController`; `vector.pathfinder`, `vector.shapeBuilderFaces`, `vector.shapeBuilder`, `vector.fillRegion`); stroke areas as operands and the tools: Planned (#533)"
       },
       {
         "feature": "Vector Blends & Path Morphing (live blend groups regenerated whenever a key changes; specified steps, specified distance or smooth colour; replace spine with orient to spine; Expand and Release; Blend tool (J) with clicked start anchors; morphs with arc-length anchor insertion, start and winding chosen by fit and shape context, Procrustes in-betweens that turn rather than collapse, holes growing from points, OKLab colours, resampled gradients, width profiles and rigid transforms; path keyframes for animation; SVG round-trip)",
@@ -1053,14 +1053,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`booleanOp(op, { live })`, `foldVectorBooleanOperands` & `vectorEnteredGroups`",
         "react": "`<VectorToolbar>` Live toggle",
         "svelte": "`<VectorToolbar>` Live toggle",
-        "swift": "Planned (#533)"
+        "swift": "Live boolean groups with operand operations, drawn and bounded as their fold ✅ headless (`VectorEditorController`, `vector.boolean` with `live`); the prefix cache, hit-testing and the views: Planned (#533)"
       },
       {
         "feature": "Vector Distort & Envelopes (Free Distort mode of the selection box: corners distort in perspective by an exact homography, Shift+Alt+Mod for symmetric perspective, Mod-drag a side to skew; `distort(corners)` and `skew(ax, ay)` on rotated nodes too; adaptive curve mapping within a tolerance, refitted to fewer anchors; live envelope effect with Photoshop's fifteen warp presets — bend, horizontal / vertical distortion, orientation — or an editable bicubic mesh of rows × columns split exactly with de Casteljau; Envelope tool (U) dragging anchors, handles and the surface, one undo step per gesture; Make with Top Object, Release, Expand; user-space gradient handles mapped; agent commands `vector.distort`, `vector.skew`, `vector.envelope`)",
         "core": "`setFreeDistort`, `distort`, `skew`, `envelope`, `makeEnvelopeWithTopObject`, `releaseEnvelope`, `mapVectorSubpaths`, `vectorHomography`, `vectorWarpPresetMesh`, `getVectorEnvelopePanel` & `getVectorOverlayRenderData().envelope` / `.distort`",
         "react": "`<VectorEnvelopePanel>` (in `<VectorStylePanel>`), `<VectorToolbar>` Distort toggle & `<VectorCanvas>` mesh / quad overlay",
         "svelte": "`<VectorEnvelopePanel>` (in `<VectorStylePanel>`), `<VectorToolbar>` Distort toggle & `<VectorCanvas>` mesh / quad overlay",
-        "swift": "Planned (#533)"
+        "swift": "Free Distort and skew ✅ headless (`VectorEditorController`; `vector.distort`, `vector.skew`); envelopes and the selection box: Planned (#533)"
       },
       {
         "feature": "Vector Gradients (linear, radial with focal point / focal radius and aspect, conic, reflected and diamond; explicit start / end / aspect frames in the box or node space with the angle / centre shorthand; stop midpoints, smoothness and sRGB / linear-light / Oklab interpolation exported as extra stops; pad / reflect / repeat; within, along or across strokes; conic, diamond and stroke modes as SVG patterns; Gradient tool (G) with start, end, radius, aspect and focal handles, click-to-add, drag and drag-off-to-delete stops and midpoints, one undo step per gesture; gradients follow scale and skew; SVG import of fx / fy / fr / spreadMethod / gradientTransform / userSpaceOnUse and lossless round-trip)",
@@ -1172,7 +1172,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`distortBrush`, `distortVectorPath`, `vectorDistortDabMap`, `setEditing({ distortMode, distortSize, distortStrength })` & `getVectorOverlayRenderData().brush`",
         "react": "`<VectorToolbar>` Distort Brush options & `<VectorCanvas>` brush circle",
         "svelte": "`<VectorToolbar>` Distort Brush options & `<VectorCanvas>` brush circle",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController`; `vector.smudgeBrush`, `vector.twirlBrush`, `vector.attractBrush`, `vector.repelBrush`, `vector.roughenBrush`); the Distort Brush tool: Planned (#533)"
       },
       {
         "feature": "Vector Perspective Drawing (CorelDRAW-style perspective grids: 1, 2 or 3 vanishing points and an origin, with floor and wall (or front) planes; the Rectangle, Ellipse, Polygon and Star tools draw on the active plane, their drag box taken on it so shapes recede; Attach lays flat art onto a plane, read from the origin; grid lines, vanishing points and origin on the canvas, the active plane stronger; agent commands `vector.getPerspective`, `vector.setPerspective`, `vector.removePerspective`, `vector.setPerspectivePlane`, `vector.attachToPerspective`)",
@@ -1228,7 +1228,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands`",
         "react": "`useVectorCommands`",
         "svelte": "`useVectorCommands`",
-        "swift": "Planned (#533)"
+        "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata and enablement; those not ported yet fail, #624) and SVG export of plain paths and groups ✅; SVG import and the rest: Planned (#533)"
       },
       {
         "feature": "Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools)",

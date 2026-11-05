@@ -249,9 +249,7 @@ public func nodeMatrix(_ node: VectorNode) -> VectorMatrix { node.transform ?? I
 /// effects applied (`effects: false`: the stored path only).
 public func vectorPathWorldBezier(_ node: VectorNode, _ parent: VectorMatrix = IDENTITY_MATRIX, effects: Bool = true) throws -> BezierPath {
     let m = multiplyMatrices(nodeMatrix(node), parent)
-    // not ported yet: path effects and lenses (vectorAppearanceOutline) (#624)
-    if effects && hasOwnVectorAppearance(node) { throw VectorNotPorted("the drawn outline of \(node.typeName) nodes with a live appearance (vectorAppearanceOutline)") }
-    let path = subpathsToBezier(node.subpaths)
+    let path = !effects || !hasOwnVectorAppearance(node) ? subpathsToBezier(node.subpaths) : try vectorAppearanceOutline(node)
     return isIdentityMatrix(m) ? path : transformBezierPath(.commands(path), m.tuple)
 }
 
@@ -270,13 +268,10 @@ public func vectorNodeBounds(_ node: VectorNode, _ parent: VectorMatrix = IDENTI
     }
     // not ported yet: mask groups (vectorAppearanceShapes) (#624)
     if isVectorMaskActive(node) { throw VectorNotPorted("bounds of mask groups (vectorAppearanceShapes)") }
-    // not ported yet: live appearances (expandVectorAppearance: effects, live booleans, symmetry, lenses, text, instances) (#624)
-    if hasOwnVectorAppearance(node) { throw VectorNotPorted("bounds of \(node.typeName) nodes with a live appearance (expandVectorAppearance)") }
+    // Live booleans as drawn (`expandVectorAppearance` throws for the live features not ported yet).
+    let node = try expandVectorAppearance(node)
     if node.isGroup {
         let m = multiplyMatrices(nodeMatrix(node), parent)
-        // The TS expands the children first, so a child with a live appearance (a frame
-        // included) is bounded as drawn.
-        if node.children.contains(where: hasOwnVectorAppearance) { throw VectorNotPorted("bounds of groups holding nodes with a live appearance (expandVectorAppearance)") }
         return unionBounds(try node.children.map { try vectorNodeBounds($0, m) })
     }
     guard node.isPath else { throw VectorNotPorted("bounds of \(node.typeName) nodes") }

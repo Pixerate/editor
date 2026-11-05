@@ -6,6 +6,9 @@
     "width": 300,
     "height": 200
   },
+  "skip": {
+    "swift": "Gradients, paint stacks, filters, path effects, masks and lenses are not ported yet (#624)."
+  },
   "steps": [
     {
       "tool": "run_command",

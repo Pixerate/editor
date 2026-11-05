@@ -6,6 +6,9 @@
     "width": 200,
     "height": 200
   },
+  "skip": {
+    "swift": "SVG import, PDF and Lottie export and import, and image tracing are not ported yet (#624)."
+  },
   "steps": [
     {
       "tool": "run_command",

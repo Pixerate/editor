@@ -215,17 +215,19 @@ export function vectorContracts(options: { effects: EffectProvider }): Record<st
 	const files: Record<string, unknown> = {
 		'document.schema.json': { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'document.schema.json', ...VECTOR_DOCUMENT_JSON_SCHEMA },
 		'tools.json': { providers },
-		// The commands agents run with run_command: `shortcut` is as written (`Mod` is ⌘ / Ctrl).
+		// The commands agents run with run_command: `shortcut` is as written (`Mod` is ⌘ / Ctrl). A
+		// command without `params` takes none (run_command refuses any); `undoable` and `readOnly`
+		// are the spec's own flags (unset is false), as the registry reads them.
 		'commands.json': specs.map((s) => ({
 			id: s.id,
 			label: s.label,
 			...(s.group ? { group: s.group } : {}),
 			...(s.keywords?.length ? { keywords: s.keywords } : {}),
 			...(s.description ? { description: s.description } : {}),
-			params: s.params ?? { type: 'object', properties: {}, additionalProperties: false },
+			...(s.params ? { params: s.params } : {}),
 			...(s.shortcut !== undefined ? { shortcut: s.shortcut } : {}),
 			...(s.scope ? { scope: s.scope } : {}),
-			undoable: s.undoable !== false,
+			undoable: !!s.undoable,
 			readOnly: !!s.readOnly,
 			...(s.hidden ? { hidden: true } : {})
 		})),

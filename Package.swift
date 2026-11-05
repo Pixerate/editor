@@ -55,10 +55,11 @@ let package = Package(
         // `polygonBoolean` in the TS core): Bézier maths, curve booleans, stroke outlines, the planar
         // map, Pathfinder and curve fitting, bit-exact with the TS. Foundation only.
         .target(name: "PixerateGeometry", dependencies: ["PixerateCore", "PixerateRaster"], path: "packages/swift/Sources/PixerateGeometry", swiftSettings: settings),
-        // The vector editor's document model and core geometry (`vector/types.ts`, `vector/geometry.ts`,
-        // `vector/corners.ts` in the TS core): JSON round trips that keep key order and unknown
-        // members, anchors ↔ Bézier, bounds, transforms, anchor edits and shape builders. Foundation only.
-        .target(name: "PixerateVector", dependencies: ["PixerateCore", "PixerateGeometry", "PixerateRaster"], path: "packages/swift/Sources/PixerateVector", swiftSettings: settings),
+        // The vector editor (`vector/` in the TS core): the document model and core geometry (JSON round
+        // trips that keep key order and unknown members, anchors ↔ Bézier, bounds, transforms, anchor
+        // edits, shape builders), the controller, its commands (metadata from the contracts) and the
+        // conformance host. Foundation only.
+        .target(name: "PixerateVector", dependencies: ["PixerateCore", "PixerateContracts", "PixerateGeometry", "PixerateRaster", "PixerateConformance"], path: "packages/swift/Sources/PixerateVector", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
@@ -96,7 +97,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PixerateVectorTests",
-            dependencies: ["PixerateVector", "PixerateGeometry", "PixerateCore", "PixerateRaster", "PixerateContracts"],
+            dependencies: ["PixerateVector", "PixerateGeometry", "PixerateCore", "PixerateRaster", "PixerateContracts", "PixerateConformance"],
             path: "packages/swift/Tests/PixerateVectorTests",
             resources: [.copy("Fixtures")],
             swiftSettings: settings
