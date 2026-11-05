@@ -155,6 +155,10 @@ public final class VectorEditorController {
     var symmetryTarget: String?
     /// Isolation mode: `doc` holds a symbol's art (`editSymbol`), or nil.
     var symbolEdit: VectorSymbolEditContext?
+    /// The document the constraints were last solved for (`lastSolved`): what differs from it was just edited.
+    var lastSolved: VectorDocument?
+    /// What the last solve could not satisfy or interpret, or nil when all hold (`state.constraintIssues`).
+    public internal(set) var constraintIssues: VectorConstraintIssues?
     /// Bumped on every change listeners hear about.
     public private(set) var revision = 0
     private var listeners: [(id: UUID, fn: () -> Void)] = []
@@ -212,9 +216,9 @@ public final class VectorEditorController {
     /// The document with its derived parts brought up to date (`refreshed`): shorthand fills and
     /// strokes go to the top layer of their stack, blends regenerate their steps, in isolation mode
     /// the edited symbol's art follows the document, instances carry their symbols' art, and lenses
-    /// show what is below them. Constraints, connectors and master pages are made only by commands
-    /// that are not ported yet (#624), so there is nothing else to refresh. A blend whose steps
-    /// cannot be made (a key the port cannot draw) keeps the steps it has.
+    /// have their constraints solved, and lenses show what is below them. Connectors and master
+    /// pages are made only by commands that are not ported yet (#624), so there is nothing else to
+    /// refresh. A blend whose steps cannot be made (a key the port cannot draw) keeps the steps it has.
     func refreshed(_ d: VectorDocument) -> VectorDocument {
         let shorthand = normalizeVectorTree(d.nodes, prefer: "shorthand")
         let nodes = (try? refreshVectorBlends(shorthand, blendCache)) ?? shorthand
@@ -230,8 +234,27 @@ public final class VectorEditorController {
                 return c
             }
         }
-        // Instances draw their symbols' art.
-        return resolveVectorLenses(resolveVectorSymbols(out))
+        // Instances draw their symbols' art; lenses show what is below them (after the constraints have moved it).
+        return resolveVectorLenses(solved(resolveVectorSymbols(out)))
+    }
+
+    /// `d` with its constraints solved (geometry edited since the last solve moving least) and
+    /// constraints on deleted anchors removed (`solved`). The TS skips the solve when the nodes,
+    /// constraints and parameters are the objects it last solved; the Swift compares their values.
+    func solved(_ d: VectorDocument) -> VectorDocument {
+        if (d["constraints"]?.arrayValue ?? []).isEmpty {
+            constraintIssues = nil
+            lastSolved = d
+            return d
+        }
+        if let last = lastSolved, d.nodes == last.nodes, d["constraints"] == last["constraints"], d["parameters"] == last["parameters"] { return d }
+        let purged = purgeVectorConstraints(d).document
+        let r = solveVectorConstraints(purged, lastSolved)
+        var unique: [String] = []
+        for id in r.conflicts where !unique.contains(id) { unique.append(id) }
+        constraintIssues = r.conflicts.isEmpty && r.skipped.isEmpty ? nil : VectorConstraintIssues(conflicts: unique, skipped: r.skipped.map { VectorConstraintIssues.Skipped(id: $0.id, message: $0.message) })
+        lastSolved = r.document
+        return r.document
     }
 
     func notify() {

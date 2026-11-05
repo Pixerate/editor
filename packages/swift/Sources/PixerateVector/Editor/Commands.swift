@@ -477,7 +477,62 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     vectorShadingRuns(&r)
     vectorBlendRuns(&r)
     vectorSymbolRuns(&r)
+    vectorConstraintRuns(&r)
     return r
+}
+
+// MARK: - Constraints
+
+/// The parametric summary (`constraintsSummary`): constraints with their evaluated value and
+/// whether they hold, parameters, degrees of freedom and the last solve's issues.
+private func constraintsSummary(_ c: VectorEditorController) -> JSONValue {
+    let doc = c.document
+    let residuals = vectorConstraintResiduals(doc)
+    let env = vectorConstraintEnv(doc)
+    let scale = JS.max(JS.max(doc.width, doc.height), 1)
+    let constraints: [JSONValue] = c.getConstraints().map { k in
+        var current: Double?
+        if VECTOR_DIMENSIONAL_KINDS.contains(k.kind) { current = (try? vectorConstraintValue(env, k)).map(round2) }
+        var o = k.json
+        if let current { o["evaluated"] = .number(current) }
+        let r = residuals[k.id] ?? nil
+        o["satisfied"] = .bool(r.map { $0 <= 1e-6 * scale } ?? false)
+        return .object(o)
+    }
+    return .object(JSONObject([
+        ("constraints", .array(constraints)), ("parameters", .array(c.getParameters())), ("dof", c.getConstraintDof().json), ("issues", c.constraintIssues?.json ?? .null),
+    ]))
+}
+
+private func vectorConstraintRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.listConstraints"] = { c, _ in constraintsSummary(c) }
+    r["vector.addConstraint"] = { c, params in
+        let res = c.addConstraint(params)
+        if !res.ok { throw fail(res.message ?? "The command failed.") }
+        let constraint = c.getConstraints().first { $0.id == res.id }
+        var o = JSONObject()
+        if let id = res.id { o["id"] = .string(id) }
+        if let constraint { o["constraint"] = .object(constraint.json) }
+        return .object(o)
+    }
+    r["vector.removeConstraint"] = { c, params in
+        let ids = VectorParams(params).strings("ids") ?? []
+        try check(c.removeConstraints(ids))
+        return .object(JSONObject([("ids", idList(ids))]))
+    }
+    r["vector.setConstraintValue"] = { c, params in
+        let res = c.setConstraintValue(VectorParams(params).str("key") ?? "", params["value"])
+        if !res.ok { throw fail(res.message ?? "The command failed.") }
+        return constraintsSummary(c)
+    }
+    r["vector.autoConstrain"] = { c, params in
+        let p = VectorParams(params)
+        let res = try c.autoConstrain(ids: p.strings("ids"), VectorInferOptions(distanceTolerance: p.num("distanceTolerance"), angleTolerance: p.num("angleTolerance"), kinds: p.strings("kinds")))
+        if !res.ok { throw fail(res.message ?? "The command failed.") }
+        var o = JSONObject()
+        if let ids = res.ids { o["ids"] = idList(ids) }
+        return .object(o)
+    }
 }
 
 // MARK: - Blends, envelopes and symmetry
