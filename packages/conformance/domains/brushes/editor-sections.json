@@ -1463,6 +1463,23 @@
         "controls": [
           {
             "kind": "choice",
+            "path": "kind",
+            "label": "Kind",
+            "ariaLabel": "Brush kind",
+            "options": [
+              {
+                "value": "mark",
+                "label": "Lays a material"
+              },
+              {
+                "value": "tool",
+                "label": "Works on paint"
+              }
+            ],
+            "value": "mark"
+          },
+          {
+            "kind": "choice",
             "path": "medium",
             "label": "Medium",
             "ariaLabel": "Brush medium",
@@ -1815,6 +1832,23 @@
         "id": "behaviour",
         "title": "Paint behaviour",
         "controls": [
+          {
+            "kind": "choice",
+            "path": "behaviour.surface",
+            "label": "Surface",
+            "ariaLabel": "Brush surface",
+            "options": [
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "wet",
+                "label": "Wet (flows)"
+              }
+            ],
+            "value": "dry"
+          },
           {
             "kind": "slider",
             "path": "behaviour.grain",
@@ -3337,6 +3371,23 @@
         "controls": [
           {
             "kind": "choice",
+            "path": "kind",
+            "label": "Kind",
+            "ariaLabel": "Brush kind",
+            "options": [
+              {
+                "value": "mark",
+                "label": "Lays a material"
+              },
+              {
+                "value": "tool",
+                "label": "Works on paint"
+              }
+            ],
+            "value": "mark"
+          },
+          {
+            "kind": "choice",
             "path": "medium",
             "label": "Medium",
             "ariaLabel": "Brush medium",
@@ -3689,6 +3740,23 @@
         "id": "behaviour",
         "title": "Paint behaviour",
         "controls": [
+          {
+            "kind": "choice",
+            "path": "behaviour.surface",
+            "label": "Surface",
+            "ariaLabel": "Brush surface",
+            "options": [
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "wet",
+                "label": "Wet (flows)"
+              }
+            ],
+            "value": "dry"
+          },
           {
             "kind": "slider",
             "path": "behaviour.grain",
@@ -4813,6 +4881,23 @@
         "controls": [
           {
             "kind": "choice",
+            "path": "kind",
+            "label": "Kind",
+            "ariaLabel": "Brush kind",
+            "options": [
+              {
+                "value": "mark",
+                "label": "Lays a material"
+              },
+              {
+                "value": "tool",
+                "label": "Works on paint"
+              }
+            ],
+            "value": "mark"
+          },
+          {
+            "kind": "choice",
             "path": "medium",
             "label": "Medium",
             "ariaLabel": "Brush medium",
@@ -5033,6 +5118,23 @@
         "title": "Wet brush",
         "controls": [
           {
+            "kind": "choice",
+            "path": "behaviour.surface",
+            "label": "Surface",
+            "ariaLabel": "Brush surface",
+            "options": [
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "wet",
+                "label": "Wet (flows)"
+              }
+            ],
+            "value": "wet"
+          },
+          {
             "kind": "slider",
             "path": "behaviour.grain",
             "label": "Grain",
@@ -5041,6 +5143,104 @@
             "max": 1,
             "step": 0.01,
             "value": 0
+          },
+          {
+            "kind": "choice",
+            "path": "behaviour.wet.medium",
+            "label": "Medium",
+            "ariaLabel": "Wet medium",
+            "options": [
+              {
+                "value": "watercolor",
+                "label": "Watercolour"
+              },
+              {
+                "value": "gouache",
+                "label": "Gouache"
+              },
+              {
+                "value": "oil",
+                "label": "Oil"
+              }
+            ],
+            "value": "watercolor"
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.wet.water",
+            "label": "Water",
+            "ariaLabel": "Brush water",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.8
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.wet.pigment",
+            "label": "Pigment",
+            "ariaLabel": "Brush pigment",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.45
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.wet.body",
+            "label": "Body (opacity)",
+            "ariaLabel": "Brush body (opacity)",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.wet.rewet",
+            "label": "Re-wet",
+            "ariaLabel": "Brush re-wet",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.2
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.wet.load",
+            "label": "Load",
+            "ariaLabel": "Brush load",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 1
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.wet.thinner",
+            "label": "Thinner",
+            "ariaLabel": "Brush thinner",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0
+          },
+          {
+            "kind": "choice",
+            "path": "behaviour.mixing",
+            "label": "Mixing",
+            "ariaLabel": "Brush mixing",
+            "options": [
+              {
+                "value": "pigment",
+                "label": "Pigment"
+              },
+              {
+                "value": "rgb",
+                "label": "RGB"
+              }
+            ],
+            "value": "pigment"
           }
         ]
       },
@@ -6227,6 +6427,23 @@
         "controls": [
           {
             "kind": "choice",
+            "path": "kind",
+            "label": "Kind",
+            "ariaLabel": "Brush kind",
+            "options": [
+              {
+                "value": "mark",
+                "label": "Lays a material"
+              },
+              {
+                "value": "tool",
+                "label": "Works on paint"
+              }
+            ],
+            "value": "mark"
+          },
+          {
+            "kind": "choice",
             "path": "medium",
             "label": "Medium",
             "ariaLabel": "Brush medium",
@@ -6446,6 +6663,23 @@
         "id": "behaviour",
         "title": "Particles",
         "controls": [
+          {
+            "kind": "choice",
+            "path": "behaviour.surface",
+            "label": "Surface",
+            "ariaLabel": "Brush surface",
+            "options": [
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "wet",
+                "label": "Wet (flows)"
+              }
+            ],
+            "value": "dry"
+          },
           {
             "kind": "slider",
             "path": "behaviour.grain",
@@ -7624,6 +7858,23 @@
         "controls": [
           {
             "kind": "choice",
+            "path": "kind",
+            "label": "Kind",
+            "ariaLabel": "Brush kind",
+            "options": [
+              {
+                "value": "mark",
+                "label": "Lays a material"
+              },
+              {
+                "value": "tool",
+                "label": "Works on paint"
+              }
+            ],
+            "value": "mark"
+          },
+          {
+            "kind": "choice",
             "path": "medium",
             "label": "Medium",
             "ariaLabel": "Brush medium",
@@ -7844,6 +8095,23 @@
         "title": "Mixer Brush",
         "controls": [
           {
+            "kind": "choice",
+            "path": "behaviour.surface",
+            "label": "Surface",
+            "ariaLabel": "Brush surface",
+            "options": [
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "wet",
+                "label": "Wet (flows)"
+              }
+            ],
+            "value": "dry"
+          },
+          {
             "kind": "slider",
             "path": "behaviour.grain",
             "label": "Grain",
@@ -7852,6 +8120,67 @@
             "max": 1,
             "step": 0.01,
             "value": 0
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.exchange.pickup",
+            "label": "Pick-up",
+            "ariaLabel": "Brush pick-up",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.5
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.exchange.mix",
+            "label": "Mix",
+            "ariaLabel": "Brush mix",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.5
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.exchange.reservoir.load",
+            "label": "Load",
+            "ariaLabel": "Brush load",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.95
+          },
+          {
+            "kind": "choice",
+            "path": "behaviour.mixing",
+            "label": "Mixing",
+            "ariaLabel": "Brush mixing",
+            "options": [
+              {
+                "value": "pigment",
+                "label": "Pigment"
+              },
+              {
+                "value": "rgb",
+                "label": "RGB"
+              }
+            ],
+            "value": "pigment"
+          },
+          {
+            "kind": "toggle",
+            "path": "behaviour.exchange.dirty",
+            "label": "Dirty brush",
+            "ariaLabel": "Dirty brush",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "behaviour.exchange.reservoir.refill",
+            "label": "Load each stroke",
+            "ariaLabel": "Brush load each stroke",
+            "value": true
           }
         ]
       },
@@ -8667,6 +8996,46 @@
     "host": "vector",
     "sections": [
       {
+        "id": "medium",
+        "title": "Medium",
+        "controls": [
+          {
+            "kind": "choice",
+            "path": "kind",
+            "label": "Kind",
+            "ariaLabel": "Brush kind",
+            "options": [
+              {
+                "value": "mark",
+                "label": "Lays a material"
+              },
+              {
+                "value": "tool",
+                "label": "Works on paint"
+              }
+            ],
+            "value": "tool"
+          },
+          {
+            "kind": "choice",
+            "path": "tool",
+            "label": "Tool",
+            "ariaLabel": "Brush tool",
+            "options": [
+              {
+                "value": "blender",
+                "label": "Blender"
+              },
+              {
+                "value": "smudge",
+                "label": "Smudge"
+              }
+            ],
+            "value": "blender"
+          }
+        ]
+      },
+      {
         "id": "shape",
         "title": "Shape",
         "controls": [
@@ -8857,6 +9226,26 @@
             "max": 1,
             "step": 0.01,
             "value": 0
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.strength",
+            "label": "Strength",
+            "ariaLabel": "Brush strength",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.5
+          },
+          {
+            "kind": "slider",
+            "path": "behaviour.distance",
+            "label": "Blend distance",
+            "ariaLabel": "Brush blend distance",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0.35
           }
         ]
       }
@@ -10338,6 +10727,23 @@
         "controls": [
           {
             "kind": "choice",
+            "path": "kind",
+            "label": "Kind",
+            "ariaLabel": "Brush kind",
+            "options": [
+              {
+                "value": "mark",
+                "label": "Lays a material"
+              },
+              {
+                "value": "tool",
+                "label": "Works on paint"
+              }
+            ],
+            "value": "mark"
+          },
+          {
+            "kind": "choice",
             "path": "medium",
             "label": "Medium",
             "ariaLabel": "Brush medium",
@@ -10690,6 +11096,23 @@
         "id": "behaviour",
         "title": "Paint behaviour",
         "controls": [
+          {
+            "kind": "choice",
+            "path": "behaviour.surface",
+            "label": "Surface",
+            "ariaLabel": "Brush surface",
+            "options": [
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "wet",
+                "label": "Wet (flows)"
+              }
+            ],
+            "value": "dry"
+          },
           {
             "kind": "slider",
             "path": "behaviour.grain",

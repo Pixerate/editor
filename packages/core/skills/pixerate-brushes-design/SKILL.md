@@ -26,8 +26,9 @@ This skill is the method. `pixerate-brushes` has the full tool reference.
 
 Ask when you cannot tell from the request; say what you assumed when you can.
 
-- **Host:** which editor will use it (paint by default; canvas and vector strokes take only dry
-  dab brushes, the image editor no wet, thick or particle brushes).
+- **Host:** which editor will use it (paint by default; canvas strokes take only dry dab brushes,
+  vector strokes dry and wet dab brushes, the Mixer Brush, smudge and blender; the image editor no
+  wet, thick or particle brushes).
 - **Medium and character:** what it imitates (pencil, ink, chalk, watercolour, marker…), and
   the size, softness and texture.
 - **Colour:** a default colour or palette, or the user's own colour (the default).
@@ -53,7 +54,8 @@ Ask when you cannot tell from the request; say what you assumed when you can.
 | Situation | Approach |
 | --- | --- |
 | A colour variant of a preset | `basedOn` it, set `colour.default` (and a `palette`), keep everything else. |
-| For canvas or vector strokes | Base on a dry preset (pencil, pastel, charcoal, marker, ink); no wet surface, particles, stickers or tools; no light on canvas. |
+| For canvas strokes | Base on a dry preset (pencil, pastel, charcoal, marker, ink); no wet surface, particles, stickers or tools; no light. |
+| For vector strokes | As canvas, but a wet surface (watercolour, gouache, wet oil), the Mixer Brush and the smudge and blender tools work too; no thick paint, particles, stickers, erasers or wet tools. |
 | A brush that must work in another editor | `check_brush` with that `host`, then `create_brush` from its `degraded` brush under a new id. |
 | A texture (chalk, charcoal, dry brush) | Raise `behaviour.grain` (0.8..1) and add `dynamics.sizeJitter`; test on rough paper. For texture that shows on any paper, give the tip its own grain: `tip.grain` `{ source: "sanded", depth: 0.6 }` (paint editor; other hosts paint without it). |
 | A brush from an image (a scanned mark, a leaf, a texture) | `list_brush_sources`, or `add_brush_source` with the PNG (keep its `licence`); then `tip` `{ shape: "stamp", stamps: ["source:<id>"] }`, spacing 0.2–0.4, `dynamics.angleJitter`, `flip` and a little `scatter`. The image as grain instead: `tip.grain.source`. Paint editor only. |
@@ -86,7 +88,8 @@ channel: "darkness" }` → `create_brush` `{ id: "scan-charcoal", name: "Scan ch
 - **Starting from nothing.** A brush without `basedOn` gets engine defaults (a hard round dab);
   it rarely looks like the medium asked for.
 - **A host that refuses the base.** A wet or particle preset can't be the base of a canvas
-  brush; set `behaviour.surface` to `dry` or start from a dry preset.
+  brush, nor a thick (impasto) preset of a vector one; set `behaviour.surface` to `dry` (vector
+  also takes `wet`) or start from a dry preset.
 - **Lists replace.** Giving `colour.palette` or `tip.stamps` replaces the whole list; include
   every entry you want.
 - **Changing a built-in.** `update_brush` refuses built-ins; duplicate first.

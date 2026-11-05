@@ -33,7 +33,7 @@ import { vectorPerspectivePlanes } from './perspective.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
-import type { VectorBrushstrokePaper, VectorMaskType } from './types.js';
+import type { VectorBrushstrokePaint, VectorBrushstrokePaper, VectorMaskType } from './types.js';
 import type { VectorEnvelopeParams } from './appearance.js';
 
 export interface VectorCommandOptions {
@@ -1535,6 +1535,68 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+	// Gradient paint a brushstroke samples dab by dab (the paint engine's PaintSource; no timed mappings).
+	const BRUSH_PAINT = {
+		anyOf: [
+			{
+				type: 'object',
+				additionalProperties: false,
+				required: ['type', 'color'],
+				description: 'One colour instead of the layer colour (the layer colour still gives the alpha).',
+				properties: {
+					type: { type: 'string', enum: ['color'], description: 'Always "color".' },
+					color: { type: 'string', pattern: '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$', description: 'The colour as #rrggbb.' }
+				}
+			},
+			{
+				type: 'object',
+				additionalProperties: false,
+				required: ['type', 'stops'],
+				description: 'Gradient paint: the brush samples it dab by dab along the path.',
+				properties: {
+					type: { type: 'string', enum: ['gradient'], description: 'Always "gradient".' },
+					stops: {
+						type: 'array',
+						minItems: 2,
+						maxItems: 16,
+						description: '2..16 stops sorted by offset.',
+						items: {
+							type: 'object',
+							additionalProperties: false,
+							required: ['offset', 'color'],
+							properties: {
+								offset: { type: 'number', minimum: 0, maximum: 1, description: 'Position 0..1 along the gradient.' },
+								color: { type: 'string', description: 'The stop colour as #rrggbb, or "paint" (the layer colour) or "secondary" (white).', anyOf: [{ pattern: '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$' }, { enum: ['paint', 'secondary'] }] },
+								opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Multiplies the brush flow where this colour is laid, 0..1 (default 1).' },
+								midpoint: { type: 'number', minimum: 0.05, maximum: 0.95, description: 'Where between this stop and the next the colours are half mixed, 0.05..0.95 (default 0.5).' }
+							}
+						}
+					},
+					space: { type: 'string', enum: ['pigment', 'oklab', 'srgb'], description: 'How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers).' },
+					map: {
+						type: 'object',
+						additionalProperties: false,
+						required: ['by'],
+						description: 'What moves the stroke along the gradient (default distance, 300 document units, mirror).',
+						properties: {
+							by: {
+								type: 'string',
+								enum: ['distance', 'pressure', 'tilt', 'direction', 'across-tip', 'random'],
+								description:
+									'distance: document units (or dabs) travelled along the path; pressure: the pressure profile 0..1; tilt: no tilt on paths, so the start of the gradient; direction: direction of travel, once round per 360°; across-tip: left to right across the tip (a brush loaded with several colours); random: a seeded random point per dab (the layer seed). Paths have no timing, so velocity and time are not available.'
+							},
+							length: { type: 'number', minimum: 1, maximum: 100000, description: 'distance: document units (or dabs, with unit "dabs") per run through the gradient (default 300).' },
+							repeat: { type: 'string', enum: ['clamp', 'repeat', 'mirror'], description: 'distance: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default).' },
+							unit: { type: 'string', enum: ['px', 'dabs'], description: 'distance: document units ("px", default) or dabs.' },
+							every: { type: 'integer', minimum: 1, maximum: 500, description: 'random: dabs per random pick (default 1).' }
+						}
+					},
+					softness: { type: 'number', minimum: 0, maximum: 1, description: 'How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps.' }
+				}
+			}
+		]
+	} as const;
+
 	const BRUSH_SEED = { type: 'integer', minimum: 0, maximum: VECTOR_BRUSHSTROKE_MAX_SEED } as const;
 	const BRUSH_PAPER = {
 		type: 'object',
@@ -1559,7 +1621,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Brushstroke Brushes',
 			readOnly: true,
 			keywords: ['brush', 'brushstroke', 'pencil', 'pastel', 'charcoal', 'ink', 'marker', 'natural media'],
-			description: 'Lists the brushes a brushstroke can use (the dry presets, then saved brushes from the brush library the vector profile admits): { brushes: [{ id, name, category, size, builtin }], colorScheme, colorLocked } (size: the brush\'s own diameter in document units; colorScheme picks the side of light / dark default colours; colorLocked: brushstrokes keep their colour, vector.setColorLocked).',
+			description: 'Lists the brushes a brushstroke can use (the dry presets, wet paint (watercolour, gouache, wet oils), the Mixer Brush, smudge and blender, then saved brushes from the brush library the vector profile admits): { brushes: [{ id, name, category, size, builtin }], colorScheme, colorLocked } (size: the brush\'s own diameter in document units; colorScheme picks the side of light / dark default colours; colorLocked: brushstrokes keep their colour, vector.setColorLocked).',
 			params: { type: 'object', properties: {}, additionalProperties: false },
 			run: () => ({ brushes: controller.listBrushstrokeBrushes().map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size, builtin: vectorBrushstrokeBrush(b.id) !== null })), ...brushColourResult() })
 		},
@@ -1569,7 +1631,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Add Brushstroke…',
 			keywords: ['brushstroke', 'brush', 'natural media', 'pencil line', 'chalk', 'sketchy', 'hand-drawn', 'ink stroke'],
 			description:
-				'Paints paths (`ids`, default the selection; groups: every path inside) with a natural-media brush along their outline, as a stroke layer of kind brushstroke: `brushId` from vector.listBrushes, `size` (document units), an optional `pressure` profile (0–1 values spread from start to end, e.g. [0.2, 1, 0.2] for a tapered stroke), `color` and `opacity`. Pass a `seed` for the brush\'s character (seeded size, angle, opacity and scatter jitter plus a paper grain: what makes pencil, pastel and charcoal look real), with `paper` to choose the grain or null for none; without a seed the brush paints plain, even dabs. The path stays editable; the strokes follow it. One undo step. Returns { paths: [{ id, strokes }] } (the brushstroke is a stroke layer; change it with vector.setBrushstroke, remove it with vector.removeStroke).',
+				'Paints paths (`ids`, default the selection; groups: every path inside) with a natural-media brush along their outline, as a stroke layer of kind brushstroke: `brushId` from vector.listBrushes, `size` (document units), an optional `pressure` profile (0–1 values spread from start to end, e.g. [0.2, 1, 0.2] for a tapered stroke), `color`, `opacity` and gradient `paint` sampled dab by dab along the path. Wet paint (watercolour, gouache, wet oils) bleeds and dries; the scene shows it as laid until it settles, exports wait for it. The Mixer Brush, smudge and blender act on the shapes beneath the stroke (fills, strokes and brushstrokes; not text, images or effects). Pass a `seed` for the brush\'s character (seeded size, angle, opacity and scatter jitter plus a paper grain: what makes pencil, pastel and charcoal look real), with `paper` to choose the grain or null for none; without a seed the brush paints plain, even dabs. The path stays editable; the strokes follow it. One undo step. Returns { paths: [{ id, strokes }] } (the brushstroke is a stroke layer; change it with vector.setBrushstroke, remove it with vector.removeStroke).',
 			params: {
 				type: 'object',
 				properties: {
@@ -1582,14 +1644,15 @@ export function createVectorCommands(controller: VectorEditorController, options
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1 (default 1).' },
 					index: { type: 'integer', minimum: 0, description: 'Position in the stroke stack, 0 the bottom (default: on top).' },
 					seed: { ...BRUSH_SEED, description: 'Character seed 0–2147483647: turns on the brush\'s jitter and paper grain; the same seed always renders the same stroke (default: none, plain dabs).' },
-					paper: { anyOf: [BRUSH_PAPER, { type: 'null' }], description: 'With `seed`: the paper the grain comes from { pattern, seed, scale, depth }, or null for jitter without grain (default: the sanded paper).' }
+					paper: { anyOf: [BRUSH_PAPER, { type: 'null' }], description: 'With `seed`: the paper the grain comes from { pattern, seed, scale, depth }, or null for jitter without grain (default: the sanded paper).' },
+					paint: { ...BRUSH_PAINT, description: 'Gradient paint sampled dab by dab along the path instead of the colour, e.g. { type: "gradient", stops: [{ offset: 0, color: "#e11d48" }, { offset: 1, color: "#2563eb" }], map: { by: "distance", length: 200, repeat: "clamp" } } (default: the colour; a gradient layer colour or a gradient brush paints its own gradient).' }
 				},
 				required: ['brushId'],
 				additionalProperties: false
 			},
 			undoable: true,
 			enabled: enabledFor,
-			run: (_ctx: unknown, params: { ids?: string[]; brushId: string; size?: number; pressure?: number[]; color?: string; keepColour?: boolean; opacity?: number; index?: number; seed?: number; paper?: VectorBrushstrokePaper | null }) => {
+			run: (_ctx: unknown, params: { ids?: string[]; brushId: string; size?: number; pressure?: number[]; color?: string; keepColour?: boolean; opacity?: number; index?: number; seed?: number; paper?: VectorBrushstrokePaper | null; paint?: VectorBrushstrokePaint }) => {
 				const targets = params.ids ?? controller.getState().selection;
 				check(
 					controller.addBrushstroke(
@@ -1598,7 +1661,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 							...(params.size !== undefined ? { size: params.size } : {}),
 							...(params.pressure ? { pressure: params.pressure } : {}),
 							...(params.seed !== undefined ? { seed: params.seed } : {}),
-							...(params.paper !== undefined ? { paper: params.paper } : {})
+							...(params.paper !== undefined ? { paper: params.paper } : {}),
+							...(params.paint !== undefined ? { paint: params.paint } : {})
 						},
 						{ ...(params.ids ? { ids: params.ids } : {}), ...(params.index !== undefined ? { index: params.index } : {}), ...(params.color ? { color: params.color } : {}), ...(params.keepColour ? { keepColour: true } : {}), ...(params.opacity !== undefined ? { opacity: params.opacity } : {}) }
 					)
@@ -1617,7 +1681,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Edit Brushstroke…',
 			keywords: ['brushstroke', 'brush', 'size', 'pressure', 'taper'],
 			description:
-				'Changes the brushstroke at stroke layer `index` of path `id` (vector.getAppearance lists strokes; 0 is the bottom): `brushId` (the same id again takes that saved brush as the library has it now), `size` (null: the brush\'s own), `pressure` (null: full pressure), `color`, `opacity`, `seed` (turns the brush\'s character on; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default paper). Pass at least one. One undo step. Returns { id, strokes }.',
+				'Changes the brushstroke at stroke layer `index` of path `id` (vector.getAppearance lists strokes; 0 is the bottom): `brushId` (the same id again takes that saved brush as the library has it now), `size` (null: the brush\'s own), `pressure` (null: full pressure), `color`, `opacity`, `seed` (turns the brush\'s character on; null: plain dabs), `paper` (replaced whole; null: no grain; {}: the default paper) and gradient `paint` (null: the colour). Pass at least one. One undo step. Returns { id, strokes }.',
 			params: {
 				type: 'object',
 				properties: {
@@ -1630,15 +1694,16 @@ export function createVectorCommands(controller: VectorEditorController, options
 					keepColour: { type: 'boolean', description: 'With another brushId: keep the layer\'s colour instead of taking the new brush\'s default colour (default false).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1.' },
 					seed: { anyOf: [BRUSH_SEED, { type: 'null' }], description: 'Character seed 0–2147483647 (jitter and paper grain; a new seed gives a new take on the same stroke), or null for plain dabs.' },
-					paper: { anyOf: [BRUSH_PAPER, { type: 'null' }], description: 'The paper the grain comes from { pattern, seed, scale, depth } (applies with a seed), null for no grain, or {} for the default sanded paper.' }
+					paper: { anyOf: [BRUSH_PAPER, { type: 'null' }], description: 'The paper the grain comes from { pattern, seed, scale, depth } (applies with a seed), null for no grain, or {} for the default sanded paper.' },
+					paint: { anyOf: [...BRUSH_PAINT.anyOf, { type: 'null' }], description: 'Gradient paint sampled dab by dab along the path (replaced whole), or null to paint the colour again.' }
 				},
 				required: ['id', 'index'],
 				additionalProperties: false
 			},
 			undoable: true,
-			run: (_ctx: unknown, params: { id: string; index: number; brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; keepColour?: boolean; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null }) => {
+			run: (_ctx: unknown, params: { id: string; index: number; brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; keepColour?: boolean; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null; paint?: VectorBrushstrokePaint | null }) => {
 				const { id, index, ...patch } = params;
-				if (!Object.keys(patch).length) fail('Pass at least one of brushId, size, pressure, color, opacity, seed, paper.');
+				if (!Object.keys(patch).length) fail('Pass at least one of brushId, size, pressure, color, opacity, seed, paper, paint.');
 				layerIndex(id, 'stroke', index);
 				check(controller.setBrushstroke(index, patch, { ids: [id] }));
 				return stackResult(id, 'stroke');
