@@ -1988,6 +1988,13 @@
           "swift": "Planned (#646): stamp and image tips, tip grain, count and flip need the stamp tip engine (#545)"
         },
         {
+          "feature": "Brush Pack Import (Photoshop `.abr` versions 1, 2, 6, 7 and 10 and Procreate `.brush` / `.brushset` packs people already own: sampled `.abr` tips and Procreate shapes become image sources and stamp-tip brushes, Procreate grain becomes tip grain, computed `.abr` tips round or flat brushes; preset names and spacing where the file has them; licence and terms files and the licence given are kept on every source; what isn't mapped (dynamics, pencil curves, patterns, dual brushes, wet mixing) is reported as `unsupported`; untrusted files read defensively with size limits; one library import; Import in the paint brush panel and the demo's Brushes tab; `import_brush_pack` agent tool)",
+          "core": "`importBrushPack`, `readBrushPack`, `importBrushFile`, `readAbr`",
+          "react": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
+          "svelte": "`<BrushPanel>` Import… (also `.abr`, `.brush`, `.brushset`)",
+          "swift": "Planned (#646)"
+        },
+        {
           "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
           "core": "`getStrokes`, `replayStrokes`, `varyStroke`",
           "react": "Via core (`replayStrokes`); `useAgentToolProvider`",
