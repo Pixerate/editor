@@ -1,0 +1,210 @@
+name: Scheduled Suites
+
+# Runs the opt-in suites that are too heavy or external-network-dependent for every PR (#522):
+#   1. PSD corpus (`pnpm test:corpus`)
+#   2. Headless WebGPU wet media tests (`WET_GPU` via Dawn / `webgpu` on macOS Metal)
+#   3. Performance benchmarks (`IMAGE_LAYERS_BENCH`, `DEEP_BENCH`, `WET_BENCH`, `SPREADSHEET_BENCH`,
+#      `RASTER_TRANSFORM_BENCH`, `SELECTION_BENCH`)
+on:
+  schedule:
+    # Weekly on Mondays at 04:00 UTC.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which opt-in suite to run"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - psd-corpus
+          - wet-gpu
+          - benchmarks
+
+permissions:
+  contents: read
+
+# A manual run queues behind the weekly one instead of cancelling it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  psd-corpus:
+    name: PSD corpus
+    if: github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'psd-corpus' || inputs.suite == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch and run PSD corpus suite
+        env:
+          PSD_CORPUS_REPORT: ${{ runner.temp }}/psd-corpus-report.json
+        run: pnpm test:corpus
+
+      # The report is an array with one entry per file: `error` is set when the file was rejected
+      # with a PsdError, `mergedError` is the mean difference from Photoshop's merged image.
+      - name: Summarise PSD corpus report
+        if: always()
+        env:
+          PSD_CORPUS_REPORT: ${{ runner.temp }}/psd-corpus-report.json
+        run: |
+          if [ ! -f "$PSD_CORPUS_REPORT" ]; then
+            echo "No PSD corpus report was written (the suite failed before its last test)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # shellcheck disable=SC2016 # the backticks are JavaScript template literals
+          node -e '
+            const fs = require("node:fs");
+            const r = JSON.parse(fs.readFileSync(process.env.PSD_CORPUS_REPORT, "utf8"));
+            const rejected = r.filter((e) => e.error);
+            const errors = r.map((e) => e.mergedError).filter((e) => typeof e === "number").sort((a, b) => a - b);
+            const median = errors.length ? errors[Math.floor(errors.length / 2)].toFixed(3) : "n/a";
+            const lines = [
+              "### PSD corpus",
+              `- **Files**: ${r.length}`,
+              `- **Opened**: ${r.length - rejected.length}`,
+              `- **Rejected with PsdError**: ${rejected.length}`,
+              `- **Median merged-image error**: ${median}`,
+              ...rejected.map((e) => `  - ${e.file}: ${e.error}`),
+            ];
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
+
+      - name: Upload PSD corpus report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: psd-corpus-report
+          path: ${{ runner.temp }}/psd-corpus-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+  wet-gpu:
+    name: Headless WebGPU wet media (macOS Metal)
+    if: github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'wet-gpu' || inputs.suite == ''
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Pinned so a new Dawn build cannot change results between runs; bump it deliberately.
+      - name: Install Dawn WebGPU binding outside workspace
+        run: npm install --prefix "$RUNNER_TEMP/webgpu" --no-save webgpu@0.6.2
+
+      # Fails (rather than skips) when the runner has no WebGPU adapter: the GPU tests assert that
+      # Engine B started.
+      - name: Run WebGPU wet media tests (Engine B vs CPU parity)
+        env:
+          WET_GPU: ${{ runner.temp }}/webgpu/node_modules/webgpu
+        run: pnpm --filter @pixerate/editor exec vitest run tests/paint-wet-gpu.test.ts
+
+  benchmarks:
+    name: Performance benchmarks
+    if: github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'benchmarks' || inputs.suite == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Vitest hides the console output of passing tests, which is where the deep, wet and
+      # selection benchmarks print their tables, so pass `--silent=false` and keep the whole log.
+      # `shell: bash` adds pipefail, so a failing test still fails the step through `tee`.
+      - name: Run opt-in benchmark suites
+        shell: bash
+        env:
+          IMAGE_LAYERS_BENCH: "1"
+          IMAGE_LAYERS_BENCH_OUT: ${{ runner.temp }}/image-layers-bench.txt
+          DEEP_BENCH: "1"
+          WET_BENCH: "1"
+          SPREADSHEET_BENCH: "1"
+          SPREADSHEET_BENCH_OUT: ${{ runner.temp }}/spreadsheet-bench.txt
+          RASTER_TRANSFORM_BENCH: "1"
+          RASTER_TRANSFORM_BENCH_OUT: ${{ runner.temp }}/raster-transform-bench.txt
+          SELECTION_BENCH: "1"
+        run: |
+          pnpm --filter @pixerate/editor exec vitest run --silent=false \
+            tests/image-layers.bench.test.ts \
+            tests/raster-deep.bench.test.ts \
+            tests/paint-wet-kernel.test.ts \
+            tests/paint-wet.bench.test.ts \
+            tests/spreadsheet-recalc.bench.test.ts \
+            tests/raster-transform.bench.test.ts \
+            tests/image-editor-selection.bench.test.ts \
+            2>&1 | tee "$RUNNER_TEMP/benchmarks.log"
+
+      - name: Summarise benchmark outputs
+        if: always()
+        run: |
+          {
+            echo "### Benchmarks"
+            for f in "$RUNNER_TEMP"/*-bench.txt "$RUNNER_TEMP/benchmarks.log"; do
+              if [ -f "$f" ]; then
+                echo "#### $(basename "$f")"
+                echo '```'
+                cat "$f"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-reports
+          path: |
+            ${{ runner.temp }}/*-bench.txt
+            ${{ runner.temp }}/benchmarks.log
+          retention-days: 14
+          if-no-files-found: ignore
