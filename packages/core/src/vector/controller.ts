@@ -426,6 +426,8 @@ export interface VectorEditorOptions {
 	brushPreview?: BrushPreviewRenderer;
 	/** The app's colour scheme, which picks the side of a brush's light / dark default colour (default light). */
 	colorScheme?: 'light' | 'dark';
+	/** Start with the colour locked: new and rebrushed brushstrokes keep their colour (see `setColorLocked`). */
+	colorLocked?: boolean;
 	/** History to record into, e.g. one shared with the rest of the app (default: a new one). */
 	history?: HistoryManager;
 	/** Starting tool (default `select`). */
@@ -651,6 +653,10 @@ export interface VectorEditorState {
 	 * a side skews along it (Alt: about the centre).
 	 */
 	freeDistort: boolean;
+	/** The colour scheme that picks the side of a brush's light / dark default colour. */
+	colorScheme: 'light' | 'dark';
+	/** "Keep my colour": brushstrokes don't take a brush's default colour (`setColorLocked`). */
+	colorLocked: boolean;
 	/** The text being edited on the canvas, or null. Typing goes to `textInput`, keys to `keyDown`. */
 	textEdit: VectorTextEditState | null;
 	/** Font and alignment new text gets. */
@@ -1588,9 +1594,11 @@ export class VectorEditorController {
 	private revision = 0;
 	private state!: VectorEditorState;
 	private colorScheme: 'light' | 'dark';
+	private colorLocked: boolean;
 
 	constructor(options: VectorEditorOptions = {}) {
-		this.colorScheme = options.colorScheme ?? 'light';
+		this.colorScheme = options.colorScheme === 'dark' ? 'dark' : 'light';
+		this.colorLocked = !!options.colorLocked;
 		this.brushLibrary = options.brushLibrary ?? null;
 		this.brushPreview = options.brushPreview ?? null;
 		this.brushes = options.brushLibrary ? snapshotBrushLibrary(options.brushLibrary, () => this.notify()) : null;
@@ -1717,6 +1725,8 @@ export class VectorEditorController {
 			blendDefaults: this.blendDefaults,
 			gradientEdit: this.gradientEdit,
 			freeDistort: this.freeDistort,
+			colorScheme: this.colorScheme,
+			colorLocked: this.colorLocked,
 			textEdit: this.textEdit ? { nodeId: this.textEdit.nodeId, anchor: this.textEdit.anchor, focus: this.textEdit.focus } : null,
 			textDefaults: this.textDefaults,
 			symbolEdit: this.symbolEditState(),
@@ -3114,7 +3124,7 @@ export class VectorEditorController {
 	 * Adds a brushstroke to the selected (or given) paths: a stroke layer that paints the path with
 	 * brush `brushId` (a preset, or a saved brush of the brush library: `listBrushstrokeBrushes`), `size` document
 	 * units across (default the brush's own), an optional `pressure` profile along the length, in
-	 * `color` (default the brush's own default colour, unless `keepColour`; else the top stroke's
+	 * `color` (default the brush's own default colour, unless `keepColour` or the colour is locked; else the top stroke's
 	 * paint, else black) at `opacity`. At the top of the stroke
 	 * stack or at `index`. A `seed` gives it the brush's character (jitter and the grain of `paper`,
 	 * `null` for none); without one it renders plain. One undo step.
@@ -3129,7 +3139,7 @@ export class VectorEditorController {
 		if (characterError) return { ok: false, message: characterError };
 		if (options.color !== undefined && !parseVectorColor(options.color)) return { ok: false, message: `"${options.color}" is not a colour.` };
 		if (options.opacity !== undefined && !(options.opacity >= 0 && options.opacity <= 1)) return { ok: false, message: 'opacity must be from 0 to 1.' };
-		const own = options.keepColour ? null : vectorBrushstrokeDefaultColour(clean.brushId, user, this.colorScheme);
+		const own = options.keepColour || this.colorLocked ? null : vectorBrushstrokeDefaultColour(clean.brushId, user, this.colorScheme);
 		return this.editStacks('stroke', options.ids, 'Add Brushstroke', (stack, path) => {
 			const top = [...stack].reverse().find((l) => (l.kind ?? 'paint') === 'paint');
 			const paint = options.color ?? own ?? (typeof top?.paint === 'string' && top.paint !== 'none' ? top.paint : typeof path.stroke === 'string' && path.stroke !== 'none' ? path.stroke : '#000000');
@@ -3144,7 +3154,7 @@ export class VectorEditorController {
 	 * given) paths: another brush, size, pressure profile (null removes it), colour or opacity, the
 	 * character `seed` (null removes it: plain dabs) or the `paper` (replaced whole: `null` for no
 	 * grain, `{}` for the default paper). Another brush without a `color` takes that brush's default
-	 * colour, if it has one, unless `keepColour`. Fails, changing nothing, when that layer is not a
+	 * colour, if it has one, unless `keepColour` or the colour is locked. Fails, changing nothing, when that layer is not a
 	 * brushstroke. With `merge`, consecutive edits fold into one undo step.
 	 */
 	setBrushstroke(
@@ -3178,7 +3188,7 @@ export class VectorEditorController {
 				if (patch.seed === null) delete brush.seed;
 				else if (patch.seed !== undefined) brush.seed = patch.seed;
 				if (patch.paper !== undefined) brush.paper = patch.paper;
-				const own = patch.brushId && patch.brushId !== layer.brush.brushId && !patch.keepColour ? vectorBrushstrokeDefaultColour(patch.brushId, user, this.colorScheme) : null;
+				const own = patch.brushId && patch.brushId !== layer.brush.brushId && !patch.keepColour && !this.colorLocked ? vectorBrushstrokeDefaultColour(patch.brushId, user, this.colorScheme) : null;
 				const colour = patch.color ?? own;
 				const next: VectorStrokeLayer = { ...layer, brush: sanitizeVectorBrushstroke(brush, user) ?? layer.brush, ...(colour ? { paint: colour } : {}), ...(patch.opacity !== undefined ? { opacity: patch.opacity } : {}) };
 				return stack.map((l, i) => (i === index ? next : l));
@@ -3189,7 +3199,21 @@ export class VectorEditorController {
 
 	/** Sets the colour scheme that picks the side of a brush's light / dark default colour. Existing strokes keep their colour. */
 	setColorScheme(scheme: 'light' | 'dark'): void {
-		this.colorScheme = scheme;
+		const next = scheme === 'dark' ? 'dark' : 'light';
+		if (this.colorScheme === next) return;
+		this.colorScheme = next;
+		this.notify();
+	}
+
+	/**
+	 * Locks the brushstroke colour ("Keep my colour"): `addBrushstroke` and `setBrushstroke` with
+	 * another brush keep the colour instead of taking the brush's default; an explicit `color` still
+	 * applies. Existing strokes are unchanged. Editor state, not an undo step.
+	 */
+	setColorLocked(locked: boolean): void {
+		if (this.colorLocked === !!locked) return;
+		this.colorLocked = !!locked;
+		this.notify();
 	}
 
 	/** Removes layer `index` of the fill or stroke stack of the selected (or given) paths. */

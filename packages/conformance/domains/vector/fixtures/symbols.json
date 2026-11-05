@@ -1,0 +1,712 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "symbols",
+  "description": "Symbols: making, placing, overriding, replacing, editing, detaching and deleting.",
+  "setup": {
+    "width": 300,
+    "height": 200
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 20,
+          "y": 20,
+          "width": 40,
+          "height": 40,
+          "fill": "#2563eb"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 70,
+          "y": 20,
+          "width": 30,
+          "height": 30,
+          "fill": "#e11d48"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.makeSymbol",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "name": "Dot"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.makeSymbol",
+          "ok": true,
+          "result": {
+            "instanceId": "n4",
+            "symbol": {
+              "bounds": {
+                "height": 40,
+                "width": 40,
+                "x": -20,
+                "y": -20
+              },
+              "id": "symbol-n3",
+              "instances": [
+                "n4"
+              ],
+              "name": "Dot",
+              "nodes": [
+                {
+                  "id": "n1",
+                  "name": "Ellipse",
+                  "type": "path"
+                }
+              ]
+            },
+            "symbolId": "symbol-n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.makeSymbol",
+        "params": {
+          "ids": [
+            "n2"
+          ],
+          "name": "Square"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.makeSymbol",
+          "ok": true,
+          "result": {
+            "instanceId": "n6",
+            "symbol": {
+              "bounds": {
+                "height": 30,
+                "width": 30,
+                "x": -15,
+                "y": -15
+              },
+              "id": "symbol-n5",
+              "instances": [
+                "n6"
+              ],
+              "name": "Square",
+              "nodes": [
+                {
+                  "id": "n2",
+                  "name": "Rectangle",
+                  "type": "path"
+                }
+              ]
+            },
+            "symbolId": "symbol-n5"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.listSymbols"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.listSymbols",
+          "ok": true,
+          "result": {
+            "editing": null,
+            "symbols": [
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": -20,
+                  "y": -20
+                },
+                "id": "symbol-n3",
+                "instances": [
+                  "n4"
+                ],
+                "name": "Dot",
+                "nodes": [
+                  {
+                    "id": "n1",
+                    "name": "Ellipse",
+                    "type": "path"
+                  }
+                ]
+              },
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 30,
+                  "x": -15,
+                  "y": -15
+                },
+                "id": "symbol-n5",
+                "instances": [
+                  "n6"
+                ],
+                "name": "Square",
+                "nodes": [
+                  {
+                    "id": "n2",
+                    "name": "Rectangle",
+                    "type": "path"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.placeSymbol",
+        "params": {
+          "symbolId": "symbol-n3",
+          "x": 150,
+          "y": 100
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.placeSymbol",
+          "ok": true,
+          "result": {
+            "id": "n7"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setInstanceOptions",
+        "params": {
+          "ids": [
+            "n7"
+          ],
+          "fill": "#16a34a",
+          "scaleStrokes": false
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setInstanceOptions",
+          "ok": true,
+          "result": {
+            "instances": [
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 130,
+                  "y": 80
+                },
+                "depth": 0,
+                "id": "n7",
+                "locked": false,
+                "name": "Dot",
+                "overrides": {
+                  "fill": "#16a34a"
+                },
+                "rotation": 0,
+                "selected": true,
+                "symbolId": "symbol-n3",
+                "transform": [
+                  1,
+                  0,
+                  0,
+                  1,
+                  150,
+                  100
+                ],
+                "type": "instance",
+                "visible": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.replaceSymbol",
+        "params": {
+          "symbolId": "symbol-n5",
+          "ids": [
+            "n7"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.replaceSymbol",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n7"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.renameSymbol",
+        "params": {
+          "symbolId": "symbol-n5",
+          "name": "Box"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.renameSymbol",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 30,
+              "width": 30,
+              "x": -15,
+              "y": -15
+            },
+            "id": "symbol-n5",
+            "instances": [
+              "n6",
+              "n7"
+            ],
+            "name": "Box",
+            "nodes": [
+              {
+                "id": "n2",
+                "name": "Rectangle",
+                "type": "path"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.editSymbol",
+        "params": {
+          "id": "n7"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.editSymbol",
+          "ok": true,
+          "result": {
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 30,
+                  "x": -15,
+                  "y": -15
+                },
+                "d": "M-15 -15L15 -15L15 15L-15 15Z",
+                "depth": 0,
+                "fill": "#e11d48",
+                "id": "n2",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "symbolId": "symbol-n5"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.exitSymbolEdit"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.exitSymbolEdit",
+          "ok": true,
+          "result": {
+            "symbolId": "symbol-n5"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.detachInstance",
+        "params": {
+          "ids": [
+            "n4"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.detachInstance",
+          "ok": true,
+          "result": {
+            "ids": [
+              "n4"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.deleteSymbol",
+        "params": {
+          "symbolId": "symbol-n3",
+          "detach": true
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.deleteSymbol",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.placeSymbol",
+        "params": {
+          "symbolId": "nope"
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "There is no symbol \"nope\"; vector.listSymbols lists them."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 20,
+                  "y": 20
+                },
+                "children": 1,
+                "depth": 0,
+                "id": "n4",
+                "locked": false,
+                "name": "Dot",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 40,
+                  "x": 20,
+                  "y": 20
+                },
+                "d": "M40 20C51.05 20 60 28.95 60 40C60 51.05 51.05 60 40 60C28.95 60 20 51.05 20 40C20 28.95 28.95 20 40 20Z",
+                "depth": 1,
+                "fill": "#2563eb",
+                "id": "n9",
+                "locked": false,
+                "name": "Ellipse",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 30,
+                  "x": 70,
+                  "y": 20
+                },
+                "depth": 0,
+                "id": "n6",
+                "locked": false,
+                "name": "Square",
+                "rotation": 0,
+                "selected": false,
+                "symbolId": "symbol-n5",
+                "transform": [
+                  1,
+                  0,
+                  0,
+                  1,
+                  85,
+                  35
+                ],
+                "type": "instance",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 30,
+                  "x": 135,
+                  "y": 85
+                },
+                "depth": 0,
+                "id": "n7",
+                "locked": false,
+                "name": "Dot",
+                "overrides": {
+                  "fill": "#16a34a"
+                },
+                "rotation": 0,
+                "selected": true,
+                "symbolId": "symbol-n5",
+                "transform": [
+                  1,
+                  0,
+                  0,
+                  1,
+                  150,
+                  100
+                ],
+                "type": "instance",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n7"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "children": [
+                  {
+                    "fill": "#2563eb",
+                    "id": "n9",
+                    "name": "Ellipse",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "in": {
+                              "x": 28.95430500338413,
+                              "y": 20
+                            },
+                            "out": {
+                              "x": 51.04569499661587,
+                              "y": 20
+                            },
+                            "type": "symmetric",
+                            "x": 40,
+                            "y": 20
+                          },
+                          {
+                            "in": {
+                              "x": 60,
+                              "y": 28.95430500338413
+                            },
+                            "out": {
+                              "x": 60,
+                              "y": 51.04569499661587
+                            },
+                            "type": "symmetric",
+                            "x": 60,
+                            "y": 40
+                          },
+                          {
+                            "in": {
+                              "x": 51.04569499661587,
+                              "y": 60
+                            },
+                            "out": {
+                              "x": 28.95430500338413,
+                              "y": 60
+                            },
+                            "type": "symmetric",
+                            "x": 40,
+                            "y": 60
+                          },
+                          {
+                            "in": {
+                              "x": 20,
+                              "y": 51.04569499661587
+                            },
+                            "out": {
+                              "x": 20,
+                              "y": 28.95430500338413
+                            },
+                            "type": "symmetric",
+                            "x": 20,
+                            "y": 40
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n4",
+                "name": "Dot",
+                "type": "group"
+              },
+              {
+                "id": "n6",
+                "name": "Square",
+                "symbolId": "symbol-n5",
+                "transform": [
+                  1,
+                  0,
+                  0,
+                  1,
+                  85,
+                  35
+                ],
+                "type": "instance"
+              },
+              {
+                "id": "n7",
+                "name": "Dot",
+                "overrides": {
+                  "fill": "#16a34a"
+                },
+                "scaleStrokes": false,
+                "symbolId": "symbol-n5",
+                "transform": [
+                  1,
+                  0,
+                  0,
+                  1,
+                  150,
+                  100
+                ],
+                "type": "instance"
+              }
+            ],
+            "symbols": [
+              {
+                "id": "symbol-n5",
+                "name": "Box",
+                "nodes": [
+                  {
+                    "fill": "#e11d48",
+                    "id": "n2",
+                    "name": "Rectangle",
+                    "stroke": "#18181b",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": -15,
+                            "y": -15
+                          },
+                          {
+                            "x": 15,
+                            "y": -15
+                          },
+                          {
+                            "x": 15,
+                            "y": 15
+                          },
+                          {
+                            "x": -15,
+                            "y": 15
+                          }
+                        ],
+                        "closed": true
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ]
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

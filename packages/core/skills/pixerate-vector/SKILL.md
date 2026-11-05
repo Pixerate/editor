@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints, artboards and frames with resizing constraints, connectors, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping and opacity masks, gradients (linear, radial, conic, mesh, freeform), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints, artboards and frames with resizing constraints, connectors, stacked fills and strokes with blend modes, brushstrokes with brush character and paper grain, drop shadows, glows and blurs, clipping and opacity masks, gradients (linear, radial, conic, mesh, freeform), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -20,7 +20,9 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
   `{ type, stops: [{ offset, color, opacity?, midpoint? }], ... }`.
 - **Appearance**: a path can stack several fills and several strokes (bottom to top; all fills
   draw under all strokes), each with its own paint, `opacity`, `blendMode` and `visible`, and
-  each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile. Layers
+  each stroke with its own width, alignment, dashes, caps, joins, arrowheads and profile, or a
+  **brushstroke** (`vector.addBrushstroke`, `vector.setBrushstroke`, `vector.listBrushes`) painted
+  along the outline with a dry brush, seeded jitter and paper grain. Layers
   are addressed by `index` in their stack, 0 at the bottom. `fill` / `stroke` and the stroke
   settings of `vector.setStyle` are shorthands for the **top** layer; `null` clears the stack.
   Any node can also have a `blendMode` and `filters` (drop / inner shadow, outer / inner glow,
@@ -101,7 +103,7 @@ the pitfalls, and uses the commands below.
   than splitting text into separate nodes, so it still edits as one paragraph. Create Outlines
   only for final artwork or logos that must not depend on fonts; keep a copy as text if it may
   change.
-- **Paths, strokes, booleans, gradients, stacks, masks, shadows, connectors, constraints and
+- **Paths, strokes, brushstrokes, booleans, gradients, stacks, masks, shadows, connectors, constraints and
   vertical text:** read [references/best-practices.md](references/best-practices.md) first.
 - **Non-destructive first.** Live booleans (`vector.boolean` with `live: true`), path effects
   and envelopes keep the operands editable. A destructive boolean or Pathfinder replaces its
@@ -373,9 +375,11 @@ contents whole while you work, without losing the mask.
 
 | Command | Use it to |
 | --- | --- |
-| `vector.listBrushes` | List the brushes a brushstroke can use: the dry presets (pencils, pastels, charcoal, crayon, chalk, markers, inks, ballpoint, gel pen, fineliner), then saved brushes from the brush library the vector profile admits, with their sizes and `builtin`. Brushes it refuses (wet, thick, particles, stickers, tools) are refused by `vector.addBrushstroke` with the reason. A saved brush is kept in the layer, so the document renders without the library. |
-| `vector.addBrushstroke` | Paint paths with a brush along their outline (`brushId`, `size`, `pressure` profile such as [0.2, 1, 0.2] for a taper, `color`, default the brush's default colour (ballpoint blue, chalk), else the path's stroke; `keepColour` keeps the path's colour): sketchy, hand-drawn or inked lines that stay editable. Pass a `seed` (any integer) so the brush gets its character, the seeded jitter and paper grain that make pencil, pastel and charcoal look real; `paper` picks the grain (`{ pattern, seed, scale, depth }`) or `null` turns it off. Returns the stroke stacks. |
-| `vector.setBrushstroke` | Change brushstroke layer `index` of path `id`: brush (another brush without `color` takes its default colour, unless `keepColour`; giving the same `brushId` again takes that saved brush as the library has it now), size, pressure, colour, opacity, `seed` (a new seed is a new take on the same stroke; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default sanded paper). Remove it with `vector.removeStroke`. |
+| `vector.listBrushes` | List the brushes a brushstroke can use: the dry presets (pencils, pastels, charcoal, crayon, chalk, markers, inks, ballpoint, gel pen, fineliner), then saved brushes from the brush library the vector profile admits, with their sizes and `builtin`, plus the editor's `colorScheme` and `colorLocked`. Brushes it refuses (wet, thick, particles, stickers, tools) are refused by `vector.addBrushstroke` with the reason. A saved brush is kept in the layer, so the document renders without the library. |
+| `vector.addBrushstroke` | Paint paths with a brush along their outline (`brushId`, `size`, `pressure` profile such as [0.2, 1, 0.2] for a taper, `color`, default the brush's default colour (ballpoint blue, chalk), else the path's stroke; `keepColour`, or a lock from `vector.setColorLocked`, keeps the path's colour): sketchy, hand-drawn or inked lines that stay editable. Pass a `seed` (any integer) so the brush gets its character, the seeded jitter and paper grain that make pencil, pastel and charcoal look real; `paper` picks the grain (`{ pattern, seed, scale, depth }`) or `null` turns it off. Returns the stroke stacks. |
+| `vector.setBrushstroke` | Change brushstroke layer `index` of path `id`: brush (another brush without `color` takes its default colour, unless `keepColour` or the colour is locked; giving the same `brushId` again takes that saved brush as the library has it now), size, pressure, colour, opacity, `seed` (a new seed is a new take on the same stroke; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default sanded paper). Remove it with `vector.removeStroke`. |
+| `vector.setColorLocked` | Lock (`locked: true`) or unlock brushstroke colours ("Keep my colour"): while locked, `vector.addBrushstroke` and `vector.setBrushstroke` with another brush keep the path's or layer's colour instead of the brush's default; an explicit `color` still applies. Strokes already made are unchanged. Respect a lock the person set. Editor state, not an undo step. Returns `{ colorScheme, colorLocked }`. |
+| `vector.setColorScheme` | Set `scheme` `light` or `dark`: the side of light / dark default colours (chalk) that brushstrokes made from now on take. Existing strokes keep their colour. Usually the host's job. Returns `{ colorScheme, colorLocked }`. |
 
 Give brushstrokes a `seed` unless you want flat, even dabs: without one a charcoal or pastel line looks like a felt pen. Use different seeds on neighbouring strokes so they do not repeat each other, and `paper: null` for clean ink or marker lines that should not catch grain. The grain is laid in each path's own space, so it moves with the path.
 

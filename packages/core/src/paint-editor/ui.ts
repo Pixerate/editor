@@ -710,7 +710,6 @@ export const PATH_STROKE_TAPERS: ReadonlyArray<{ id: string; label: string; pres
   { id: 'out', label: 'Fade out', pressure: [1, 0.2] },
 ];
 
-/** The sticker panel's sliders for the selected sticker. */
 /** The brush sliders of a picked stroke on a stroke layer (paths into its brush; see `updateStroke`). */
 export const STROKE_SLIDERS: readonly SliderControl[] = [
   { path: 'tip.size', label: 'Size', min: 1, max: 400, step: 1 },
@@ -718,6 +717,7 @@ export const STROKE_SLIDERS: readonly SliderControl[] = [
   { path: 'tip.flow', label: 'Flow', min: 0, max: 1, step: 0.01 },
 ];
 
+/** The sticker panel's sliders for the selected sticker. */
 export const STICKER_SLIDERS: readonly SliderControl[] = [
   { path: 'size', label: 'Size', min: 2, max: 400, step: 1 },
   { path: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1 },

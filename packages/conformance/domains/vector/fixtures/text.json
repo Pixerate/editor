@@ -1,0 +1,918 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "text",
+  "description": "Text with the metric shaper: point and area text, styles, paragraphs, frames, text on a path and outlines.",
+  "setup": {
+    "width": 400,
+    "height": 300
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.listFonts"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.listFonts",
+          "ok": true,
+          "result": {
+            "families": [
+              "sans-serif",
+              "serif",
+              "monospace"
+            ],
+            "outlines": false,
+            "shaper": "metric"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Hello vector",
+          "x": 20,
+          "y": 40,
+          "font": {
+            "fontFamily": "sans-serif",
+            "fontSize": 24
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 24,
+              "width": 132.96,
+              "x": 20,
+              "y": 20.8
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 20,
+              "y": 40
+            },
+            "id": "n1",
+            "lines": [
+              {
+                "end": 12,
+                "start": 0,
+                "text": "Hello vector"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Hello vector"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "An area of text that wraps across several lines in its frame.",
+          "x": 20,
+          "y": 80,
+          "width": 160,
+          "height": 120,
+          "paragraph": {
+            "align": "center"
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 110.4,
+              "width": 158.64,
+              "x": 25,
+              "y": 80
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "height": 120,
+              "kind": "area",
+              "width": 160,
+              "x": 20,
+              "y": 80
+            },
+            "id": "n2",
+            "lines": [
+              {
+                "end": 11,
+                "start": 0,
+                "text": "An area of "
+              },
+              {
+                "end": 21,
+                "start": 11,
+                "text": "text that "
+              },
+              {
+                "end": 34,
+                "start": 21,
+                "text": "wraps across "
+              },
+              {
+                "end": 48,
+                "start": 34,
+                "text": "several lines "
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": true,
+            "paragraph": {
+              "align": "center"
+            },
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "An area of text that wraps across several lines in its frame."
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.getText",
+        "params": {
+          "id": "n1"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.getText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 24,
+              "width": 132.96,
+              "x": 20,
+              "y": 20.8
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 20,
+              "y": 40
+            },
+            "id": "n1",
+            "lines": [
+              {
+                "end": 12,
+                "start": 0,
+                "text": "Hello vector"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Hello vector"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setText",
+        "params": {
+          "id": "n1",
+          "text": "Hi",
+          "start": 0,
+          "end": 5
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 24,
+              "width": 100.32,
+              "x": 20,
+              "y": 20.8
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 20,
+              "y": 40
+            },
+            "id": "n1",
+            "lines": [
+              {
+                "end": 9,
+                "start": 0,
+                "text": "Hi vector"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Hi vector"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setTextStyle",
+        "params": {
+          "id": "n1",
+          "start": 0,
+          "end": 2,
+          "fontWeight": 700,
+          "fontSize": 30,
+          "tracking": 50
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setTextStyle",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 30,
+              "width": 110.37,
+              "x": 20,
+              "y": 16
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 20,
+              "y": 40
+            },
+            "id": "n1",
+            "lines": [
+              {
+                "end": 9,
+                "start": 0,
+                "text": "Hi vector"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [
+              {
+                "end": 2,
+                "start": 0,
+                "style": {
+                  "fontSize": 30,
+                  "fontWeight": 700,
+                  "tracking": 50
+                }
+              }
+            ],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Hi vector"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setParagraphStyle",
+        "params": {
+          "id": "n2",
+          "align": "right",
+          "spaceBefore": 4
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setParagraphStyle",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 110.4,
+              "width": 158.64,
+              "x": 30,
+              "y": 80
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "height": 120,
+              "kind": "area",
+              "width": 160,
+              "x": 20,
+              "y": 80
+            },
+            "id": "n2",
+            "lines": [
+              {
+                "end": 11,
+                "start": 0,
+                "text": "An area of "
+              },
+              {
+                "end": 21,
+                "start": 11,
+                "text": "text that "
+              },
+              {
+                "end": 34,
+                "start": 21,
+                "text": "wraps across "
+              },
+              {
+                "end": 48,
+                "start": 34,
+                "text": "several lines "
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": true,
+            "paragraph": {
+              "align": "right",
+              "spaceBefore": 4
+            },
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "An area of text that wraps across several lines in its frame."
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setTextFrame",
+        "params": {
+          "id": "n2",
+          "kind": "area",
+          "width": 200,
+          "height": 100
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setTextFrame",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 81.6,
+              "width": 175.68,
+              "x": 52.96,
+              "y": 80
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "height": 100,
+              "kind": "area",
+              "width": 200,
+              "x": 20,
+              "y": 80
+            },
+            "id": "n2",
+            "lines": [
+              {
+                "end": 16,
+                "start": 0,
+                "text": "An area of text "
+              },
+              {
+                "end": 27,
+                "start": 16,
+                "text": "that wraps "
+              },
+              {
+                "end": 42,
+                "start": 27,
+                "text": "across several "
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": true,
+            "paragraph": {
+              "align": "right",
+              "spaceBefore": 4
+            },
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "An area of text that wraps across several lines in its frame."
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setTextOrientation",
+        "params": {
+          "id": "n1",
+          "orientation": "vertical"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.setTextOrientation",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 110.37,
+              "width": 30,
+              "x": 5,
+              "y": 40
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 20,
+              "y": 40
+            },
+            "id": "n1",
+            "lines": [
+              {
+                "end": 9,
+                "start": 0,
+                "text": "Hi vector"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "vertical",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [
+              {
+                "end": 2,
+                "start": 0,
+                "style": {
+                  "fontSize": 30,
+                  "fontWeight": 700,
+                  "tracking": 50
+                }
+              }
+            ],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Hi vector"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M20 260 C 120 200 260 300 380 240",
+          "stroke": "#111827"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.typeOnPath",
+        "params": {
+          "pathId": "n3",
+          "text": "Along the curve",
+          "font": {
+            "fontSize": 16
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.typeOnPath",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 35.55,
+              "width": 119.52,
+              "x": 13.85,
+              "y": 227.16
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 16,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "path",
+              "path": {
+                "anchors": [
+                  {
+                    "out": {
+                      "x": 120,
+                      "y": 200
+                    },
+                    "x": 20,
+                    "y": 260
+                  },
+                  {
+                    "in": {
+                      "x": 260,
+                      "y": 300
+                    },
+                    "x": 380,
+                    "y": 240
+                  }
+                ],
+                "closed": false
+              }
+            },
+            "id": "n4",
+            "lines": [
+              {
+                "end": 15,
+                "start": 0,
+                "text": "Along the curve"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Along the curve"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.createOutlines",
+        "params": {
+          "ids": [
+            "n1"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "The text shaper \"metric\" gives no glyph outlines. Load a font file and set an outline shaper (createOutlineTextShaper with parseOpenTypeFont) to create outlines."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.getText",
+        "params": {
+          "id": "n4"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.getText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 35.55,
+              "width": 119.52,
+              "x": 13.85,
+              "y": 227.16
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 16,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "path",
+              "path": {
+                "anchors": [
+                  {
+                    "out": {
+                      "x": 120,
+                      "y": 200
+                    },
+                    "x": 20,
+                    "y": 260
+                  },
+                  {
+                    "in": {
+                      "x": 260,
+                      "y": 300
+                    },
+                    "x": 380,
+                    "y": 240
+                  }
+                ],
+                "closed": false
+              }
+            },
+            "id": "n4",
+            "lines": [
+              {
+                "end": 15,
+                "start": 0,
+                "text": "Along the curve"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Along the curve"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 300,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 110.37,
+                  "width": 30,
+                  "x": 5,
+                  "y": 40
+                },
+                "depth": 0,
+                "fill": "#000000",
+                "frame": "point",
+                "id": "n1",
+                "locked": false,
+                "name": "Hi vector",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "Hi vector",
+                "type": "text",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 81.6,
+                  "width": 175.68,
+                  "x": 52.96,
+                  "y": 80
+                },
+                "depth": 0,
+                "fill": "#000000",
+                "frame": "area",
+                "id": "n2",
+                "locked": false,
+                "name": "An area of text that wra…",
+                "rotation": 0,
+                "selected": false,
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "An area of text that wraps across several lines in its frame.",
+                "type": "text",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 35.55,
+                  "width": 119.52,
+                  "x": 13.85,
+                  "y": 227.16
+                },
+                "depth": 0,
+                "fill": "#000000",
+                "frame": "path",
+                "id": "n4",
+                "locked": false,
+                "name": "Along the curve",
+                "rotation": 0,
+                "selected": true,
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "Along the curve",
+                "type": "text",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n4"
+            ],
+            "tool": "select",
+            "width": 400
+          }
+        },
+        "document": {
+          "document": {
+            "height": 300,
+            "nodes": [
+              {
+                "fill": "#000000",
+                "font": {
+                  "fontFamily": "sans-serif",
+                  "fontSize": 24,
+                  "fontWeight": 400
+                },
+                "frame": {
+                  "kind": "point",
+                  "x": 20,
+                  "y": 40
+                },
+                "id": "n1",
+                "name": "Hi vector",
+                "orientation": "vertical",
+                "runs": [
+                  {
+                    "length": 2,
+                    "style": {
+                      "fontSize": 30,
+                      "fontWeight": 700,
+                      "tracking": 50
+                    }
+                  },
+                  {
+                    "length": 7,
+                    "style": {}
+                  }
+                ],
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "Hi vector",
+                "type": "text"
+              },
+              {
+                "fill": "#000000",
+                "font": {
+                  "fontFamily": "sans-serif",
+                  "fontSize": 24,
+                  "fontWeight": 400
+                },
+                "frame": {
+                  "height": 100,
+                  "kind": "area",
+                  "width": 200,
+                  "x": 20,
+                  "y": 80
+                },
+                "id": "n2",
+                "name": "An area of text that wra…",
+                "paragraph": {
+                  "align": "right",
+                  "spaceBefore": 4
+                },
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "An area of text that wraps across several lines in its frame.",
+                "type": "text"
+              },
+              {
+                "fill": "#000000",
+                "font": {
+                  "fontFamily": "sans-serif",
+                  "fontSize": 16,
+                  "fontWeight": 400
+                },
+                "frame": {
+                  "kind": "path",
+                  "path": {
+                    "anchors": [
+                      {
+                        "out": {
+                          "x": 120,
+                          "y": 200
+                        },
+                        "x": 20,
+                        "y": 260
+                      },
+                      {
+                        "in": {
+                          "x": 260,
+                          "y": 300
+                        },
+                        "x": 380,
+                        "y": 240
+                      }
+                    ],
+                    "closed": false
+                  }
+                },
+                "id": "n4",
+                "name": "Along the curve",
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "Along the curve",
+                "type": "text"
+              }
+            ],
+            "width": 400
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

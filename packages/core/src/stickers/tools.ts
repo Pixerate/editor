@@ -6,7 +6,7 @@
 
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { StickerError } from './errors';
-import { closestStickerRefs, MAX_STICKER_PAGE, parseStickerRef, stickerIdFor, stickerRefOf, stickerVariantFor, stickerVariantsOf } from './helpers';
+import { closestStickerRefs, MAX_STICKER_PAGE, parseStickerRef, providerCollections, stickerIdFor, stickerRefOf, stickerVariantFor, stickerVariantsOf } from './helpers';
 import { STICKER_VARIANTS, type MaybePromise, type StickerAsset, type StickerDescription, type StickerFormat, type StickerProvider, type StickerRef, type StickerSummary, type StickerVariant } from './types';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -114,7 +114,7 @@ export function createStickerTools(options: StickerToolsOptions): AgentTool[] {
       if (category !== undefined && categories && !categories.some((c) => c.id === category)) {
         throw new StickerError('invalid_argument', `No category "${category}" in "${p.name}"; categories: ${categories.map((c) => c.id).join(', ')}.`);
       }
-      const collections = (await p.listCollections?.()) ?? null;
+      const collections = (await providerCollections(p)) ?? null;
       if (collection !== undefined && !collections?.some((c) => c.id === collection)) {
         throw new StickerError('invalid_argument', collections?.length ? `No collection "${collection}" in "${p.name}"; collections: ${collections.map((c) => c.id).join(', ')}.` : `"${p.name}" has no collections; leave collection out.`);
       }

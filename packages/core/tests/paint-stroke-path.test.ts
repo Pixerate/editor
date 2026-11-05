@@ -23,12 +23,15 @@ describe('samplePath', () => {
     const curve = samplePath('M 0 0 C 0 100 100 100 100 0')[0];
     expect(Math.max(...curve.map((p) => p.y))).toBeCloseTo(75, 0);
     expect(curve.every((p) => p.pressure === undefined)).toBe(true);
+    const timed = samplePath('M 0 0 L 100 0', { spacing: 25, speed: 2 })[0];
+    expect(timed.map((p) => p.t)).toEqual([0, 12.5, 25, 37.5, 50]);
   });
 
   it('refuses paths with nothing to brush and bad options, saying what to give', () => {
     expect(() => samplePath('M 10 10')).toThrow(/no segments to brush/);
     expect(() => samplePath('M 0 0 L 10 0', { spacing: 0 })).toThrow(/spacing 0 is out of range/);
     expect(() => samplePath('M 0 0 L 10 0', { pressure: [2] })).toThrow(/pressure needs/);
+    expect(() => samplePath('M 0 0 L 10 0', { speed: 0 })).toThrow(/speed 0 is out of range/);
     expect(() => samplePath('M 0 0 L 100000 0', { spacing: 1 })).toThrow(/too many samples/);
   });
 });
@@ -83,5 +86,39 @@ describe('stroke_path', () => {
     expect(r.isError, r.text).toBe(false);
     expect(c.getStrokes()[0].points[0]).toMatchObject({ x: 10, y: 50 });
     expect(r.result.bounds.x).toBeGreaterThan(300);
+  });
+
+  it('sends one strokes command to the director in document pixels and undoes as one step', async () => {
+    const c = new PaintEditorController({ width: 100, height: 100 });
+    const commands: any[] = [];
+    const director = {
+      perform: async (_actor: unknown, cmds: readonly any[]) => {
+        commands.push(...cmds);
+        return cmds.map((command) => {
+          if (command.kind !== 'strokes') return { ok: true as const, command, result: undefined };
+          const results = c.group(command.label ?? 'Path stroke', () => command.strokes.map((s: any) => c.paintStroke(s)));
+          return {
+            ok: true as const,
+            command,
+            result: { layerId: results[0].layerId, dabs: 4, bounds: results[0].bounds, strokeIds: results.map((r: any) => r.strokeId) },
+          };
+        });
+      },
+    } as any;
+    const r = await tools(c, { origin: { x: 300, y: 200 }, director })('stroke_path', {
+      path: 'M 310 220 L 390 220 M 310 260 L 390 260',
+      brushId: 'ink-pen',
+      speed: 2,
+      seed: 7,
+    });
+    expect(r.isError, r.text).toBe(false);
+    expect(commands).toHaveLength(1);
+    expect(commands[0].kind).toBe('strokes');
+    expect(commands[0].strokes).toHaveLength(2);
+    expect(commands[0].strokes[0].points[0]).toMatchObject({ x: 10, y: 20, t: 0 });
+    expect(commands[0].strokes.map((s: any) => s.seed)).toEqual([7, 8]);
+    expect(r.result.bounds.x).toBeGreaterThan(300);
+    c.undo();
+    expect(c.getStrokes()).toHaveLength(0);
   });
 });

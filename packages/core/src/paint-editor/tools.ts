@@ -30,6 +30,7 @@ import { createLayerEffectTools } from '../image-editor/effect-tools';
 import { createPaintWetTools } from './wet-tools';
 import { createPaintThickTools } from './thick-tools';
 import { createPaintReplayTools } from './replay-tools';
+import { samplePath } from './path-samples';
 import type { PaintAgentCommand, PaintDirector } from './presence';
 import type { PresenceActorInfo } from '../animation/presence';
 
@@ -114,9 +115,10 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   const tools: PaintAgentTool[] = [];
   const add = (t: PaintAgentTool) => tools.push(t);
   /** Runs `command` through the director when there is one (its error becomes the tool error), else `direct`. */
-  const act = async <T>(command: PaintAgentCommand, direct: () => T): Promise<T> => {
+  const act = async <T>(command: PaintAgentCommand | (() => PaintAgentCommand), direct: () => T): Promise<T> => {
     if (!options.director) return direct();
-    const [r] = await options.director.perform(options.actor ?? { id: 'agent', name: 'Agent' }, [command]);
+    const cmd = typeof command === 'function' ? command() : command;
+    const [r] = await options.director.perform(options.actor ?? { id: 'agent', name: 'Agent' }, [cmd]);
     if (!r || !r.ok) throw new Error(r && !r.ok ? r.message : 'The director did not run the command.');
     return r.result as T;
   };
@@ -625,13 +627,14 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'stroke_path',
     title: 'Brush along a path',
     description:
-      'Brushes vector path data (SVG path d in document pixels: M, L, H, V, C, S, Q, T, A and Z) on a pixel layer with a library brush or the active one, as if drawn by hand along it: the outline of a shape, a lettering guide, a curve from a vector tool. Each subpath becomes one recorded stroke, sampled every spacing px, with an optional pressure profile spread along each subpath (a taper such as [0.2, 1, 0.2]); closed subpaths end where they start. Brushes behave as in paint_stroke (grain, pick-up, wet and thick paint, guides off). One undo step for the whole path. Returns the layer id, changed bounds, dab count and the recorded strokeIds (for replay_strokes, update_stroke).',
+      'Brushes vector path data (SVG path d in document pixels: M, L, H, V, C, S, Q, T, A and Z) on a pixel layer with a library brush or the active one, as if drawn by hand along it: the outline of a shape, a lettering guide, a curve from a vector tool. Each subpath becomes one recorded stroke, sampled every spacing px, with an optional pressure profile spread along each subpath (a taper such as [0.2, 1, 0.2]); closed subpaths end where they start. Brushes behave as in paint_stroke (grain, pick-up, wet and thick paint, guides off). With an agent cursor (a director), each subpath is painted live in turn. One undo step for the whole path. Returns the layer id, changed bounds, dab count and the recorded strokeIds (for replay_strokes, update_stroke).',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', minLength: 1, description: 'SVG path data in document pixels, e.g. "M 40 200 C 120 40 280 40 360 200". Several subpaths paint several strokes.' },
         spacing: { type: 'number', minimum: 0.25, maximum: 100, description: 'Distance between samples along the path in document pixels (default 2); the brush spaces its own dabs, so this only sets how closely curves are followed.' },
         pressure: { type: 'array', minItems: 1, maxItems: 64, items: { type: 'number', minimum: 0, maximum: 1 }, description: 'Pen pressure along each subpath, spread evenly from start to end (default full pressure); [0.2, 1, 0.2] tapers both ends.' },
+        speed: { type: 'number', minimum: 0.01, maximum: 100, description: 'Drawing speed in document pixels per millisecond (optional; gives each sample a time t so playback has a pace and speed-sensitive brushes respond).' },
         layerId: LAYER_ID,
         brushId: { type: 'string', description: 'Brush id from list_brush_presets (default the active brush).' },
         brush: { type: 'object', description: 'Facets to change for this stroke only, laid over brushId or the active brush (as set_brush takes them).', properties: BRUSH_PATCH_PROPERTIES, additionalProperties: false },
@@ -654,7 +657,30 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       }
       // A hosted layer takes canvas coordinates: move the path into document pixels.
       const path = options.origin && typeof a.path === 'string' && a.path.trim() ? bezierPathToSvg(a.path, { offset: { x: -options.origin.x, y: -options.origin.y } }) : (a.path as string);
-      const r = c.strokePath({ path, spacing: a.spacing, pressure: a.pressure, layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed });
+      const init = { path, spacing: a.spacing, pressure: a.pressure, speed: a.speed, layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed };
+      const r = await act(
+        () => {
+          if (typeof path !== 'string' || !path.trim()) throw new PaintEditorError('path is empty; give SVG path data in document pixels, e.g. "M 10 10 C 40 0 80 60 120 30".');
+          let subpaths: PenPoint[][];
+          try {
+            subpaths = samplePath(path, init);
+          } catch (e) {
+            throw new PaintEditorError(e instanceof Error ? e.message : String(e));
+          }
+          const { path: _path, spacing: _spacing, pressure: _pressure, speed: _speed, ...stroke } = init;
+          return {
+            kind: 'strokes' as const,
+            label: `${base?.name ?? 'Brush'} path stroke`,
+            strokes: subpaths.map((points, i) => ({
+              ...stroke,
+              ...(stroke.seed !== undefined ? { seed: (stroke.seed as number) + i } : {}),
+              snapToPerspective: false,
+              points,
+            })),
+          };
+        },
+        () => c.strokePath(init)
+      );
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },
   });

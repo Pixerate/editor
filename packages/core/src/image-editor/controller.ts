@@ -8496,7 +8496,7 @@ export class ImageEditorController {
   }
 
   /**
-   * The document as an RGB PSD at its bit depth (8, 16 or 32) (PSB above 30 000 px) with real layers, groups, adjustment
+   * The document as a PSD in its colour mode (RGB, CMYK or Lab) at its bit depth (PSB above 30 000 px) with real layers, groups, adjustment
    * layers and masks, in the source frame. Layer filters and parametric (depth) masks are baked
    * into pixels and masks, annotation layers are rasterized (in a browser; elsewhere they are left
    * out), and the merged image is our composite. `warnings` lists every such change.

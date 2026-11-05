@@ -43,6 +43,41 @@ describe('brushed freehand strokes (Svelte)', () => {
 		await expect(draw.selectBrush('watercolor-round')).rejects.toThrow(/can't brush a canvas stroke/);
 	});
 
+	it('a colour taken from a light / dark default follows setColorScheme; colorLocked keeps the colour', async () => {
+		let nodes: CanvasNode[] = [];
+		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n), tool: 'pen', colorScheme: 'dark' });
+		expect(draw.colorScheme).toBe('dark');
+		await draw.selectBrush('chalk');
+		expect(draw.style.color).toBe('#f8fafc');
+		draw.setColorScheme('light');
+		expect(draw.colorScheme).toBe('light');
+		expect(draw.style.color).toBe('#475569');
+		expect(draw.brushSettings()).toMatchObject({ brush: 'chalk', colorScheme: 'light', colorFollowsScheme: true });
+		expect(draw.colorLocked).toBe(false);
+		draw.setColorLocked(true);
+		expect(draw.colorLocked).toBe(true);
+		draw.setStyle({ color: '#16a34a' });
+		await draw.selectBrush('ballpoint');
+		expect(draw.style).toMatchObject({ brush: 'ballpoint', color: '#16a34a' });
+		draw.setColorScheme('dark');
+		expect(draw.style.color).toBe('#16a34a');
+		const locked = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n), tool: 'pen', colorLocked: true });
+		expect(locked.colorLocked).toBe(true);
+	});
+
+	it('the picker commands run through the Svelte draw object', async () => {
+		let nodes: CanvasNode[] = [];
+		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n), tool: 'pen' });
+		const registry = new CommandRegistry();
+		registry.register(createDrawCommands(draw));
+		const r = await registry.executeAsync('canvas.selectBrush', { brushId: 'chalk' });
+		expect(r).toMatchObject({ ok: true, result: { brush: 'chalk', color: '#475569', colorLocked: false } });
+		expect(await registry.executeAsync('canvas.setColorScheme', { scheme: 'dark' })).toMatchObject({ ok: true, result: { color: '#f8fafc', colorScheme: 'dark' } });
+		expect(draw.colorScheme).toBe('dark');
+		expect(await registry.executeAsync('canvas.setColorLocked', { locked: true })).toMatchObject({ ok: true, result: { colorLocked: true } });
+		expect(draw.colorLocked).toBe(true);
+	});
+
 	it('exposes nodeBounds, so gesture commands can circle a node by id', async () => {
 		let nodes: CanvasNode[] = [{ id: 'card', position: { x: 100, y: 80 }, width: 160, height: 40, data: {} }];
 		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n) });

@@ -344,10 +344,11 @@ private func profileAt(_ profile: [Double], _ t: Double) -> Double {
  * Samples SVG path data (document pixels) into pen points, one array per subpath. Closed
  * subpaths end where they start. Throws a sentence when the path has nothing to brush.
  */
-func samplePath(_ d: String, spacing spacingIn: Double?, pressure profile: [Double]?) throws -> [[PenPoint]] {
+func samplePath(_ d: String, spacing spacingIn: Double?, pressure profile: [Double]?, speed: Double? = nil) throws -> [[PenPoint]] {
     let spacing = spacingIn ?? 2
     if !(spacing >= 0.25 && spacing <= 100) { throw PaintEditorError("spacing \(jsText(spacing)) is out of range; use 0.25..100 document pixels.") }
     if let profile, profile.isEmpty || profile.contains(where: { !($0 >= 0 && $0 <= 1) }) { throw PaintEditorError("pressure needs one or more values from 0 to 1, e.g. [0.2, 1, 0.2] for a taper.") }
+    if let speed, !(speed >= 0.01 && speed <= 100) { throw PaintEditorError("speed \(jsText(speed)) is out of range; use 0.01..100 document pixels per millisecond.") }
     var out: [[PenPoint]] = []
     for contour in pathToContours(d) {
         if contour.segments.isEmpty { continue }
@@ -371,7 +372,9 @@ func samplePath(_ d: String, spacing spacingIn: Double?, pressure profile: [Doub
             let b = line[Swift.min(j + 1, line.count - 1)]
             let x = JS.round((a.0 + (b.0 - a.0) * f) * 1000) / 1000
             let y = JS.round((a.1 + (b.1 - a.1) * f) * 1000) / 1000
-            points.append(profile.map { PenPoint(x: x, y: y, pressure: JS.round(profileAt($0, Double(k) / Double(n)) * 1000) / 1000) } ?? PenPoint(x: x, y: y))
+            let pr = profile.map { JS.round(profileAt($0, Double(k) / Double(n)) * 1000) / 1000 }
+            let t = speed.map { JS.round((at / $0) * 1000) / 1000 }
+            points.append(PenPoint(x: x, y: y, pressure: pr, t: t))
         }
         out.append(points)
     }

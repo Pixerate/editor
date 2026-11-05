@@ -1,0 +1,690 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "arrange-and-transform",
+  "description": "Transforms, alignment, distribution, stacking order, groups and layer moves.",
+  "setup": {
+    "width": 400,
+    "height": 300
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 40,
+          "height": 40,
+          "fill": "#ef4444"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 100,
+          "y": 30,
+          "width": 40,
+          "height": 60,
+          "fill": "#22c55e"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 220,
+          "y": 60,
+          "width": 60,
+          "height": 40,
+          "fill": "#3b82f6"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.transform",
+        "params": {
+          "ids": [
+            "n1"
+          ],
+          "dx": 15,
+          "dy": 5,
+          "rotate": 30
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.transform",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.transform",
+        "params": {
+          "ids": [
+            "n2"
+          ],
+          "sx": 1.5,
+          "sy": 0.5
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.transform",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.skew",
+        "params": {
+          "ids": [
+            "n3"
+          ],
+          "ax": 20,
+          "ay": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.skew",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.align",
+        "params": {
+          "edge": "top",
+          "ids": [
+            "n1",
+            "n2",
+            "n3"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.align",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.align",
+        "params": {
+          "edge": "center",
+          "to": "artboard",
+          "ids": [
+            "n2"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.align",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.distribute",
+        "params": {
+          "direction": "horizontal",
+          "ids": [
+            "n1",
+            "n2",
+            "n3"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.distribute",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.arrange",
+        "params": {
+          "order": "back",
+          "ids": [
+            "n3"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.arrange",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.arrange",
+        "params": {
+          "order": "forward",
+          "ids": [
+            "n1"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.arrange",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.group",
+        "params": {
+          "ids": [
+            "n1",
+            "n2"
+          ],
+          "name": "Pair"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.group",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.moveLayer",
+        "params": {
+          "id": "n3",
+          "index": 0,
+          "parentId": "n4"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.moveLayer",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 300,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 54.64,
+                  "width": 269.6,
+                  "x": 17.68,
+                  "y": 7.68
+                },
+                "children": 3,
+                "depth": 0,
+                "id": "n4",
+                "locked": false,
+                "name": "Pair",
+                "rotation": 0,
+                "selected": true,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 74.56,
+                  "x": 212.72,
+                  "y": 7.68
+                },
+                "d": "M227.19 102.33L286.22 113.07L293.38 155.03L234.35 144.29Z",
+                "depth": 1,
+                "fill": "#3b82f6",
+                "id": "n3",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": -10.31,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 60,
+                  "x": 112.52,
+                  "y": 7.68
+                },
+                "d": "M112.52 7.68L172.52 7.68L172.52 37.68L112.52 37.68Z",
+                "depth": 1,
+                "fill": "#22c55e",
+                "id": "n2",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 54.64,
+                  "width": 54.64,
+                  "x": 17.68,
+                  "y": 7.68
+                },
+                "d": "M25 15L65 15L65 55L25 55Z",
+                "depth": 1,
+                "fill": "#ef4444",
+                "id": "n1",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 30,
+                "selected": false,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n4"
+            ],
+            "tool": "select",
+            "width": 400
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.ungroup",
+        "params": {
+          "ids": [
+            "n4"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.ungroup",
+          "ok": true,
+          "result": {
+            "selection": [
+              "n3",
+              "n2",
+              "n1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.distort",
+        "params": {
+          "ids": [
+            "n3"
+          ],
+          "corners": [
+            {
+              "x": 200,
+              "y": 50
+            },
+            {
+              "x": 300,
+              "y": 40
+            },
+            {
+              "x": 310,
+              "y": 120
+            },
+            {
+              "x": 190,
+              "y": 110
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.distort",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 112.32050807568875,
+              "width": 292.3205080756887,
+              "x": 17.67949192431124,
+              "y": 7.679491924311222
+            },
+            "ok": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.transform",
+        "params": {
+          "ids": [],
+          "dx": 1
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "Nothing is selected; pass ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 300,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 70,
+                  "width": 110,
+                  "x": 200,
+                  "y": 50
+                },
+                "d": "M207.1 141.69L292.33 161.96L302.78 230.25L200.52 187.78Z",
+                "depth": 0,
+                "fill": "#3b82f6",
+                "id": "n3",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": -10.31,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 30,
+                  "width": 60,
+                  "x": 112.52,
+                  "y": 7.68
+                },
+                "d": "M112.52 7.68L172.52 7.68L172.52 37.68L112.52 37.68Z",
+                "depth": 0,
+                "fill": "#22c55e",
+                "id": "n2",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 54.64,
+                  "width": 54.64,
+                  "x": 17.68,
+                  "y": 7.68
+                },
+                "d": "M25 15L65 15L65 55L25 55Z",
+                "depth": 0,
+                "fill": "#ef4444",
+                "id": "n1",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 30,
+                "selected": true,
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n3",
+              "n2",
+              "n1"
+            ],
+            "tool": "select",
+            "width": 400
+          }
+        },
+        "document": {
+          "document": {
+            "height": 300,
+            "nodes": [
+              {
+                "fill": "#3b82f6",
+                "id": "n3",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 207.09538934586186,
+                        "y": 141.68934082080744
+                      },
+                      {
+                        "x": 292.329199093162,
+                        "y": 161.96019162476676
+                      },
+                      {
+                        "x": 302.7847891357632,
+                        "y": 230.25309620554944
+                      },
+                      {
+                        "x": 200.515962689527,
+                        "y": 187.77906977659802
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "transform": [
+                  0.9838409914012408,
+                  -0.1790444180605012,
+                  0.1790444180605012,
+                  0.9838409914012408,
+                  -29.117618741296212,
+                  -52.320508075688764
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#22c55e",
+                "id": "n2",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 112.52055169518233,
+                        "y": 7.679491924311222
+                      },
+                      {
+                        "x": 172.52055169518235,
+                        "y": 7.679491924311222
+                      },
+                      {
+                        "x": 172.52055169518235,
+                        "y": 37.67949192431122
+                      },
+                      {
+                        "x": 112.52055169518233,
+                        "y": 37.67949192431122
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#ef4444",
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 25,
+                        "y": 15
+                      },
+                      {
+                        "x": 65,
+                        "y": 15
+                      },
+                      {
+                        "x": 65,
+                        "y": 55
+                      },
+                      {
+                        "x": 25,
+                        "y": 55
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "transform": [
+                  0.8660254037844387,
+                  0.49999999999999983,
+                  -0.49999999999999983,
+                  0.8660254037844387,
+                  23.528856829700256,
+                  -17.81088913245535
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 400
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}
