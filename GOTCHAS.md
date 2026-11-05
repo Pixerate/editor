@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [svelte/canvas] `FloatingHorizontalScrollbar` Kept a Stale Position When Its Target Resized Quietly
+
+- **Issue / Symptom**: The bar stayed at its old `left` and `width` after the target changed size. In one host app it stayed 1022px wide while the board it tracks was 1313px wide.
+- **Root Cause**: The component measured only on window `scroll` / `resize` and target `scroll`. A target widened by a CSS variable written in an animation frame after the scroll event changes size after the last measurement, and no further event arrives.
+- **Solution / Workaround**: A `ResizeObserver` on `targetElement` calls `updateMetrics`. It lives in an `$effect` rather than `onMount` so it follows the prop. It reports size changes only, so a target that moves without resizing still waits for the next scroll or resize event.
+
 ### [core/canvas] Proposal Ghosts Stay Hidden in React Flow Unless They Carry a Size
 
 - **Issue / Symptom**: Ghost nodes from `useCanvasProposals().view` were in the DOM with their label but never showed (`visibility: hidden`), and their edges did not draw.
