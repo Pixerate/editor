@@ -6,9 +6,6 @@
     "width": 300,
     "height": 200
   },
-  "skip": {
-    "swift": "Symbols and instances are not ported yet (#624)."
-  },
   "steps": [
     {
       "tool": "run_command",

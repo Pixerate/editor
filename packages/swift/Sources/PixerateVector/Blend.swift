@@ -851,8 +851,10 @@ private func preparePathMorph(_ a: VectorNode, _ b: VectorNode, _ options: Vecto
 private func flattenPaths(_ node: VectorNode, _ parent: VectorMatrix = IDENTITY_MATRIX) throws -> [(path: VectorNode, m: VectorMatrix, opacity: Double)] {
     let m = multiplyMatrices(nodeMatrix(node), parent)
     if node.isPath { return [(node, m, 1)] }
-    // not ported yet: text and instances blend as their glyphs / art (#624)
-    if node.isText || node.isInstance { throw VectorNotPorted("blending \(node.typeName) nodes") }
+    // Instances blend as their art.
+    if node.isInstance { return try flattenPaths(try expandVectorAppearance(node), parent) }
+    // not ported yet: text blends as its glyphs (#624)
+    if node.isText { throw VectorNotPorted("blending \(node.typeName) nodes") }
     let o = node.opacity ?? 1
     return try node.children.filter(\.isVisible).flatMap { try flattenPaths($0, m) }.map { ($0.path, $0.m, $0.opacity * o) }
 }

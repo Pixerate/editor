@@ -9,9 +9,10 @@ import PixerateRaster
 // `style` declarations, `transform`s, `fill-opacity` / `stroke-opacity` (as paint stacks),
 // `clip-path` and `mask` references (each a mask group, the clip or mask first), and this editor's
 // own export: live corners, paint stacks, stroke settings kept on a `<g data-vector-path>`, and
-// live boolean groups, path effects, symmetry groups and blends. Text, `<use>` and symbols,
-// filters, frames, own mask groups, instances, connectors, generated art, lenses and resizing
-// constraints throw `VectorNotPorted` (#624). Regular expressions are the TS ones with
+// live boolean groups, path effects, symmetry groups and blends; `<use>` as instances of the
+// element it refers to (our own `<symbol data-vector-symbol>`s, any other element as a symbol of
+// its own) and our own `<g data-vector-instance>`. Text, filters, frames, own mask groups,
+// connectors, generated art, lenses and resizing constraints throw `VectorNotPorted` (#624). Regular expressions are the TS ones with
 // JavaScript's `\s` and `\w` spelled out, since ICU's differ.
 
 /// JavaScript's `\s`.
@@ -450,6 +451,11 @@ private final class SvgImporter {
     var resolving = Set<String>()
     /// The base style mask and clip content inherits.
     var rootStyle: SvgStyle = ["fill": "#000", "stroke": "none", "strokeWidth": ""]
+    /// Symbols read so far, and the symbol each referred-to element became (nil while it is read,
+    /// so a symbol that uses itself draws nothing).
+    var symbols: [VectorSymbol] = []
+    var symbolOfElement: [ObjectIdentifier: String?] = [:]
+    var usedSymbolIds = Set<String>()
 
     init(root: SvgElement, createId: (() -> String)?) {
         self.root = root
@@ -676,6 +682,104 @@ private final class SvgImporter {
         return group
     }
 
+    /// An attribute's JSON, or nil when absent or unreadable (`json`).
+    func json(_ value: String?) -> JSONValue? { value.flatMap { try? JSONValue.parse($0) } }
+
+    /// The symbol an element becomes (`symbolFor`): our `<symbol data-vector-symbol>` with its art,
+    /// or any other element `<use>` refers to as the art itself. Nil for a symbol that uses itself.
+    func symbolFor(_ el: SvgElement) throws -> String? {
+        let key = ObjectIdentifier(el)
+        if let hit = symbolOfElement[key] { return hit }
+        symbolOfElement[key] = .some(nil)
+        let own = json(el.attrs["data-vector-symbol"])?.objectValue
+        var id = own?["id"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? el.attrs["id"] ?? createId()
+        while usedSymbolIds.contains(id) { id = "\(id)-\(usedSymbolIds.count)" }
+        usedSymbolIds.insert(id)
+        let style = readStyle(el, rootStyle, styleRules)
+        // A `<symbol>` holds its art; any other element referred to is the art itself.
+        let nodes: [VectorNode]
+        if el.name == "symbol" {
+            nodes = try visit(el, style, IDENTITY_MATRIX)
+        } else {
+            let copy = SvgElement(name: el.name, attrs: el.attrs)
+            copy.attrs["transform"] = ""
+            copy.children = el.children
+            copy.content = el.content
+            nodes = try visitOne(copy, rootStyle, parseSvgTransform(el.attrs["transform"]) ?? IDENTITY_MATRIX)
+        }
+        let name = own?["name"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? el.attrs["id"] ?? "Symbol"
+        symbols.append(VectorSymbol(id: id, name: name, nodes: nodes))
+        symbolOfElement[key] = .some(id)
+        return id
+    }
+
+    /// An instance node: id, type, `meta`, symbol, then the instance options of `own`.
+    func instanceNode(_ id: String, _ meta: JSONObject, _ symbolId: String, _ own: JSONObject?) -> VectorNode {
+        var props = JSONObject([("id", .string(id)), ("type", "instance")])
+        for (k, v) in meta { props[k] = v }
+        props["symbolId"] = .string(symbolId)
+        if own?["scaleStrokes"] == .bool(false) { props["scaleStrokes"] = false }
+        if truthy(own?["overrides"]) { props["overrides"] = own!["overrides"] }
+        return VectorNode(props: props)
+    }
+
+    /// A `<use>` as an instance of the symbol it refers to, placed by its transform and `x` / `y` (`useInstance`).
+    func useInstance(_ el: SvgElement, _ m: VectorMatrix, _ meta: JSONObject) throws -> VectorNode? {
+        let href = (el.attrs["href"] ?? el.attrs["xlink:href"] ?? "").jsTrimmed
+        guard href.hasPrefix("#"), let target = byId[String(href.dropFirst())] else { return nil }
+        guard let symbolId = try symbolFor(target) else { return nil }
+        let own = json(el.attrs["data-vector-instance"])?.objectValue
+        let place = multiplyMatrices(translateMatrix(length(el.attrs["x"]), length(el.attrs["y"])), m)
+        var node = instanceNode(idFor(el), meta, symbolId, own)
+        if !isIdentityMatrix(place) { node.transform = place }
+        return node
+    }
+
+    /// Our own `<symbol data-vector-symbol>` elements, in document order.
+    func ownSymbolElements() -> [SvgElement] {
+        var out: [SvgElement] = []
+        func walk(_ el: SvgElement) {
+            if el.name == "symbol", el.attrs["data-vector-symbol"] != nil { out.append(el) }
+            el.children.forEach(walk)
+        }
+        walk(root)
+        return out
+    }
+
+    /// A `<g data-vector-instance>` (an instance written as its drawn art) as the instance it came from (`ownInstance`).
+    func ownInstance(_ g: SvgElement, _ m: VectorMatrix, _ meta: JSONObject) throws -> VectorNode? {
+        guard let raw = json(g.attrs["data-vector-instance"])?.objectValue, let rawSymbol = raw["symbolId"]?.stringValue else { return nil }
+        // The first element with an id that is one of our symbols (`[...byId.values()].find`).
+        let sym = ownSymbolElements().first { e in
+            guard let id = e.attrs["id"], byId[id] === e else { return false }
+            return json(e.attrs["data-vector-symbol"])?["id"]?.stringValue == rawSymbol
+        }
+        guard let symbolId = try sym.map({ try symbolFor($0) }) ?? rawSymbol else { return nil }
+        let rawT = raw["transform"]?.arrayValue
+        let t = rawT.flatMap { list -> VectorMatrix? in
+            let n = list.compactMap(\.numberValue)
+            return list.count == 6 && n.count == 6 && n.allSatisfy(\.isFinite) ? VectorMatrix(n[0], n[1], n[2], n[3], n[4], n[5]) : nil
+        } ?? IDENTITY_MATRIX
+        let place = multiplyMatrices(t, m)
+        let drawn = g.children.first { $0.name == "g" }
+        let effects = try sanitizeVectorEffects(raw["effects"])
+        let id = drawn?.attrs["id"] ?? idFor(g)
+        var node = instanceNode(id, meta, symbolId, raw)
+        if !effects.isEmpty { node["effects"] = .array(effects.map { .object($0) }) }
+        if let drawn {
+            // The drawn group carries the instance's own opacity, blend mode and filters.
+            let ds = readStyle(drawn, rootStyle, styleRules)
+            if let op = drawn.attrs["opacity"].map(\.jsParseFloat), op.isFinite, op < 1 { node.opacity = op }
+            if let blend = vectorBlendModeFromCss(ds["mixBlendMode"]), blend != "normal" { node["blendMode"] = .string(blend) }
+            let filters = try filtersOf(ds["filter"])
+            if !filters.isEmpty { node["filters"] = .array(filters) }
+            if drawn.attrs["display"] == "none" { node["visible"] = false }
+            usedIds.insert(node.id)
+        }
+        if !isIdentityMatrix(place) { node.transform = place }
+        return node
+    }
+
     /// Maps a unit box onto the bounds of `nodes` (`bboxMatrix`).
     func bboxMatrix(_ nodes: [VectorNode]) throws -> VectorMatrix? {
         guard let b = unionBounds(try nodes.map { try vectorNodeBounds($0) }), b.width > 0, b.height > 0 else { return nil }
@@ -769,16 +873,12 @@ private final class SvgImporter {
             throw VectorNotPorted("importing \(what)")
         }
         let g = child.name == "g"
-        // not ported yet: frames, own mask groups, instances and symbols, text (#624)
+        // not ported yet: frames, own mask groups, text (#624)
         if g && child.attrs["data-vector-frame"] != nil { throw VectorNotPorted("importing frames") }
         if g && child.attrs["data-vector-mask"] != nil { throw VectorNotPorted("importing mask groups") }
         if g && child.attrs["data-vector-live"] != nil { return try liveNode(child, s, m, meta).map { [$0] } ?? [] }
-        if child.name == "use" {
-            let href = (child.attrs["href"] ?? child.attrs["xlink:href"] ?? "").jsTrimmed
-            if href.hasPrefix("#") && byId[String(href.dropFirst())] != nil { throw VectorNotPorted("importing <use> and symbols") }
-            return []
-        }
-        if g && child.attrs["data-vector-instance"] != nil { throw VectorNotPorted("importing instances") }
+        if child.name == "use" { return try useInstance(child, m, meta).map { [$0] } ?? [] }
+        if g && child.attrs["data-vector-instance"] != nil { return try ownInstance(child, m, meta).map { [$0] } ?? [] }
         if (g && child.attrs["data-vector-text"] != nil) || child.name == "text" { throw VectorNotPorted("importing text") }
         if g && child.attrs["data-vector-path"] != nil && child.attrs["data-vector-fills"] != nil { return try stackedPath(child, m, meta).map { [$0] } ?? [] }
         if g && child.attrs["data-vector-path"] != nil { return try mergedPath(child, s, m, meta).map { [$0] } ?? [] }
@@ -807,11 +907,12 @@ private final class SvgImporter {
         let height = viewBox.count == 4 ? viewBox[3] : length(root.attrs["height"], 150)
         let rootMatrix = viewBox.count == 4 ? translateMatrix(-viewBox[0], -viewBox[1]) : IDENTITY_MATRIX
         rootStyle = readStyle(root, rootStyle, styleRules)
-        // not ported yet: symbols (#624)
-        func hasOwnSymbol(_ el: SvgElement) -> Bool { (el.name == "symbol" && el.attrs["data-vector-symbol"] != nil) || el.children.contains(where: hasOwnSymbol) }
-        if hasOwnSymbol(root) { throw VectorNotPorted("importing symbols") }
+        // Our own symbols come back whether or not an instance uses them.
+        for el in ownSymbolElements() { _ = try symbolFor(el) }
         let nodes = try visit(root, rootStyle, rootMatrix)
-        return VectorDocument(width: width, height: height, nodes: nodes)
+        var doc = VectorDocument(width: width, height: height, nodes: nodes)
+        if !symbols.isEmpty { doc.symbols = symbols }
+        return resolveVectorSymbols(doc)
     }
 }
 

@@ -41,8 +41,7 @@ public func createVectorCommands(_ controller: VectorEditorController) throws ->
                 return ctl.selection.isEmpty ? "Nothing is selected." : .enabled
             }
         } else if c.id == "vector.exitSymbolEdit" {
-            // not ported yet: symbol editing (#624); no symbol can be in isolation mode.
-            enabled = { _, _ in "No symbol is being edited." }
+            enabled = { ctl, _ in ctl.symbolEdit != nil ? .enabled : "No symbol is being edited." }
         } else {
             enabled = nil
         }
@@ -173,10 +172,14 @@ extension VectorEditorController {
                     o["stroke"] = n.stroke ?? .null
                     o["strokeWidth"] = .number(n.strokeWidth ?? 1)
                     o["d"] = .string(vectorPathData(n, precision: 2))
+                } else if n.isInstance {
+                    o["symbolId"] = .string(n.symbolId)
+                    if truthy(n["transform"]) { o["transform"] = n["transform"] }
+                    if truthy(n["overrides"]) { o["overrides"] = n["overrides"] }
                 } else if n.isGroup {
                     o["children"] = .number(Double(n.children.count))
                 } else {
-                    // not ported yet: text and instances (#624)
+                    // not ported yet: text (#624)
                     throw VectorNotPorted("listing \(n.typeName) nodes")
                 }
                 if n.isGroup && truthy(n["blend"]) {
@@ -473,6 +476,7 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     vectorStrokeRuns(&r)
     vectorShadingRuns(&r)
     vectorBlendRuns(&r)
+    vectorSymbolRuns(&r)
     return r
 }
 
@@ -982,5 +986,101 @@ private func vectorShadingRuns(_ r: inout [String: VectorCommandRun]) {
         let id = p.str("id") ?? ""
         try check(c.setFreeformLines(id, params["lines"]?.arrayValue ?? []))
         return try shadingResult(c, id)
+    }
+}
+
+// MARK: - Symbols
+
+/// A symbol as `vector.listSymbols` lists it (`symbolSummary`): id, name, the art's nodes, its
+/// bounds in symbol space and the ids of its instances.
+private func symbolSummary(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let sym = c.getSymbols().first(where: { $0.id == id }) else { throw fail("There is no symbol \"\(id)\"; vector.listSymbols lists them.") }
+    var nodes: [JSONValue] = []
+    func walk(_ list: [VectorNode]) {
+        for n in list {
+            var o = JSONObject([("id", .string(n.id)), ("type", .string(n.typeName))])
+            if let name = n.name, !name.isEmpty { o["name"] = .string(name) }
+            nodes.append(.object(o))
+            if n.isGroup { walk(n.children) }
+        }
+    }
+    walk(sym.nodes)
+    var x0 = Double.infinity, y0 = Double.infinity, x1 = -Double.infinity, y1 = -Double.infinity
+    for n in sym.nodes {
+        guard let b = try vectorNodeBounds(n, IDENTITY_MATRIX) else { continue }
+        x0 = JS.min(x0, b.x)
+        y0 = JS.min(y0, b.y)
+        x1 = JS.max(x1, b.x + b.width)
+        y1 = JS.max(y1, b.y + b.height)
+    }
+    let bounds: JSONValue = x0 < .infinity
+        ? .object(JSONObject([("x", .number(round2(x0))), ("y", .number(round2(y0))), ("width", .number(round2(x1 - x0))), ("height", .number(round2(y1 - y0)))]))
+        : .null
+    return .object(JSONObject([("id", .string(sym.id)), ("name", .string(sym.name)), ("nodes", .array(nodes)), ("bounds", bounds), ("instances", idList(c.getSymbolInstances(sym.id)))]))
+}
+
+private func vectorSymbolRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.listSymbols"] = { c, _ in
+        .object(JSONObject([("symbols", .array(try c.getSymbols().map { try symbolSummary(c, $0.id) })), ("editing", c.symbolEdit.map { .string($0.symbolId) } ?? .null)]))
+    }
+    r["vector.makeSymbol"] = { c, params in
+        let p = VectorParams(params)
+        let name = p.str("name").flatMap { $0.isEmpty ? nil : $0 }
+        let made = try c.makeSymbol(ids: try targetIds(c, p), name: name)
+        try check(made.result)
+        return .object(JSONObject([("symbolId", .string(made.symbolId!)), ("instanceId", .string(made.instanceId!)), ("symbol", try symbolSummary(c, made.symbolId!))]))
+    }
+    r["vector.placeSymbol"] = { c, params in
+        let p = VectorParams(params)
+        let transform = params["transform"].flatMap { VectorMatrix(json: $0) }
+        if transform != nil && (p.has("x") || p.has("y")) { throw fail("Pass either x / y or transform, not both.") }
+        let placed = try c.placeSymbol(p.str("symbolId") ?? "", x: p.num("x"), y: p.num("y"), transform: transform, name: p.str("name").flatMap { $0.isEmpty ? nil : $0 })
+        try check(placed.result)
+        return .object(JSONObject([("id", .string(placed.id!))]))
+    }
+    r["vector.setInstanceOptions"] = { c, params in
+        var patch = JSONObject()
+        if let v = params["scaleStrokes"] { patch["scaleStrokes"] = v }
+        for key in ["fill", "stroke"] {
+            guard let v = params[key] else { continue }
+            if v == .null { patch[key] = .null } else { patch[key] = try checkPaint(v, key) ?? .null }
+        }
+        if let v = params["hidden"] { patch["hidden"] = v }
+        if patch.isEmpty { throw fail("Pass at least one of scaleStrokes, fill, stroke, hidden.") }
+        let ids = try targetIds(c, VectorParams(params))
+        try check(try c.setInstanceOptions(patch, ids: ids))
+        let listed = try c.listing()["nodes"]?.arrayValue ?? []
+        return .object(JSONObject([("instances", .array(ids.map { id in listed.first { $0["id"] == .string(id) } ?? .null }))]))
+    }
+    r["vector.replaceSymbol"] = { c, params in
+        let p = VectorParams(params)
+        let ids = try targetIds(c, p)
+        try check(c.replaceSymbol(p.str("symbolId") ?? "", ids: ids))
+        return .object(JSONObject([("ids", idList(ids))]))
+    }
+    r["vector.detachInstance"] = { c, params in
+        let r = try c.detachInstances(ids: try targetIds(c, VectorParams(params)))
+        try check(r.result)
+        return .object(JSONObject([("ids", idList(r.ids))]))
+    }
+    r["vector.renameSymbol"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("symbolId") ?? ""
+        try check(c.renameSymbol(id, p.str("name") ?? ""))
+        return try symbolSummary(c, id)
+    }
+    r["vector.deleteSymbol"] = { c, params in
+        let p = VectorParams(params)
+        try check(try c.deleteSymbol(p.str("symbolId") ?? "", detach: p.bool("detach") ?? false))
+        return ok()
+    }
+    r["vector.editSymbol"] = { c, params in
+        try check(try c.editSymbol(VectorParams(params).str("id") ?? ""))
+        return .object(JSONObject([("symbolId", .string(c.symbolEdit!.symbolId)), ("nodes", try c.listing()["nodes"] ?? .array([]))]))
+    }
+    r["vector.exitSymbolEdit"] = { c, _ in
+        let id = c.symbolEdit?.symbolId
+        c.exitSymbolEdit()
+        return .object(JSONObject([("symbolId", id.map { .string($0) } ?? .null)]))
     }
 }
