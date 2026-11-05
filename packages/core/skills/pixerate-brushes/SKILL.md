@@ -1,6 +1,6 @@
 ---
 name: pixerate-brushes
-description: How to find, describe, create, change, check and share brushes in the Pixerate brush library through list_brush_presets, describe_brush, create_brush, update_brush, duplicate_brush, remove_brush, check_brush, export_brushes, import_brushes, preview_brush, add_brush_source and list_brush_sources - brushes made of facets (kind, medium and variety or tool, tip, marks, dynamics, behaviour, light, motion, colour), image tips and tip grain made from image sources, the built-in presets, and the host profiles that say what the paint editor, image editor, canvas and vector strokes can render. Use when asked to make, design, tweak, save, copy, delete, export, import or check a brush, make a brush from an image (a scanned mark, a leaf, a texture), give a brush grain, find a brush for a medium (pencil, ink, watercolour, oil, airbrush, highlighter), or make a brush work in another editor.
+description: How to find, describe, create, change, check and share brushes in the Pixerate brush library through list_brush_presets, describe_brush, create_brush, update_brush, duplicate_brush, remove_brush, check_brush, export_brushes, import_brushes, import_brush_pack, preview_brush, add_brush_source and list_brush_sources - brushes made of facets (kind, medium and variety or tool, tip, marks, dynamics, behaviour, light, motion, colour), image tips and tip grain made from image sources, the built-in presets, and the host profiles that say what the paint editor, image editor, canvas and vector strokes can render. Use when asked to make, design, tweak, save, copy, delete, export, import or check a brush, make a brush from an image (a scanned mark, a leaf, a texture), give a brush grain, bring in a Photoshop .abr or Procreate .brush / .brushset pack, find a brush for a medium (pencil, ink, watercolour, oil, airbrush, highlighter), or make a brush work in another editor.
 ---
 
 # Brushes
@@ -79,7 +79,10 @@ drawn.
    part; keep the `licence` it came with), then `create_brush` with `tip: { shape: "stamp",
    stamps: ["source:<id>"] }` for an image tip, or `tip.grain.source` for grain.
    `list_brush_sources` lists them and which brushes use each.
-7. **Share it.** `export_brushes` writes a library file; `import_brushes` adds one (version 1
+7. **Bring in a pack.** `import_brush_pack` with the file (base64), its `fileName` and the
+   `licence` it came with. Read `brushes` (with `renderable` for this host), `unsupported` (what
+   was not mapped) and `licence`, then `preview_brush` a few and tune them with `update_brush`.
+8. **Share it.** `export_brushes` writes a library file; `import_brushes` adds one (version 1
    files of the paint editor's older brushes are migrated). `check_brush` with `host` before
    handing a brush to another editor.
 
@@ -132,6 +135,11 @@ drawn.
   not strokes already painted. Objects marks take stickers only, so an image source there is
   dropped (`problems` says so). Brush packs are often licensed for personal use only: keep the
   `licence` text with the source.
+- **Brush packs.** Only the tips (and Procreate grain) are imported: dynamics, pencil curves,
+  patterns, dual brushes and wet settings are listed in `unsupported`, so imported brushes paint
+  with default feel; tune them. Imported image tips are stamp tips, so canvas, vector and the image
+  editor can't paint them (`renderable` false). Packs are often for personal use only: pass and
+  keep their `licence`; never redistribute a library file of imported brushes without checking it.
 - **Out-of-range values** are refused by the schema (`tip.size` is 1..2500 px); a stored brush
   is clamped on import and reported in `problems`.
 - **The paint editor paints from this library.** Its `set_brush` picks a brush by id here and
@@ -159,4 +167,5 @@ drawn.
 | `import_brushes` | Add a library `file` (v2, v1 migrated, or a bare list): built-in ids and taken ids are skipped unless `overwrite`. Returns `added`, `replaced`, `skipped`, `problems`. |
 | `preview_brush` | Only when the host renders previews: a sample stroke with a brush (`id`, `width`, `height`, `color`) as an image. |
 | `add_brush_source` | Add an image (`name`, `image` PNG data: URL, optional `id`, `channel` auto / alpha / darkness / lightness, `invert`, `licence`, `origin`, `overwrite`) as a source for image tips and grain. Returns `id`, `ref` (`source:<id>`), `width`, `height`, `problems`, `replaced`. Then `create_brush` / `update_brush` with the ref in `tip.stamps` or `tip.grain.source`. |
+| `import_brush_pack` | Import a Photoshop `.abr` or Procreate `.brush` / `.brushset` (`file` base64 or a data: URL, `fileName`, optional `format`, `prefix`, `licence`, `overwrite`). Returns `format`, `brushes` (id, name, `renderable` here), `sources`, `skipped`, `unsupported`, `licence`, `problems`. Then `preview_brush` and `update_brush` to tune. |
 | `list_brush_sources` | The library's image sources (`text`, `offset`, `limit`). Returns `sources` (id, ref, name, width, height, licence, origin, `usedBy` brush ids) and `total`. Call before naming a `source:` ref. |

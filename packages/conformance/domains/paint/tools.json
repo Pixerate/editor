@@ -15893,6 +15893,63 @@
             "idempotentHint": false,
             "openWorldHint": false
           }
+        },
+        {
+          "name": "import_brush_pack",
+          "title": "Import a brush pack",
+          "description": "Imports a brush pack someone already owns: Photoshop .abr (sampled tips become image sources and stamp-tip brushes, computed tips round or flat brushes; preset names and spacing where the file has them) or Procreate .brush / .brushset (each brush's shape becomes its image tip and its grain its tip grain, with its name and spacing). Brushes and sources are added to the library in one import; ids already saved are skipped unless overwrite. Returns format, brushes (id, name, renderable: whether this host, Paint editor, can paint it), sources (ids), skipped, unsupported (what was not imported or mapped, in words), licence (the licence given and any licence or terms files found in the pack, also kept on each source) and problems. Packs are often licensed for personal use only: pass the licence they came with.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 89478490,
+                "description": "The pack's bytes, base64 (at most 64 MB)."
+              },
+              "fileName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "The file name, e.g. \"Inky.abr\": its extension picks the format and its name prefixes the brush ids and names."
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "abr",
+                  "brush",
+                  "brushset"
+                ],
+                "description": "abr, brush or brushset (default: from the file name, then the contents)."
+              },
+              "prefix": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+                "description": "Id prefix for the brushes and sources (default: from the file name)."
+              },
+              "licence": {
+                "type": "string",
+                "maxLength": 2000,
+                "description": "The licence or terms the pack came with, kept on every source it adds."
+              },
+              "overwrite": {
+                "type": "boolean",
+                "description": "Replace saved brushes and sources with the same ids (default false: skip them)."
+              }
+            },
+            "required": [
+              "file",
+              "fileName"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Import a brush pack",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
         }
       ]
     },

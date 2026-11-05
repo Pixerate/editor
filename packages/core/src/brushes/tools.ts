@@ -17,6 +17,8 @@ import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, withKeptIssues
 import { resolveCategory, resolveEngine } from './resolve';
 import { BRUSH_JSON_SCHEMA } from './schema';
 import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_TOOLS, type Brush } from './types';
+import { BRUSH_PACK_FORMATS, importBrushPack, MAX_BRUSH_PACK_BYTES, type BrushPackFormat } from './import/pack';
+import { base64ToBytes } from '../raster/png';
 import { BRUSH_SOURCE_CHANNELS, brushSourceIdOf, brushSourceIds, brushSourceRef, isBrushSourceRef, MAX_BRUSH_SOURCE_INPUT_PIXELS, MAX_BRUSH_SOURCE_SIZE, summarizeBrushSource } from './sources';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -422,6 +424,42 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
       },
       annotations: { title: 'Import brushes', ...WRITE, destructiveHint: true },
       handler: async ({ file, overwrite }) => library.importFile(file, { overwrite: !!overwrite }),
+    },
+    {
+      name: 'import_brush_pack',
+      title: 'Import a brush pack',
+      description: `Imports a brush pack someone already owns: Photoshop .abr (sampled tips become image sources and stamp-tip brushes, computed tips round or flat brushes; preset names and spacing where the file has them) or Procreate .brush / .brushset (each brush's shape becomes its image tip and its grain its tip grain, with its name and spacing). Brushes and sources are added to the library in one import; ids already saved are skipped unless overwrite. Returns format, brushes (id, name, renderable: whether this host, ${profile.name}, can paint it), sources (ids), skipped, unsupported (what was not imported or mapped, in words), licence (the licence given and any licence or terms files found in the pack, also kept on each source) and problems. Packs are often licensed for personal use only: pass the licence they came with.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          file: { type: 'string', minLength: 4, maxLength: Math.ceil((MAX_BRUSH_PACK_BYTES * 4) / 3) + 4, description: `The pack's bytes, base64 (at most ${MAX_BRUSH_PACK_BYTES / 1024 / 1024} MB).` },
+          fileName: { type: 'string', minLength: 1, maxLength: 200, description: 'The file name, e.g. "Inky.abr": its extension picks the format and its name prefixes the brush ids and names.' },
+          format: { type: 'string', enum: [...BRUSH_PACK_FORMATS], description: 'abr, brush or brushset (default: from the file name, then the contents).' },
+          prefix: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,39}$', description: 'Id prefix for the brushes and sources (default: from the file name).' },
+          licence: { type: 'string', maxLength: 2000, description: 'The licence or terms the pack came with, kept on every source it adds.' },
+          overwrite: { type: 'boolean', description: 'Replace saved brushes and sources with the same ids (default false: skip them).' },
+        },
+        required: ['file', 'fileName'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Import a brush pack', ...WRITE, destructiveHint: true },
+      handler: async ({ file, fileName, format, prefix, licence, overwrite }) => {
+        let bytes: Uint8Array;
+        try {
+          bytes = base64ToBytes((file as string).replace(/^data:[^,]*,/, ''));
+        } catch {
+          throw new BrushLibraryError('invalid', 'file is not base64: pass the pack\'s bytes as base64 (a data: URL works too).');
+        }
+        let r;
+        try {
+          r = await importBrushPack(library, bytes, { fileName: fileName as string, ...(format ? { format: format as BrushPackFormat } : {}), ...(prefix ? { prefix: prefix as string } : {}), ...(licence ? { licence: licence as string } : {}), overwrite: !!overwrite });
+        } catch (e) {
+          if (e instanceof BrushLibraryError) throw e;
+          throw new BrushLibraryError('invalid', `${(e as Error).message} Nothing was imported.`);
+        }
+        const entries = await Promise.all(r.brushes.map((b) => library.get(b.id)));
+        return { ...r, brushes: r.brushes.map((b, i) => ({ ...b, renderable: entries[i] ? checkBrush(entries[i]!.brush, profile).ok : false })) };
+      },
     },
   );
   return tools;

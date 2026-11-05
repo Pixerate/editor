@@ -1,7 +1,7 @@
 <script lang="ts">
   import StickerPicker from './StickerPicker.svelte';
   import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-  import { addBrushSourceFromFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+  import { addBrushSourceFromFile, importBrushFile, brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
   import BrushEditor from '../brushes/BrushEditor.svelte';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
@@ -97,7 +97,7 @@
   {/if}
 {/snippet}
 
-<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. Images picked for an image tip or grain go into the brush library as sources. -->
+<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. Images picked for an image tip or grain go into the brush library as sources; Import also reads brush packs (.abr, .brush, .brushset). -->
 <div class={`${panel} ${className}`} data-testid="brush-panel">
   <BrushLibraryBrowser {entries} activeId={brush.id} onselect={(id) => controller.setBrush({ id })} thumbnail={(id) => thumbs.get(id) ?? null} {thumbnailWidth} {thumbnailHeight} />
   <BrushEditor
@@ -116,14 +116,14 @@
     <input
       bind:this={fileInput}
       type="file"
-      accept=".json,application/json"
+      accept=".json,.abr,.brush,.brushset,application/json"
       aria-label="Import brushes"
       class="hidden"
       onchange={(e) => {
         const input = e.currentTarget;
         const f = input.files?.[0];
         input.value = '';
-        if (f) run(async () => controller.importBrushes(JSON.parse(await f.text())));
+        if (f) run(async () => (/\.json$/i.test(f.name) ? controller.importBrushes(JSON.parse(await f.text())) : importBrushFile(controller.brushLibrary, f)));
       }}
     />
   </div>

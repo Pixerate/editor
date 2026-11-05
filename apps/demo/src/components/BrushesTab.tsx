@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Paintbrush } from "lucide-react";
-import { BRUSH_HOST_PROFILES, checkBrush, createBrushLibraryToolProvider, type BrushPreviewRenderer } from "@pixerate/editor/brushes";
+import { BRUSH_HOST_PROFILES, checkBrush, createBrushLibraryToolProvider, importBrushFile, type BrushPreviewRenderer } from "@pixerate/editor/brushes";
 import { BrushLibraryBrowser, BrushLibraryEditor, useBrushLibrary } from "@pixerate/editor-react/brushes";
 import { useAgentToolProvider } from "@pixerate/editor-react";
 import { renderCanvasBrushPreview } from "@pixerate/editor/canvas";
@@ -117,7 +117,7 @@ function BrushesView() {
             <input
               ref={fileRef}
               type="file"
-              accept=".json,application/json"
+              accept=".json,.abr,.brush,.brushset,application/json"
               aria-label="Import brushes"
               className="hidden"
               onChange={(e) => {
@@ -125,7 +125,8 @@ function BrushesView() {
                 e.target.value = "";
                 if (f)
                   attempt(async () => {
-                    const r = await demoBrushLibrary.importFile(JSON.parse(await f.text()));
+                    const r = await importBrushFile(demoBrushLibrary, f);
+                    if ("format" in r) return `Imported ${r.brushes.length} brushes from ${f.name}${r.skipped.length ? `, skipped ${r.skipped.length}` : ""}. Not mapped: ${r.unsupported.join(" ") || "nothing"}${r.licence.length ? ` Licence: ${r.licence.join(" ")}` : ""}`;
                     return `Imported ${r.added.length} brushes${r.skipped.length ? `, skipped ${r.skipped.length}` : ""}.`;
                   });
               }}
