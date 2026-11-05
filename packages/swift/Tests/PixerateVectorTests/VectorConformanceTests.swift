@@ -44,7 +44,7 @@ final class VectorConformanceTests: XCTestCase {
     /// The scenarios this port covers stay unskipped.
     func testPortedScenariosAreNotSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors"] {
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text"] {
             let scenario = try XCTUnwrap(scenarios.first { $0.id == id })
             XCTAssertNil(scenario.skip["swift"], id)
         }
@@ -113,8 +113,8 @@ final class VectorConformanceTests: XCTestCase {
         XCTAssertNil(listed.first { $0.id == "vector.list" }?.params)
         _ = host.commands.execute("vector.addShape", ["kind": "rect", "x": 0, "y": 0, "width": 10, "height": 10])
         XCTAssertEqual(host.commands.list().filter { !$0.enabled }.map(\.id), ["vector.exitSymbolEdit"])
-        let result = host.commands.execute("vector.listFonts")
-        guard case .failure(let f) = result else { return XCTFail("listFonts ran") }
+        let result = host.commands.execute("vector.exportPdf")
+        guard case .failure(let f) = result else { return XCTFail("exportPdf ran") }
         XCTAssertEqual(f.code, .failed)
         XCTAssertTrue(f.message.contains("not ported to Swift yet (#624)"), f.message)
     }

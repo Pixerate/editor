@@ -281,7 +281,7 @@ private func sameSubpaths(_ a: [VectorSubpath], _ b: [VectorSubpath]) -> Bool {
 
 /// The document's nodes with every connector routed again (glue to objects that no longer exist
 /// dropped); the same nodes when nothing moved (`rerouteVectorConnectors`). A connector whose ends
-/// the port cannot measure yet (text) keeps its geometry.
+/// the port cannot measure yet (art with effects it does not draw, such as Extrude) keeps its geometry.
 public func rerouteVectorConnectors(_ nodes: [VectorNode]) -> [VectorNode] {
     var ids: [String] = []
     walkVectorNodes(nodes) { n, _, _ in

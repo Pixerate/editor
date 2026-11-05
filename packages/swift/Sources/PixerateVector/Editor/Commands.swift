@@ -180,8 +180,11 @@ extension VectorEditorController {
                 } else if n.isGroup {
                     o["children"] = .number(Double(n.children.count))
                 } else {
-                    // not ported yet: text (#624)
-                    throw VectorNotPorted("listing \(n.typeName) nodes")
+                    o["fill"] = n.fill ?? .null
+                    o["stroke"] = n.stroke ?? .null
+                    o["strokeWidth"] = .number(n.strokeWidth ?? 1)
+                    o["text"] = .string(n.textValue)
+                    o["frame"] = .string(n.textFrameKind)
                 }
                 if n.isGroup && truthy(n["blend"]) {
                     var blend = resolveVectorBlendOptions(n["blend"])
@@ -193,8 +196,8 @@ extension VectorEditorController {
                 if let e = n["effects"], let c = e.arrayValue?.count, c > 0 { o["effects"] = e }
                 if n.isGroup && truthy(n["liveBoolean"]) { o["liveBoolean"] = n["liveBoolean"] }
                 if truthy(n["booleanOperation"]) { o["booleanOperation"] = n["booleanOperation"] }
-                if n.isPath, let f = n["fills"], f.arrayValue != nil { o["fills"] = f }
-                if n.isPath, let s = n["strokes"], s.arrayValue != nil { o["strokes"] = s }
+                if n.isPath || n.isText, let f = n["fills"], f.arrayValue != nil { o["fills"] = f }
+                if n.isPath || n.isText, let s = n["strokes"], s.arrayValue != nil { o["strokes"] = s }
                 if let m = n["blendMode"]?.stringValue, !m.isEmpty, m != "normal" { o["blendMode"] = .string(m) }
                 if let f = n["filters"], let c = f.arrayValue?.count, c > 0 { o["filters"] = f }
                 if let mask = vectorMaskSummary(n) { o["mask"] = mask }
@@ -480,6 +483,7 @@ private func vectorCommandRuns() -> [String: VectorCommandRun] {
     vectorSymbolRuns(&r)
     vectorConstraintRuns(&r)
     vectorFrameRuns(&r)
+    vectorTextCommandRuns(&r)
     return r
 }
 
@@ -1321,5 +1325,132 @@ private func vectorFrameRuns(_ r: inout [String: VectorCommandRun]) {
         let made = try c.attachToPerspective(p.str("plane") ?? "", ids: p.strings("ids"))
         try check(made.result)
         return .object(JSONObject([("ids", idList(made.ids))]))
+    }
+}
+
+// MARK: - Text
+
+/// The character style fields of `FONT_PROPS`, in its order.
+private let FONT_PROPS = ["fontFamily", "fontWeight", "italic", "fontSize", "tracking", "leading", "baselineShift", "underline", "strikethrough", "upright"]
+/// The paragraph fields of `PARAGRAPH_PROPS`, in its order.
+private let PARAGRAPH_PROPS = ["align", "autoLeading", "firstLineIndent", "startIndent", "endIndent", "spaceBefore", "spaceAfter"]
+/// The path text options of `PATH_TEXT_PROPS`, in its order.
+private let PATH_TEXT_PROPS = ["start", "end", "flip", "orientation", "baseline"]
+
+/// The params among `keys` that are given, in the order of `keys` (`pick`).
+private func pick(_ params: JSONObject, _ keys: [String]) -> JSONObject {
+    var out = JSONObject()
+    for k in keys { if let v = params[k] { out[k] = v } }
+    return out
+}
+
+/// A text node as agents read it (`textSummary`): text, styles as ranges, frame, laid-out lines and bounds.
+private func textSummary(_ c: VectorEditorController, _ id: String) throws -> JSONValue {
+    guard let n = c.getNode(id) else { throw fail("There is no node \"\(id)\".") }
+    if !n.isText { throw fail("\"\(id)\" is a \(n.typeName), not text; vector.list shows each node's type.") }
+    let layout = layoutVectorText(n)
+    let parent = vectorParentMatrix(c.document.nodes, id) ?? IDENTITY_MATRIX
+    let b = try vectorNodeBounds(n, parent)
+    var at = 0.0
+    var runs: [JSONValue] = []
+    for r in n.textRuns ?? [] {
+        let range = JSONObject([("start", .number(at)), ("end", .number(at + r.length))])
+        at += r.length
+        if r.style.isEmpty { continue }
+        var o = range
+        o["style"] = .object(r.style)
+        runs.append(.object(o))
+    }
+    let text = n.textValue
+    let units = text.u16
+    var o = JSONObject([("id", .string(id)), ("text", .string(text)), ("font", n["font"] ?? .null), ("runs", .array(runs)), ("paragraph", n["paragraph"] ?? .object(JSONObject()))])
+    o["frame"] = n["frame"] ?? .null
+    o["orientation"] = n["orientation"] ?? "horizontal"
+    o["fill"] = n.fill ?? .null
+    o["stroke"] = n.stroke ?? .null
+    o["lines"] = .array(layout.lines.map { l in
+        .object(JSONObject([("start", .number(Double(l.start))), ("end", .number(Double(l.end))), ("text", .string(str16(units[Swift.min(l.start, units.count) ..< Swift.min(Swift.max(l.start, l.end), units.count)])))]))
+    })
+    o["bounds"] = b.map { .object(JSONObject([("x", .number(round2($0.x))), ("y", .number(round2($0.y))), ("width", .number(round2($0.width))), ("height", .number(round2($0.height)))])) } ?? .null
+    o["overflow"] = .bool(layout.overflow)
+    o["outlines"] = .bool(vectorTextHasOutlines())
+    o["shaper"] = .string(layout.shaper)
+    o["missingFonts"] = .array(layout.missingFonts.map { .string($0) })
+    return .object(o)
+}
+
+private func vectorTextCommandRuns(_ r: inout [String: VectorCommandRun]) {
+    r["vector.listFonts"] = { c, _ in
+        .object(JSONObject([("shaper", .string(c.getTextShaper().id)), ("outlines", .bool(vectorTextHasOutlines())), ("families", .array(vectorTextFamilies().map { .string($0) }))]))
+    }
+    r["vector.addText"] = { c, params in
+        let p = VectorParams(params)
+        let pathOptions = pick(params, PATH_TEXT_PROPS)
+        if params["path"] == nil && !pathOptions.isEmpty { throw fail("\(pathOptions.keys.joined(separator: ", ")) only apply to text on a path; pass path too.") }
+        if (params["width"] == nil) != (params["height"] == nil) { throw fail("Area text needs both width and height; leave both out for point text.") }
+        var style = JSONObject()
+        if let w = params["strokeWidth"] { style["strokeWidth"] = w }
+        if params["fill"] != nil { style["fill"] = try checkPaint(params["fill"], "fill") }
+        if params["stroke"] != nil { style["stroke"] = try checkPaint(params["stroke"], "stroke") }
+        let input = VectorTextInput(text: p.str("text") ?? "", x: p.num("x"), y: p.num("y"), width: p.num("width"), height: p.num("height"), path: params["path"], pathOptions: pathOptions,
+                                    font: params["font"]?.objectValue, paragraph: params["paragraph"]?.objectValue, orientation: params["textOrientation"], name: p.str("name"), style: style)
+        let options = try parentOf(c, p.str("parentId"))
+        let id: String
+        do {
+            id = try c.addText(input, options)
+        } catch {
+            throw fail("\(error)")
+        }
+        return try textSummary(c, id)
+    }
+    r["vector.getText"] = { c, params in try textSummary(c, VectorParams(params).str("id") ?? "") }
+    r["vector.setText"] = { c, params in
+        let p = VectorParams(params)
+        let id = p.str("id") ?? ""
+        try check(c.setText(id, p.str("text") ?? "", start: p.num("start"), end: p.num("end")))
+        return try textSummary(c, id)
+    }
+    r["vector.setTextStyle"] = { c, params in
+        let p = VectorParams(params)
+        var patch = pick(params, FONT_PROPS + ["fill"])
+        if patch.isEmpty { throw fail("Pass at least one of \((FONT_PROPS + ["fill"]).joined(separator: ", ")).") }
+        if patch["fill"] != nil { patch["fill"] = try checkPaint(patch["fill"], "fill") }
+        let id = p.str("id") ?? ""
+        try check(c.setTextStyle(id, patch, start: p.num("start"), end: p.num("end")))
+        return try textSummary(c, id)
+    }
+    r["vector.setParagraphStyle"] = { c, params in
+        let patch = pick(params, PARAGRAPH_PROPS)
+        if patch.isEmpty { throw fail("Pass at least one of \(PARAGRAPH_PROPS.joined(separator: ", ")).") }
+        let id = VectorParams(params).str("id") ?? ""
+        try check(c.setParagraphStyle(id, patch))
+        return try textSummary(c, id)
+    }
+    r["vector.setTextFrame"] = { c, params in
+        var patch = params
+        let id = VectorParams(params).str("id") ?? ""
+        remove(&patch, "id")
+        if patch.isEmpty { throw fail("Pass kind or a frame field to change.") }
+        try check(c.setTextFrame(id, patch))
+        return try textSummary(c, id)
+    }
+    r["vector.setTextOrientation"] = { c, params in
+        let id = VectorParams(params).str("id") ?? ""
+        try check(c.setTextOrientation(id, params["orientation"] ?? .null))
+        return try textSummary(c, id)
+    }
+    r["vector.typeOnPath"] = { c, params in
+        let p = VectorParams(params)
+        var style = JSONObject()
+        if params["fill"] != nil { style["fill"] = try checkPaint(params["fill"], "fill") }
+        let input = VectorTextInput(text: p.str("text") ?? "", pathOptions: pick(params, PATH_TEXT_PROPS), font: params["font"]?.objectValue, paragraph: params["paragraph"]?.objectValue, style: style)
+        let (result, id) = c.typeOnPath(p.str("pathId") ?? "", input)
+        try check(result)
+        return try textSummary(c, id ?? "")
+    }
+    r["vector.createOutlines"] = { c, params in
+        let r = c.createOutlines(ids: try targetIds(c, VectorParams(params)))
+        try check(r.result)
+        return ["ids": idList(r.ids ?? [])]
     }
 }

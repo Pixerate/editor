@@ -168,6 +168,8 @@ public final class VectorEditorController {
     var drawingPlane: String?
     /// The route new connectors get (the Connector tool and `addConnector`).
     var connectorRoute = "straight"
+    /// The font and alignment new text gets (`textDefaults`).
+    var textDefaults = DEFAULT_VECTOR_FONT
     /// Bumped on every change listeners hear about.
     public private(set) var revision = 0
     private var listeners: [(id: UUID, fn: () -> Void)] = []

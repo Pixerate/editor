@@ -9,7 +9,8 @@ import PixerateCore
  * tool names (`list_commands`, `run_command`, `run_commands`) in a registry that validates
  * arguments, the saved document (the `pixerate.editor-document` envelope) and the scene render
  * data (`getVectorSceneRenderData` with its defaults). Node ids come from a counter (`n1`, `n2`,
- * …), so they are part of the contract and are not normalised. `setup` is the scenario's artboard
+ * …), so they are part of the contract and are not normalised. Text uses the metric shaper (set
+ * for the process, `setVectorTextShaper`), the one every implementation can match. `setup` is the scenario's artboard
  * size (`{ width, height }`, default the editor's).
  *
  * The effect and generation tools (`vector-effects`, `vector-generation`) are not ported yet
@@ -21,6 +22,8 @@ public final class VectorConformanceHost: ConformanceHost {
     private let registry = ToolRegistry(validateArguments: true)
 
     public init(setup: JSONObject) throws {
+        // Text lays out with the metric shaper, the one every implementation can match.
+        setVectorTextShaper(MetricTextShaper())
         var next = 0
         let width = setup["width"]?.numberValue
         let height = setup["height"]?.numberValue
