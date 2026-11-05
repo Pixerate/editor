@@ -43,3 +43,20 @@ Read this before `mix_colors`, a `paint_stroke` with `tool: "mixer"`, or gradien
    "gradient", stops, map }`, or `paint_stroke` `paint` for one stroke (brush only). `map.by`
    `distance` (default 300 px, mirrored) for drag-it-out colour, `pressure`, `direction`,
    `across-tip`, `random`; stops may be `"paint"` / `"secondary"` (foreground / background).
+
+## Pitfalls
+
+- `paint_stroke`, `fill_pixels` and `clear_pixels` need a visible pixel layer (or a layer with a
+  raster mask and `channel: "mask"`); adjustment, group, shape, type, annotation and smart object layers can
+  only be painted through their masks (and a smart object through `channel: "filter-mask"`).
+  To paint a smart object's pixels, `edit_smart_object_contents` or rasterize it. A layer with
+  `locks.pixels` refuses paint.
+- `mix_colors` predicts a mix; it does not paint. To paint the mix, pass `blend: "pigment"` to
+  `paint_stroke` (in `brush`) or `fill_pixels`, or set it on a layer.
+- `pigment` and the painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) have no Photoshop mode in the image editor's PSD exporter: `export_psd` writes those layers as Normal (the merged image keeps the look; only `pigment` adds a warning, naming the layers). `import_psd` never produces them. Over transparent pixels there is nothing for `pigment` to mix with, so it lays the colour down as Normal.
+- The Mixer Brush ignores `brush.blend` (including `pigment`; use its own `mixer.mixing` instead) and the opacity ceiling: each dab lays paint at
+  `flow × opacity` over the pixels as they are now, so overlapping dabs build up. At `flow` 1
+  each dab covers what is under it, the pickup then sees mostly the brush's own paint, and the
+  stroke drifts towards the loaded colour; lower the flow for more blending.
+- An empty, dry mixer (no reservoir, `wet` 0) paints nothing; the call succeeds with
+  `bounds: null`. A mixer stroke over transparent pixels has nothing to pick up.

@@ -1,7 +1,7 @@
 /**
  * Agent tools for provider effects in the animation editor: the shared effect tools on artwork
  * nodes (`apply_effect` applies a motion effect, made into commands) and `add_vector_effect`
- * for vector effects that bring their own picture, and the camera move tools (`list_camera_moves`,
+ * for vector effects that bring their own picture (`set_vector_effect_path` runs one along a path node or words), and the camera move tools (`list_camera_moves`,
  * `set_shot_camera_move`, `clear_shot_camera_move`).
  */
 
@@ -9,6 +9,7 @@ import { effectTemplateTools } from '../effects/template-tools.js';
 import { animationShotLayerTools } from './layer-tools.js';
 import { animationCameraMoveTools } from './camera-tools.js';
 import { withAnimationPlayback } from './playback.js';
+import { pathControlsOf } from '../effects/helpers.js';
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult } from '../effects/tools.js';
 import type { EffectValue } from '../effects/types.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
@@ -98,7 +99,7 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 				name: 'add_vector_effect',
 				title: 'Add a vector effect',
 				description:
-					'Adds a provider vector effect that brings its own picture (search_effects with kind vector: lower thirds, loaders, stickers): its SVG becomes an artwork group, fitted into box (default the whole artwork), and its motion becomes shots after the last one. For an effect that draws along a path (search_effects accepts ["path"]: a signature, a route), pass path: { node } to run it along a path node (its outline with every transform applied; the picture then lands on the node at scale 1 unless box is given) or { text } for words the provider writes. Use it instead of follow or draw-on when the effect itself should trace the path. The path is copied when added; add it again after reshaping the node. Change it with update_effect (target and effect: the returned instance) or remove it with remove_effect. One undo step. Returns the instance, the group id and any notes on what could not be carried over.',
+					'Adds a provider vector effect that brings its own picture (search_effects with kind vector: lower thirds, loaders, stickers): its SVG becomes an artwork group, fitted into box (default the whole artwork), and its motion becomes shots after the last one. For an effect that draws along a path (search_effects accepts ["path"]: a signature, a route), pass path: { node } to run it along a path node (its outline with every transform applied; the picture then lands on the node at scale 1 unless box is given) or { text } for words the provider writes. Use it instead of follow or draw-on when the effect itself should trace the path. The path is copied when added; after reshaping the node, give it the path again with set_vector_effect_path. Change it with update_effect (target and effect: the returned instance) or remove it with remove_effect. One undo step. Returns the instance, the group id and any notes on what could not be carried over.',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -141,6 +142,43 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 					const r = await controller.addVectorEffect(args.effect, { values: args.values, box: args.box, path, control: args.control });
 					if (!r.ok) throw new Error(r.error);
 					return { instance: r.effect.instance, group: r.effect.group, effect: info(r.effect), ...(r.notes.length ? { notes: r.notes } : {}) };
+				}
+			},
+			{
+				name: 'set_vector_effect_path',
+				title: 'Run a vector effect along a path',
+				description:
+					'Gives a vector effect already added with add_vector_effect (instance: its id from add_vector_effect or list_applied_effects) a new path to draw along, in place: path: { node } runs it along a path node (its outline with every transform applied) and lands the picture on the node at scale 1; { text } writes words with the provider and keeps the picture where it was. Use it after reshaping the node the effect was run along, or to switch between a node and words. To clear the path, call update_effect with the path control set to "". Refuses a motion effect, an effect without a path control, an unknown or non-path node, and a provider that cannot write words, saying what to pass. One undo step. Returns the instance, the control set, its new path data and any notes.',
+				inputSchema: {
+					type: 'object',
+					properties: {
+						instance: { type: 'string', minLength: 1, description: 'The applied vector effect id (add_vector_effect instance, or list_applied_effects).' },
+						path: {
+							type: 'object',
+							description: 'The path the effect draws along: { node } or { text }.',
+							properties: {
+								node: { type: 'string', minLength: 1, description: 'A path node id (find_animation_elements).' },
+								text: { type: 'string', minLength: 1, description: 'Words the provider writes as a single-stroke path.' },
+								font: { type: 'string', minLength: 1, description: 'With text: a single-stroke font the provider offers (default its first).' },
+								align: { type: 'string', enum: ['start', 'middle', 'end'], description: 'With text: where the line sits (default start).' }
+							},
+							oneOf: [{ required: ['node'] }, { required: ['text'] }],
+							additionalProperties: false
+						},
+						control: { type: 'string', minLength: 1, description: 'Which path control takes the path (default the effect\'s only one; describe_effect pathControls lists them).' }
+					},
+					required: ['instance', 'path'],
+					additionalProperties: false
+				},
+				annotations: { title: 'Run a vector effect along a path', ...ctx.annotations.write, idempotentHint: true },
+				handler: async (args) => {
+					ctx.requireProvider();
+					if (args.path.node !== undefined && args.path.text !== undefined) throw new Error('Pass path as { node } or { text }, not both.');
+					const path = args.path.node !== undefined ? { node: args.path.node } : { text: args.path.text, font: args.path.font, align: args.path.align };
+					const r = await controller.setVectorEffectPath(args.instance, path, { control: args.control });
+					if (!r.ok) throw new Error(r.error);
+					const control = (args.control as string | undefined) ?? pathControlsOf(await controller.effectsProvider!.describe(r.effect.effect))[0];
+					return { instance: r.effect.instance, group: r.effect.group, control, value: r.effect.values[control], effect: info(r.effect), ...(r.notes.length ? { notes: r.notes } : {}) };
 				}
 			}
 		]

@@ -36,11 +36,10 @@ const line = (extra: Partial<VectorPathNode> = {}): VectorPathNode => ({
 const brush = (patch: Partial<VectorStrokeLayer['brush'] & object> = {}): VectorStrokeLayer => ({ kind: 'brushstroke', paint: '#ff0000', brush: { brushId: 'marker', size: 8, ...patch } });
 
 describe('brushstroke brushes', () => {
-	it('are the dry brushes of the paint editor library', () => {
+	it('are the dry, wet paint, mixer, smudge and blender brushes of the paint editor library', () => {
 		const ids = vectorBrushstrokeBrushes().map((b) => b.id);
-		expect(ids).toContain('pencil-hb');
-		expect(ids).toContain('marker');
-		expect(ids.some((id) => /wet|water|smudge|blender|mixer/.test(id))).toBe(false);
+		for (const id of ['pencil-hb', 'marker', 'watercolor-round', 'gouache', 'mixer-brush', 'smudge', 'blender']) expect(ids).toContain(id);
+		for (const id of ['add-water', 'wet-blend', 'blot', 'impasto-brush', 'eraser-soft', 'sticker-stars']) expect(ids).not.toContain(id);
 	});
 
 	it('sanitize brushstroke layers and keep unknown kinds as they are', () => {
@@ -108,7 +107,8 @@ describe('brushstrokes in the editor', () => {
 		expect((c.getNode('a') as VectorPathNode).strokes![index].brush!.brushId).toBe('pencil-hb');
 		expect(c.setBrushstroke(0, { size: 4 }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringContaining('no brushstroke') });
 		// A preset the vector profile refuses says why; an unknown id gives the closest ones.
-		expect(c.addBrushstroke({ brushId: 'watercolor-wash' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Brush "watercolor-wash" \(Wash brush\) can't paint a brushstroke: .*wet.* Use one of: pencil-hb/) });
+		expect(c.addBrushstroke({ brushId: 'paint-tube' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Brush "paint-tube" \(Paint tube\) can't paint a brushstroke: .*thick.* Use one of: pencil-hb/) });
+		expect(c.addBrushstroke({ brushId: 'add-water' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Brush "add-water" \(Add water\) can't paint a brushstroke: .*no water tool.* Use one of: blender, smudge/) });
 		expect(c.addBrushstroke({ brushId: 'pencil-h' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Unknown brush "pencil-h"\. Closest: pencil-hb/) });
 	});
 });

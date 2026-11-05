@@ -97,7 +97,8 @@ describe('brush pickers on a shared library (React)', () => {
     const select = container.querySelector('select[aria-label$=" brush"]') as HTMLSelectElement;
     expect(select.value).toBe('my-pencil');
     expect([...select.options].map((o) => o.value)).toContain('my-pencil');
-    expect([...select.options].map((o) => o.value)).not.toContain('my-wash');
+    // Wet brushes paint vector brushstrokes too (#519).
+    expect([...select.options].map((o) => o.value)).toContain('my-wash');
   });
 
   it('useCanvasBrushes lists saved brushes with their spec and follows the library', async () => {

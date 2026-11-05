@@ -4002,7 +4002,7 @@
         {
           "name": "stroke_path",
           "title": "Brush along a path",
-          "description": "Brushes vector path data (SVG path d in document pixels: M, L, H, V, C, S, Q, T, A and Z) on a pixel layer with a library brush or the active one, as if drawn by hand along it: the outline of a shape, a lettering guide, a curve from a vector tool. Each subpath becomes one recorded stroke, sampled every spacing px, with an optional pressure profile spread along each subpath (a taper such as [0.2, 1, 0.2]); closed subpaths end where they start. Brushes behave as in paint_stroke (grain, pick-up, wet and thick paint, guides off). One undo step for the whole path. Returns the layer id, changed bounds, dab count and the recorded strokeIds (for replay_strokes, update_stroke).",
+          "description": "Brushes vector path data (SVG path d in document pixels: M, L, H, V, C, S, Q, T, A and Z) on a pixel layer with a library brush or the active one, as if drawn by hand along it: the outline of a shape, a lettering guide, a curve from a vector tool. Each subpath becomes one recorded stroke, sampled every spacing px, with an optional pressure profile spread along each subpath (a taper such as [0.2, 1, 0.2]); closed subpaths end where they start. Brushes behave as in paint_stroke (grain, pick-up, wet and thick paint, guides off). With an agent cursor (a director), each subpath is painted live in turn. One undo step for the whole path. Returns the layer id, changed bounds, dab count and the recorded strokeIds (for replay_strokes, update_stroke).",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -4027,6 +4027,12 @@
                   "maximum": 1
                 },
                 "description": "Pen pressure along each subpath, spread evenly from start to end (default full pressure); [0.2, 1, 0.2] tapers both ends."
+              },
+              "speed": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100,
+                "description": "Drawing speed in document pixels per millisecond (optional; gives each sample a time t so playback has a pace and speed-sensitive brushes respond)."
               },
               "layerId": {
                 "type": "string",

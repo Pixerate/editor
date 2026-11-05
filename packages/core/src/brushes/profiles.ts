@@ -120,8 +120,13 @@ export const CANVAS_PROFILE: BrushHostProfile = {
   tilt: 'full',
 };
 
-/** Vector brushstrokes: dry dab brushes along a path; light brushes paint as plain colour. */
-export const VECTOR_PROFILE: BrushHostProfile = { ...CANVAS_PROFILE, id: 'vector', name: 'Vector editor', light: 'ignored' };
+/**
+ * Vector brushstrokes: dab brushes along a path; light brushes paint as plain colour. Wet paint
+ * settles in its own small wet area and dries to a cached image; the Mixer Brush, smudge and
+ * blender act on the shapes beneath the stroke. The wet tools (water, hair dryer, blow, wet blend,
+ * wet drag, blot) act on wet paint, which a vector document never holds, so they are refused.
+ */
+export const VECTOR_PROFILE: BrushHostProfile = { ...CANVAS_PROFILE, id: 'vector', name: 'Vector editor', kinds: ['mark', 'tool'], tools: ['blender', 'smudge'], surfaces: ['dry', 'wet'], reservoir: 'full', light: 'ignored' };
 
 /** The built-in profiles by id. */
 export const BRUSH_HOST_PROFILES: Readonly<Record<string, BrushHostProfile>> = { paint: PAINT_PROFILE, image: IMAGE_PROFILE, canvas: CANVAS_PROFILE, vector: VECTOR_PROFILE };
