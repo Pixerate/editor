@@ -129,16 +129,37 @@ export default function App() {
               P
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-bold text-base tracking-tight text-slate-100">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h1 className="font-bold text-base tracking-tight text-slate-100 mr-0.5">
                   @pixerate/editor
                 </h1>
-                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                  v{__PIXERATE_VERSION__}
+                <span
+                  className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                  title="@pixerate/editor"
+                >
+                  core v{__PIXERATE_VERSIONS__.core}
+                </span>
+                <span
+                  className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                  title="@pixerate/editor-react"
+                >
+                  react v{__PIXERATE_VERSIONS__.react}
+                </span>
+                <span
+                  className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                  title="@pixerate/editor-svelte"
+                >
+                  svelte v{__PIXERATE_VERSIONS__.svelte}
+                </span>
+                <span
+                  className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                  title="@pixerate/swift"
+                >
+                  swift v{__PIXERATE_VERSIONS__.swift}
                 </span>
               </div>
               <p className="hidden sm:block text-xs text-slate-400">
-                Editors for prompts, documents, data, charts and graphics, in React and Svelte
+                Editors for prompts, documents, data, charts and graphics, in TypeScript, React, Svelte and Swift
               </p>
             </div>
           </div>
