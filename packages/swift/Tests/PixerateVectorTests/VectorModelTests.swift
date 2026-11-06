@@ -79,9 +79,10 @@ final class VectorModelTests: XCTestCase {
         let disabled = try node(#"{"id":"e","type":"path","subpaths":[{"anchors":[{"x":0,"y":0},{"x":4,"y":4}],"closed":false}],"effects":[{"id":"z","type":"zigzag","enabled":false,"params":{}}]}"#)
         XCTAssertEqual(try vectorNodeBounds(disabled), VectorBounds(x: 0, y: 0, width: 4, height: 4))
         let text = try node(#"{"id":"t","type":"text","text":"x","font":{"fontFamily":"Inter","fontWeight":400,"fontSize":10},"frame":{"kind":"point","x":0,"y":0}}"#)
-        XCTAssertThrowsError(try vectorNodeBounds(text))
-        XCTAssertThrowsError(try transformVectorNode(text, translateMatrix(1, 0)))
-        XCTAssertNoThrow(try transformVectorNode(text, rotateMatrix(30)), "a rigid move only sets the transform")
+        // Text is bounded by its glyph boxes (the metric shaper: 0.54 em, ascent 0.8 em, descent 0.2 em).
+        XCTAssertEqual(try vectorNodeBounds(text), VectorBounds(x: 0, y: -8, width: 5.4, height: 10))
+        XCTAssertEqual(try transformVectorNode(text, translateMatrix(1, 0)).frame?["x"], 1, "a move without a turn moves the frame")
+        XCTAssertEqual(try transformVectorNode(text, scaleMatrix(2, 2))["font"]?["fontSize"], 20, "a scale is baked into the font size")
         let frameMask = try node(#"{"id":"m","type":"group","mask":{"type":"clip"},"children":[{"id":"f","type":"group","frame":{"x":0,"y":0,"width":4,"height":4},"children":[]},{"id":"a","type":"path","subpaths":[{"anchors":[{"x":0,"y":0},{"x":4,"y":4}],"closed":false}]}]}"#)
         // A frame as a mask covers what it draws (its fill and children, clipped): an empty frame
         // without a fill draws nothing, so it hides everything.

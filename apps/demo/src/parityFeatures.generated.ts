@@ -1081,28 +1081,28 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`traceImage`, `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`",
         "react": "`<VectorTracePanel>` (in `<VectorToolbar>`)",
         "svelte": "`<VectorTracePanel>` (in `<VectorStylePanel>`)",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController.traceImage`, `vector.traceImage`; `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`); the trace panel and the views: Planned (#533)"
       },
       {
         "feature": "Vector Lottie Export & Import (Bodymovin v5 JSON: groups mirroring the nodes, paths with solid and gradient fills and strokes (dashes, caps, joins, blend modes), path effects kept live as Lottie modifiers — trim, round corners, pucker & bloat, twist, zig zag, offset, merge, repeater — live booleans as Merge Paths, masks and frames clipped, text, instances and wiggle / envelope effects as drawn, aligned or arrowed strokes as outlines; import of one frame with eased keyframes, layer parenting, precomps, solids and additive masks, modifiers becoming live effects; notes for what was approximated; agent commands `vector.exportLottie`, `vector.importLottie`)",
         "core": "`toLottie`, `importLottie`, `vectorDocumentToLottie`, `parseVectorLottie`, `lottieValueAt`",
         "react": "headless (demo Export / Import Lottie)",
         "svelte": "headless",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController`: `toLottie`, `importLottie`; `vector.exportLottie`, `vector.importLottie`; `vectorDocumentToLottie`, `parseVectorLottie`, `lottieValueAt`); the views: Planned (#533)"
       },
       {
         "feature": "Vector PDF Export (real vector PDF: paths from the canvas's render data — effects, text outlines, paint stacks, aligned and arrowed strokes, clip masks and frames — filled and stroked with dashes, caps and joins; opacity and blend modes as graphics states; linear and radial gradients as PDF shadings, conic, diamond, mesh and freeform as their tiles; one page, or a page per artboard; points per unit; Flate compression; notes for filters, opacity masks and text without outlines; agent command `vector.exportPdf`)",
         "core": "`toPdf`, `vectorDocumentToPdf`",
         "react": "headless (demo Export PDF)",
         "svelte": "headless",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController.toPdf`, `vector.exportPdf`, `vectorDocumentToPdf`, byte for byte the TS file) for what the Swift render data draws; aligned, arrowed and profiled strokes, brushstrokes, lenses and opacity masks wait on render data, and the views: Planned (#533)"
       },
       {
         "feature": "Vector Text (point, area and text on a path as `text` nodes painted with the same fill and stroke stacks, filters and blend modes as paths; base character style plus styled runs with their own fill, paragraph alignment, indents and spacing; laid out by the layout engine shared with the image editor's type layers (`src/text`: line breaking, justification, tracking, leading, baseline shift, underline, strike-through, horizontal and vertical writing — columns right to left, CJK upright, Latin turned or upright, `vert` alternates and `vhea` / `vmtx` metrics) over a pluggable text shaper — the browser's fonts as SVG `<text>` placed character by character, or glyph outlines from fonts read by the built-in OpenType reader (TrueType, CFF, WOFF; kern and GPOS pair kerning) so path effects, envelopes, booleans and Create Outlines act on the glyphs; Type (T) and Type on a Path (Q) tools, on-canvas editing with caret, selection, word moves, IME through a hidden textarea and one undo step per typing session; area overflow and path overflow reported; scale bakes into font size; SVG export as `<text>` (or outlines) with a lossless round-trip and import of foreign `<text>`; agent commands `vector.listFonts`, `vector.addText`, `vector.getText`, `vector.setText`, `vector.setTextStyle`, `vector.setParagraphStyle`, `vector.setTextFrame`, `vector.setTextOrientation`, `vector.typeOnPath`, `vector.createOutlines`)",
         "core": "`addText`, `setText`, `setTextStyle`, `styleTexts`, `setTextFrame`, `setTextOrientation`, `typeOnPath`, `createOutlines`, `editText`, `textInput`, `layoutVectorText`, `setVectorTextShaper`, `parseOpenTypeFont`, `getVectorTextPanel` & `getVectorOverlayRenderData().text`",
         "react": "`<VectorTextPanel>` (in `<VectorStylePanel>`, with Horizontal / Vertical and Upright Latin), `<VectorTextElement>` & `<VectorCanvas>` hidden textarea, caret and selection",
         "svelte": "`<VectorTextPanel>` (with Horizontal / Vertical and Upright Latin) (in `<VectorStylePanel>`), `<VectorTextElement>` & `<VectorCanvas>` hidden textarea, caret and selection",
-        "swift": "Planned (#533)"
+        "swift": "Text ✅ headless (`VectorEditorController`: `addText`, `setText`, `setTextStyle`, `styleTexts`, `setParagraphStyle`, `setTextFrame`, `setTextOrientation`, `typeOnPath`, `createOutlines`, `textPanel`; `layoutVectorText` over the shared layout engine with point, area, path and vertical text, a `VectorTextShaper` protocol with the `MetricTextShaper` default; text in bounds, transforms, blends, render data and the SVG round trip, foreign `<text>` imported); a CoreText shaper, the OpenType reader, the Type tools and on-canvas editing: Planned (#533)"
       },
       {
         "feature": "Vector Symbols & Instances (a document's reusable symbols drawn by `instance` nodes through a transform that may scale and skew, strokes scaling with them unless switched off; Make Symbol (F8) with the registration point at the objects' centre, Place, Replace, Break Link (Detach), Rename and Delete; per-instance fill / stroke tints and hidden art nodes; Edit Symbol in isolation (double-click an instance) with the rest of the document dimmed and lined up behind the art, every instance following, undo stepping in and out; nested symbols with cycle checks; SVG export as `<symbol>` / `<use>` (or drawn art where `<use>` cannot draw an instance exactly) with a lossless round-trip, and import of foreign `<use>`; agent commands `vector.listSymbols`, `vector.makeSymbol`, `vector.placeSymbol`, `vector.setInstanceOptions`, `vector.replaceSymbol`, `vector.detachInstance`, `vector.renameSymbol`, `vector.deleteSymbol`, `vector.editSymbol`, `vector.exitSymbolEdit`)",
@@ -1165,7 +1165,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`stylizeImage`, `stylizeVectorImage`, `vectorMosaic`, `vectorHalftone`, `vectorLowPoly`, `vectorHatch`",
         "react": "`<VectorTracePanel>` styles",
         "svelte": "`<VectorTracePanel>` styles",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController.stylizeImage`; `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage`, `vector.hatchImage`; `stylizeVectorImage`, `vectorMosaic`, `vectorHalftone`, `vectorLowPoly`, `vectorHatch`); the panel: Planned (#533)"
       },
       {
         "feature": "Vector Distortion Brushes (CorelDRAW-style Smudge, Twirl, Attract, Repel and Roughen: a round brush with a smooth falloff that bends the outlines under it, as the Distort Brush tool (D) with mode, size and strength options and a brush circle on the canvas, each drag one undo step; a stroke's dabs are composed into one map applied to the paths as they were when it began, curves re-fitted, so anchors do not pile up; roughen breaks the outline into deterministic spikes; agent commands `vector.smudgeBrush`, `vector.twirlBrush`, `vector.attractBrush`, `vector.repelBrush`, `vector.roughenBrush`)",
@@ -1193,14 +1193,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`generateVectorArt`, `regenerateVectorArt`, `createVectorGenerationToolProvider`, `vectorArtModels`",
         "react": "`<VectorGeneratePanel>` & `useVectorGenerationTools`",
         "svelte": "`<VectorGeneratePanel>` & `useVectorGenerationTools`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`generateVectorArt`, `regenerateVectorArt`, `createVectorGenerationToolProvider`, `vectorArtModels`: SVG through the SVG importer, pictures traced or stylised, provenance kept and exported to SVG); the views: Planned (#533)"
       },
       {
         "feature": "Vector Pages & Master Pages (multipage documents on top of frames: the top-level frames are the pages, in order, numbered from 1; master pages are frames whose art shows on every page that uses them, laid out by each object's resizing constraints for pages of other sizes, with `{page}` / `{pages}` in master text; Add Page, Add Master Page, Apply Master, Move Page and Go to Page, each edit one undo step; the master art follows every edit of the master, is drawn on the canvas, SVG and Lottie, and PDF export by artboards writes the pages (not the masters); agent commands `vector.listPages`, `vector.addPage`, `vector.addMasterPage`, `vector.setPageMaster`, `vector.movePage`, `vector.goToPage`, and `parentId` on `vector.addText`)",
         "core": "`addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`, `vectorPages`, `vectorMasterPages`, `resolveVectorMasterPages`",
         "react": "`<VectorPagesPanel>` (in `<VectorToolbar>`)",
         "svelte": "`<VectorPagesPanel>` (in `<VectorStylePanel>`)",
-        "swift": "Pages and master pages ✅ headless (`VectorEditorController`: `addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`; `vectorPages`, `vectorMasterPages`, `resolveVectorMasterPages` after every edit, in render data and SVG); master text tokens need text (#624); the panel: Planned (#533)"
+        "swift": "Pages and master pages ✅ headless (`VectorEditorController`: `addPage`, `addMasterPage`, `setPageMaster`, `movePage`, `goToPage`, `getPages`; `vectorPages`, `vectorMasterPages`, `resolveVectorMasterPages` after every edit, in render data and SVG, master text with `{page}` and `{pages}`); the panel: Planned (#533)"
       },
       {
         "feature": "Vector Brushstrokes (natural-media brushes — pencils, pastels, charcoal, markers, inks, wet paint (watercolour, gouache, wet oils), the Mixer Brush, smudge and blender: the presets `VECTOR_PROFILE` admits and, with a `brushLibrary`, saved brushes from the shared brush library, kept in the layer so the document renders without it — laid along vector paths as stroke layers of kind `brushstroke`: the path stays the data and the rendered brush images are a cache, through the shared `renderBrushstroke` / `BrushstrokeCache` renderer the canvas uses; colour from the layer's paint, or gradient paint sampled dab by dab along the path (`brush.paint`; a gradient layer paint along, across or within the stroke; a brush's own gradient), a size and a pressure profile along the length; wet paint simulated in the stroke's own wet area for a fixed number of steps and dried (shown as laid until it settles in the background; exports wait); the Mixer Brush, smudge and blender acting on a CPU backdrop of the fills, strokes and brushstrokes beneath, re-rendered when that changes; opt-in brush character with a `seed` (seeded jitter and a procedural paper grain, `paper` to pick it or `null` for none; seedless layers render as before, panel-added layers get a random seed); drawn on both canvases, exported to SVG as images (the layer data round-trips) and to PDF as image objects with soft masks; brush, size, colour and a grain toggle in the appearance panel; agent commands `vector.listBrushes`, `vector.addBrushstroke`, `vector.setBrushstroke` and the brush library tools with `VECTOR_PROFILE`)",
@@ -1228,14 +1228,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands`",
         "react": "`useVectorCommands`",
         "svelte": "`useVectorCommands`",
-        "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata and enablement; those not ported yet fail, #624) and SVG export of plain paths and groups ✅; SVG import and the rest: Planned (#533)"
+        "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata, enablement and Swift run), SVG export and import ✅ headless (`vectorDocumentToSvg`, `parseVectorSvg`); the views: Planned (#533)"
       },
       {
         "feature": "Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools)",
         "core": "`vectorEffectGroups`, `createVectorEffectsToolProvider`",
         "react": "`<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools`",
         "svelte": "`<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups`, `createVectorEffectsToolProvider`); the views: Planned (#533)"
       }
     ]
   },
@@ -2189,7 +2189,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`createEffectToolProvider`",
         "react": "`useEffects` + the editor's tools hook",
         "svelte": "`useEffects` + the editor's tools hook",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`effectToolHandlers` with an `EffectToolHost`, used by `createPaintEffectsToolProvider` and `createVectorEffectsToolProvider`; schemas from the contracts, without the catalog's ids); the views: Planned (#533)"
       },
       {
         "feature": "Effect Authoring (`supportsAuthoring`, `openAuthoring`, reactive session with keyframe tracks, playback, undo/redo, source editing & live shader compilation, agent authoring tools & skill, visual authoring editor)",
@@ -2550,7 +2550,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`planGenerationRequest` (`/generation`)",
         "react": "`useGenerationPlan`",
         "svelte": "`createGenerationPlan`",
-        "swift": "Planned (#533)"
+        "swift": "✅ (`planGenerationRequest`, `ModelCapabilities`, every strategy)"
       },
       {
         "feature": "Generation Settings Form from Capabilities (enums, ranges, reference slots, adjustments)",

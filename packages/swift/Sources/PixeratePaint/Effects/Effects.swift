@@ -144,6 +144,47 @@ extension EffectProvider {
     public func list() async throws -> [EffectDescription] { try await list(EffectSearchOptions()) }
 }
 
+/// One animated element of a vector effect's picture (`EffectSvgAnimation`): the element's id and its attribute keyframes.
+public typealias EffectSvgAnimation = JSONObject
+
+/// What a vector or motion effect gives back (`EffectVectorMotion`): SVG markup and how it animates.
+public struct EffectVectorMotion: Sendable {
+    public var svg: String
+    /// `{ id, delay?, ms, attrs }` per animated element.
+    public var animate: [EffectSvgAnimation]
+    /// Length of one play (ms).
+    public var duration: Double
+    public var loop: Bool
+    /// Ms held on the last frame before looping.
+    public var hold: Double?
+    public init(svg: String, animate: [EffectSvgAnimation] = [], duration: Double, loop: Bool, hold: Double? = nil) {
+        self.svg = svg
+        self.animate = animate
+        self.duration = duration
+        self.loop = loop
+        self.hold = hold
+    }
+}
+
+/// What a vector or motion effect is applied to (`EffectVectorTarget`): SVG markup, optionally with the ids of the elements to animate (default: all).
+public struct EffectVectorTarget: Sendable {
+    public var svg: String
+    public var nodeIds: [String]?
+    public init(svg: String, nodeIds: [String]? = nil) {
+        self.svg = svg
+        self.nodeIds = nodeIds
+    }
+}
+
+/**
+ * A provider with vector effects (`EffectProvider.applyVectorEffect`, `capabilities.supportsVector`):
+ * a `vector` effect brings its own picture, a `motion` effect animates the target's. Unknown ids
+ * throw `unknown_effect`, invalid values `invalid_values`, other kinds `unsupported`.
+ */
+public protocol VectorEffectProvider: EffectProvider {
+    func applyVectorEffect(_ id: String, target: EffectVectorTarget, values: JSONObject?) async throws -> EffectVectorMotion
+}
+
 // MARK: - Helpers
 
 /// Problems with `values` against an effect's control schema (partial values are fine).

@@ -368,8 +368,8 @@ private func bakeIntoGeometry(_ nodeIn: VectorNode, _ m: VectorMatrix) throws ->
         if truthy(node["symmetry"]), let s = node["symmetry"]?.objectValue { node["symmetry"] = .object(transformVectorSymmetry(s, m)) }
         return node
     }
-    // not ported yet: text geometry (bakeVectorTextGeometry) (#624)
-    if node.isText { throw VectorNotPorted("transforming text (bakeVectorTextGeometry)") }
+    // Text: its frame maps and its font sizes scale (`bakeVectorTextGeometry`); paints as for paths.
+    if node.isText { node = bakeVectorTextGeometry(node, m) }
     // A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
     let flips = m.a * m.d - m.b * m.c < 0
     func layer(_ l: JSONValue) -> JSONValue {

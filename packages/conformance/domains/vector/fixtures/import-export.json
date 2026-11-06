@@ -6,9 +6,6 @@
     "width": 200,
     "height": 200
   },
-  "skip": {
-    "swift": "PDF export, Lottie export and import, and image tracing and stylising (trace, mosaic, halftone, low poly, hatch) are not ported yet (#624). Its SVG steps pass on their own."
-  },
   "steps": [
     {
       "tool": "run_command",

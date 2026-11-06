@@ -6,8 +6,8 @@ import PixerateRaster
 // What nodes draw as (`vector/appearance.ts`): path effect stacks, live boolean groups (their
 // operands folded bottom to top into one shape in the bottom operand's style), mask groups (their
 // contents clipped by the mask, `Mask.swift`), lenses (`Lens.swift`), envelopes (`Warp.swift`) and
-// symmetry groups (`Symmetry.swift`); instances draw their symbol's art (`Symbols.swift`). The
-// Extrude and Bevel effects, text and frames throw `VectorNotPorted` (#624).
+// symmetry groups (`Symmetry.swift`); instances draw their symbol's art (`Symbols.swift`) and text
+// its glyphs (`VectorText.swift`). The Extrude and Bevel effects throw `VectorNotPorted` (#624).
 
 /// A shape a node draws (`VectorAppearanceShape`): the path whose style paints it, its outline in
 /// the node's own space, an opacity factor and a draw-order key.
@@ -87,7 +87,8 @@ private func liveBooleanShapes(_ group: VectorNode) throws -> [VectorAppearanceS
 /// What a node's effect stack starts from: its own outline, its live boolean result or its children's shapes.
 private func baseShapes(_ node: VectorNode) throws -> [VectorAppearanceShape] {
     if node.isPath { return [VectorAppearanceShape(source: node, path: subpathsToBezier(node.subpaths), opacity: 1, order: [])] }
-    if node.isText { throw VectorNotPorted("the appearance of \(node.typeName) nodes") }
+    // Text: its glyphs, one shape per fill (a run's own fill paints its characters).
+    if node.isText { return vectorTextPaths(node).parts.enumerated().map { k, p in VectorAppearanceShape(source: vectorTextPaintSource(node, p.fill), path: p.path, opacity: 1, order: [k]) } }
     if node.isInstance { return try baseShapes(try vectorInstanceDrawn(node)) }
     if truthy(node["liveBoolean"]) { return try liveBooleanShapes(node) }
     // A mask group's effects act on its contents (the mask stays as it is).
@@ -112,7 +113,9 @@ public func vectorAppearanceShapes(_ node: VectorNode) throws -> [VectorAppearan
     if isVectorFrame(node) { return try vectorAppearanceShapes(vectorFrameDrawn(node)) }
     // A symmetry group draws as its children and their copies.
     if isVectorSymmetryGroup(node) { return try vectorAppearanceShapes(try vectorSymmetryDrawn(node)) }
-    let out = isVectorMaskGroup(node) ? try vectorMaskedShapes(node) : try applyVectorEffects(try baseShapes(node), node["effects"]?.arrayValue)
+    // Text without glyph outlines has only glyph boxes, which effects would distort meaninglessly: they are skipped.
+    let effects = node.isText && !vectorTextPaths(node).outlines ? nil : node["effects"]?.arrayValue
+    let out = isVectorMaskGroup(node) ? try vectorMaskedShapes(node) : try applyVectorEffects(try baseShapes(node), effects)
     return jsSorted(out) { compareOrder($0.order, $1.order) }
 }
 
@@ -200,7 +203,17 @@ public func expandVectorAppearance(_ node: VectorNode) throws -> VectorNode {
         if opacity < 1 { rest.opacity = opacity }
         return rest
     }
-    if node.isText { throw VectorNotPorted("expanding text") }
+    if node.isText && shapes.count == 1 {
+        // Text in one paint draws as one compound path with the text's id.
+        let one = shapes[0]
+        let opacity = (node.opacity ?? 1) * one.opacity
+        var out = shapeNode(one, node.id)
+        var place = JSONObject()
+        placement(node, into: &place)
+        for (k, v) in place { out[k] = v }
+        if opacity < 1 { out.opacity = opacity } else { out["opacity"] = Optional<JSONValue>.none }
+        return out
+    }
     var props = JSONObject([("id", .string(node.id)), ("type", "group")])
     placement(node, into: &props)
     if let o = node["opacity"] { props["opacity"] = o }

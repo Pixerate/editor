@@ -12,8 +12,9 @@ import PixerateRaster
 // live boolean groups, path effects, symmetry groups, blends, frames, resizing constraints and
 // connectors; `<use>` as instances of the
 // element it refers to (our own `<symbol data-vector-symbol>`s, any other element as a symbol of
-// its own) and our own `<g data-vector-instance>`. Text, filters, own mask groups, generated art
-// and lenses throw `VectorNotPorted` (#624). Regular expressions are the TS ones with
+// its own) and our own `<g data-vector-instance>`; our own `<g data-vector-text>` and foreign
+// `<text>` as text nodes. Filters, own mask groups, generated art and lenses throw
+// `VectorNotPorted` (#624). Regular expressions are the TS ones with
 // JavaScript's `\s` and `\w` spelled out, since ICU's differ.
 
 /// `tidy`: whole numbers stay whole (`Math.round(v) + 0` within 1e-9).
@@ -655,19 +656,16 @@ private final class SvgImporter {
     }
 
     /// A `<g data-vector-live>` from our own export as the node it came from (`liveNode`): paths
-    /// with effects, live boolean groups, groups with effects, symmetry groups and blends. Live
-    /// text is not ported.
+    /// and text with effects, live boolean groups, groups with effects, symmetry groups and blends.
     func liveNode(_ g: SvgElement, _ style: SvgStyle, _ m: VectorMatrix, _ meta: JSONObject) throws -> VectorNode? {
         let raw = g.attrs["data-vector-live"].flatMap { try? JSONValue.parse($0) }?.objectValue ?? JSONObject()
         guard let sourceEl = g.children.first(where: { $0.name == "g" && $0.attrs["data-vector-part"] == "source" }) else { return nil }
-        // not ported yet: text (#624)
-        if raw["kind"] == "text" { throw VectorNotPorted("importing live text nodes") }
         let inner = try visit(sourceEl, style, m)
         let effects = try sanitizeVectorEffects(raw["effects"]).map { JSONValue.object($0) }
         let liveBoolean = raw["liveBoolean"]?.stringValue.flatMap { BOOLEAN_OPERATIONS.contains($0) ? $0 : nil }
         let id = idFor(g)
-        if raw["kind"] == "path" {
-            guard var path = inner.first(where: \.isPath) else { return nil }
+        if raw["kind"] == "text" || raw["kind"] == "path" {
+            guard var path = inner.first(where: { raw["kind"] == "text" ? $0.isText : $0.isPath }) else { return nil }
             let residual = decomposeRigid(m).residual
             path["visible"] = Optional<JSONValue>.none
             path.id = id
@@ -684,6 +682,96 @@ private final class SvgImporter {
         if let symmetry = sanitizeVectorSymmetry(raw["symmetry"]) { group["symmetry"] = .object(transformVectorSymmetry(symmetry, m)) }
         if let blend = try blendFromAttribute(g.attrs["data-vector-blend"], m) { group["blend"] = .object(blend) }
         return group
+    }
+
+    /// A `<g data-vector-text>` from our own export as the text node it came from (`ownText`).
+    func ownText(_ g: SvgElement, _ m: VectorMatrix, _ meta: JSONObject) throws -> VectorNode? {
+        guard let raw = json(g.attrs["data-vector-text"]), raw.objectValue != nil || raw.arrayValue != nil else { return nil }
+        guard let fields = try? sanitizeVectorTextFields(raw.objectValue ?? JSONObject()) else { return nil }
+        let effects = try sanitizeVectorEffects(raw["effects"]).map { JSONValue.object($0) }
+        var props = JSONObject([("id", .string(idFor(g))), ("type", "text")])
+        for (k, v) in meta { props[k] = v }
+        for (k, v) in fields { props[k] = v }
+        if !effects.isEmpty { props["effects"] = .array(effects) }
+        var node = VectorNode(props: props)
+        if g.attrs["data-vector-fills"] != nil {
+            node.fill = .null
+            node.stroke = .null
+            node = withVectorFills(node, try sanitizeVectorFills(json(g.attrs["data-vector-fills"]) ?? .array([])))
+            node = withVectorStrokes(node, try sanitizeVectorStrokes(json(g.attrs["data-vector-strokes"]) ?? .array([])))
+        } else {
+            let fill = json(g.attrs["data-vector-fill"])
+            let stroke = json(g.attrs["data-vector-stroke"])
+            func one(_ paint: JSONValue?) throws -> JSONValue {
+                guard let paint, paint != .null else { return .null }
+                return try sanitizeVectorFills(.array([.object(JSONObject([("paint", paint)]))])).first?["paint"] ?? .null
+            }
+            node.fill = try one(fill)
+            node.stroke = try one(stroke)
+            if let settings = json(g.attrs["data-vector-stroke-settings"])?.objectValue {
+                var layer = JSONObject([("paint", node.stroke.flatMap { $0 == .null ? nil : $0 } ?? "#000")])
+                for (k, v) in settings { layer[k] = v }
+                if let first = try sanitizeVectorStrokes(.array([.object(layer)])).first {
+                    for (k, v) in first where k != "paint" { node[k] = v }
+                }
+            }
+        }
+        return normalizeVectorPaintStacks(try transformVectorNode(node, m), prefer: "stack")
+    }
+
+    /// A foreign `<text>` as point text (`foreignText`): its characters (tspans that start a new
+    /// line at their own `x` become line breaks), font, anchor and paint. Per-character positions,
+    /// `textPath` and `textLength` are not kept.
+    func foreignText(_ el: SvgElement, _ style: SvgStyle, _ m: VectorMatrix, _ meta: JSONObject) throws -> VectorNode? {
+        var text = ""
+        var first = true
+        func walk(_ e: SvgElement) {
+            for part in e.content ?? [] {
+                switch part {
+                case .text(let t): text += collapseJSWhitespace(t)
+                case .element(let child):
+                    if child.name == "tspan" || child.name == "textPath" {
+                        if !first && child.attrs["x"] != nil && (child.attrs["dy"] != nil || child.attrs["y"] != nil) { text += "\n" }
+                        walk(child)
+                    }
+                }
+                first = false
+            }
+        }
+        walk(el)
+        text = text.components(separatedBy: "\n").map { line in
+            var l = Substring(line)
+            while l.hasPrefix(" ") { l = l.dropFirst() }
+            while l.hasSuffix(" ") { l = l.dropLast() }
+            return String(l)
+        }.joined(separator: "\n")
+        if text.jsTrimmed.isEmpty { return nil }
+        func font(_ name: String) -> String? { attrOrStyle(el, name) ?? el.children.lazy.compactMap { attrOrStyle($0, name) }.first }
+        let size = length(font("font-size"), 16)
+        let weightRaw = font("font-weight")
+        let weight = weightRaw == "bold" ? 700 : weightRaw == "normal" || (weightRaw ?? "").isEmpty ? 400 : JS.round(length(weightRaw, 400))
+        var family = (font("font-family") ?? "sans-serif").components(separatedBy: ",")[0].jsTrimmed
+        if family.hasPrefix("\"") || family.hasPrefix("'") { family.removeFirst() }
+        if family.hasSuffix("\"") || family.hasSuffix("'") { family.removeLast() }
+        if family.isEmpty { family = "sans-serif" }
+        let anchor = attrOrStyle(el, "text-anchor")
+        func first0(_ v: String?) -> Double { svgNumberList(v).first ?? 0 }
+        let tspan = el.children.first { $0.name == "tspan" }
+        let x = el.attrs["x"] != nil ? first0(el.attrs["x"]) : first0(tspan?.attrs["x"])
+        let y = el.attrs["y"] != nil ? first0(el.attrs["y"]) : first0(tspan?.attrs["y"])
+        let fillValue = attrOrStyle(el, "fill") ?? style["fill"]
+        var props = JSONObject([("id", .string(idFor(el))), ("type", "text")])
+        for (k, v) in meta { props[k] = v }
+        props["text"] = .string(text)
+        var f = JSONObject([("fontFamily", .string(family)), ("fontWeight", .number(JS.max(1, JS.min(1000, weight)))), ("fontSize", .number(size > 0 ? size : 16))])
+        if font("font-style") == "italic" { f["italic"] = true }
+        props["font"] = .object(f)
+        if anchor == "middle" { props["paragraph"] = .object(JSONObject([("align", "center")])) } else if anchor == "end" { props["paragraph"] = .object(JSONObject([("align", "right")])) }
+        props["frame"] = .object(JSONObject([("kind", "point"), ("x", .number(x)), ("y", .number(y))]))
+        props["fill"] = paint(fillValue ?? "#000")
+        props["stroke"] = paint(style["stroke"] ?? "none")
+        if let w = style["strokeWidth"], !w.isEmpty { props["strokeWidth"] = .number(length(w, 1)) }
+        return try transformVectorNode(VectorNode(props: props), m)
     }
 
     /// A `<g data-vector-frame>` from our own export as its frame (`frameGroup`): the contents from
@@ -907,18 +995,21 @@ private final class SvgImporter {
         if let op = child.attrs["data-vector-boolean-operation"], BOOLEAN_OPERATIONS.contains(op) { meta["booleanOperation"] = .string(op) }
         if child.attrs["data-vector-resizing"] != nil, let resizing = sanitizeVectorResizing(json(child.attrs["data-vector-resizing"])) { meta["resizing"] = .object(resizing) }
         if child.attrs["data-vector-connector"] != nil, let connector = sanitizeVectorConnector(json(child.attrs["data-vector-connector"])) { meta["connector"] = .object(connector) }
-        // not ported yet: generated art and lenses (#624)
-        for (attr, what) in [("data-vector-generation", "generated art"), ("data-vector-lens", "lenses")] where child.attrs[attr] != nil {
-            throw VectorNotPorted("importing \(what)")
+        if child.attrs["data-vector-generation"] != nil {
+            // Unreadable provenance is dropped; the art stays.
+            if let generation = try? parseProvenance(json(child.attrs["data-vector-generation"]) ?? .null) { meta["generation"] = .object(generation) }
         }
+        // not ported yet: lenses (#624)
+        if child.attrs["data-vector-lens"] != nil { throw VectorNotPorted("importing lenses") }
         let g = child.name == "g"
         if g && child.attrs["data-vector-frame"] != nil { return try frameGroup(child, s, m, meta).map { [$0] } ?? [] }
-        // not ported yet: own mask groups, text (#624)
+        // not ported yet: own mask groups (#624)
         if g && child.attrs["data-vector-mask"] != nil { throw VectorNotPorted("importing mask groups") }
         if g && child.attrs["data-vector-live"] != nil { return try liveNode(child, s, m, meta).map { [$0] } ?? [] }
         if child.name == "use" { return try useInstance(child, m, meta).map { [$0] } ?? [] }
         if g && child.attrs["data-vector-instance"] != nil { return try ownInstance(child, m, meta).map { [$0] } ?? [] }
-        if (g && child.attrs["data-vector-text"] != nil) || child.name == "text" { throw VectorNotPorted("importing text") }
+        if g && child.attrs["data-vector-text"] != nil { return try ownText(child, m, meta).map { [$0] } ?? [] }
+        if child.name == "text" { return try foreignText(child, s, m, meta).map { [$0] } ?? [] }
         if g && child.attrs["data-vector-path"] != nil && child.attrs["data-vector-fills"] != nil { return try stackedPath(child, m, meta).map { [$0] } ?? [] }
         if g && child.attrs["data-vector-path"] != nil { return try mergedPath(child, s, m, meta).map { [$0] } ?? [] }
         if g || child.name == "svg" || child.name == "a" || child.name == "switch" {
@@ -1033,4 +1124,25 @@ private func blendFromAttribute(_ value: String?, _ m: VectorMatrix) throws -> J
         out["spine"] = try transformVectorNode(VectorNode(props: JSONObject([("id", ""), ("type", "path")]), subpaths: [sp]), m).subpaths[0].toJSON()
     }
     return out
+}
+
+/// `s.replace(/\s+/g, ' ')` with JavaScript's white space.
+private func collapseJSWhitespace(_ s: String) -> String {
+    var out = String.UnicodeScalarView()
+    var inSpace = false
+    for c in s.unicodeScalars {
+        let ws: Bool
+        switch c.value {
+        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF: ws = true
+        default: ws = false
+        }
+        if ws {
+            if !inSpace { out.append(" ") }
+            inSpace = true
+        } else {
+            out.append(c)
+            inSpace = false
+        }
+    }
+    return String(out)
 }

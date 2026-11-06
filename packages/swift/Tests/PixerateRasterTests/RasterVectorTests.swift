@@ -877,6 +877,11 @@ final class RasterVectorTests: XCTestCase {
 
     func testV8MathOnArm64() {
         let cases: [(String, UInt64, UInt64, UInt64)] = [
+            ("acos", 0xbfd49bf2356227f0, 0x0, 0x3ffe60e5f150d17d),
+            ("acos", 0xbfd49bf2356227ee, 0x0, 0x3ffe60e5f150d17c),
+            ("acos", 0x3fe6cb892a4a513e, 0x0, 0x3fe8e50f90569a02),
+            ("acos", 0xbfed31ef90b0b7a4, 0x0, 0x4005c218a4ff7db6),
+            ("acos", 0x3fd3333333333333, 0x0, 0x3ff441f5ecbeef59),
             ("atan2", 0xbfd620b200000000, 0xbfcc4f63c0000000, 0xc0011e816f2c0628),
             ("atan2", 0xbfd7b49200000000, 0xbfc0bc23c0000000, 0xbffe8fdb737b885f),
             ("atan2", 0x3fc2f4db00000000, 0x3fbdf6de00000000, 0x3fecdcf005c0cd6e),
@@ -900,6 +905,7 @@ final class RasterVectorTests: XCTestCase {
             let x = Double(bitPattern: a), y = Double(bitPattern: b)
             let got: Double
             switch fn {
+            case "acos": got = JS.acos(x)
             case "atan2": got = JS.atan2(x, y)
             case "cbrt": got = JS.cbrt(x)
             case "cos": got = JS.cos(x)

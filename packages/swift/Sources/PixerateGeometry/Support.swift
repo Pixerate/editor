@@ -102,8 +102,9 @@ let PI = Double.pi
 /// `Math.tan`: Foundation's (V8's fdlibm `tan` is not ported; trig results are compared within
 /// the conformance tolerance anyway).
 @inline(__always) func jtan(_ x: Double) -> Double { Foundation.tan(x) }
-/// `Math.acos`: Foundation's (see `jtan`).
-@inline(__always) func jacos(_ x: Double) -> Double { Foundation.acos(x) }
+/// `Math.acos`: V8's fdlibm port (`JS.acos`). Curve fitting breaks ties between equally sharp
+/// corners by comparing turn angles exactly, so Foundation's last bits picked other corners.
+@inline(__always) func jacos(_ x: Double) -> Double { JS.acos(x) }
 
 /// `String(n)` for a number.
 @inline(__always) func jsString(_ n: Double) -> String { n.isNaN ? "NaN" : n.isInfinite ? (n > 0 ? "Infinity" : "-Infinity") : JSONValue.jsNumber(n) }

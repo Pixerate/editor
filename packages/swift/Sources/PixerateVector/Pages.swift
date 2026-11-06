@@ -91,7 +91,7 @@ public func vectorMasterArt(_ master: VectorNode, _ page: VectorNode, _ number: 
 }
 
 /// The document with every page's `masterArt` up to date (and gone from pages without a master).
-/// A page whose master art cannot be drawn yet (text, which the port cannot transform) keeps what
+/// A page whose master art cannot be drawn yet (art the port cannot transform, such as Extrude) keeps what
 /// it has.
 public func resolveVectorMasterPages(_ doc: VectorDocument) -> VectorDocument {
     let masterList = vectorMasterPages(doc.nodes)

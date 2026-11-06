@@ -7,7 +7,8 @@ import PixerateRaster
 // document-space paths, groups and paint servers React and Svelte draw as SVG, as JSON with the TS
 // field names. Ported for what the controller holds now: paths and groups, transforms, opacity,
 // blend modes, colour, gradient, mesh and freeform paints (see `Gradient.swift`, `Shading.swift`), paint stacks, live booleans and instances (as their drawn art).
-// Frames draw as clip groups (their clip as render data). Text, inverted clips and opacity masks
+// Frames draw as clip groups (their clip as render data), text as SVG text spans placed character by
+// character (or, with an outline shaper, as its outlines). Inverted clips and opacity masks
 // that are on, stroke parts (inside / outside
 // alignment, arrowheads, width profiles), brushstroke layers, lenses and the viewport culling
 // options (`viewportSize`, `lod`) throw `VectorNotPorted` (#624). The overlay and the panels'
@@ -100,11 +101,60 @@ private struct SceneRenderer {
         return out
     }
 
+    /// A text node drawn as SVG text (no glyph outlines here; `renderText`).
+    mutating func text(_ node: VectorNode) throws -> JSONObject {
+        let geometry = vectorTextGeometryNode(node)
+        var layers: [JSONObject] = []
+        let nodes = vectorPaintLayerNodes(geometry)
+        let topFill = nodes.lastIndex { $0.kind == "fill" && $0.drawn }
+        for (i, l) in nodes.enumerated() where l.drawn {
+            let paint = vectorPaintToSvg(l.layer["paint"], "\(prefix)\(l.kind)-\(node.id)-\(l.index)", node: l.node, role: l.kind)
+            defs += paint.defs
+            var o = JSONObject([("kind", .string(l.kind)), ("opacity", .number(l.layer["opacity"]?.numberValue ?? 1))])
+            if let blend = vectorBlendModeCss(l.layer["blendMode"]) { o["blendMode"] = .string(blend) }
+            if l.kind == "fill" {
+                o["fill"] = .string(paint.value)
+                o["stroke"] = "none"
+                o["strokeWidth"] = 0
+                if i == topFill { o["runFills"] = true }
+            } else {
+                o["fill"] = "none"
+                o["stroke"] = .string(paint.value)
+                o["strokeWidth"] = .number(l.node.strokeWidth ?? 1)
+                if let join = l.node["strokeLinejoin"]?.stringValue, !join.isEmpty { o["strokeLinejoin"] = .string(join) }
+                if let dash = l.node["strokeDasharray"]?.arrayValue, !dash.isEmpty {
+                    o["strokeDasharray"] = .string(dash.map { $0.numberValue.map(jsString) ?? $0.stringValue ?? "" }.joined(separator: " "))
+                }
+            }
+            layers.append(o)
+        }
+        // Runs with their own fill paint the top fill (or are the only fill when the node has none).
+        let spans = vectorTextSpans(node).enumerated().map { i, sp -> JSONObject in
+            var fill: String?
+            if let f = sp.fill {
+                let paint = vectorPaintToSvg(f, "\(prefix)run-\(node.id)-\(i)", node: geometry)
+                defs += paint.defs
+                fill = paint.value
+            }
+            return vectorTextSpanSvg(sp, fill)
+        }
+        if topFill == nil && spans.contains(where: { truthy($0["fill"]) }) {
+            layers.insert(JSONObject([("kind", "fill"), ("fill", "none"), ("stroke", "none"), ("strokeWidth", 0), ("opacity", 1), ("runFills", true)]), at: 0)
+        }
+        var o = JSONObject([("kind", "text"), ("id", .string(node.id))])
+        if truthy(node["transform"]), let t = node.transform { o["transform"] = .string(fmtMatrix(t)) }
+        o["opacity"] = .number(node.opacity ?? 1)
+        try finish(node, into: &o)
+        o["layers"] = .array(layers.map { .object($0) })
+        o["spans"] = .array(spans.map { .object($0) })
+        return o
+    }
+
     /// One node as render data, or nil when hidden (`renderNodeFresh`).
     mutating func node(_ stored: VectorNode) throws -> JSONValue? {
         if !stored.isVisible { return nil }
-        // not ported yet: text layout (renderText, vectorTextPaths) (#624)
-        if stored.isText { throw VectorNotPorted("drawing text") }
+        // Text without glyph outlines draws as SVG text; with them it draws as its outlines below.
+        if stored.isText && !vectorTextHasOutlines() { return .object(try text(stored)) }
         let node = try expandVectorAppearance(stored)
         var o = JSONObject([("id", .string(node.id))])
         if truthy(node["transform"]), let t = node.transform { o["transform"] = .string(fmtMatrix(t)) }
@@ -174,6 +224,11 @@ private func hasLens(_ nodes: [VectorNode]) -> Bool {
  * the ids of defs and filters (default `ve-`).
  */
 public func getVectorSceneRenderData(_ document: VectorDocument, viewport: VectorViewport = VectorViewport(), idPrefix: String = "ve-") throws -> JSONValue {
+    try vectorSceneRender(document, viewport: viewport, idPrefix: idPrefix).data
+}
+
+/// The render data with its paint servers typed (the PDF writer fills from them).
+func vectorSceneRender(_ document: VectorDocument, viewport: VectorViewport = VectorViewport(), idPrefix: String = "ve-") throws -> (data: JSONValue, defs: [VectorPaintDef]) {
     // not ported yet: lens backdrops (resolveVectorLenses) (#624).
     if hasLens(document.nodes) { throw VectorNotPorted("drawing lenses") }
     let document = resolveVectorMasterPages(document)
@@ -189,7 +244,7 @@ public func getVectorSceneRenderData(_ document: VectorDocument, viewport: Vecto
     o["defs"] = .array(renderer.defs.map(\.json))
     o["filters"] = .array(renderer.filters.map(\.json))
     o["nodes"] = .array(nodes)
-    return .object(o)
+    return (.object(o), renderer.defs)
 }
 
 extension VectorEditorController {

@@ -170,7 +170,7 @@ private struct Cut {
 
 private func smoothCut(_ cd: CornerData, _ radius: Double, _ smoothing: Double) -> Cut? {
     let c = cd.info
-    let turn = Double.pi - Foundation.acos(JS.max(-1, JS.min(1, c.cos)))
+    let turn = Double.pi - JS.acos(JS.max(-1, JS.min(1, c.cos)))
     let t = cornerSetback(c, radius)
     let room = JS.min(c.lu, c.lv) / 2
     var s = JS.max(0, JS.min(1, smoothing))
@@ -225,7 +225,7 @@ private func cutCorner(_ cd: CornerData, _ radius: Double, _ kind: String, _ smo
     }
     let d1 = mul(a.dir, -1)
     let d2 = mul(b.dir, -1)
-    let turn = Foundation.acos(JS.max(-1, JS.min(1, -dot(d1, d2))))
+    let turn = JS.acos(JS.max(-1, JS.min(1, -dot(d1, d2))))
     let chord = len(sub(b.p, a.p))
     let k = turn < 1e-9 ? chord / 3 : (((4.0 / 3.0) * Foundation.tan(turn / 4) * chord) / (2 * JS.sin(turn / 2)))
     if !k.isFinite { return nil }

@@ -10,9 +10,14 @@ import PixerateRaster
 // source), path effects and symmetry groups (drawn shapes plus the hidden source), blends (their
 // options on `data-vector-blend`), instances (a `<use>` of a `<symbol>` in `defs`, or their drawn
 // art in a `<g data-vector-instance>`), symbols, transforms, opacity, visibility, blend modes and
-// filters, frames (with a page's master art) and connectors. Stroke parts (inside / outside
-// alignment, arrowheads, width profiles), masks, text, generated art, lenses and brushstrokes
-// throw `VectorNotPorted` (#624).
+// filters, frames (with a page's master art), connectors and text (SVG text placed character by
+// character, with the text kept as JSON for import). Stroke parts (inside / outside alignment,
+// arrowheads, width profiles), masks, generated art, lenses and brushstrokes throw
+// `VectorNotPorted` (#624).
+
+private func escapeText(_ value: String) -> String {
+    value.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+}
 
 private func escapeAttr(_ value: String) -> String {
     value.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
@@ -65,8 +70,9 @@ private func paintMarkup(_ paint: JSONValue?, _ defs: [VectorPaintDef]) -> [Stri
 private let LIVE_SOURCE_DROPPED = ["effects", "transform", "opacity", "visible", "booleanOperation", "blendStep", "blendMode", "filters", "lens", "lensView"]
 
 /// The document as SVG markup (`vectorDocumentToSvg`), `precision` decimals (default 3).
-/// `idPrefix` prefixes paint server ids (default `vg-`).
-public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, pretty: Bool = true, includeHidden: Bool = false, background: Bool = true, idPrefix: String = "vg-") throws -> String {
+/// `idPrefix` prefixes paint server ids (default `vg-`). `text`: `text` (default) writes text as SVG
+/// `<text>`, `outlines` as its glyph outlines when the shaper gives them.
+public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, pretty: Bool = true, includeHidden: Bool = false, background: Bool = true, idPrefix: String = "vg-", text textMode: String = "text") throws -> String {
     // Instances draw their symbol's art and pages their master's: resolve them when the caller's document has not.
     let doc = resolveVectorMasterPages(resolveVectorSymbols(docIn))
     let precision = precision ?? 3
@@ -87,8 +93,9 @@ public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, 
         if truthy(node["resizing"]) { out += " data-vector-resizing=\"\(escapeAttr(node["resizing"]!.stringified()))\"" }
         if node.isPath && isVectorShadedPaint(node.fill) { out += " data-vector-shading=\"\(escapeAttr(node.fill!.stringified()))\"" }
         if node.isPath && truthy(node["connector"]) { out += " data-vector-connector=\"\(escapeAttr(node["connector"]!.stringified()))\"" }
-        // not ported yet: generated art, lenses (#624)
-        for key in ["generation", "lens"] where truthy(node[key]) { throw VectorNotPorted("exporting \(key) to SVG") }
+        if node.isGroup && truthy(node["generation"]) { out += " data-vector-generation=\"\(escapeAttr(node["generation"]!.stringified()))\"" }
+        // not ported yet: lenses (#624)
+        if node.isPath && truthy(node["lens"]) { throw VectorNotPorted("exporting lens to SVG") }
         if let blend = vectorBlendModeCss(node["blendMode"]) { out += " style=\"mix-blend-mode:\(blend)\"" }
         if let filters = node["filters"], let n = arrayLength(filters), n > 0 {
             let data = " data-vector-filters=\"\(escapeAttr(filters.stringified()))\""
@@ -247,6 +254,85 @@ public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, 
         lines.append("\(indent(depth))</g>")
     }
 
+    /// A text node as SVG text (`emitTextElement`): a `<g data-vector-text>` carrying the text and
+    /// its stacks (JSON, for import), holding one `<text>` per drawn paint layer with a `<tspan>` per
+    /// styled fragment, every character placed by our layout.
+    func emitTextElement(_ node: VectorNode, _ depth: Int, _ attrs: String) throws {
+        let geometry = vectorTextGeometryNode(node)
+        var fields = JSONObject([("text", node["text"] ?? .null), ("font", node["font"] ?? .null)])
+        if let runs = node["runs"], (arrayLength(runs) ?? 0) > 0 { fields["runs"] = runs }
+        if truthy(node["paragraph"]) { fields["paragraph"] = node["paragraph"] }
+        fields["frame"] = node["frame"] ?? .null
+        if truthy(node["orientation"]) { fields["orientation"] = node["orientation"] }
+        if let e = node["effects"], (arrayLength(e) ?? 0) > 0 { fields["effects"] = e }
+        var data = " data-vector-text=\"\(escapeAttr(JSONValue.object(fields).stringified()))\""
+        if hasVectorPaintStacks(node) {
+            let stack = { (list: [JSONObject]) in escapeAttr(JSONValue.array(list.map { .object($0) }).stringified()) }
+            data += " data-vector-fills=\"\(stack(vectorFills(node)))\" data-vector-strokes=\"\(stack(vectorStrokes(node)))\""
+        } else {
+            data += " data-vector-fill=\"\(escapeAttr((node.fill ?? .null).stringified()))\" data-vector-stroke=\"\(escapeAttr((node.stroke ?? .null).stringified()))\""
+            let settings = vectorStrokeSettings { node[$0] }
+            if !settings.isEmpty { data += " data-vector-stroke-settings=\"\(escapeAttr(JSONValue.object(settings).stringified()))\"" }
+        }
+        lines.append("\(indent(depth))<g\(attrs)\(data)>")
+        let layers = vectorPaintLayerNodes(geometry).filter(\.drawn)
+        let topFill = layers.lastIndex { $0.kind == "fill" }
+        let spans = vectorTextSpans(node).enumerated().map { i, sp -> JSONObject in
+            guard let f = sp.fill else { return vectorTextSpanSvg(sp) }
+            let paint = vectorPaintToSvg(f, "\(prefix)run-\(node.id)-\(i)", node: geometry, precision: precision)
+            defs += paintMarkup(f, paint.defs)
+            return vectorTextSpanSvg(sp, paint.value)
+        }
+        func tspans(_ runFills: Bool) -> String {
+            spans.map { sp in
+                var a = " x=\"\(sp["x"]?.stringValue ?? "")\" y=\"\(sp["y"]?.stringValue ?? "")\""
+                if let r = sp["rotate"]?.stringValue { a += " rotate=\"\(r)\"" }
+                a += " font-family=\"\(escapeAttr(sp["fontFamily"]?.stringValue ?? ""))\" font-size=\"\(num(sp["fontSize"]?.numberValue ?? .nan))\""
+                if let w = sp["fontWeight"], w != 400 { a += " font-weight=\"\(w.numberValue.map(jsString) ?? w.stringified())\"" }
+                if sp["fontStyle"] != nil { a += " font-style=\"italic\"" }
+                if let d = sp["textDecoration"]?.stringValue { a += " text-decoration=\"\(d)\"" }
+                if runFills, let f = sp["fill"]?.stringValue, !f.isEmpty { a += " fill=\"\(escapeAttr(f))\"" }
+                return "<tspan\(a)>\(escapeText(sp["text"]?.stringValue ?? ""))</tspan>"
+            }.joined()
+        }
+        let hasRunFills = spans.contains { truthy($0["fill"]) }
+        if topFill == nil && hasRunFills { lines.append("\(indent(depth + 1))<text data-vector-part=\"fill\" fill=\"none\" xml:space=\"preserve\">\(tspans(true))</text>") }
+        for (i, l) in layers.enumerated() {
+            let id = "\(prefix)\(l.kind)-\(node.id)-\(l.index)"
+            let paint = vectorPaintToSvg(l.layer["paint"], id, node: l.node, role: l.kind, precision: precision)
+            defs += paintMarkup(l.layer["paint"], paint.defs)
+            let attrs = " data-vector-part=\"\(l.kind)\" data-vector-layer=\"\(l.index)\"\(layerAttrs(l.layer))"
+            let paintAttrs = l.kind == "fill" ? " fill=\"\(escapeAttr(paint.value))\"" : " fill=\"none\"\(lineAttrs(l.node, paint.value, l.node.strokeWidth ?? 1))"
+            lines.append("\(indent(depth + 1))<text\(attrs)\(paintAttrs) xml:space=\"preserve\">\(tspans(i == topFill))</text>")
+        }
+        if layers.isEmpty && !hasRunFills { lines.append("\(indent(depth + 1))<text data-vector-part=\"fill\" fill=\"none\" xml:space=\"preserve\">\(tspans(false))</text>") }
+        lines.append("\(indent(depth))</g>")
+    }
+
+    /// Text (`emitText`): as SVG text, or (with glyph outlines, when it has path effects) as its
+    /// outlines with the text kept hidden for import, like other live art.
+    func emitText(_ node: VectorNode, _ depth: Int) throws {
+        let outlines = vectorTextPaths(node).outlines
+        let effects = (node["effects"]?.arrayValue ?? []).contains { $0["enabled"] != .bool(false) }
+        if !outlines || (!effects && textMode != "outlines") {
+            try emitTextElement(node, depth, try common(node))
+            return
+        }
+        var live = JSONObject([("kind", "text")])
+        if let e = node["effects"], (arrayLength(e) ?? 0) > 0 { live["effects"] = e }
+        lines.append("\(indent(depth))<g\(try common(node)) data-vector-live=\"\(escapeAttr(JSONValue.object(live).stringified()))\">")
+        lines.append("\(indent(depth + 1))<g data-vector-part=\"appearance\">")
+        for shape in try vectorAppearanceNodes(node) { try emit(shape, depth + 2) }
+        lines.append("\(indent(depth + 1))</g>")
+        lines.append("\(indent(depth + 1))<g data-vector-part=\"source\" display=\"none\">")
+        var source = node
+        for key in ["effects", "transform", "opacity", "visible", "booleanOperation", "blendStep", "blendMode", "filters"] { source[key] = Optional<JSONValue>.none }
+        source.id = "\(node.id)~src"
+        try emitTextElement(source, depth + 2, " id=\"\(escapeAttr("\(node.id)~src"))\"")
+        lines.append("\(indent(depth + 1))</g>")
+        lines.append("\(indent(depth))</g>")
+    }
+
     func emitNode(_ node: VectorNode, _ depth: Int) throws {
         if isVectorFrame(node) {
             try emitFrame(node, depth)
@@ -256,8 +342,12 @@ public func vectorDocumentToSvg(_ docIn: VectorDocument, precision: Int? = nil, 
             try emitInstance(node, depth)
             return
         }
-        // not ported yet: masks, text and lenses (#624)
-        if isVectorMaskGroup(node) || node.isText || isVectorLens(node) {
+        if node.isText {
+            try emitText(node, depth)
+            return
+        }
+        // not ported yet: masks and lenses (#624)
+        if isVectorMaskGroup(node) || isVectorLens(node) {
             throw VectorNotPorted("exporting \(node.typeName) nodes with masks or lenses to SVG")
         }
         if hasOwnVectorAppearance(node) {

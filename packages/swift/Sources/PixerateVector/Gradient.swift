@@ -568,6 +568,17 @@ func vectorGradientMatrix(_ g: JSONObject, _ bounds: VectorBounds?) -> VectorMat
     multiplyMatrices(framePointsMatrix(vectorGradientPoints(g)), vectorGradientUnitsMatrix(g, bounds))
 }
 
+/// The gradient's handles mapped by `toWorld` from node space (`vectorGradientHandles`): start, end,
+/// the secondary axis' end for centred styles and the focal point for radial ones.
+func vectorGradientHandles(_ g: JSONObject, _ bounds: VectorBounds?, _ toWorld: VectorMatrix = IDENTITY_MATRIX) -> (start: Vec2, end: Vec2, aspect: Vec2?, focal: Vec2?) {
+    let p = vectorGradientPoints(g)
+    let m = multiplyMatrices(vectorGradientUnitsMatrix(g, bounds), toWorld)
+    let type = g["type"]?.stringValue ?? ""
+    let f = type == "radial" ? unitFocal(g) : nil
+    let frame = multiplyMatrices(framePointsMatrix(p), m)
+    return (applyMatrix(m, p.start), applyMatrix(m, p.end), isCentredVectorGradient(type) ? applyMatrix(m, p.width) : nil, type == "radial" ? applyMatrix(frame, f?.f ?? Vec2(0, 0)) : nil)
+}
+
 /// A gradient after its node's geometry goes through a non-affine map `f` (`mapVectorGradient`):
 /// `userSpaceOnUse` handles are mapped point by point; box gradients follow the new bounds.
 public func mapVectorGradient(_ g: JSONObject, _ f: (Vec2) -> Vec2) -> JSONObject {

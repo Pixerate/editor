@@ -97,7 +97,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PixerateVectorTests",
-            dependencies: ["PixerateVector", "PixerateGeometry", "PixerateCore", "PixerateRaster", "PixerateContracts", "PixerateConformance"],
+            dependencies: ["PixerateVector", "PixerateGeometry", "PixerateCore", "PixerateRaster", "PixerateContracts", "PixerateConformance", "PixeratePaint"],
             path: "packages/swift/Tests/PixerateVectorTests",
             resources: [.copy("Fixtures")],
             swiftSettings: settings

@@ -5,9 +5,9 @@ import PixerateCore
 import XCTest
 @testable import PixerateVector
 
-/// Replays the vector scenarios of `@pixerate/conformance` against the Swift vector editor. A
-/// scenario the Swift port can't pass yet is marked `"skip": { "swift": "… (#issue)" }` in its file
-/// and reported here, so the remaining work is a count that goes down.
+/// Replays the vector scenarios of `@pixerate/conformance` against the Swift vector editor. The
+/// vector domain is fully ported: every scenario runs, and a scenario marked
+/// `"skip": { "swift": "… (#issue)" }` fails here, so new skips can't creep in.
 final class VectorConformanceTests: XCTestCase {
     func testVectorScenarios() async throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
@@ -38,15 +38,16 @@ final class VectorConformanceTests: XCTestCase {
             }
         }
         for failure in failures { XCTFail(failure.description) }
+        for (id, reason) in skipped { XCTFail("The vector domain is fully ported, but \(id) is skipped for Swift: \(reason)") }
         VectorConformanceReport.write(passed: passed, skipped: skipped, failed: Set(failures.map(\.scenario)).count)
     }
 
-    /// The scenarios this port covers stay unskipped.
-    func testPortedScenariosAreNotSkipped() throws {
+    /// Every vector scenario runs on Swift: none carries a skip, and the 15 known ones are there.
+    func testNoVectorScenarioIsSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors"] {
-            let scenario = try XCTUnwrap(scenarios.first { $0.id == id })
-            XCTAssertNil(scenario.skip["swift"], id)
+        for scenario in scenarios { XCTAssertNil(scenario.skip["swift"], "\(scenario.id) is skipped for Swift; the vector domain is fully ported (#624).") }
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text", "import-export", "effects-and-generation"] {
+            XCTAssertNotNil(scenarios.first { $0.id == id }, id)
         }
     }
 
@@ -61,11 +62,9 @@ final class VectorConformanceTests: XCTestCase {
         }
     }
 
-    /// `import-export` is skipped for PDF, Lottie and tracing; its SVG steps (import, export and a
-    /// failed import) replay on their own.
+    /// The SVG steps of `import-export` (import, export and a failed import) also replay on their own.
     func testImportExportSvgSteps() async throws {
         var scenario = try XCTUnwrap(ConformanceScenario.load(domain: "vector").first { $0.id == "import-export" })
-        XCTAssertNotNil(scenario.skip["swift"])
         scenario.steps = [scenario.steps[0], scenario.steps[1], scenario.steps[10]]
         XCTAssertEqual(scenario.steps.map { $0.arguments["id"]?.stringValue }, ["vector.importSvg", "vector.exportSvg", "vector.importSvg"])
         let outputs = try await runConformanceScenario(scenario, host: VectorConformanceHost(setup: scenario.setup))
@@ -91,8 +90,7 @@ final class VectorConformanceTests: XCTestCase {
         }
     }
 
-    /// Every command of the contract is registered, with the TS metadata, and a command that is
-    /// not ported yet fails with a message rather than crashing.
+    /// Every command of the contract is registered, with the TS metadata and a Swift run.
     func testEveryContractCommandIsRegistered() throws {
         let host = try VectorConformanceHost(setup: [:])
         let contract = try VectorContracts.commands()
@@ -113,10 +111,10 @@ final class VectorConformanceTests: XCTestCase {
         XCTAssertNil(listed.first { $0.id == "vector.list" }?.params)
         _ = host.commands.execute("vector.addShape", ["kind": "rect", "x": 0, "y": 0, "width": 10, "height": 10])
         XCTAssertEqual(host.commands.list().filter { !$0.enabled }.map(\.id), ["vector.exitSymbolEdit"])
-        let result = host.commands.execute("vector.listFonts")
-        guard case .failure(let f) = result else { return XCTFail("listFonts ran") }
-        XCTAssertEqual(f.code, .failed)
-        XCTAssertTrue(f.message.contains("not ported to Swift yet (#624)"), f.message)
+        guard case .ok(_, let pdf) = host.commands.execute("vector.exportPdf") else { return XCTFail("exportPdf failed") }
+        XCTAssertEqual(pdf?["pages"], 1)
+        // Every command has a Swift run: none falls back to the "not ported" failure.
+        XCTAssertEqual(Set(contract.map(\.id)).subtracting(vectorCommandRuns().keys), [])
     }
 }
 
