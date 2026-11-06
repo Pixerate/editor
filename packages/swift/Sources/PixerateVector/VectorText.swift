@@ -906,7 +906,7 @@ public func vectorTextRange(_ text: String, _ start: Double?, _ end: Double?) th
 public func replaceVectorText(_ node: VectorNode, _ start: Int, _ end: Int, _ insert: String) -> VectorNode {
     let clean = normalizeLineBreaks(insert)
     let old = node.textValue.u16
-    let text = str16(old[0 ..< start] + clean.u16 + old[end...])
+    let text = str16(Array(old[0 ..< start]) + clean.u16 + Array(old[end...]))
     var runs: [StyledRun]?
     if let own = node.textRuns, !own.isEmpty {
         let fitted = fitVectorTextRuns(own, Double(old.count))

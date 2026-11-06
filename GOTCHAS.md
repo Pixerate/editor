@@ -4125,6 +4125,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A retry of `generate_vector_art` after a generator error that throws (not one the tool reports) returned the same error without calling the generator again, while a retry after an `ok: false` result (bad prompt, unknown model) ran again.
 - **Root Cause**: The TS `once` stores the promise per key and deletes the key in a `.then` only when the result is not `ok`; a rejected promise never reaches that `.then`, so it stays. Generator failures inside `produce` are caught and become `ok: false` results, so only errors outside it (an SVG feature `VectorNotPorted` in Swift) are kept.
 - **Solution / Workaround**: `VectorGenerationRuns` mirrors it: the outcome (`Result`) is kept per key, waiting calls with the same key and input share it, a failed result removes the key, a thrown error stays. A different input under a used key is refused (compared by `stableStringify`, keys sorted by UTF-16 units).
+
 ### [swift] Wet Brush Dab Invalidation Must Be Per-Tile, Not Per-Lane
 - **Issue / Symptom**: Painting with a wet brush over a canvas with many active wet tiles (e.g., 16–25 tiles) lagged badly on pointer moves (~43 ms/move on M4 Pro, Release), even when the dab touched only 1 tile.
 - **Root Cause**: Five things stacked on each pointer move and tick:
