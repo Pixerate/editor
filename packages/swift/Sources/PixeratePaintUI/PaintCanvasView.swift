@@ -48,11 +48,8 @@ public struct PaintCanvasView: View {
             let t = CGAffineTransform(a: m[0], b: m[2], c: m[1], d: m[3], tx: m[4], ty: m[5])
             let smooth = view.zoom < 2
             ZStack {
-                Canvas { ctx, _ in
-                    var shadow = ctx
-                    shadow.addFilter(.shadow(color: .black.opacity(0.45), radius: 8))
-                    shadow.fill(Path(CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height)).applying(t), with: .color(.white))
-                }
+                PaintSheetShadowView(width: canvas.width, height: canvas.height, transform: t)
+                    .equatable()
                 // On screen the tiles are layers, which keep their textures until their images change.
                 if interactive { PaintTilesView(tiles: tiles, transform: t, smooth: smooth) }
                 Canvas { ctx, _ in
@@ -152,6 +149,20 @@ extension Color {
     }
 }
 
+private struct PaintSheetShadowView: View, Equatable {
+    let width: Int
+    let height: Int
+    let transform: CGAffineTransform
+
+    var body: some View {
+        Canvas { ctx, _ in
+            var shadow = ctx
+            shadow.addFilter(.shadow(color: .black.opacity(0.45), radius: 8))
+            shadow.fill(Path(CGRect(x: 0, y: 0, width: width, height: height)).applying(transform), with: .color(.white))
+        }
+    }
+}
+
 // MARK: - Tiles
 
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
@@ -216,7 +227,7 @@ final class PaintTilesLayerView: PaintPlatformView {
     func update(_ v: PaintTilesView) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        content.setAffineTransform(v.transform)
+        if content.affineTransform() != v.transform { content.setAffineTransform(v.transform) }
         let keys = v.tiles.map { tileKey($0.tx, $0.ty) }
         if keys != order {
             // The canvas changed size: new layers, in drawing order.
@@ -231,13 +242,14 @@ final class PaintTilesLayerView: PaintPlatformView {
             order = keys
         }
         let filter: CALayerContentsFilter = v.smooth ? .linear : .nearest
+        let minFilter: CALayerContentsFilter = v.smooth ? .trilinear : .nearest
         for (key, tile) in zip(keys, v.tiles) {
             guard let l = layers[key] else { continue }
             // Only a new image is uploaded again.
             if (l.contents as AnyObject?) !== tile.image { l.contents = tile.image }
             if l.frame != tile.rect { l.frame = tile.rect }
-            l.magnificationFilter = filter
-            l.minificationFilter = v.smooth ? .trilinear : .nearest
+            if l.magnificationFilter != filter { l.magnificationFilter = filter }
+            if l.minificationFilter != minFilter { l.minificationFilter = minFilter }
         }
         CATransaction.commit()
     }

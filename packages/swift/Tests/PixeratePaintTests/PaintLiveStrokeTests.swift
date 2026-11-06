@@ -109,6 +109,37 @@ final class PaintLiveStrokeTests: XCTestCase {
         XCTAssertEqual(shown, c.compositePixels(wet: "display").data)
     }
 
+    func testALiveWetStrokeRecompositesOnlyTouchedTilesOnPush() throws {
+        let c = try PaintEditorController(width: 1024, height: 1024, brushId: "watercolor-round", color: "#1e5aa8")
+        // Seed wet paint across 4 tiles so the wet lane already has multiple active tiles.
+        _ = try c.paintStroke(PaintStrokeInit(seed: 1), points: [
+            PenPoint(x: 100, y: 100, pressure: 0.8),
+            PenPoint(x: 400, y: 100, pressure: 0.8),
+            PenPoint(x: 400, y: 400, pressure: 0.8),
+            PenPoint(x: 100, y: 400, pressure: 0.8),
+        ])
+        _ = c.wet.advance(2)
+        let view = createPaintCompositor()
+        c.compositeTiles(using: view) { _, _, _, _ in }
+
+        var i = PaintStrokeInit(seed: 9)
+        i.snapToPerspective = false
+        let live = try c.beginStroke(i)
+        c.compositeTiles(using: view) { _, _, _, _ in }
+
+        // Pushing a dab inside tile (0, 0) must only mark and recomposite tile (0, 0), not all 4 active wet tiles.
+        let before = c.version
+        live.push([PenPoint(x: 80, y: 80, pressure: 0.7), PenPoint(x: 95, y: 95, pressure: 0.7)])
+        let dirty = try XCTUnwrap(c.dirtySince(before))
+        XCTAssertFalse(dirty.isEmpty)
+        var changedTiles = 0
+        c.compositeTiles(using: view) { _, _, _, changed in
+            if changed { changedTiles += 1 }
+        }
+        XCTAssertEqual(changedTiles, 1, "pushing a wet dab in tile (0, 0) recomposites only that tile, not every active tile in the wet lane")
+        try live.end()
+    }
+
     func testViewMathsAndPenInput() {
         let canvas = PaintCanvas(width: 200, height: 100, dpi: 72)
         var view = PaintView()

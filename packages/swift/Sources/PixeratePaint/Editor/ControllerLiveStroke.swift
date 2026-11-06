@@ -42,8 +42,11 @@ public final class PaintLiveStroke {
         let rects = try? session.push(points)
         if isWet {
             // The wet layer's display is the layer's pixels: show it (not an undo step).
-            controller?.wet.syncDisplays()
-            controller?.emit()
+            let beforeVersion = controller?.version
+            controller?.wet.syncDisplaysGpu()
+            if controller?.version == beforeVersion {
+                controller?.emit(rects)
+            }
         } else {
             // Only where the dabs landed changed.
             controller?.emit(rects)

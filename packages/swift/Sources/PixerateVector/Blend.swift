@@ -188,7 +188,10 @@ public func refineMorphContour(_ c: VectorMorphContour, _ segments: Int) -> (con
     var left = segments - parts.reduce(0, +)
     // Remainders that differ by rounding noise tie, so congruent shapes split alike.
     let frac = want.map { $0 - JS.floor($0) }
-    let order = jsSorted(Array(parts.indices)) { a, b in abs(frac[b] - frac[a]) > 1e-9 ? frac[b] - frac[a] : Double(a - b) }
+    let order = jsSorted(Array(parts.indices)) { (a: Int, b: Int) -> Double in
+        let d = frac[b] - frac[a]
+        return abs(d) > 1e-9 ? d : Double(a - b)
+    }
     var i = 0
     while left > 0 {
         parts[order[i]] += 1

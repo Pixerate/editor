@@ -94,8 +94,9 @@ public func vectorLensColorMap(_ lens: JSONObject) -> (([Double]) -> [Double])? 
         return { c in
             // Dark to black, middle grey to the tint, light to white.
             let l = luma(c)
-            let duo = l < 0.5 ? [tint[0] * 2 * l, tint[1] * 2 * l, tint[2] * 2 * l] : (0 ..< 3).map { tint[$0] + (1 - tint[$0]) * (2 * l - 1) }
-            return mix(c, duo, s)
+            let dark: [Double] = [tint[0] * 2 * l, tint[1] * 2 * l, tint[2] * 2 * l]
+            let light: [Double] = (0 ..< 3).map { k in tint[k] + (1 - tint[k]) * (2 * l - 1) }
+            return mix(c, l < 0.5 ? dark : light, s)
         }
     case "colorAdd":
         return { c in [JS.min(1, c[0] + tint[0] * s), JS.min(1, c[1] + tint[1] * s), JS.min(1, c[2] + tint[2] * s), c[3]] }

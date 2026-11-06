@@ -202,19 +202,30 @@ final class WetStrokeDriver {
         rasterizeDab(flat, initValues.brush.tip.hardness, rect, &tip)
         let grain = depth > 0 ? initValues.grain : nil
         let mask = initValues.mask
-        var k = 0
-        for yy in 0..<rect.height {
-            for xx in 0..<rect.width {
-                if let mask, tip[k] > 0 {
-                    let mx = rect.x + xx, my = rect.y + yy
-                    let m = mx >= 0 && my >= 0 && mx < mask.width && my < mask.height ? Double(mask.data[my * mask.width + mx]) / 255 : 0
-                    tip[k] = Float(Double(tip[k]) * m)
+        let dVal = depth
+        let pr = d.pressure
+        let rx = rect.x, ry = rect.y, rw = rect.width, rh = rect.height
+        tip.withUnsafeMutableBufferPointer { tipBuf in
+            cov.withUnsafeMutableBufferPointer { covBuf in
+                guard let tipPtr = tipBuf.baseAddress, let covPtr = covBuf.baseAddress else { return }
+                var k = 0
+                for yy in 0..<rh {
+                    for xx in 0..<rw {
+                        var t = Double(tipPtr[k])
+                        if t > 0 {
+                            if let mask {
+                                let mx = rx + xx, my = ry + yy
+                                let m = mx >= 0 && my >= 0 && mx < mask.width && my < mask.height ? Double(mask.data[my * mask.width + mx]) / 255 : 0
+                                t *= m
+                            }
+                            var v = t
+                            if v > 0, let grain { v *= grainCatch(grain.at(Double(rx + xx) + 0.5, Double(ry + yy) + 0.5), dVal, pr) }
+                            tipPtr[k] = Float(JS.round(t * COVERAGE_STEPS) / COVERAGE_STEPS)
+                            covPtr[k] = Float(JS.round(v * COVERAGE_STEPS) / COVERAGE_STEPS)
+                        }
+                        k += 1
+                    }
                 }
-                var v = Double(tip[k])
-                if v > 0, let grain { v *= grainCatch(grain.at(Double(rect.x + xx) + 0.5, Double(rect.y + yy) + 0.5), depth, d.pressure) }
-                tip[k] = Float(JS.round(Double(tip[k]) * COVERAGE_STEPS) / COVERAGE_STEPS)
-                cov[k] = Float(JS.round(v * COVERAGE_STEPS) / COVERAGE_STEPS)
-                k += 1
             }
         }
         return (tip, cov)
@@ -646,11 +657,11 @@ public final class PaintWetLayers {
         stepsOwed = Swift.min(Double(maxSteps * 4), stepsOwed + ((now - previous) / 1000) * speed)
         let n = Swift.min(maxSteps, Int(JS.floor(stepsOwed)))
         if n < 1 { return 0 }
-        stepsOwed -= Double(n)
+        stepsOwed -= JS.floor(stepsOwed)
         w.step(n)
-        if w.gpuActive { syncDisplaysGpu(DISPLAY_TILES_PER_TICK) } else { syncDisplays(DISPLAY_TILES_PER_TICK) }
+        let rects = syncDisplaysGpu(DISPLAY_TILES_PER_TICK)
         retireDry()
-        host.changed()
+        if rects.isEmpty { host.changed() }
         return n
     }
 
@@ -659,7 +670,7 @@ public final class PaintWetLayers {
         guard let w = world else { return 0 }
         let start = w.clock
         w.step(Swift.max(0, steps))
-        if w.gpuActive { syncDisplaysGpu() } else { syncDisplays() }
+        syncDisplaysGpu()
         retireDry()
         return w.clock - start
     }
@@ -670,7 +681,7 @@ public final class PaintWetLayers {
         let ids = layerId.map { w.hasLane($0) ? [$0] : [] } ?? w.laneIds()
         var out: [(layerId: String, bounds: RasterRect?)] = []
         for id in ids { out.append((id, try w.dry(id, rect))) }
-        syncDisplays()
+        syncDisplaysGpu()
         retireDry()
         return out
     }

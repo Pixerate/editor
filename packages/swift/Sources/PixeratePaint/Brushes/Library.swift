@@ -17,7 +17,7 @@ public let BRUSH_PRESETS: [Brush] = {
 }()
 
 public struct BrushLibraryError: Error, LocalizedError {
-    public enum Code: String { case unknownBrush = "unknown_brush", unknownSource = "unknown_source", builtin, exists, invalid }
+    public enum Code: String, Sendable { case unknownBrush = "unknown_brush", unknownSource = "unknown_source", builtin, exists, invalid }
     public let code: Code
     public let message: String
     public init(_ code: Code, _ message: String) {
@@ -75,7 +75,8 @@ private func matches(_ entry: BrushLibraryEntry, _ f: BrushFilter) -> Bool {
     let tags = (b["tags"]?.arrayValue ?? []).compactMap(\.stringValue)
     if let t = f.tag, !tags.contains(t) { return false }
     if let q = f.text {
-        let parts = [b["id"]?.stringValue ?? "", b["name"]?.stringValue ?? "", b["description"]?.stringValue ?? "", b["variety"]?.stringValue ?? "", b["medium"]?.stringValue ?? "", b["tool"]?.stringValue ?? ""] + tags
+        let fields: [String] = ["id", "name", "description", "variety", "medium", "tool"].map { b[$0]?.stringValue ?? "" }
+        let parts = fields + tags
         let text = brushWords(parts.joined(separator: " "))
         if !brushWords(q).allSatisfy({ w in text.contains { $0.hasPrefix(w) } }) { return false }
     }

@@ -183,7 +183,13 @@ func rgbToHex(_ r: Double, _ g: Double, _ b: Double) -> String {
 private func movePoint(_ p: LayerOffset, _ dx: Int, _ dy: Int) -> LayerOffset { LayerOffset(x: p.x + dx, y: p.y + dy) }
 
 public final class PaintEditorController {
-    public internal(set) var doc: PaintDocumentState { didSet { emit() } }
+    private var suppressDocEmit = false
+    public internal(set) var doc: PaintDocumentState { didSet { if !suppressDocEmit { emit() } } }
+    func setDocSilently(_ next: PaintDocumentState) {
+        suppressDocEmit = true
+        doc = next
+        suppressDocEmit = false
+    }
     var undoStack: [HistoryEntry] = []
     var redoStack: [HistoryEntry] = []
     let historyLimit: Int
@@ -295,19 +301,21 @@ public final class PaintEditorController {
             canvas: { [unowned self] in doc.canvas },
             paper: { [unowned self] in doc.paper },
             layerSurface: { [unowned self] id in findLayer(doc.layers, id).flatMap { $0.layer.isPixel ? $0.layer.pixelSurface : nil } },
-            updateSurfaces: { [unowned self] surfaces, _ in
+            updateSurfaces: { [unowned self] surfaces, rects in
                 var layers = doc.layers
                 for (id, surface) in surfaces where findLayer(layers, id) != nil { layers = mapLayer(layers, id) { $0.withSurface(surface) } }
                 // Wet paint moving is not an undo step: keep the history's documents.
-                doc = doc.with { $0.layers = layers }
+                setDocSilently(doc.with { $0.layers = layers })
+                emit(rects.isEmpty ? nil : rects)
             },
             layerLight: { [unowned self] id in doc.light?.get(id) },
             updateLights: { [unowned self] lights in
                 let d = doc
                 // Wet light moving is not an undo step either.
-                doc = d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } }
+                setDocSilently(d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } })
+                emit(nil)
             },
-            changed: { [unowned self] in emit() }
+            changed: { [unowned self] in emit([]) }
         ), wetOptions)
         self.wetOptions = wetOptions
     }
@@ -1160,7 +1168,7 @@ public final class PaintEditorController {
             ))
             i.seed = seedW
             i.load = load
-            wetInit = (driver, { (try? world.display(id).surface) ?? emptySurface(4) })
+            wetInit = (driver, { (try? world.displayGpu(id).surface) ?? emptySurface(4) })
         } else if wet.wetLayerIds().contains(layer.id) {
             // A dry brush on wet paint: the paint dries first (in the same undo step).
             dryLayersFirst([layer.id])

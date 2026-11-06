@@ -75,18 +75,21 @@ public final class PaintCanvasPresenter {
                 let ox = tx * TILE, oy = ty * TILE
                 let cw = Swift.min(TILE, w - ox), ch = Swift.min(TILE, h - oy)
                 data.withUnsafeBufferPointer { src in
+                    guard let srcPtr = src.baseAddress else { return }
                     for y in 0..<ch {
                         var s = (y * TILE) * 4
                         var d = ((oy + y) * w + ox) * 4
                         for _ in 0..<cw {
                             // RGBA straight → BGRA premultiplied.
-                            let a = UInt16(src[s + 3])
+                            let a = UInt16(srcPtr[s + 3])
                             if a == 255 {
-                                base[d] = src[s + 2]; base[d + 1] = src[s + 1]; base[d + 2] = src[s]; base[d + 3] = 255
+                                base[d] = srcPtr[s + 2]; base[d + 1] = srcPtr[s + 1]; base[d + 2] = srcPtr[s]; base[d + 3] = 255
+                            } else if a == 0 {
+                                base[d] = 0; base[d + 1] = 0; base[d + 2] = 0; base[d + 3] = 0
                             } else {
-                                base[d] = UInt8((UInt16(src[s + 2]) * a + 127) / 255)
-                                base[d + 1] = UInt8((UInt16(src[s + 1]) * a + 127) / 255)
-                                base[d + 2] = UInt8((UInt16(src[s]) * a + 127) / 255)
+                                base[d] = UInt8((UInt16(srcPtr[s + 2]) * a + 127) / 255)
+                                base[d + 1] = UInt8((UInt16(srcPtr[s + 1]) * a + 127) / 255)
+                                base[d + 2] = UInt8((UInt16(srcPtr[s]) * a + 127) / 255)
                                 base[d + 3] = UInt8(a)
                             }
                             s += 4
