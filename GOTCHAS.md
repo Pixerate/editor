@@ -4100,3 +4100,13 @@ All contributors and AI assistants should check this file before starting work a
   4. `WetWorld.refreshHalos()` copied borders for all active tiles synchronously after every single dab inside `paint`, `addWater`, `dry`, and `setPaper` rather than lazily before `step` / `snapshot`.
   5. `PaintEditorModel` bumped one `@Observable` `revision` counter for both canvas frame updates (`pointerMove`, `tick`) and UI state changes, which re-evaluated all SwiftUI chrome (`ContextBar`, `ToolRail`, open panels—including `PaintWetPanel`, which called `world.stats(id)` and scanned all 65,536 pixels of every active tile) on every pointer move and 60 Hz wet tick.
 - **Solution / Workaround**: `WetLane` tracks per-slot stamps (`slotStamp[key]`), and `setBase` / `setLight` invalidate only tiles whose `RasterTile` identity (`!==`) changed; `updateSurfaces` sets `doc` via `setDocSilently` and emits the exact changed tile rectangles once; `push`, `tick`, `advance`, and `dry` use `syncDisplaysGpu()`; `refreshHalos()` marks `halosDirty = true` and flushes in parallel at the start of `runHere` and `snapshot()`; `pixerate_wet_step` skips completely dry 4-cell blocks and dry-cell pigment face loads (bit-identical to the scalar reference); and `PaintEditorModel` separates `revision` (canvas + step label) from `stateRevision` (chrome + panels) and reads wet slider settings via `wetLayerSettings` instead of `world.stats(id)`.
+
+### [swift] Wet Slot Stamps Say "Changed", Not "How Long Ago"
+- **Issue / Symptom**: On canvases with more than `DISPLAY_TILES_PER_TICK` stale wet tiles, older tiles stopped updating while the newest kept reshading. Tiles freed between shadings kept their old pixels on screen.
+- **Root Cause**: `slotStamp` counts one tile's own changes, so its values can't be compared between tiles, and the "longest unshaded" sort did exactly that. Separately, once `updateSurfaces` emitted exact rectangles, a freed tile was in no rectangle because `display` only reported tiles it reshaded.
+- **Solution / Workaround**: Order shading by `shaded[tk].at`, the lane stamp when the tile was shaded. `free` records the tile in `lane.freedRects`, and `display` drains that into `changed`.
+
+### [swift] Light Changes Must Dirty the Whole Canvas
+- **Issue / Symptom**: Emitting tile rectangles from `updateLights` looks like an easy win for lit wet layers, but would leave stale glow on the neighbouring tiles.
+- **Root Cause**: Light spills past the tile it is painted in (`computeSpill` blurs it by `LightSpill.radius`), so a light change reaches pixels outside its tiles.
+- **Solution / Workaround**: Keep `emit(nil)` in `updateLights`. Any narrower rectangle has to grow by the full reach of the spill blur.

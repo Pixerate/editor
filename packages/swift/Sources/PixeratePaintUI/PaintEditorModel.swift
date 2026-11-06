@@ -102,7 +102,6 @@ public final class PaintEditorModel {
     @ObservationIgnored public private(set) var gesture: PaintGesture!
     @ObservationIgnored private var subscriptions: [Cancellable] = []
     @ObservationIgnored private var fitted: String?
-    @ObservationIgnored private var cachedBrushes: (ids: [String], brushes: [PaintBrush])?
 
     /// A model over `controller` (default a new 1024 × 768 painting), with its tools in `registry` (default a new one).
     public init(controller: PaintEditorController? = nil, registry: ToolRegistry? = nil) throws {
@@ -147,15 +146,7 @@ public final class PaintEditorModel {
     public var view: PaintView { track(); return controller.view }
     public var brush: PaintBrush { track(); return controller.brush }
     /// The brushes this port paints with, in library order.
-    public var brushes: [PaintBrush] {
-        track()
-        let all = controller.brushes
-        let ids = all.map(\.id)
-        if let c = cachedBrushes, c.ids == ids { return c.brushes }
-        let filtered = all.filter(controller.canPaint)
-        cachedBrushes = (ids, filtered)
-        return filtered
-    }
+    public var brushes: [PaintBrush] { track(); return controller.brushes.filter(controller.canPaint) }
     public var color: String { track(); return controller.color }
     public var secondaryColor: String { track(); return controller.secondaryColor }
     public var colorLocked: Bool { track(); return controller.colorLocked }

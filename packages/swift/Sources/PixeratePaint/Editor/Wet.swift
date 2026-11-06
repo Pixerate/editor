@@ -596,7 +596,7 @@ public final class PaintWetLayers {
             rects += d.changed
         }
         syncLights()
-        if !surfaces.isEmpty { host.updateSurfaces(surfaces, rects) }
+        if !surfaces.isEmpty || !rects.isEmpty { host.updateSurfaces(surfaces, rects) }
         return rects
     }
 
@@ -612,7 +612,7 @@ public final class PaintWetLayers {
             rects += d.changed
         }
         syncLights()
-        if !surfaces.isEmpty { host.updateSurfaces(surfaces, rects) }
+        if !surfaces.isEmpty || !rects.isEmpty { host.updateSurfaces(surfaces, rects) }
         return rects
     }
 
@@ -657,7 +657,7 @@ public final class PaintWetLayers {
         stepsOwed = Swift.min(Double(maxSteps * 4), stepsOwed + ((now - previous) / 1000) * speed)
         let n = Swift.min(maxSteps, Int(JS.floor(stepsOwed)))
         if n < 1 { return 0 }
-        stepsOwed -= JS.floor(stepsOwed)
+        stepsOwed -= Double(n)
         w.step(n)
         let rects = syncDisplaysGpu(DISPLAY_TILES_PER_TICK)
         retireDry()
