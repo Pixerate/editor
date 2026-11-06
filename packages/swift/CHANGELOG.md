@@ -1,5 +1,33 @@
 # @pixerate/swift
 
+## 0.20.0
+
+### Minor Changes
+
+- 2683e36: **Swift vector editor: PDF, Lottie, Image Trace and stylise (#624).**
+
+  - Vector PDF export (`Pdf.swift`, from `vector/pdf.ts`): `vectorDocumentToPdf` draws the scene render data as PDF paths, with linear and radial gradients as shadings, pattern paints as their tiles, opacity and blend modes as graphics states, clip masks, a page per artboard, `scale`, `title` and Flate compression; the bytes match the TS file. Notes name what is left out (filters, opacity masks, stop opacity, text without outlines).
+  - Lottie export and import (`Lottie.swift`, from `vector/lottie.ts`): `vectorDocumentToLottie` with path effects as live shape modifiers and gradients as gradient fills, and `parseVectorLottie` / `lottieValueAt` reading one frame (eased and held keyframes, transforms and parenting, precomps, solids, additive masks, modifiers as live effects).
+  - Image Trace (`Trace.swift`, from `vector/trace.ts`): `traceVectorImage` in threshold and colour modes, `vectorTraceContours`, `quantizeVectorTraceColors`; and the bitmap-to-vector styles (`Stylize.swift`, from `vector/stylize.ts`): `stylizeVectorImage` with mosaic, halftone, low poly and engraving.
+  - The controller has `toPdf`, `toLottie`, `importLottie`, `traceImage` and `stylizeImage`; `vector.exportPdf`, `vector.exportLottie`, `vector.importLottie`, `vector.traceImage`, `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage` and `vector.hatchImage` run, so every vector command now has a Swift run, and the `import-export` scenario passes (14 of 15 vector scenarios).
+  - `JS.acos` ports V8's `Math.acos` bit for bit on arm64; curve fitting, live corners and variable-width strokes use it instead of Foundation's.
+
+- 94446bf: **Swift vector editor: text (#624).**
+
+  - The shared text engine (`TextLayout.swift`, from `src/text`): `layoutText` with styled runs, paragraphs, line breaking (spaces, break characters, between CJK characters), alignment and justification, tracking, leading, indents, spacing, baseline shift and vertical writing (CJK upright, Latin sideways or upright), carets, hit testing, selection quads, decorations and fragment outlines.
+  - A `VectorTextShaper` protocol (`resolve`, `metrics`, `measure` over UTF-16 code units, optional `outline`, `vertical` and `families`) with `MetricTextShaper` (`createMetricTextShaper`: per-class advances, 0.8 / 0.2 em ascent and descent, bold 5 % wider) as the default; `setVectorTextShaper` swaps it, and the conformance host forces the metric shaper.
+  - Text nodes (`VectorText.swift`, from `vector/text.ts`): runs and styles, path measuring, point, area and path text layout with vertical orientation (`layoutVectorText`), glyph boxes or outlines (`vectorTextPaths`), carets, spans, validation (`patchVectorCharacterStyle`, `patchVectorParagraphStyle`, `sanitizeVectorTextFrame`, `sanitizeVectorTextFields`) and the pure edits, including `bakeVectorTextGeometry`.
+  - Text now bounds, transforms (scale bakes into font sizes), blends (as its glyphs), draws in render data (SVG text spans, or outlines with an outline shaper), exports to SVG (`<g data-vector-text>`, or outlines with effects) and imports (our own text, live text with effects, and foreign `<text>` as point text); frames lay out point, area and path text children, and master pages fill `{page}` / `{pages}` in text.
+  - The controller has `addText`, `createTextNode`, `setText`, `setTextStyle`, `styleTexts`, `setParagraphStyle`, `setTextFrame`, `setTextOrientation`, `typeOnPath`, `createOutlines`, `getTextLayout`, `setTextShaper`, `setTextDefaults` and the text panel's data (`textPanel`). The 10 text commands run, and the `text` scenario passes (13 of 15 vector scenarios).
+
+- 3dcb648: **Swift vector editor: effect and generation agent tools; the vector domain is fully ported (#624).**
+
+  - Provider vector effects (`ControllerEffects.swift`, from `vector/controller.ts`): `addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups` and the effects slot (`effectsProvider`, `setEffectsProvider`, `useEffects`). A vector effect's SVG is read with the SVG importer into a group that keeps its `providerEffect` and draws as a plain group in render data and SVG export.
+  - `createVectorEffectsToolProvider` (`search_effects`, `describe_effect`, `list_applied_effects`, `apply_effect`, `update_effect`, `remove_effect`) on the shared effect tools, now `effectToolHandlers` with an `EffectToolHost` in `PixeratePaint`, which `createPaintEffectsToolProvider` uses too. `VectorEffectProvider` adds `applyVectorEffect`; `FakeEffectProvider` implements it (`badge`, `route`, `fade-in`) as the TS fake does.
+  - Generation (`Generate.swift`, from `vector/generate.ts`): `generateVectorArt`, `regenerateVectorArt` (keeps the group's id, place and transform), `replaceGeneratedArt`, `vectorArtModels`, idempotency keys, `createVectorGenerationToolProvider` (`list_vector_art_models`, `generate_vector_art`, `regenerate_vector_art`) and `FAKE_VECTOR_ART_MODELS` / `fakeVectorArtGenerator`. SVG export writes `data-vector-generation` and SVG import reads it back.
+  - Generation planning in `PixerateCore` for any domain (`generation/capabilities.ts`, `plan.ts`, `provenance.ts`, `hash.ts`): `ModelCapabilities`, `planGenerationRequest` with every strategy, `createProvenance` (prompts as written; templates and values are not ported), `parseProvenance`, `stableStringify`. `jsToFixed` moved to `PixerateCore`.
+  - `VectorConformanceHost` registers both providers; all 15 vector scenarios pass, and `VectorConformanceTests` fails if a vector scenario is skipped.
+
 ## 0.19.3
 
 ### Patch Changes
