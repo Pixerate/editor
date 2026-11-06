@@ -305,7 +305,7 @@ public final class PaintEditorController {
                 var layers = doc.layers
                 for (id, surface) in surfaces where findLayer(layers, id) != nil { layers = mapLayer(layers, id) { $0.withSurface(surface) } }
                 // Wet paint moving is not an undo step: keep the history's documents.
-                setDocSilently(doc.with { $0.layers = layers })
+                if !surfaces.isEmpty { setDocSilently(doc.with { $0.layers = layers }) }
                 emit(rects.isEmpty ? nil : rects)
             },
             layerLight: { [unowned self] id in doc.light?.get(id) },
@@ -313,6 +313,7 @@ public final class PaintEditorController {
                 let d = doc
                 // Wet light moving is not an undo step either.
                 setDocSilently(d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } })
+                // Anywhere: light spills past its tiles (`computeSpill`), so tile rectangles would miss the glow around them.
                 emit(nil)
             },
             changed: { [unowned self] in emit([]) }

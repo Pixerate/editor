@@ -129,15 +129,17 @@ final class WetLane {
     var flow: WetFlowField?
     var flowStrength: Double
     var base: TiledSurface
-    /// Shaded display tiles by tile key, with the stamp they were shaded at (nil tile: transparent).
-    var shaded = OrderedMap<TileKey, (stamp: Int, tile: Tile?)>()
+    /// Shaded display tiles by tile key (nil tile: transparent), with the slot stamp they show and
+    /// the lane stamp when they were shaded. Slot stamps count each tile's own changes, so only the
+    /// lane stamp says which of two tiles was shaded longer ago.
+    var shaded = OrderedMap<TileKey, (stamp: Int, at: Int, tile: Tile?)>()
     /// Tile keys edited since they were last shaded.
     var urgent = Set<TileKey>()
     /// Changes whenever its pixels (display) may have changed.
     var stamp = 1
-    /// Changes when every active tile's display may have changed (step, paper change).
-    var stepStamp = 1
     var display: TiledSurface?
+    /// Document rectangles of tiles freed since the last `display`: their pixels are the base's now.
+    var freedRects: [RasterRect] = []
     var shadedVersion = 0
     var displayKey = ""
     var light: TiledSurface
@@ -331,7 +333,6 @@ public final class WetWorld {
             guard let l else { continue }
             pack(l)
             l.stamp += 1
-            l.stepStamp += 1
         }
         refreshHalos()
     }
@@ -433,6 +434,8 @@ public final class WetWorld {
             _ = lane.lightShaded.delete(tk)
             lane.urgent.remove(tk)
             lane.stamp += 1
+            let (tx, ty) = tileXY(key)
+            lane.freedRects.append(RasterRect(x: tx * WET_TILE, y: ty * WET_TILE, width: WET_TILE, height: WET_TILE))
         }
     }
 
@@ -627,10 +630,7 @@ public final class WetWorld {
             syncList()
             refreshHalos()
         }
-        for lane in lanes {
-            lane?.stamp += 1
-            lane?.stepStamp += 1
-        }
+        for lane in lanes { lane?.stamp += 1 }
     }
 
     /// Steps the simulation `steps` times. Returns the clock.
@@ -1150,7 +1150,7 @@ public final class WetWorld {
         let ordered = stale.enumerated().sorted { a, b in
             let ua = lane.urgent.contains(tileKeyOf(a.element)), ub = lane.urgent.contains(tileKeyOf(b.element))
             if ua != ub { return ua }
-            let sa = lane.shaded.get(tileKeyOf(a.element))?.stamp ?? 0, sb = lane.shaded.get(tileKeyOf(b.element))?.stamp ?? 0
+            let sa = lane.shaded.get(tileKeyOf(a.element))?.at ?? 0, sb = lane.shaded.get(tileKeyOf(b.element))?.at ?? 0
             if sa != sb { return sa < sb }
             return a.offset < b.offset
         }.map(\.element)
@@ -1172,12 +1172,14 @@ public final class WetWorld {
         let done = toShade.count
         for (i, key) in toShade.enumerated() {
             let tk = tileKeyOf(key)
-            lane.shaded.set(tk, (slotStamp[key], shadedTiles[i]))
+            lane.shaded.set(tk, (slotStamp[key], lane.stamp, shadedTiles[i]))
             lane.shadedVersion += 1
             lane.urgent.remove(tk)
             let (tx, ty) = tileXY(key)
             changed.append(RasterRect(x: tx * WET_TILE, y: ty * WET_TILE, width: WET_TILE, height: WET_TILE))
         }
+        changed += lane.freedRects
+        lane.freedRects.removeAll()
         // Shaded tiles of freed slots are gone; drop leftovers.
         let live = Set(keys.map(tileKeyOf))
         for tk in lane.shaded.keys where !live.contains(tk) {
@@ -1328,14 +1330,14 @@ public final class WetWorld {
         var changed: [RasterRect] = []
         for (i, key) in stale.enumerated() {
             let tk = tileKeyOf(key)
-            lane.shaded.set(tk, (slotStamp[key], finishTile(tiles[i], 4, 0)))
+            lane.shaded.set(tk, (slotStamp[key], lane.stamp, finishTile(tiles[i], 4, 0)))
             lane.urgent.remove(tk)
             let (tx, ty) = tileXY(key)
             changed.append(RasterRect(x: tx * WET_TILE, y: ty * WET_TILE, width: WET_TILE, height: WET_TILE))
         }
         lane.shadedVersion += 1
         let d = try display(id, maxTiles: 0)
-        return (d.surface, changed, 0, true)
+        return (d.surface, changed + d.changed, 0, true)
     }
 
     // MARK: - Snapshots
