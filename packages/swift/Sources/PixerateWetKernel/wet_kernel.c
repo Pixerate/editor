@@ -72,10 +72,21 @@ uint32_t pixerate_wet_step(float *f, int32_t parity, const float *prm, const Pix
     for (int y = 1; y <= T; y++) {
         for (int x = 1; x <= T; x += 4) {
             const int c = y * S + x;
-            const v4 hx = ld(hP + c);
-            const v4 kx = blockScale * hx;
             const v4 rx = ld(rhoS + c);
             const v4 sx = ld(swS + c);
+            const u4 rAny = (u4)rx | (u4)sx
+                | (u4)ld(rhoS + c - 1) | (u4)ld(rhoS + c + 1)
+                | (u4)ld(rhoS + c - S - 1) | (u4)ld(rhoS + c - S) | (u4)ld(rhoS + c - S + 1)
+                | (u4)ld(rhoS + c + S - 1) | (u4)ld(rhoS + c + S) | (u4)ld(rhoS + c + S + 1);
+            if (!any((m4)rAny)) {
+                const u4 pAny = (u4)ld(pS + c) | (u4)ld(pS + PL + c) | (u4)ld(pS + 2 * PL + c) | (u4)ld(pS + 3 * PL + c) | (u4)ld(pS + 4 * PL + c);
+                if (!any((m4)pAny)) {
+                    for (int k = 0; k < L->setPlanes; k++) st(dst + k * PL + c, zero);
+                    continue;
+                }
+            }
+            const v4 hx = ld(hP + c);
+            const v4 kx = blockScale * hx;
             const v4 damp = vmax(zero, one - sx * invCap);
             const v4 pinX = (pinT + rough * hx) * damp;
             const m4 rxDry = rx < eps;
@@ -157,27 +168,31 @@ uint32_t pixerate_wet_step(float *f, int32_t parity, const float *prm, const Pix
 
             // 5. pigment and light: upwind advection with the last step's velocities, plus bleed
             const m4 rxWet = ~rxDry;
-            const v4 uxc = ld(uxS + c), uyc = ld(uyS + c);
             const v4 pc[5] = {ld(pS + c), ld(pS + PL + c), ld(pS + 2 * PL + c), ld(pS + 3 * PL + c), ld(pS + 4 * PL + c)};
             v4 p[5] = {pc[0], pc[1], pc[2], pc[3], pc[4]};
+            if (any(rxWet)) {
+                const v4 uxc = ld(uxS + c), uyc = ld(uyS + c);
 #define FACE(NB, UF, OUT)                                                                               \
     {                                                                                                \
         const int nb = (NB);                                                                         \
         const m4 open = rxWet & (ld(rhoS + nb) >= eps);                                              \
-        const v4 uf = (UF);                                                                          \
-        const m4 pos = uf > zero;                                                                    \
-        for (int q = 0; q < 5; q++) {                                                                \
-            const v4 pn = ld(pS + q * PL + nb);                                                      \
-            const v4 diff = bleed * (pn - pc[q]);                                                    \
-            const v4 v = (OUT) ? p[q] - sel(uf * pc[q], uf * pn, pos) + diff : p[q] + sel(uf * pn, uf * pc[q], pos) + diff; \
-            p[q] = sel(v, p[q], open);                                                               \
+        if (any(open)) {                                                                             \
+            const v4 uf = (UF);                                                                      \
+            const m4 pos = uf > zero;                                                                \
+            for (int q = 0; q < 5; q++) {                                                            \
+                const v4 pn = ld(pS + q * PL + nb);                                                  \
+                const v4 diff = bleed * (pn - pc[q]);                                                \
+                const v4 v = (OUT) ? p[q] - sel(uf * pc[q], uf * pn, pos) + diff : p[q] + sel(uf * pn, uf * pc[q], pos) + diff; \
+                p[q] = sel(v, p[q], open);                                                           \
+            }                                                                                        \
         }                                                                                            \
     }
-            FACE(c + 1, mobility * (uxc + ld(uxS + c + 1)), 1)
-            FACE(c - 1, mobility * (ld(uxS + c - 1) + uxc), 0)
-            FACE(c + S, mobility * (uyc + ld(uyS + c + S)), 1)
-            FACE(c - S, mobility * (ld(uyS + c - S) + uyc), 0)
+                FACE(c + 1, mobility * (uxc + ld(uxS + c + 1)), 1)
+                FACE(c - 1, mobility * (ld(uxS + c - 1) + uxc), 0)
+                FACE(c + S, mobility * (uyc + ld(uyS + c + S)), 1)
+                FACE(c - S, mobility * (ld(uyS + c - S) + uyc), 0)
 #undef FACE
+            }
 
             // 6. deposition and pickup
             const m4 dryNow = rhoNew < eps;

@@ -322,74 +322,79 @@ public func blendTile(_ dst: inout [UInt8], _ src: [UInt8], _ mode: BlendMode, _
     var cb = [0.0, 0.0, 0.0]
     var cs = [0.0, 0.0, 0.0]
     let n = dst.count
-    var i = 0, p = 0
-    while i < n {
-        defer {
-            i += 4
-            p += 1
+    dst.withUnsafeMutableBufferPointer { dstBuf in
+        src.withUnsafeBufferPointer { srcBuf in
+            guard let dstPtr = dstBuf.baseAddress, let srcPtr = srcBuf.baseAddress else { return }
+            var i = 0, p = 0
+            while i < n {
+                defer {
+                    i += 4
+                    p += 1
+                }
+                let sa = srcPtr[i + 3]
+                if sa == 0 { continue }
+                let k = coverage.map { alpha * Double($0[p]) } ?? alpha
+                if !(k > 0) { continue }
+                if normal && sa == 255 && k >= 1 {
+                    // Opaque normal source: the result is the source (what the general formula rounds to).
+                    dstPtr[i] = srcPtr[i]
+                    dstPtr[i + 1] = srcPtr[i + 1]
+                    dstPtr[i + 2] = srcPtr[i + 2]
+                    dstPtr[i + 3] = 255
+                    continue
+                }
+                let as_ = (Double(sa) / 255) * k
+                let ab = Double(dstPtr[i + 3]) / 255
+                let ao = as_ + ab * (1 - as_)
+                if ao <= 0 {
+                    dstPtr[i] = 0
+                    dstPtr[i + 1] = 0
+                    dstPtr[i + 2] = 0
+                    dstPtr[i + 3] = 0
+                    continue
+                }
+                let d0 = Int(dstPtr[i]), d1 = Int(dstPtr[i + 1]), d2 = Int(dstPtr[i + 2])
+                if pigment {
+                    // Not B(Cb, Cs): the colours mix like paint by amount, `as / ao` of the source.
+                    mixPigment8(d0, d1, d2, Int(srcPtr[i]), Int(srcPtr[i + 1]), Int(srcPtr[i + 2]), as_ / ao, &cb)
+                    dstPtr[i] = JS.u8c(JS.round(cb[0] * 255))
+                    dstPtr[i + 1] = JS.u8c(JS.round(cb[1] * 255))
+                    dstPtr[i + 2] = JS.u8c(JS.round(cb[2] * 255))
+                    dstPtr[i + 3] = JS.u8c(JS.round(ao * 255))
+                    continue
+                }
+                let b0 = Double(d0) / 255, b1 = Double(d1) / 255, b2 = Double(d2) / 255
+                let s0 = Double(srcPtr[i]) / 255, s1 = Double(srcPtr[i + 1]) / 255, s2 = Double(srcPtr[i + 2]) / 255
+                let m0: Double, m1: Double, m2: Double
+                if normal {
+                    m0 = s0
+                    m1 = s1
+                    m2 = s2
+                } else if let lut {
+                    m0 = lut[(d0 << 8) | Int(srcPtr[i])]
+                    m1 = lut[(d1 << 8) | Int(srcPtr[i + 1])]
+                    m2 = lut[(d2 << 8) | Int(srcPtr[i + 2])]
+                } else {
+                    cb[0] = b0
+                    cb[1] = b1
+                    cb[2] = b2
+                    cs[0] = s0
+                    cs[1] = s1
+                    cs[2] = s2
+                    let m = blendRgb(mode, cb, cs)
+                    m0 = m[0]
+                    m1 = m[1]
+                    m2 = m[2]
+                }
+                let wb = (1 - as_) * ab
+                let ws = (1 - ab) * as_
+                let wm = as_ * ab
+                dstPtr[i] = JS.u8c(JS.round(((wb * b0 + ws * s0 + wm * m0) / ao) * 255))
+                dstPtr[i + 1] = JS.u8c(JS.round(((wb * b1 + ws * s1 + wm * m1) / ao) * 255))
+                dstPtr[i + 2] = JS.u8c(JS.round(((wb * b2 + ws * s2 + wm * m2) / ao) * 255))
+                dstPtr[i + 3] = JS.u8c(JS.round(ao * 255))
+            }
         }
-        let sa = src[i + 3]
-        if sa == 0 { continue }
-        let k = coverage.map { alpha * Double($0[p]) } ?? alpha
-        if !(k > 0) { continue }
-        if normal && sa == 255 && k >= 1 {
-            // Opaque normal source: the result is the source (what the general formula rounds to).
-            dst[i] = src[i]
-            dst[i + 1] = src[i + 1]
-            dst[i + 2] = src[i + 2]
-            dst[i + 3] = 255
-            continue
-        }
-        let as_ = (Double(sa) / 255) * k
-        let ab = Double(dst[i + 3]) / 255
-        let ao = as_ + ab * (1 - as_)
-        if ao <= 0 {
-            dst[i] = 0
-            dst[i + 1] = 0
-            dst[i + 2] = 0
-            dst[i + 3] = 0
-            continue
-        }
-        let d0 = Int(dst[i]), d1 = Int(dst[i + 1]), d2 = Int(dst[i + 2])
-        if pigment {
-            // Not B(Cb, Cs): the colours mix like paint by amount, `as / ao` of the source.
-            mixPigment8(d0, d1, d2, Int(src[i]), Int(src[i + 1]), Int(src[i + 2]), as_ / ao, &cb)
-            dst[i] = JS.u8c(JS.round(cb[0] * 255))
-            dst[i + 1] = JS.u8c(JS.round(cb[1] * 255))
-            dst[i + 2] = JS.u8c(JS.round(cb[2] * 255))
-            dst[i + 3] = JS.u8c(JS.round(ao * 255))
-            continue
-        }
-        let b0 = Double(d0) / 255, b1 = Double(d1) / 255, b2 = Double(d2) / 255
-        let s0 = Double(src[i]) / 255, s1 = Double(src[i + 1]) / 255, s2 = Double(src[i + 2]) / 255
-        let m0: Double, m1: Double, m2: Double
-        if normal {
-            m0 = s0
-            m1 = s1
-            m2 = s2
-        } else if let lut {
-            m0 = lut[(d0 << 8) | Int(src[i])]
-            m1 = lut[(d1 << 8) | Int(src[i + 1])]
-            m2 = lut[(d2 << 8) | Int(src[i + 2])]
-        } else {
-            cb[0] = b0
-            cb[1] = b1
-            cb[2] = b2
-            cs[0] = s0
-            cs[1] = s1
-            cs[2] = s2
-            let m = blendRgb(mode, cb, cs)
-            m0 = m[0]
-            m1 = m[1]
-            m2 = m[2]
-        }
-        let wb = (1 - as_) * ab
-        let ws = (1 - ab) * as_
-        let wm = as_ * ab
-        dst[i] = JS.u8c(JS.round(((wb * b0 + ws * s0 + wm * m0) / ao) * 255))
-        dst[i + 1] = JS.u8c(JS.round(((wb * b1 + ws * s1 + wm * m1) / ao) * 255))
-        dst[i + 2] = JS.u8c(JS.round(((wb * b2 + ws * s2 + wm * m2) / ao) * 255))
-        dst[i + 3] = JS.u8c(JS.round(ao * 255))
     }
 }
 

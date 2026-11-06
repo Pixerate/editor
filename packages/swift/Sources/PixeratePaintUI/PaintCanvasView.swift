@@ -9,10 +9,11 @@ import UIKit
 #endif
 
 /**
- * The painting (`PaintCanvas`): the controller's composite drawn through CoreGraphics with the
- * view's zoom, pan, rotation and mirroring (pixels are never resampled into the document), the
- * guides, the picked stroke's box and the predicted tail of a stroke over it. Only changed tiles
- * are copied (`PaintCanvasPresenter`). Input goes through `PaintGesture`: the mouse, trackpad and
+ * The painting (`PaintCanvas`): the controller's composite drawn with the view's zoom, pan,
+ * rotation and mirroring (pixels are never resampled into the document), the guides, the picked
+ * stroke's box and the predicted tail of a stroke over it. The composite is one image per tile
+ * (`PaintCanvasPresenter`), drawn as Core Animation layers (`PaintTilesView`) so only the tiles
+ * that changed are rebuilt and uploaded; stills (`interactive: false`) draw them through SwiftUI. Input goes through `PaintGesture`: the mouse, trackpad and
  * tablet pens on macOS (scroll pans, pinch zooms, rotate turns the view); touch and Apple Pencil
  * on iOS, with force, altitude, azimuth, roll and coalesced and predicted touches.
  */
@@ -34,7 +35,7 @@ public struct PaintCanvasView: View {
     public var body: some View {
         // Reading `revision` redraws the canvas after every change.
         let _ = model.revision
-        let image = presenter.image()
+        let tiles = presenter.tiles()
         let view = model.view
         let canvas = model.canvas
         let lines = showGuides ? guideLines() : []
@@ -43,19 +44,21 @@ public struct PaintCanvasView: View {
         let tipSize = model.brush.tip.size
         let water = waterImages(model.waterOverlayTiles)
         GeometryReader { geo in
+            let m = paintViewMatrix(view, canvas, viewport: geo.size.width, geo.size.height)
+            let t = CGAffineTransform(a: m[0], b: m[2], c: m[1], d: m[3], tx: m[4], ty: m[5])
+            let smooth = view.zoom < 2
             ZStack {
-                Canvas { ctx, size in
-                    let m = paintViewMatrix(view, canvas, viewport: size.width, size.height)
-                    let t = CGAffineTransform(a: m[0], b: m[2], c: m[1], d: m[3], tx: m[4], ty: m[5])
-                    let frame = CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height)
-                    var shadow = ctx
-                    shadow.addFilter(.shadow(color: .black.opacity(0.45), radius: 8))
-                    shadow.fill(Path(frame).applying(t), with: .color(.white))
-                    if let image {
+                PaintSheetShadowView(width: canvas.width, height: canvas.height, transform: t)
+                    .equatable()
+                // On screen the tiles are layers, which keep their textures until their images change.
+                if interactive { PaintTilesView(tiles: tiles, transform: t, smooth: smooth) }
+                Canvas { ctx, _ in
+                    // A still (`ImageRenderer` draws no platform views): the tiles through SwiftUI.
+                    if !interactive && !tiles.isEmpty {
                         var c = ctx
                         c.concatenate(t)
-                        let img = Image(decorative: image, scale: 1).interpolation(view.zoom >= 2 ? .none : .medium)
-                        c.draw(img, in: frame)
+                        let interpolation: Image.Interpolation = smooth ? .medium : .none
+                        for tile in tiles { c.draw(Image(decorative: tile.image, scale: 1).interpolation(interpolation), in: tile.rect) }
                     }
                     // The water overlay (view only): blue where the surface is wet, fainter where the paper is damp.
                     if !water.isEmpty {
@@ -145,6 +148,124 @@ extension Color {
         self.init(.sRGB, red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255, opacity: 1)
     }
 }
+
+private struct PaintSheetShadowView: View, Equatable {
+    let width: Int
+    let height: Int
+    let transform: CGAffineTransform
+
+    var body: some View {
+        Canvas { ctx, _ in
+            var shadow = ctx
+            shadow.addFilter(.shadow(color: .black.opacity(0.45), radius: 8))
+            shadow.fill(Path(CGRect(x: 0, y: 0, width: width, height: height)).applying(transform), with: .color(.white))
+        }
+    }
+}
+
+// MARK: - Tiles
+
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+typealias PaintPlatformView = NSView
+#else
+typealias PaintPlatformView = UIView
+#endif
+
+/**
+ * The painting's tiles (`PaintCanvasPresenter.tiles()`) as Core Animation layers under the view
+ * transform. A layer keeps its texture until its image changes, so a stroke uploads only the
+ * tiles it touched. (SwiftUI's `Canvas` uploaded every tile image again each frame.)
+ */
+struct PaintTilesView {
+    let tiles: [PaintCanvasTile]
+    /// Document pixels to view points.
+    let transform: CGAffineTransform
+    /// Smooth sampling (zoomed out); nearest neighbour when false (zoomed in, so pixels stay square).
+    let smooth: Bool
+}
+
+/// The view holding the tile layers (`PaintTilesView`); it takes no input.
+final class PaintTilesLayerView: PaintPlatformView {
+    private let content = CALayer()
+    private var layers: [TileKey: CALayer] = [:]
+    private var order: [TileKey] = []
+
+    init() {
+        super.init(frame: .zero)
+        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        // Layer-hosting, flipped: y runs down as in the document.
+        let root = CALayer()
+        root.isGeometryFlipped = true
+        layer = root
+        wantsLayer = true
+        #else
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+        #endif
+        content.anchorPoint = .zero
+        content.position = .zero
+        hostLayer.addSublayer(content)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    private var hostLayer: CALayer {
+        #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+        layer!
+        #else
+        layer
+        #endif
+    }
+
+    #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    #endif
+
+    /// The tile layers in drawing order, for tests.
+    var tileLayers: [CALayer] { order.compactMap { layers[$0] } }
+
+    func update(_ v: PaintTilesView) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if content.affineTransform() != v.transform { content.setAffineTransform(v.transform) }
+        let keys = v.tiles.map { tileKey($0.tx, $0.ty) }
+        if keys != order {
+            // The canvas changed size: new layers, in drawing order.
+            for l in layers.values { l.removeFromSuperlayer() }
+            layers = [:]
+            for key in keys {
+                let l = CALayer()
+                l.anchorPoint = .zero
+                content.addSublayer(l)
+                layers[key] = l
+            }
+            order = keys
+        }
+        let filter: CALayerContentsFilter = v.smooth ? .linear : .nearest
+        let minFilter: CALayerContentsFilter = v.smooth ? .trilinear : .nearest
+        for (key, tile) in zip(keys, v.tiles) {
+            guard let l = layers[key] else { continue }
+            // Only a new image is uploaded again.
+            if (l.contents as AnyObject?) !== tile.image { l.contents = tile.image }
+            if l.frame != tile.rect { l.frame = tile.rect }
+            if l.magnificationFilter != filter { l.magnificationFilter = filter }
+            if l.minificationFilter != minFilter { l.minificationFilter = minFilter }
+        }
+        CATransaction.commit()
+    }
+}
+
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+extension PaintTilesView: NSViewRepresentable {
+    func makeNSView(context: Context) -> PaintTilesLayerView { PaintTilesLayerView() }
+    func updateNSView(_ v: PaintTilesLayerView, context: Context) { v.update(self) }
+}
+#else
+extension PaintTilesView: UIViewRepresentable {
+    func makeUIView(context: Context) -> PaintTilesLayerView { PaintTilesLayerView() }
+    func updateUIView(_ v: PaintTilesLayerView, context: Context) { v.update(self) }
+}
+#endif
 
 // MARK: - Input
 

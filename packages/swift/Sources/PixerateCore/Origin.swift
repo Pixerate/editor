@@ -26,7 +26,7 @@ public func originMiddleware(_ histories: OriginHistories, fallbackOrigin: Strin
         if targets.isEmpty { return try await next() }
         let origin = call.context.actor.map { agentOrigin($0.id) } ?? fallbackOrigin
         // The first history wraps the rest, as reduceRight builds it in TS.
-        func run(_ i: Int) async throws -> ToolOutput {
+        nonisolated(nonsending) func run(_ i: Int) async throws -> ToolOutput {
             i < targets.count ? try await targets[i].withOrigin(origin) { try await run(i + 1) } : try await next()
         }
         return try await run(0)

@@ -235,89 +235,170 @@ func shadeTile(_ f: UnsafeMutablePointer<Float>, _ d: Int, _ p: Int, _ rho: Int,
     let side = SLOT_SIDE
     let p0 = paper[0], p1 = paper[1], p2 = paper[2]
     let lp0 = SRGB_TO_LINEAR[p0], lp1 = SRGB_TO_LINEAR[p1], lp2 = SRGB_TO_LINEAR[p2]
-    var any = false
-    for y in 0..<h {
-        for x in 0..<w {
-            let c = (y + 1) * side + x + 1
-            var k0 = Double(f[d + c])
-            var k1 = Double(f[d + plane + c])
-            var k2 = Double(f[d + 2 * plane + c])
-            var s = Double(f[d + 3 * plane + c])
-            if p >= 0 {
-                k0 += Double(f[p + c])
-                k1 += Double(f[p + plane + c])
-                k2 += Double(f[p + 2 * plane + c])
-                s += Double(f[p + 3 * plane + c])
-            }
-            var wet = 0.0
-            if rho >= 0 {
-                wet = Double(f[rho + c]) * 4 + Double(f[sw + c])
-                if wet > 1 { wet = 1 }
-            }
-            if !(k0 > 1e-7 || k1 > 1e-7 || k2 > 1e-7 || s > 1e-7) && wet <= 0 { continue }
-            any = true
-            let i = (y * 256 + x) * 4
-            let pa = src.map { Int($0[i + 3]) } ?? 0
-            let a = Double(pa) / 255
-            let na = 1 - a
-            let b0 = src != nil ? srgbByteToLinear(a * Double(src![i]) + na * Double(p0)) : lp0
-            let b1 = src != nil ? srgbByteToLinear(a * Double(src![i + 1]) + na * Double(p1)) : lp1
-            let b2 = src != nil ? srgbByteToLinear(a * Double(src![i + 2]) + na * Double(p2)) : lp2
-            var hide = 0.0
-            if s > 0 {
-                let x0 = HIDE * s
-                hide = 1 - (x0 >= EXP_MAX ? 0 : interp(x0 * EXP_RES))
-            }
-            let keep = 1 - hide
-            let inv = s > 1e-9 ? 1 / s : 0
-            var r0 = keep * expT(2 * k0) * b0
-            var r1 = keep * expT(2 * k1) * b1
-            var r2 = keep * expT(2 * k2) * b2
-            if hide > 0 {
-                r0 += hide * rinf(k0 * inv)
-                r1 += hide * rinf(k1 * inv)
-                r2 += hide * rinf(k2 * inv)
-            }
-            if dl >= 0 {
-                var l = Double(f[dl + c])
-                if pl >= 0 { l += Double(f[pl + c]) }
-                if l > 1e-7 {
-                    if l > 1 { l = 1 }
-                    var w0 = keep * expT(2 * k0)
-                    var w1 = keep * expT(2 * k1)
-                    var w2 = keep * expT(2 * k2)
-                    if hide > 0 {
-                        w0 += hide * rinf(k0 * inv)
-                        w1 += hide * rinf(k1 * inv)
-                        w2 += hide * rinf(k2 * inv)
+    let sp0 = srgbByteToLinear(Double(p0)), sp1 = srgbByteToLinear(Double(p1)), sp2 = srgbByteToLinear(Double(p2))
+    let fp0 = Double(p0), fp1 = Double(p1), fp2 = Double(p2)
+    return EXP_TABLE.withUnsafeBufferPointer { expBuf in
+        ENCODE.withUnsafeBufferPointer { encBuf in
+            SRGB_TO_LINEAR.withUnsafeBufferPointer { srgbBuf in
+                out.withUnsafeMutableBufferPointer { outBuf in
+                    let expPtr = expBuf.baseAddress!
+                    let encPtr = encBuf.baseAddress!
+                    let srgbPtr = srgbBuf.baseAddress!
+                    let outPtr = outBuf.baseAddress!
+                    @inline(__always) func fastExpT(_ x: Double) -> Double {
+                        if !(x > 0) { return 1 }
+                        if x >= EXP_MAX { return 0 }
+                        let t = x * EXP_RES
+                        let idx = Int(JS.floor(t))
+                        let v0 = expPtr[idx]
+                        return v0 + (expPtr[idx + 1] - v0) * (t - Double(idx))
                     }
-                    r0 += l * (w0 - r0)
-                    r1 += l * (w1 - r1)
-                    r2 += l * (w2 - r2)
+                    @inline(__always) func fastEncode(_ v: Double) -> Int {
+                        if !(v > 0) { return 0 }
+                        if v >= 1 { return 255 }
+                        return Int(encPtr[Int(JS.round(v * ENC_STEPS))])
+                    }
+                    @inline(__always) func fastSrgbToLinear(_ v: Double) -> Double {
+                        if !(v > 0) { return 0 }
+                        if v >= 255 { return 1 }
+                        let idx = Int(JS.floor(v))
+                        let v0 = srgbPtr[idx]
+                        return v0 + (srgbPtr[idx + 1] - v0) * (v - Double(idx))
+                    }
+                    func run(_ srcPtr: UnsafePointer<UInt8>?) -> Bool {
+                        var any = false
+                        let fd0 = f + d
+                        let fd1 = f + d + plane
+                        let fd2 = f + d + 2 * plane
+                        let fds = f + d + 3 * plane
+                        let fp0Ptr = p >= 0 ? f + p : nil
+                        let fp1Ptr = p >= 0 ? f + p + plane : nil
+                        let fp2Ptr = p >= 0 ? f + p + 2 * plane : nil
+                        let fpsPtr = p >= 0 ? f + p + 3 * plane : nil
+                        let frho = rho >= 0 ? f + rho : nil
+                        let fsw = rho >= 0 ? f + sw : nil
+                        let fdl = dl >= 0 ? f + dl : nil
+                        let fpl = (dl >= 0 && pl >= 0) ? f + pl : nil
+                        for y in 0..<h {
+                            let rowC = (y + 1) * side + 1
+                            let rowI = y * 1024
+                            for x in 0..<w {
+                                let c = rowC + x
+                                var k0 = Double(fd0[c])
+                                var k1 = Double(fd1[c])
+                                var k2 = Double(fd2[c])
+                                var s = Double(fds[c])
+                                if let fp0Ptr, let fp1Ptr, let fp2Ptr, let fpsPtr {
+                                    k0 += Double(fp0Ptr[c])
+                                    k1 += Double(fp1Ptr[c])
+                                    k2 += Double(fp2Ptr[c])
+                                    s += Double(fpsPtr[c])
+                                }
+                                var wet = 0.0
+                                if let frho, let fsw {
+                                    wet = Double(frho[c]) * 4 + Double(fsw[c])
+                                    if wet > 1 { wet = 1 }
+                                }
+                                if !(k0 > 1e-7 || k1 > 1e-7 || k2 > 1e-7 || s > 1e-7) && wet <= 0 { continue }
+                                any = true
+                                let i = rowI + x * 4
+                                let pa: Int
+                                let a: Double
+                                let b0: Double, b1: Double, b2: Double
+                                if let srcPtr {
+                                    pa = Int(srcPtr[i + 3])
+                                    if pa == 0 {
+                                        a = 0
+                                        b0 = sp0
+                                        b1 = sp1
+                                        b2 = sp2
+                                    } else {
+                                        a = Double(pa) / 255
+                                        let na = 1 - a
+                                        b0 = fastSrgbToLinear(a * Double(srcPtr[i]) + na * fp0)
+                                        b1 = fastSrgbToLinear(a * Double(srcPtr[i + 1]) + na * fp1)
+                                        b2 = fastSrgbToLinear(a * Double(srcPtr[i + 2]) + na * fp2)
+                                    }
+                                } else {
+                                    pa = 0
+                                    a = 0
+                                    b0 = lp0
+                                    b1 = lp1
+                                    b2 = lp2
+                                }
+                                var hide = 0.0
+                                if s > 0 {
+                                    let x0 = HIDE * s
+                                    if x0 >= EXP_MAX {
+                                        hide = 1
+                                    } else {
+                                        let t = x0 * EXP_RES
+                                        let idx = Int(JS.floor(t))
+                                        let v0 = expPtr[idx]
+                                        hide = 1 - (v0 + (expPtr[idx + 1] - v0) * (t - Double(idx)))
+                                    }
+                                }
+                                let keep = 1 - hide
+                                let inv = s > 1e-9 ? 1 / s : 0
+                                let ke0 = keep * fastExpT(2 * k0)
+                                let ke1 = keep * fastExpT(2 * k1)
+                                let ke2 = keep * fastExpT(2 * k2)
+                                var r0 = ke0 * b0
+                                var r1 = ke1 * b1
+                                var r2 = ke2 * b2
+                                var hr0 = 0.0, hr1 = 0.0, hr2 = 0.0
+                                if hide > 0 {
+                                    hr0 = hide * rinf(k0 * inv)
+                                    hr1 = hide * rinf(k1 * inv)
+                                    hr2 = hide * rinf(k2 * inv)
+                                    r0 += hr0
+                                    r1 += hr1
+                                    r2 += hr2
+                                }
+                                if let fdl {
+                                    var l = Double(fdl[c])
+                                    if let fpl { l += Double(fpl[c]) }
+                                    if l > 1e-7 {
+                                        if l > 1 { l = 1 }
+                                        let w0 = ke0 + hr0
+                                        let w1 = ke1 + hr1
+                                        let w2 = ke2 + hr2
+                                        r0 += l * (w0 - r0)
+                                        r1 += l * (w1 - r1)
+                                        r2 += l * (w2 - r2)
+                                    }
+                                }
+                                let dark = 1 - 0.07 * wet
+                                let e0 = fastEncode(r0 * dark)
+                                let e1 = fastEncode(r1 * dark)
+                                let e2 = fastEncode(r2 * dark)
+                                var alpha = needAlpha(e2, p2, needAlpha(e1, p1, needAlpha(e0, p0, 0)))
+                                if hide > 0 && alpha < 1 { alpha += hide * (1 - alpha) }
+                                if a > alpha { alpha = a }
+                                if alpha <= 0 {
+                                    outPtr[i + 3] = 0
+                                    continue
+                                }
+                                let a8 = Swift.max(JS.round(Swift.min(1, alpha) * 255), Double(pa))
+                                let al = a8 / 255
+                                let ia = 1 / al
+                                let k = 1 - al
+                                outPtr[i] = JS.u8c(JS.round(Swift.min(255, Swift.max(0, (Double(e0) - k * fp0) * ia))))
+                                outPtr[i + 1] = JS.u8c(JS.round(Swift.min(255, Swift.max(0, (Double(e1) - k * fp1) * ia))))
+                                outPtr[i + 2] = JS.u8c(JS.round(Swift.min(255, Swift.max(0, (Double(e2) - k * fp2) * ia))))
+                                outPtr[i + 3] = JS.u8c(a8)
+                            }
+                        }
+                        return any
+                    }
+                    if let src {
+                        return src.withUnsafeBufferPointer { run($0.baseAddress) }
+                    }
+                    return run(nil)
                 }
             }
-            let dark = 1 - 0.07 * wet
-            let e0 = encode(r0 * dark)
-            let e1 = encode(r1 * dark)
-            let e2 = encode(r2 * dark)
-            var alpha = needAlpha(e2, p2, needAlpha(e1, p1, needAlpha(e0, p0, 0)))
-            if hide > 0 && alpha < 1 { alpha += hide * (1 - alpha) }
-            if a > alpha { alpha = a }
-            if alpha <= 0 {
-                out[i + 3] = 0
-                continue
-            }
-            let a8 = Swift.max(JS.round(Swift.min(1, alpha) * 255), Double(pa))
-            let al = a8 / 255
-            let ia = 1 / al
-            let k = 1 - al
-            out[i] = JS.u8c(JS.round(Swift.min(255, Swift.max(0, (Double(e0) - k * Double(p0)) * ia))))
-            out[i + 1] = JS.u8c(JS.round(Swift.min(255, Swift.max(0, (Double(e1) - k * Double(p1)) * ia))))
-            out[i + 2] = JS.u8c(JS.round(Swift.min(255, Swift.max(0, (Double(e2) - k * Double(p2)) * ia))))
-            out[i + 3] = JS.u8c(a8)
         }
     }
-    return any
 }
 
 /**

@@ -135,6 +135,8 @@ final class WetLane {
     var urgent = Set<TileKey>()
     /// Changes whenever its pixels (display) may have changed.
     var stamp = 1
+    /// Changes when every active tile's display may have changed (step, paper change).
+    var stepStamp = 1
     var display: TiledSurface?
     var shadedVersion = 0
     var displayKey = ""
@@ -191,8 +193,9 @@ private func wetParallel(_ count: Int, _ workers: Int, _ body: (Int) -> Void) {
     }
     let chunks = Swift.min(count, workers)
     withoutActuallyEscaping(body) { body in
+        nonisolated(unsafe) let fn = body
         DispatchQueue.concurrentPerform(iterations: chunks) { c in
-            for i in stride(from: c, to: count, by: chunks) { body(i) }
+            for i in stride(from: c, to: count, by: chunks) { fn(i) }
         }
     }
 }
@@ -215,8 +218,10 @@ public final class WetWorld {
     private var table: [Int]
     private var flags: [UInt32]
     private var last: [UInt32]
+    private var slotStamp: [Int]
     private var active: [Int] = []
     private var parity = 0
+    private var halosDirty = false
     private var lanes: [WetLane?] = Array(repeating: nil, count: MAX_WET_LANES)
     private var tilt = FLAT_TILT
     private var paper: WetPaperInput
@@ -243,6 +248,7 @@ public final class WetWorld {
         table = Array(repeating: -1, count: layout.keys)
         flags = Array(repeating: 0, count: layout.keys)
         last = Array(repeating: 0, count: layout.keys)
+        slotStamp = Array(repeating: 1, count: layout.keys)
     }
 
     /// The kernel in use and why it is not faster.
@@ -317,11 +323,15 @@ public final class WetWorld {
     public func setPaper(_ p: WetPaperInput) {
         paper = p
         paperBytes = p.color
-        for key in active { fillPaper(key) }
+        for key in active {
+            fillPaper(key)
+            slotStamp[key] += 1
+        }
         for l in lanes {
             guard let l else { continue }
             pack(l)
             l.stamp += 1
+            l.stepStamp += 1
         }
         refreshHalos()
     }
@@ -343,8 +353,12 @@ public final class WetWorld {
     /// Replaces the pixels under a layer's wet paint.
     public func setBase(_ id: String, _ base: TiledSurface) {
         guard let lane = try? laneOf(id), base !== lane.base else { return }
+        let old = lane.base
         lane.base = base
-        lane.shaded = OrderedMap()
+        for tk in Array(lane.shaded.keys) where old.tiles.get(tk) !== base.tiles.get(tk) {
+            _ = lane.shaded.delete(tk)
+            lane.urgent.insert(tk)
+        }
         lane.shadedVersion += 1
         lane.stamp += 1
     }
@@ -358,9 +372,12 @@ public final class WetWorld {
     /// Replaces the light paint under a layer's wet paint.
     public func setLight(_ id: String, _ light: TiledSurface) {
         guard let lane = try? laneOf(id), light !== lane.light else { return }
+        let old = lane.light
         lane.light = light
         if !light.tiles.isEmpty { lane.lit = true }
-        lane.lightShaded = OrderedMap()
+        for tk in Array(lane.lightShaded.keys) where old.tiles.get(tk) !== light.tiles.get(tk) {
+            _ = lane.lightShaded.delete(tk)
+        }
         lane.stamp += 1
     }
 
@@ -397,6 +414,7 @@ public final class WetWorld {
         table[key] = slot
         flags[key] = 0
         last[key] = 0
+        slotStamp[key] += 1
         active.append(key)
         fillPaper(key)
         fillFlow(key)
@@ -410,7 +428,10 @@ public final class WetWorld {
         freeSlots.append(slot)
         if let i = active.firstIndex(of: key) { active.remove(at: i) }
         if let lane = lanes[laneIndexOf(key)] {
-            if lane.shaded.delete(tileKeyOf(key)) { lane.shadedVersion += 1 }
+            let tk = tileKeyOf(key)
+            if lane.shaded.delete(tk) { lane.shadedVersion += 1 }
+            _ = lane.lightShaded.delete(tk)
+            lane.urgent.remove(tk)
             lane.stamp += 1
         }
     }
@@ -498,9 +519,16 @@ public final class WetWorld {
         }
     }
 
-    /// Refills every live slot's halo in the current set (after edits or wake-ups).
+    /// Marks live slots' halos dirty (flushed before stepping or taking a snapshot).
     private func refreshHalos() {
-        for key in active { halo(key, parity) }
+        halosDirty = true
+    }
+
+    private func ensureHalos() {
+        guard halosDirty else { return }
+        halosDirty = false
+        let keys = active
+        wetParallel(keys.count, Swift.min(threads, keys.count)) { i in self.halo(keys[i], self.parity) }
     }
 
     // MARK: - Stepping
@@ -524,6 +552,7 @@ public final class WetWorld {
      * (`threads`) and give the same bits as one.
      */
     private func runHere(_ n: Int) {
+        ensureHalos()
         let keys = active
         let slotPtrs = keys.map { slotPtr(slotOf($0)) }
         let prms = keys.map { lanes[laneIndexOf($0)]?.prm }
@@ -538,6 +567,7 @@ public final class WetWorld {
                 }
             }
             for (i, key) in keys.enumerated() where prms[i] != nil {
+                if last[key] != 0 || stepped[i] != 0 { slotStamp[key] += 1 }
                 flags[key] |= stepped[i]
                 last[key] = stepped[i]
             }
@@ -597,7 +627,10 @@ public final class WetWorld {
             syncList()
             refreshHalos()
         }
-        for lane in lanes { lane?.stamp += 1 }
+        for lane in lanes {
+            lane?.stamp += 1
+            lane?.stepStamp += 1
+        }
     }
 
     /// Steps the simulation `steps` times. Returns the clock.
@@ -650,16 +683,33 @@ public final class WetWorld {
     }
 
     private func markEdited(_ lane: WetLane, _ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int) {
-        for ty in (y0 >> 8)...((y1 - 1) >> 8) {
-            for tx in (x0 >> 8)...((x1 - 1) >> 8) { lane.urgent.insert(tileKey(tx, ty)) }
+        if x1 > x0 && y1 > y0 {
+            for ty in (y0 >> 8)...((y1 - 1) >> 8) {
+                for tx in (x0 >> 8)...((x1 - 1) >> 8) {
+                    let tk = tileKey(tx, ty)
+                    lane.urgent.insert(tk)
+                    _ = lane.lightShaded.delete(tk)
+                }
+            }
         }
         lane.stamp += 1
     }
 
     /// Adds water (depth units) at rest.
     @inline(__always) private func addWaterAt(_ c: UnsafeMutablePointer<Float>, _ dw: Float) {
-        for k in 0..<9 { c[k * PL] = Float(Double(c[k * PL]) + W9[k] * Double(dw)) }
-        c[P_RHO * PL] = Float(Double(c[P_RHO * PL]) + Double(dw))
+        let d = Double(dw)
+        c[0] = Float(Double(c[0]) + (4.0 / 9.0) * d)
+        let w1 = (1.0 / 9.0) * d
+        c[1 * PL] = Float(Double(c[1 * PL]) + w1)
+        c[2 * PL] = Float(Double(c[2 * PL]) + w1)
+        c[3 * PL] = Float(Double(c[3 * PL]) + w1)
+        c[4 * PL] = Float(Double(c[4 * PL]) + w1)
+        let w5 = (1.0 / 36.0) * d
+        c[5 * PL] = Float(Double(c[5 * PL]) + w5)
+        c[6 * PL] = Float(Double(c[6 * PL]) + w5)
+        c[7 * PL] = Float(Double(c[7 * PL]) + w5)
+        c[8 * PL] = Float(Double(c[8 * PL]) + w5)
+        c[P_RHO * PL] = Float(Double(c[P_RHO * PL]) + d)
     }
 
     /**
@@ -671,6 +721,8 @@ public final class WetWorld {
         if !(water >= 0) { throw WetWorldError("water \(jsText(water)) must be 0 or more.") }
         if !(light >= 0) { throw WetWorldError("light \(jsText(light)) must be 0 or more.") }
         if light > 0 { try laneOf(id).lit = true }
+        let p0 = pigment?[0] ?? 0, p1 = pigment?[1] ?? 0, p2 = pigment?[2] ?? 0, p3 = pigment?[3] ?? 0
+        let hasPigment = pigment != nil
         try footprint(id, rect, cov) { c, w, x, y in
             let dw = Float(water * w)
             if dw > 0 { addWaterAt(c, dw) }
@@ -678,8 +730,11 @@ public final class WetWorld {
             if let field {
                 let o = ((y - rect.y) * rect.width + (x - rect.x)) * 4
                 for q in 0..<4 { into[q * PL] = Float(Double(into[q * PL]) + Double(field[o + q]) * w) }
-            } else if let pigment {
-                for q in 0..<4 { into[q * PL] = Float(Double(into[q * PL]) + pigment[q] * w) }
+            } else if hasPigment {
+                into[0] = Float(Double(into[0]) + p0 * w)
+                into[PL] = Float(Double(into[PL]) + p1 * w)
+                into[2 * PL] = Float(Double(into[2 * PL]) + p2 * w)
+                into[3 * PL] = Float(Double(into[3 * PL]) + p3 * w)
             }
             if light > 0 { into[4 * PL] = Float(Double(into[4 * PL]) + light * w) }
         }
@@ -790,6 +845,9 @@ public final class WetWorld {
             to[P_RHO * PL] = to[P_RHO * PL] + t[9]
             for q in 0..<MASS_CHANNELS { to[(P_P0 + q) * PL] = to[(P_P0 + q) * PL] + t[10 + q] }
         }
+        let sx0 = Swift.max(0, rect.x - sx), sy0 = Swift.max(0, rect.y - sy)
+        let sx1 = Swift.min(width, rect.x + rect.width - sx), sy1 = Swift.min(height, rect.y + rect.height - sy)
+        markEdited(lane, sx0, sy0, sx1, sy1)
         refreshHalos()
     }
 
@@ -987,7 +1045,8 @@ public final class WetWorld {
     public func sample(_ id: String, _ rect: RasterRect, _ cov: [Float]?) throws -> (weight: Double, water: Double, wet: Double, pigment: [Double], settled: [Double]) {
         let lane = try laneOf(id)
         var weight = 0.0, water = 0.0, wet = 0.0
-        var pigment = [0.0, 0.0, 0.0, 0.0], settled = [0.0, 0.0, 0.0, 0.0]
+        var p0 = 0.0, p1 = 0.0, p2 = 0.0, p3 = 0.0
+        var s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0
         let x0 = Swift.max(0, rect.x), y0 = Swift.max(0, rect.y)
         let x1 = Swift.min(width, rect.x + rect.width), y1 = Swift.min(height, rect.y + rect.height)
         if x1 > x0 && y1 > y0 {
@@ -1001,14 +1060,18 @@ public final class WetWorld {
                     water += rho * w
                     if rho >= DRY_EPS { wet += w }
                     let d = single(c) + P_D0 * PL
-                    for q in 0..<4 {
-                        pigment[q] += Double(c[(P_P0 + q) * PL]) * w
-                        settled[q] += Double(d[q * PL]) * w
-                    }
+                    p0 += Double(c[P_P0 * PL]) * w
+                    p1 += Double(c[(P_P0 + 1) * PL]) * w
+                    p2 += Double(c[(P_P0 + 2) * PL]) * w
+                    p3 += Double(c[(P_P0 + 3) * PL]) * w
+                    s0 += Double(d[0]) * w
+                    s1 += Double(d[PL]) * w
+                    s2 += Double(d[2 * PL]) * w
+                    s3 += Double(d[3 * PL]) * w
                 }
             }
         }
-        return (weight, water, wet, pigment, settled)
+        return (weight, water, wet, [p0, p1, p2, p3], [s0, s1, s2, s3])
     }
 
     /// Surface water depth at a document cell (0 where nothing is simulated).
@@ -1079,7 +1142,10 @@ public final class WetWorld {
     public func display(_ id: String, maxTiles: Int = Int.max) throws -> (surface: TiledSurface, changed: [RasterRect], pending: Int) {
         let lane = try laneOf(id)
         let keys = active.filter { laneIndexOf($0) == lane.index }
-        let stale = keys.filter { lane.shaded.get(tileKeyOf($0))?.stamp != lane.stamp }
+        let stale = keys.filter {
+            let tk = tileKeyOf($0)
+            return lane.urgent.contains(tk) || lane.shaded.get(tk)?.stamp != slotStamp[$0]
+        }
         // A stable sort: edited tiles first, then the longest unshaded.
         let ordered = stale.enumerated().sorted { a, b in
             let ua = lane.urgent.contains(tileKeyOf(a.element)), ub = lane.urgent.contains(tileKeyOf(b.element))
@@ -1088,19 +1154,29 @@ public final class WetWorld {
             if sa != sb { return sa < sb }
             return a.offset < b.offset
         }.map(\.element)
+        let toShade = Array(ordered.prefix(Swift.max(0, maxTiles)))
+        var shadedTiles = [Tile?](repeating: nil, count: toShade.count)
+        let baseTiles = lane.base.tiles
+        if !toShade.isEmpty {
+            shadedTiles.withUnsafeMutableBufferPointer { buf in
+                wetParallel(toShade.count, Swift.min(threads, toShade.count)) { i in
+                    let key = toShade[i]
+                    let tk = self.tileKeyOf(key)
+                    let srcTile = baseTiles.get(tk)
+                    let out = self.shadeSlot(key, srcTile?.data, .display)
+                    buf[i] = out != nil ? finishTile(out!, 4, 0) : srcTile
+                }
+            }
+        }
         var changed: [RasterRect] = []
-        var done = 0
-        for key in ordered {
-            if done >= maxTiles { break }
+        let done = toShade.count
+        for (i, key) in toShade.enumerated() {
             let tk = tileKeyOf(key)
-            let out = shadeSlot(key, lane.base.tiles.get(tk)?.data, .display)
-            let tile = out != nil ? finishTile(out!, 4, 0) : lane.base.tiles.get(tk)
-            lane.shaded.set(tk, (lane.stamp, tile))
+            lane.shaded.set(tk, (slotStamp[key], shadedTiles[i]))
             lane.shadedVersion += 1
             lane.urgent.remove(tk)
             let (tx, ty) = tileXY(key)
             changed.append(RasterRect(x: tx * WET_TILE, y: ty * WET_TILE, width: WET_TILE, height: WET_TILE))
-            done += 1
         }
         // Shaded tiles of freed slots are gone; drop leftovers.
         let live = Set(keys.map(tileKeyOf))
@@ -1129,10 +1205,10 @@ public final class WetWorld {
         for key in keys {
             let tk = tileKeyOf(key)
             live.insert(tk)
-            if lane.lightShaded.get(tk)?.stamp == lane.stamp { continue }
+            if !lane.urgent.contains(tk) && lane.lightShaded.get(tk)?.stamp == slotStamp[key] { continue }
             let src = lane.light.tiles.get(tk)
             let out = shadeLightSlot(key, src, .display)
-            lane.lightShaded.set(tk, (lane.stamp, out != nil ? finishTile(out!, 1, 0) : src))
+            lane.lightShaded.set(tk, (slotStamp[key], out != nil ? finishTile(out!, 1, 0) : src))
             changed = true
         }
         for tk in lane.lightShaded.keys where !live.contains(tk) {
@@ -1229,7 +1305,11 @@ public final class WetWorld {
         }
         guard let engine = gpu, gpuDecide() else { return try cpu() }
         let lane = try laneOf(id)
-        let stale = active.filter { laneIndexOf($0) == lane.index && lane.shaded.get(tileKeyOf($0))?.stamp != lane.stamp }
+        let stale = active.filter {
+            guard laneIndexOf($0) == lane.index else { return false }
+            let tk = tileKeyOf($0)
+            return lane.urgent.contains(tk) || lane.shaded.get(tk)?.stamp != slotStamp[$0]
+        }
         if stale.isEmpty {
             let d = try display(id, maxTiles: 0)
             return (d.surface, d.changed, d.pending, true)
@@ -1248,7 +1328,7 @@ public final class WetWorld {
         var changed: [RasterRect] = []
         for (i, key) in stale.enumerated() {
             let tk = tileKeyOf(key)
-            lane.shaded.set(tk, (lane.stamp, finishTile(tiles[i], 4, 0)))
+            lane.shaded.set(tk, (slotStamp[key], finishTile(tiles[i], 4, 0)))
             lane.urgent.remove(tk)
             let (tx, ty) = tileXY(key)
             changed.append(RasterRect(x: tx * WET_TILE, y: ty * WET_TILE, width: WET_TILE, height: WET_TILE))
@@ -1262,6 +1342,7 @@ public final class WetWorld {
 
     /// A copy of everything (for undo): live slots, layers, clock and tilt.
     public func snapshot() -> WetSnapshot {
+        ensureHalos()
         var out: [(key: Int, planes: [Float], last: UInt32)] = []
         var bytes = 0
         for key in active {

@@ -380,13 +380,13 @@ public struct PaintWetPanel: View {
     public var body: some View {
         let wet = model.wet
         let isWet = wet.isWet()
-        let layer = model.wetLayer
+        let layer = model.wetLayerSettings
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 PanelHeading("Wet paint")
                 Spacer()
                 Text(isWet ? (wet.paused ? "Wet (paused)" : "Wet") : "Dry").font(.caption).foregroundStyle(isWet ? .blue : .secondary)
-                Text("step \(model.wetClock)").font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                WetStepLabel(model: model)
             }
             HStack(spacing: 4) {
                 Button("Dry now") { model.dryNow() }.disabled(wet.wetLayerIds().isEmpty)
@@ -417,6 +417,13 @@ public struct PaintWetPanel: View {
             }
             Text(model.wetEngineSummary).font(.caption2).foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct WetStepLabel: View {
+    let model: PaintEditorModel
+    var body: some View {
+        Text("step \(model.wetClock)").font(.caption2).foregroundStyle(.secondary).monospacedDigit()
     }
 }
 

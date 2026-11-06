@@ -429,7 +429,7 @@ public final class ToolRegistry {
         let context = ToolCallContext(name: exposed, providerId: found.provider.id, actor: actor)
         let call = ToolMiddlewareCall(name: exposed, tool: found.tool, provider: found.provider, args: input, context: context)
         let chain = middleware.map(\.fn)
-        func run(_ i: Int) async throws -> ToolOutput {
+        nonisolated(nonsending) func run(_ i: Int) async throws -> ToolOutput {
             i < chain.count ? try await chain[i](call, { try await run(i + 1) }) : try await found.tool.handler(call.args, context)
         }
         do {
