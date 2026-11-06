@@ -1,5 +1,11 @@
 # @pixerate/swift
 
+## 0.20.1
+
+### Patch Changes
+
+- c2a283c: Fix `ArraySlice<UInt16>` concatenation type mismatch in `replaceVectorText`.
+
 ## 0.20.0
 
 ### Minor Changes
