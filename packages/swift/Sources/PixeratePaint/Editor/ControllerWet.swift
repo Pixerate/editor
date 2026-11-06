@@ -127,13 +127,19 @@ extension PaintEditorController {
         wet.info(try wetLayer(layerId, "read the wet paint of").id)
     }
 
+    /// One layer's wet settings without scanning live tile statistics.
+    public func wetLayerSettings(_ layerId: String? = nil) -> WetLayerSettings? {
+        guard let l = try? wetLayer(layerId, "read the wet settings of") else { return nil }
+        return wet.settingsOf(l.id)
+    }
+
     /**
      * Lets wet paint flow with the wall clock: call every frame with the time in ms. Steps at the
      * wet speed unless paused. Returns the steps run (the view redraws the tiles that changed).
      */
     @discardableResult
-    public func tickWet(_ now: Double) -> Int {
-        wet.tick(now)
+    public func tickWet(_ now: Double, maxSteps: Int = 8) -> Int {
+        wet.tick(now, maxSteps: maxSteps)
     }
 
     /// Lets the CPU engine run alone (`off`) or lets Metal shade large wet areas (`auto`). Not an undo step.
@@ -185,7 +191,7 @@ extension PaintEditorController {
         beginWetOp()
         let world = try wet.ensureLane(l.id)
         try world.wetPaper(l.id, rect, nil, amount: amount)
-        wet.syncDisplays()
+        wet.syncDisplaysGpu()
         logWet("wet-paper", layerId: l.id, data: ["rect": rect.json, "amount": .number(amount)])
         commit("Wet paper", withWetEvents(doc), before: before)
         return ["layerId": .string(l.id), "rect": rect.json, "wet": .bool(wet.isWet(l.id))]

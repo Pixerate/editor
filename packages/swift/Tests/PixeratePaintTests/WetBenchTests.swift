@@ -43,5 +43,44 @@ final class WetBenchTests: XCTestCase {
             let shadeGpu = try ms { _ = try gpu.displayGpu("a") }
             print(String(format: "wet %d²: %d tiles, one thread %.1f ms a step (%.2f ms/tile), %d threads %.1f ms (%.2f ms/tile), CPU shading %.1f ms (%.2f ms/tile), Metal shading %@", side, tiles, oneThread, oneThread / Double(tiles), cpu.threads, step, step / Double(tiles), shadeCpu, shadeCpu / Double(tiles), engine == nil ? "unavailable" : String(format: "%.1f ms", shadeGpu)))
         }
+
+        // Live wet stroke + compositor throughput on a 2048×1536 canvas.
+        let c = try PaintEditorController(width: 2048, height: 1536, brushId: "watercolor-round", color: "#2255aa")
+        let compositor = createPaintCompositor()
+        func drawChanged() -> Int {
+            var count = 0
+            c.compositeTiles(using: compositor) { _, _, _, changed in if changed { count += 1 } }
+            return count
+        }
+        _ = drawChanged()
+        // Pre-wet a wash across several tiles so there are ~16 active tiles on the canvas.
+        _ = try c.paintStroke(PaintStrokeInit(seed: 1), points: [PenPoint(x: 200, y: 200, pressure: 0.8), PenPoint(x: 900, y: 700, pressure: 0.8), PenPoint(x: 1500, y: 1100, pressure: 0.8)])
+        _ = drawChanged()
+        var strokeInit = PaintStrokeInit(seed: 2)
+        strokeInit.start = Point2(x: 300, y: 300)
+        let live = try c.beginStroke(strokeInit)
+        var pushMs = 0.0
+        var tickMs = 0.0
+        var pushTiles = 0
+        var tickTiles = 0
+        var clockNow = 1000.0
+        _ = c.tickWet(clockNow)
+        for i in 0..<40 {
+            let t = Double(i) / 39.0
+            let pt = PenPoint(x: 300 + t * 1200, y: 300 + sin(t * 6) * 200 + t * 600, pressure: 0.7)
+            pushMs += ms {
+                live.push([pt])
+                pushTiles += drawChanged()
+            }
+            if i % 2 == 1 {
+                clockNow += 16.67
+                tickMs += ms {
+                    _ = c.tickWet(clockNow)
+                    tickTiles += drawChanged()
+                }
+            }
+        }
+        try live.end()
+        print(String(format: "live wet stroke (40 moves, 20 ticks, %d active tiles): push total %.1f ms (%.2f ms/move, %d tiles composited), tick total %.1f ms (%.2f ms/tick, %d tiles composited)", c.wet.world?.activeTiles() ?? 0, pushMs, pushMs / 40, pushTiles, tickMs, tickMs / 20, tickTiles))
     }
 }

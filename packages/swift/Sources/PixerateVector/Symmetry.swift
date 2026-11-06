@@ -91,7 +91,9 @@ public func vectorSymmetryAxes(_ s: JSONObject, _ box: VectorBounds) -> [(Vec2, 
     let r = s["rotation"]?.numberValue ?? 0
     let mode = s["mode"]?.stringValue ?? ""
     let c = centerOf(s)
-    let dirs: [Double] = mode == "radial" ? (0 ..< radialCount(s)).map { r - 90 + (360 * Double($0)) / Double(radialCount(s)) } : (AXIS[mode] ?? []).map { $0 + r }
+    let count = radialCount(s)
+    let radialDirs: [Double] = (0 ..< count).map { k in r - 90 + (360 * Double(k)) / Double(count) }
+    let dirs: [Double] = mode == "radial" ? radialDirs : (AXIS[mode] ?? []).map { $0 + r }
     var out: [(Vec2, Vec2)] = []
     for deg in dirs {
         let d = Vec2(JS.cos(rad(deg)), JS.sin(rad(deg)))

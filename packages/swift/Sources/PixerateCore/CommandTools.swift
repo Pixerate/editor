@@ -174,7 +174,7 @@ public func createCommandToolProvider<Context>(_ registry: CommandRegistry<Conte
     let visible = { registry.list(scope: options.scope, context: context()).filter { !(options.exclude?($0.id) ?? false) } }
     let allowed = { (id: String) in registry.has(id) && !(options.exclude?(id) ?? false) && visible().contains { $0.id == id } }
 
-    func runOne(_ id: String, _ params: JSONValue?) async -> CommandResult {
+    nonisolated(nonsending) func runOne(_ id: String, _ params: JSONValue?) async -> CommandResult {
         if !allowed(id) { return .failure(CommandFailure(id: id, code: .unknownCommand, message: "Unknown command \"\(id)\".")) }
         return await registry.executeAsync(id, params ?? .object(JSONObject()), context: context())
     }

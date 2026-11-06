@@ -2,6 +2,9 @@ import Foundation
 import PixerateCore
 import PixerateRaster
 
+/// How many changes `dirtySince` remembers.
+private let MAX_DIRTY_LOG = 256
+
 /**
  * A stroke painted from pointer input (`beginStroke` in `paint-editor/controller.ts`): `push` raw
  * pen samples (document pixels) as they arrive, then `end()` (one undo step) or `cancel()`. While
@@ -35,10 +38,19 @@ public final class PaintLiveStroke {
     /// Adds pen samples and redraws the layer with them.
     public func push(_ points: [PenPoint]) {
         guard open, !points.isEmpty else { return }
-        try? session.push(points)
-        // The wet layer's display is the layer's pixels: show it (not an undo step).
-        if isWet { controller?.wet.syncDisplays() }
-        controller?.emit()
+        // A push that fails part way may have painted anywhere it reached.
+        let rects = try? session.push(points)
+        if isWet {
+            // The wet layer's display is the layer's pixels: show it (not an undo step).
+            let beforeVersion = controller?.version
+            controller?.wet.syncDisplaysGpu()
+            if controller?.version == beforeVersion {
+                controller?.emit(rects)
+            }
+        } else {
+            // Only where the dabs landed changed.
+            controller?.emit(rects)
+        }
     }
 
     /// Ends the stroke: one undo step (none when no pixel changed).
@@ -92,10 +104,29 @@ extension PaintEditorController {
         return Cancellable { [weak self] in self?.listeners[id] = nil }
     }
 
-    func emit() {
+    /// `dirty`: where the rendered canvas changed (document pixels), or nil for anywhere.
+    func emit(_ dirty: [RasterRect]? = nil) {
         if previewing || grouping != nil { return }
         version += 1
+        dirtyLog.append((version, dirty))
+        if dirtyLog.count > MAX_DIRTY_LOG { dirtyLog.removeFirst(dirtyLog.count - MAX_DIRTY_LOG) }
         for l in Array(listeners.values) { l() }
+    }
+
+    /**
+     * Where the canvas changed after `version` (`takeDirty` in `controller.ts`, kept per view):
+     * the rectangles of the changes since, or nil when one of them may have changed anything, is
+     * no longer in the log, or nothing was emitted since.
+     */
+    func dirtySince(_ since: Int) -> [RasterRect]? {
+        if since >= version { return nil }
+        guard let first = dirtyLog.first, first.version <= since + 1 else { return nil }
+        var out: [RasterRect] = []
+        for entry in dirtyLog where entry.version > since {
+            guard let rects = entry.rects else { return nil }
+            out += rects
+        }
+        return out
     }
 
     // MARK: - Live strokes
@@ -139,7 +170,12 @@ extension PaintEditorController {
      */
     public func compositeTiles(using compositor: RasterCompositor<ViewLayer, BasicRasterSources>? = nil, _ onTile: (_ tx: Int, _ ty: Int, _ data: [UInt8], _ changed: Bool) -> Void) {
         let rect = RasterRect(x: 0, y: 0, width: doc.canvas.width, height: doc.canvas.height)
-        (compositor ?? viewCompositor).compositeTiles(renderLayers(), rect, sources(), onTile, CompositeCallOptions(checkpointLayerId: doc.activeLayerId))
+        let c = compositor ?? viewCompositor
+        let id = ObjectIdentifier(c)
+        // Changed tiles recomposite only where the canvas changed since this compositor's last call.
+        let dirty = compositedVersions[id].flatMap(dirtySince)
+        compositedVersions[id] = version
+        c.compositeTiles(renderLayers(), rect, sources(), onTile, CompositeCallOptions(checkpointLayerId: liveStroke?.layerId ?? doc.activeLayerId, dirty: dirty.map { $0.map(DirtyRect.init) }))
     }
 
     /// Where a stroke of a stroke layer painted (document pixels), for drawing its pick box; nil when unknown.

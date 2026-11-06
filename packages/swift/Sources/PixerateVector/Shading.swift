@@ -154,7 +154,8 @@ private struct Mesh {
         let b = C(i, j + 1)
         let c = C(i + 1, j + 1)
         let d = C(i + 1, j)
-        return (0 ..< 4).map { k in (1 - u) * (1 - v) * a[k] + u * (1 - v) * b[k] + u * v * c[k] + (1 - u) * v * d[k] }
+        let w00 = (1 - u) * (1 - v), w10 = u * (1 - v), w11 = u * v, w01 = (1 - u) * v
+        return (0 ..< 4).map { k in w00 * a[k] + w10 * b[k] + w11 * c[k] + w01 * d[k] }
     }
 }
 

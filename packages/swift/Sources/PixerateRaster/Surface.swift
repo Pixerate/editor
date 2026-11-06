@@ -117,6 +117,7 @@ public final class TiledSurface: @unchecked Sendable {
     public let tiles: OrderedMap<TileKey, Tile>
     public let defaultValue: Int
     private let boundsCache = Locked<RasterRect??>(nil)
+    fileprivate let contentBoundsCache = Locked<RasterRect??>(nil)
 
     public init(channels: Int, tiles: OrderedMap<TileKey, Tile>, defaultValue: Int = 0) {
         precondition(channels == 1 || channels == 4, "channels must be 1 or 4")
@@ -206,18 +207,29 @@ func defaultPacked(_ channels: Int, _ defaultValue: Int) -> UInt32 {
 
 /// The packed value when every pixel of `data` is the same, else `nil`.
 private func uniformValue(_ data: [UInt8], _ channels: Int) -> UInt32? {
+    if data.isEmpty { return nil }
     if channels == 1 {
         let v = data[0]
-        for i in 1..<data.count where data[i] != v { return nil }
-        return UInt32(v)
+        let ok = data.withUnsafeBytes { raw -> Bool in
+            let w = UInt64(v) &* 0x0101_0101_0101_0101
+            let words = raw.bindMemory(to: UInt64.self)
+            for i in 0..<words.count where words[i] != w { return false }
+            for i in (words.count * 8)..<raw.count where raw[i] != v { return false }
+            return true
+        }
+        return ok ? UInt32(v) : nil
     }
     let a = data[0], b = data[1], c = data[2], d = data[3]
-    var i = 4
-    while i < data.count {
-        if data[i] != a || data[i + 1] != b || data[i + 2] != c || data[i + 3] != d { return nil }
-        i += 4
+    let ok = data.withUnsafeBytes { raw -> Bool in
+        let words = raw.bindMemory(to: UInt32.self)
+        guard let first = words.first else { return true }
+        let pair = UInt64(first) | (UInt64(first) << 32)
+        let pairs = raw.bindMemory(to: UInt64.self)
+        for i in 0..<pairs.count where pairs[i] != pair { return false }
+        if words.count & 1 == 1, words[words.count - 1] != first { return false }
+        return true
     }
-    return packPixel(data, 0, 4)
+    return ok ? ((UInt32(a) << 24) | (UInt32(b) << 16) | (UInt32(c) << 8) | UInt32(d)) : nil
 }
 
 /**
@@ -317,6 +329,15 @@ public func readPixel(_ surface: TiledSurface, _ x: Int, _ y: Int) -> [Int] {
  * `nil`. Scans the stored tiles; uniform tiles count whole.
  */
 public func contentBounds(_ surface: TiledSurface) -> RasterRect? {
+    surface.contentBoundsCache.with { cache in
+        if let c = cache { return c }
+        let b = computeContentBounds(surface)
+        cache = .some(b)
+        return b
+    }
+}
+
+private func computeContentBounds(_ surface: TiledSurface) -> RasterRect? {
     let ch = surface.channels
     let def = UInt8(truncatingIfNeeded: surface.defaultValue)
     var x0 = Int.max, y0 = Int.max, x1 = Int.min, y1 = Int.min
@@ -332,14 +353,19 @@ public func contentBounds(_ surface: TiledSurface) -> RasterRect? {
             continue
         }
         tile.data.withUnsafeBufferPointer { d in
+            let ptr = d.baseAddress!
             for y in 0..<TILE {
                 var first = -1
                 var last = -1
                 let row = y * TILE * ch
                 for x in 0..<TILE {
                     let i = row + x * ch
-                    var differs = false
-                    for c in 0..<ch where d[i + c] != def { differs = true }
+                    let differs: Bool
+                    if ch == 4 {
+                        differs = ptr[i] != def || ptr[i + 1] != def || ptr[i + 2] != def || ptr[i + 3] != def
+                    } else {
+                        differs = ptr[i] != def
+                    }
                     if differs {
                         if first < 0 { first = x }
                         last = x

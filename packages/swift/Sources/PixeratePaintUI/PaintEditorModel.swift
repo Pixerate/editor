@@ -85,6 +85,9 @@ public final class PaintEditorModel {
     public let commands: [ShortcutCommand]
     /// Bumped after every change to the editor.
     public private(set) var revision = 0
+    /// Bumped when non-canvas UI state (brush, colour, layers, undo, tools, settings) may have changed.
+    private var stateRevision = 0
+    @ObservationIgnored private var isQuietFrameChange = false
     /// The active tool (`PaintUITables.tools` id).
     public var tool = "brush" { didSet { gesture.tool = tool } }
     /// The last refusal or error, shown under the canvas.
@@ -99,6 +102,7 @@ public final class PaintEditorModel {
     @ObservationIgnored public private(set) var gesture: PaintGesture!
     @ObservationIgnored private var subscriptions: [Cancellable] = []
     @ObservationIgnored private var fitted: String?
+    @ObservationIgnored private var cachedBrushes: (ids: [String], brushes: [PaintBrush])?
 
     /// A model over `controller` (default a new 1024 × 768 painting), with its tools in `registry` (default a new one).
     public init(controller: PaintEditorController? = nil, registry: ToolRegistry? = nil) throws {
@@ -121,10 +125,11 @@ public final class PaintEditorModel {
 
     private func changed() {
         revision &+= 1
+        if !isQuietFrameChange { stateRevision &+= 1 }
     }
 
-    /// Reads `revision`, so a view reading a property below redraws on every change.
-    private func track() { _ = revision }
+    /// Reads `stateRevision`, so a view reading a property below redraws when UI state changes (without re-evaluating panels on every stroke sample or wet tick).
+    private func track() { _ = stateRevision }
 
     /// Runs `fn`, turning a thrown error into `error` (`useAttempt`).
     @discardableResult
@@ -142,7 +147,15 @@ public final class PaintEditorModel {
     public var view: PaintView { track(); return controller.view }
     public var brush: PaintBrush { track(); return controller.brush }
     /// The brushes this port paints with, in library order.
-    public var brushes: [PaintBrush] { track(); return controller.brushes.filter(controller.canPaint) }
+    public var brushes: [PaintBrush] {
+        track()
+        let all = controller.brushes
+        let ids = all.map(\.id)
+        if let c = cachedBrushes, c.ids == ids { return c.brushes }
+        let filtered = all.filter(controller.canPaint)
+        cachedBrushes = (ids, filtered)
+        return filtered
+    }
     public var color: String { track(); return controller.color }
     public var secondaryColor: String { track(); return controller.secondaryColor }
     public var colorLocked: Bool { track(); return controller.colorLocked }
@@ -196,7 +209,10 @@ public final class PaintEditorModel {
     }
 
     public func pointerMove(_ e: PaintPointerEvent) {
+        let quiet = tool == "brush" && controller.activeStroke != nil
+        isQuietFrameChange = quiet
         gesture.move(e)
+        isQuietFrameChange = false
         afterGesture()
     }
 
@@ -338,11 +354,13 @@ public final class PaintEditorModel {
     public var wetGpuOptions: [PaintUIWetGpuItem] { tables.wetGpu }
     /// Wet media as the panel shows it (`getState().wet`).
     public var wet: PaintWetLayers { track(); return controller.wet }
-    public var wetClock: Int { track(); return controller.wet.world?.clock ?? 0 }
+    public var wetClock: Int { _ = revision; return controller.wet.world?.clock ?? 0 }
     /// The active layer's wet settings and state, or nil without an active pixel layer.
-    public var wetLayer: WetLayerInfo? { track(); return try? controller.wetLayerInfo() }
+    public var wetLayer: WetLayerInfo? { _ = revision; return try? controller.wetLayerInfo() }
+    /// The active layer's wet settings without scanning live tile statistics.
+    public var wetLayerSettings: WetLayerSettings? { track(); return controller.wetLayerSettings() }
     /// A wet setting of the active layer (`WetParams` key).
-    public func wetParam(_ path: String) -> Double { wetLayer?.params[path] ?? DEFAULT_WET_PARAMS[path] }
+    public func wetParam(_ path: String) -> Double { wetLayerSettings?.params[path] ?? DEFAULT_WET_PARAMS[path] }
     public func setWetParam(_ path: String, _ value: Double) { attempt { _ = try controller.setWetParams(nil, [path: .number(value)]) } }
     public func setFlowKind(_ kind: String) { attempt { _ = try controller.setFlowMap(nil, ["kind": .string(kind)]) } }
     public func setFlowStrength(_ value: Double) { attempt { _ = try controller.setFlowMap(nil, ["strength": .number(value)]) } }
@@ -371,19 +389,42 @@ public final class PaintEditorModel {
      * paint changed. Returns the steps run.
      */
     @discardableResult
-    public func tick(now: Double) -> Int { controller.tickWet(now) }
+    public func tick(now: Double, maxSteps: Int = 8) -> Int {
+        let wasWet = controller.wet.isWet()
+        let wetIdsBefore = controller.wet.wetLayerIds()
+        let gpuBefore = controller.wet.world?.gpuActive
+        isQuietFrameChange = true
+        let ran = controller.tickWet(now, maxSteps: maxSteps)
+        isQuietFrameChange = false
+        if controller.wet.isWet() != wasWet || controller.wet.wetLayerIds() != wetIdsBefore || controller.wet.world?.gpuActive != gpuBefore {
+            stateRevision &+= 1
+        }
+        return ran
+    }
 
     /// Ticks the wet simulation about 60 times a second until the task is cancelled (the editor view runs it).
     public func runWetClock() async {
+        var stepBudget = 8
         while !Task.isCancelled {
-            tick(now: Date().timeIntervalSinceReferenceDate * 1000)
-            try? await Task.sleep(nanoseconds: 16_000_000)
+            let start = Date().timeIntervalSinceReferenceDate * 1000
+            let cap = controller.activeStroke != nil ? Swift.min(stepBudget, 2) : stepBudget
+            let ran = tick(now: start, maxSteps: cap)
+            let elapsed = Date().timeIntervalSinceReferenceDate * 1000 - start
+            if ran > 0 {
+                if elapsed > 14 {
+                    stepBudget = Swift.max(1, ran - 1)
+                } else if elapsed < 8 && stepBudget < 8 {
+                    stepBudget += 1
+                }
+            }
+            let sleepMs = Swift.max(4.0, 16.0 - elapsed)
+            try? await Task.sleep(nanoseconds: UInt64(sleepMs * 1_000_000))
         }
     }
 
     /// The water overlay over the canvas (RGBA tiles, straight alpha), when it is shown.
     public var waterOverlayTiles: [(tx: Int, ty: Int, data: [UInt8])] {
-        track()
+        _ = revision
         guard controller.wet.overlay else { return [] }
         let c = controller.doc.canvas
         return controller.waterOverlayTiles(RasterRect(x: 0, y: 0, width: c.width, height: c.height))
