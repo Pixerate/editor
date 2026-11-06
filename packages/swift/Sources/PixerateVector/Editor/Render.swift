@@ -224,6 +224,11 @@ private func hasLens(_ nodes: [VectorNode]) -> Bool {
  * the ids of defs and filters (default `ve-`).
  */
 public func getVectorSceneRenderData(_ document: VectorDocument, viewport: VectorViewport = VectorViewport(), idPrefix: String = "ve-") throws -> JSONValue {
+    try vectorSceneRender(document, viewport: viewport, idPrefix: idPrefix).data
+}
+
+/// The render data with its paint servers typed (the PDF writer fills from them).
+func vectorSceneRender(_ document: VectorDocument, viewport: VectorViewport = VectorViewport(), idPrefix: String = "ve-") throws -> (data: JSONValue, defs: [VectorPaintDef]) {
     // not ported yet: lens backdrops (resolveVectorLenses) (#624).
     if hasLens(document.nodes) { throw VectorNotPorted("drawing lenses") }
     let document = resolveVectorMasterPages(document)
@@ -239,7 +244,7 @@ public func getVectorSceneRenderData(_ document: VectorDocument, viewport: Vecto
     o["defs"] = .array(renderer.defs.map(\.json))
     o["filters"] = .array(renderer.filters.map(\.json))
     o["nodes"] = .array(nodes)
-    return .object(o)
+    return (.object(o), renderer.defs)
 }
 
 extension VectorEditorController {

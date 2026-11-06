@@ -212,21 +212,29 @@ private func uniformValue(_ data: [UInt8], _ channels: Int) -> UInt32? {
         let v = data[0]
         let ok = data.withUnsafeBytes { raw -> Bool in
             let w = UInt64(v) &* 0x0101_0101_0101_0101
-            let words = raw.bindMemory(to: UInt64.self)
-            for i in 0..<words.count where words[i] != w { return false }
-            for i in (words.count * 8)..<raw.count where raw[i] != v { return false }
+            var i = 0
+            while i + 8 <= raw.count {
+                if raw.loadUnaligned(fromByteOffset: i, as: UInt64.self) != w { return false }
+                i += 8
+            }
+            while i < raw.count {
+                if raw[i] != v { return false }
+                i += 1
+            }
             return true
         }
         return ok ? UInt32(v) : nil
     }
     let a = data[0], b = data[1], c = data[2], d = data[3]
     let ok = data.withUnsafeBytes { raw -> Bool in
-        let words = raw.bindMemory(to: UInt32.self)
-        guard let first = words.first else { return true }
+        let first = raw.loadUnaligned(as: UInt32.self)
         let pair = UInt64(first) | (UInt64(first) << 32)
-        let pairs = raw.bindMemory(to: UInt64.self)
-        for i in 0..<pairs.count where pairs[i] != pair { return false }
-        if words.count & 1 == 1, words[words.count - 1] != first { return false }
+        var i = 0
+        while i + 8 <= raw.count {
+            if raw.loadUnaligned(fromByteOffset: i, as: UInt64.self) != pair { return false }
+            i += 8
+        }
+        if i + 4 <= raw.count, raw.loadUnaligned(fromByteOffset: i, as: UInt32.self) != first { return false }
         return true
     }
     return ok ? ((UInt32(a) << 24) | (UInt32(b) << 16) | (UInt32(c) << 8) | UInt32(d)) : nil

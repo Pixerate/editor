@@ -995,10 +995,12 @@ private final class SvgImporter {
         if let op = child.attrs["data-vector-boolean-operation"], BOOLEAN_OPERATIONS.contains(op) { meta["booleanOperation"] = .string(op) }
         if child.attrs["data-vector-resizing"] != nil, let resizing = sanitizeVectorResizing(json(child.attrs["data-vector-resizing"])) { meta["resizing"] = .object(resizing) }
         if child.attrs["data-vector-connector"] != nil, let connector = sanitizeVectorConnector(json(child.attrs["data-vector-connector"])) { meta["connector"] = .object(connector) }
-        // not ported yet: generated art and lenses (#624)
-        for (attr, what) in [("data-vector-generation", "generated art"), ("data-vector-lens", "lenses")] where child.attrs[attr] != nil {
-            throw VectorNotPorted("importing \(what)")
+        if child.attrs["data-vector-generation"] != nil {
+            // Unreadable provenance is dropped; the art stays.
+            if let generation = try? parseProvenance(json(child.attrs["data-vector-generation"]) ?? .null) { meta["generation"] = .object(generation) }
         }
+        // not ported yet: lenses (#624)
+        if child.attrs["data-vector-lens"] != nil { throw VectorNotPorted("importing lenses") }
         let g = child.name == "g"
         if g && child.attrs["data-vector-frame"] != nil { return try frameGroup(child, s, m, meta).map { [$0] } ?? [] }
         // not ported yet: own mask groups (#624)

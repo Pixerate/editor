@@ -2,7 +2,7 @@ import Foundation
 
 /// The code points JavaScript's `String.prototype.trim` and `\s` treat as white space
 /// (WhiteSpace and LineTerminator in ECMA-262).
-func isJSWhitespace(_ s: Unicode.Scalar) -> Bool {
+public func isJSWhitespace(_ s: Unicode.Scalar) -> Bool {
     switch s.value {
     case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF: return true
     default: return false
@@ -131,4 +131,35 @@ extension String {
         let end = decimalPrefix(scalars, 0)
         return end == scalars.count ? decimalValue(scalars[0 ..< end]) : .nan
     }
+}
+
+/// `Number.prototype.toFixed(digits)` for finite values: the nearest multiple of 10^-digits, the
+/// larger one on an exact tie (`printf` rounds exact ties to even), and the sign of any negative.
+public func jsToFixed(_ v: Double, _ digits: Int) -> String {
+    if v.isNaN { return "NaN" }
+    if Swift.abs(v) >= 1e21 || !v.isFinite { return v.isFinite ? JSONValue.jsNumber(v) : v < 0 ? "-Infinity" : "Infinity" }
+    let a = Swift.abs(v)
+    var s = String(format: "%.\(digits)f", a)
+    // An exact tie has a terminating expansion that is 5 just past the last digit, then zeros.
+    let exact = String(format: "%.\(digits + 40)f", a)
+    let tail = exact.suffix(40)
+    if tail.first == "5" && tail.dropFirst().allSatisfy({ $0 == "0" }) {
+        var chars = Array(exact.dropLast(40))
+        if chars.last == "." { chars.removeLast() }
+        var k = chars.count - 1
+        var carry = true
+        while carry && k >= 0 {
+            if chars[k] == "." { k -= 1; continue }
+            if chars[k] == "9" {
+                chars[k] = "0"
+                k -= 1
+            } else {
+                chars[k] = Character(String(chars[k].wholeNumberValue! + 1))
+                carry = false
+            }
+        }
+        if carry { chars.insert("1", at: 0) }
+        s = String(chars)
+    }
+    return v < 0 ? "-" + s : s
 }

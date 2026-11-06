@@ -456,4 +456,13 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertFalse(model.wet.isWet())
         XCTAssertEqual(model.tick(now: 3000), 0)
     }
+
+    func testBrushesFollowAnEditThatKeepsTheId() throws {
+        let model = try makeModel()
+        var saved = try model.controller.brushLibrary.duplicate("pencil-6b", newId: "mine", name: "Before")
+        XCTAssertEqual(model.brushes.first { $0.id == "mine" }?.name, "Before")
+        saved["name"] = .string("After")
+        _ = try model.controller.brushLibrary.save(.object(saved), overwrite: true)
+        XCTAssertEqual(model.brushes.first { $0.id == "mine" }?.name, "After")
+    }
 }
