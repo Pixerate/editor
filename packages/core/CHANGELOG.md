@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.272.1
+
+### Patch Changes
+
+- 6ec9a09: Export chart domain contracts (`@pixerate/conformance/domains/chart`) and `createChartConformanceHost` for deterministic chart conformance testing.
+
 ## 0.272.0
 
 ### Minor Changes
