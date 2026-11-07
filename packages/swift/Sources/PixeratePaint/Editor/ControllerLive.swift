@@ -113,7 +113,9 @@ extension PaintEditorController {
                 next.paint = nil
                 next.effect = nil
             } else if isPaintEffectPaint(paint) {
-                guard let e = readPaintEffectPaint(paint), effectPaintImage(e) != nil else { throw PaintEditorError("The effect \"\(paint.objectValue?["effect"]?.stringValue ?? "")\" is not rendered yet; render it first (prepareEffectPaints; the update_stroke tool does this).") }
+                guard var e = readPaintEffectPaint(paint) else { throw PaintEditorError("The effect \"\(paint.objectValue?["effect"]?.stringValue ?? "")\" is not rendered yet; render it first (prepareEffectPaints; the update_stroke tool does this).") }
+                e = strokeEffectWithPath(e, next.points)
+                guard (effectPaintImage(e) ?? renderEffectPaintSync(e)) != nil else { throw PaintEditorError("The effect \"\(paint.objectValue?["effect"]?.stringValue ?? "")\" is not rendered yet; render it first (prepareEffectPaints; the update_stroke tool does this).") }
                 next.paint = nil
                 next.effect = e
             } else {
@@ -145,6 +147,9 @@ extension PaintEditorController {
             next = was
             next.key = newStrokeKey()
             next.points = try checkPoints(points)
+            if let e = was.effect, e.map?.by == "path" {
+                next.effect = strokeEffectWithPath(e, next.points)
+            }
         } else {
             let t = transform!
             if let s = t["scale"]?.numberValue, !(s > 0 && s <= 20) { throw PaintEditorError("scale \(jsText(s)) is out of range; use above 0 up to 20.") }
@@ -220,6 +225,28 @@ extension PaintEditorController {
         return liveStrokeBounds(s)
     }
 
+    func liveStrokeById(_ id: String) -> RecordedStroke? {
+        for (_, strokes) in doc.liveStrokes ?? OrderedMap() {
+            if let s = strokes.first(where: { $0.id == id }) { return s }
+        }
+        return nil
+    }
+
+    func prepareEditStrokePointsEffect(_ id: String, points: [PenPoint]?, transform: JSONObject?) async throws {
+        guard let stroke = liveStrokeById(id), let e = stroke.effect, e.map?.by == "path" else { return }
+        if let points, !points.isEmpty {
+            try await prepareEffectPaints([strokeEffectWithPath(e, points)])
+        } else if let t = transform {
+            let b = strokeBounds(stroke.points)
+            let o = t["origin"]?.objectValue
+            let origin: (Double, Double) = o.map { ($0["x"]?.numberValue ?? 0, $0["y"]?.numberValue ?? 0) } ?? (b.x + b.width / 2, b.y + b.height / 2)
+            let v = ReplayOptions(strokeIds: [], dx: t["dx"]?.numberValue, dy: t["dy"]?.numberValue, scale: t["scale"]?.numberValue, rotate: t["rotate"]?.numberValue, flipX: t["flipX"]?.boolValue)
+            if let varied = varyStroke(stroke, variationAffine(v, origin)).effect {
+                try await prepareEffectPaints([varied])
+            }
+        }
+    }
+
     private func withLiveStrokes(_ d: PaintDocumentState, _ layer: PaintLayer, _ list: [RecordedStroke]) throws -> PaintDocumentState {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) first.") }
         let current = findLayer(d.layers, layer.id)?.layer ?? layer
@@ -255,6 +282,7 @@ extension PaintEditorController {
         i.snapToPerspective = false
         i.stencils = false
         i.maskStencils = st.stencils ?? []
+        i.points = st.points
         let session = try sessionFor(d.with { $0.layers = mapLayer(d.layers, plain.id) { _ in plain.withSurface(surface) } }, i)
         try session.push(st.points)
         let result = try session.end()
@@ -314,14 +342,22 @@ func paintStrokeHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         if update.isEmpty { throw PaintEditorError("Pass at least one change: brushId, brush, color, paint or seed.") }
         var changes: JSONObject? = nil
         if let patch = update["brush"]?.objectValue {
-            guard let stroke = (c.doc.liveStrokes ?? OrderedMap()).values.flatMap({ $0 }).first(where: { $0.id == id }) else { throw PaintEditorError("Unknown stroke \"\(id)\" on a stroke layer. Call list_strokes {live: true} for the ids.") }
+            guard let stroke = c.liveStrokeById(id) else { throw PaintEditorError("Unknown stroke \"\(id)\" on a stroke layer. Call list_strokes {live: true} for the ids.") }
             if let bid = update["brushId"]?.stringValue { changes = try c.brushChanges(patch, from: bid) } else { changes = try c.brushChanges(patch, fromBrush: stroke.brush) }
+        }
+        if let paint = update["paint"], isPaintEffectPaint(paint), var e = readPaintEffectPaint(paint) {
+            if let stroke = c.liveStrokeById(id) { e = c.strokeEffectWithPath(e, stroke.points) }
+            try await c.prepareEffectPaints([e])
         }
         let r = try c.updateStroke(id, brushId: update["brushId"]?.stringValue, brushChanges: changes, color: update["color"]?.stringValue, paint: update["paint"], seed: update["seed"]?.numberValue)
         return ["stroke": strokeSummary(r.stroke, withPoints: false, live: true), "bounds": r.bounds.json]
     }
     h["edit_stroke_points"] = { a in
-        let r = try c.editStrokePoints(a["id"]?.stringValue ?? "", points: a["points"]?.arrayValue?.compactMap(PenPoint.init(json:)), transform: a["transform"]?.objectValue)
+        let id = a["id"]?.stringValue ?? ""
+        let points = a["points"]?.arrayValue?.compactMap(PenPoint.init(json:))
+        let transform = a["transform"]?.objectValue
+        try await c.prepareEditStrokePointsEffect(id, points: points, transform: transform)
+        let r = try c.editStrokePoints(id, points: points, transform: transform)
         return ["stroke": strokeSummary(r.stroke, withPoints: true, live: true), "bounds": r.bounds.json]
     }
     h["reorder_stroke"] = { a in ["order": .array(try c.reorderStroke(a["id"]?.stringValue ?? "", Int(a["index"]?.numberValue ?? 0)).map { .string($0) })] }

@@ -135,11 +135,16 @@ func varyStroke(_ stroke: RecordedStroke, _ m: Affine, pressureScale: Double = 1
             out.paint = p
         }
     }
-    // A stroke-mapped effect keeps its pattern the same size relative to the stroke.
-    if s != 1, var e = stroke.effect, var map = e.map {
-        map.length = Int(Swift.min(4096, Swift.max(16, JS.round(Double(map.length) * s))))
-        e.map = map
-        out.effect = e
+    // A stroke-mapped effect keeps its pattern the same size relative to the stroke;
+    // a path-mapped effect follows the moved points in canvas pixels.
+    if var e = stroke.effect {
+        if e.map?.by == "path" {
+            out.effect = withStrokePath(e, out.points)
+        } else if s != 1, var map = e.map, map.by == "stroke" {
+            map.length = Int(Swift.min(4096, Swift.max(16, JS.round(Double(map.length) * s))))
+            e.map = map
+            out.effect = e
+        }
     }
     if let copies = stroke.copies, !copies.isEmpty, let inv = try? invertAffine(m) {
         out.copies = copies.map { composeAffine(m, composeAffine($0, inv)) }

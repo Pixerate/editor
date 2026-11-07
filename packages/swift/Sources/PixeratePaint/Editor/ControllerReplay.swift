@@ -135,4 +135,26 @@ extension PaintEditorController {
         if d !== doc { commit(strokes.count == 1 && repeatCount == 1 ? "Replay stroke" : "Replay strokes", d) }
         return ["strokeIds": .array(ids.map { .string($0) }), "bounds": rectJSON(bounds), "layerIds": .array(layerIds.map { .string($0) })]
     }
+
+    /// Pre-renders effect paints for `replayStrokes(options)`, including path-mapped effects whose paths change per varied repeat.
+    func prepareReplayEffectPaints(_ options: ReplayOptions) async throws {
+        let picked = options.strokeIds.compactMap { id in doc.strokes.first(where: { $0.id == id }) }
+        guard !picked.isEmpty else { return }
+        let repeatCount = Swift.max(1, Swift.min(100, options.repeatCount ?? 1))
+        var origin = options.origin
+        if origin == nil {
+            let b = strokeBounds(picked.flatMap(\.points))
+            origin = (b.x + b.width / 2, b.y + b.height / 2)
+        }
+        let step = variationAffine(options, origin!)
+        var paints: [PaintEffectPaint] = []
+        var m: Affine = IDENTITY_AFFINE
+        for _ in 0..<repeatCount {
+            m = [step[0] * m[0] + step[1] * m[2], step[0] * m[1] + step[1] * m[3], step[2] * m[0] + step[3] * m[2], step[2] * m[1] + step[3] * m[3], step[0] * m[4] + step[1] * m[5] + step[4], step[2] * m[4] + step[3] * m[5] + step[5]]
+            for s in picked {
+                if let e = varyStroke(s, m, pressureScale: options.pressureScale ?? 1).effect { paints.append(e) }
+            }
+        }
+        try await prepareEffectPaints(paints)
+    }
 }

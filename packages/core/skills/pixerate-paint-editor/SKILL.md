@@ -235,7 +235,7 @@ When to use which:
 | The effect in a wash that flows, or in thick paint | `set_effect_paint` and a watercolour, gouache, oil or impasto brush |
 | The effect inside an exact shape, unchanged by water | Paint the shape, dry it, then `fill_layer_with_effect` with `lockTransparency: true` |
 | The effect over the whole sheet | `set_paper_effect` or `add_effect_layer` |
-| A pattern that follows the stroke, or paint that moves | `map: { by: "stroke" }`, `live: true` on a stroke layer |
+| A pattern that follows the stroke, or paint that moves | `map: { by: "stroke" }` (bends any effect as a strip), or `map: { by: "path" }` for effects with a path control (`accepts: ["path"]`: beams, trails, signatures); `live: true` on a stroke layer |
 
 ## Canvas-hosted layer
 
@@ -394,7 +394,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `set_paper_effect` | Draw a generator over the paper (`values`, `opacity`, `blend` default `multiply`, `time`); `effect: null` removes it. One undo step. Returns the effect paper. |
 | `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect (`values`, `name`, `aboveId`, `opacity`, `blend`, `time`); it becomes active. Returns the layer and its effect. |
 | `fill_layer_with_effect` | Composite a generator, overlay or title effect onto a layer (`layerId`, `values`, `opacity`, `lockTransparency`, `time`). One undo step. Returns the layer id and the effect. |
-| `set_effect_paint` | Paint with a generator, overlay or title effect (`effect`, `values`, `time` ms default 0): rendered once at the canvas size, strokes take each pixel's colour from it; `map` `{ by: "stroke", length, repeat }` lays it along each stroke; `live` keeps it playing on stroke layers. Call after `describe_effect`, then `paint_stroke`. Editor state, not an undo step. Returns `effectPaint`. |
+| `set_effect_paint` | Paint with a generator, overlay or title effect (`effect`, `values`, `time` ms default 0): rendered once at the canvas size, strokes take each pixel's colour from it; `map` `{ by: "stroke", length, repeat }` bends a strip along each stroke, or `{ by: "path" }` passes the stroke's centreline to an effect with a path control (`format: "svg-path"`, `accepts: ["path"]`); `live` keeps it playing on stroke layers. Call after `describe_effect`, then `paint_stroke`. Editor state, not an undo step. Returns `effectPaint`. |
 | `set_effect_playback` | Play or pause live effect paint in the view (`playing`) and cap its frame rate (`fps` 1..60). Editor state. Returns `playing`, `fps`, `time` and `animation` (what plays, or null). Export a moment with `export_image` / `export_psd` `time`. |
 
 ### Guides

@@ -161,6 +161,7 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         let points = x.points.compactMap(PenPoint.init(json:))
         var i = PaintStrokeInit(layerId: x.layerId, color: x.color, paint: x.paint, brushId: x.brushId, brush: changes, seed: x.seed)
         i.snapToPerspective = x.snapToPerspective
+        try await c.prepareStrokePathEffect(i, points)
         return strokeResultJSON(try c.paintStroke(i, points: points))
     }
 
@@ -168,13 +169,12 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         let x = try StrokePathArguments(a)
         let changes = try x.brush.map { try c.brushChanges($0.objectValue ?? [:], from: x.brushId) }
         let i = PaintStrokeInit(layerId: x.layerId, color: x.color, paint: x.paint, brushId: x.brushId, brush: changes, seed: x.seed)
+        if let subpaths = try? samplePath(x.path, spacing: x.spacing, pressure: x.pressure, speed: x.speed) {
+            for pts in subpaths { try await c.prepareStrokePathEffect(i, pts) }
+        }
         return .object(try c.strokePath(x.path, spacing: x.spacing, pressure: x.pressure, speed: x.speed, i))
     }
     h["replay_strokes"] = { a in
-        if a["color"] == nil {
-            let ids = Set(a["strokeIds"]?.arrayValue?.compactMap(\.stringValue) ?? [])
-            try await c.prepareEffectPaints(c.doc.strokes.filter { ids.contains($0.id) }.compactMap(\.effect))
-        }
         let o = a["origin"]?.objectValue
         let opts = ReplayOptions(
             strokeIds: a["strokeIds"]?.arrayValue?.compactMap(\.stringValue) ?? [], dx: a["dx"]?.numberValue, dy: a["dy"]?.numberValue,
@@ -183,6 +183,9 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
             layerId: a["layerId"]?.stringValue, color: a["color"]?.stringValue, brushId: a["brushId"]?.stringValue,
             repeatCount: a["repeat"]?.numberValue.map { Int($0) }
         )
+        if a["color"] == nil {
+            try await c.prepareReplayEffectPaints(opts)
+        }
         return .object(try c.replayStrokes(opts))
     }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createFakeEffectProvider } from '../src/effects';
-import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider, replayPainting, sampleEffectAt, type EffectPaintPixels, type PaintPixelLayer } from '../src/paint-editor';
+import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider, MAX_EFFECT_PATH_POINTS, replayPainting, sampleEffectAt, type EffectPaintPixels, type PaintPixelLayer } from '../src/paint-editor';
 import { readPixel } from '../src/raster/surface';
 import { ToolRegistry } from '../src/tools/registry';
 
@@ -85,8 +85,53 @@ describe('effect paint along the stroke', () => {
       expect(c.paintStroke({ brushId, points: ACROSS }).bounds, brushId).not.toBeNull();
     }
     await expect(c.setEffectPaint({ effect: 'fake.gradient', map: { by: 'stroke', length: 4 } })).rejects.toThrow(/map.length 4 is out of range; use 16..4096/);
-    await expect(c.setEffectPaint({ effect: 'fake.gradient', map: { by: 'path' } })).rejects.toThrow(/use "canvas" .* or "stroke"/);
+    await expect(c.setEffectPaint({ effect: 'fake.gradient', map: { by: 'spiral' } })).rejects.toThrow(/use "canvas" .* "stroke" .* or "path"/);
+    await expect(c.setEffectPaint({ effect: 'fake.gradient', map: { by: 'path' } })).rejects.toThrow(/has no path control.*by: "stroke".*by: "canvas"/);
     await expect(c.setEffectPaint({ effect: 'fake.gradient', map: { by: 'stroke', repeat: 'wrap' } })).rejects.toThrow(/repeat, mirror, clamp/);
+  });
+
+  it('passes each stroke centreline in canvas pixels to an effect path control (map: { by: "path" }) and simplifies long strokes', async () => {
+    const renderedPaths: unknown[] = [];
+    const c = new PaintEditorController({ width: W, height: H, paper: 'smooth' });
+    c.setEffectsProvider(
+      createFakeEffectProvider({
+        onRender: (id, req) => {
+          if (id === 'fake.trail') renderedPaths.push(req.values?.path);
+        },
+      })
+    );
+    const p = await c.setEffectPaint({ effect: 'fake.trail', values: { color: '#ff0000', width: 12 }, map: { by: 'path' } });
+    expect(p.map).toEqual({ by: 'path' });
+
+    c.paintStroke({ brushId: 'ink-pen', brush: HARD, points: DOWN });
+    expect(renderedPaths.at(-1)).toEqual([20, 4, 20, 60]);
+    expect(c.getStrokes()[0].paint).toMatchObject({
+      type: 'effect',
+      effect: 'fake.trail',
+      map: { by: 'path' },
+      values: { path: [20, 4, 20, 60], color: '#ff0000', width: 12 },
+    });
+    // The trail draws along x = 20, y = 4..60 in red, and leaves pixels off the stroke untouched.
+    expect(px(c, 20, 32)[0]).toBeGreaterThan(200);
+    expect(px(c, 20, 32)[3]).toBe(255);
+    expect(px(c, 70, 32)[3]).toBe(0);
+
+    // Replaying moved by dx = 40 moves the path control points too.
+    c.replayStrokes({ strokeIds: [c.getStrokes()[0].id], dx: 40 });
+    expect(renderedPaths.at(-1)).toEqual([60, 4, 60, 60]);
+    expect(px(c, 60, 32)[0]).toBeGreaterThan(200);
+
+    // Very long strokes (> MAX_EFFECT_PATH_POINTS) are simplified rather than refused.
+    const longPoints = Array.from({ length: MAX_EFFECT_PATH_POINTS + 120 }, (_, i) => ({
+      x: 4 + (i * 88) / (MAX_EFFECT_PATH_POINTS + 119),
+      y: 16,
+    }));
+    c.paintStroke({ brushId: 'ink-pen', brush: HARD, points: longPoints });
+    const simplified = renderedPaths.at(-1) as number[];
+    expect(Array.isArray(simplified)).toBe(true);
+    expect(simplified.length).toBe(MAX_EFFECT_PATH_POINTS * 2);
+    expect(simplified.slice(0, 2)).toEqual([4, 16]);
+    expect(simplified.slice(-2)).toEqual([92, 16]);
   });
 });
 
@@ -195,6 +240,13 @@ describe('live effect paint', () => {
     expect(r.data.effectPaint).toMatchObject({ live: true, map: { by: 'stroke', length: 80, repeat: 'mirror' } });
     r = await call('set_effect_paint', { effect: 'fake.gradient', map: { by: 'stroke', length: 2 } });
     expect(r.error).toMatch(/length/);
+    r = await call('set_effect_paint', { effect: 'fake.gradient', map: { by: 'path' } });
+    expect(r.error).toMatch(/has no path control.*by: "stroke".*by: "canvas"/);
+    r = await call('set_effect_paint', { effect: 'fake.trail', values: { color: '#22d3ee', width: 10 }, map: { by: 'path' }, live: true });
+    expect(r.error).toBeNull();
+    expect(r.data.effectPaint).toMatchObject({ effect: 'fake.trail', map: { by: 'path' }, live: true });
+    r = await call('set_effect_paint', { effect: 'fake.gradient', values: { ...RED_TO_BLUE, spin: 180 }, live: true, map: { by: 'stroke', length: 80, repeat: 'mirror' } });
+    expect(r.error).toBeNull();
     await call('paint_stroke', { brushId: 'ink-pen', points: ACROSS });
     r = await call('list_applied_effects', { target: 'paint' });
     expect(JSON.stringify(r.data)).toMatch(/"live":true/);

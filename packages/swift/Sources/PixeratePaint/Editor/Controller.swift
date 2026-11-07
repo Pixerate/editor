@@ -140,6 +140,8 @@ public struct PaintStrokeInit {
     public var maskStencils: [Stencil]?
     /// Where the stroke starts (a tracing image that samples colours gives a stroke without colour its colour there).
     public var start: Point2?
+    /// The stroke's points, when known ahead of time (for path-mapped effect paint).
+    public var points: [PenPoint]?
     public init(layerId: String? = nil, color: String? = nil, paint: JSONValue? = nil, brushId: String? = nil, brush: JSONObject? = nil, seed: Int? = nil, copies: [Affine]? = nil, load: MixerLoad? = nil) {
         self.layerId = layerId
         self.color = color
@@ -253,6 +255,8 @@ public final class PaintEditorController {
     var effectPaintPending: PaintEffectPaint?
     /// Rendered effect paints by key, most recently used last.
     var effectPaintPixels = OrderedMap<String, EffectPaintPixels>()
+    /// Each described effect's path control name (`format: "svg-path"`), when it has one.
+    var effectPathControls: [String: String] = [:]
     /// Bumped whenever the paint changes, so a slow `setEffectPaint` can tell it was overtaken.
     var paintEpoch = 0
     /// Live effect paint playback (`setEffectPlayback`) and the time the view shows.
@@ -1238,6 +1242,8 @@ public final class PaintEditorController {
 
     /// Runs a whole stroke against `d` without touching the editor; returns the new document.
     func runStroke(_ d: PaintDocumentState, _ i: PaintStrokeInit, _ points: [PenPoint]) throws -> (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush) {
+        var i = i
+        if i.points == nil { i.points = points }
         let session = try sessionFor(d, i)
         try session.push(points)
         return try endStroke(d, session)

@@ -60,8 +60,22 @@ public final class PaintLiveStroke {
         c.liveStroke = nil
         let current = c.doc
         let before = isWet ? beforeDoc : current
+        var finalSession = session
+        if !isWet, let e = session.initValues.effect?.source, e.map?.by == "path", !session.points.isEmpty {
+            let pathSource = c.strokeEffectWithPath(e, session.points)
+            if let pixels = c.effectPaintImage(pathSource) ?? c.renderEffectPaintSync(pathSource) {
+                var reInit = session.initValues
+                reInit.effect = (pathSource, pixels)
+                reInit.inputFilter = nil
+                if let re = try? PaintStrokeSession(reInit) {
+                    re.maskStencils = session.maskStencils
+                    _ = try? re.push(session.points)
+                    finalSession = re
+                }
+            }
+        }
         let run: (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush)
-        do { run = try c.endStroke(current, session) } catch {
+        do { run = try c.endStroke(current, finalSession) } catch {
             c.wetOp = nil
             c.wet.driver = nil
             c.emit()

@@ -17,7 +17,7 @@ import type { Linear2, PenPoint, StrokeCopy } from './engine';
 import type { MixerLoad } from '../paint/exchange';
 import { normalizeStencil, type Stencil } from './stencils';
 import { readPaintSource, scalePaintGradient, type PaintGradientSource } from '../paint/gradient-paint';
-import { readPaintEffectPaint, type PaintEffectPaint } from './effect-paint';
+import { readPaintEffectPaint, withStrokePath, type PaintEffectPaint } from './effect-paint';
 
 /** An affine map [a, b, c, d, e, f]: (x, y) → (a·x + b·y + e, c·x + d·y + f). */
 export type Affine = readonly [number, number, number, number, number, number];
@@ -231,7 +231,9 @@ export function varyStroke(stroke: RecordedStroke, m: Affine, v: StrokeVariation
   // Effect paint is fixed to the canvas: a moved stroke reveals another part of it.
   if (stroke.paint?.type === 'gradient' && s !== 1) out.paint = scalePaintGradient(stroke.paint, s);
   // A stroke-mapped effect keeps its pattern the same size relative to the stroke.
-  if (stroke.paint?.type === 'effect' && stroke.paint.map && s !== 1) out.paint = { ...stroke.paint, map: { ...stroke.paint.map, length: Math.min(4096, Math.max(16, Math.round(stroke.paint.map.length * s))) } };
+  if (stroke.paint?.type === 'effect' && stroke.paint.map?.by === 'stroke' && s !== 1) out.paint = { ...stroke.paint, map: { ...stroke.paint.map, length: Math.min(4096, Math.max(16, Math.round(stroke.paint.map.length * s))) } };
+  // A path-mapped effect follows the varied stroke's new centreline.
+  if (stroke.paint?.type === 'effect' && stroke.paint.map?.by === 'path') out.paint = withStrokePath(stroke.paint, points);
   if (stroke.copies?.length) {
     const inv = invertAffine(m);
     out.copies = stroke.copies.map((c) => composeAffine(m, composeAffine(c, inv)));

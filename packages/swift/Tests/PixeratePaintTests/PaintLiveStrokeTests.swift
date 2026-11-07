@@ -160,4 +160,60 @@ final class PaintLiveStrokeTests: XCTestCase {
         XCTAssertFalse(isPalmTouch(Point2(x: 20, y: 130), Point2(x: 100, y: 100), hand: "right"))
         XCTAssertEqual(fitZoom(canvas, viewport: 448, 300), 2)
     }
+
+    func testPathMappedEffectPaintPassesStrokeCentrelineAndRefusesEffectsWithoutPathControls() async throws {
+        var calls: [(id: String, width: Int, height: Int, values: JSONObject?)] = []
+        let provider = FakeEffectProvider { id, w, h, req in
+            calls.append((id, w, h, req.values))
+        }
+        let c = try PaintEditorController(width: 80, height: 60, brushId: "ink-pen")
+        c.setEffectsProvider(provider)
+
+        // Effects without a path control refuse by: "path".
+        do {
+            _ = try await c.setEffectPaint("fake.gradient", map: ["by": "path"])
+            XCTFail("Expected fake.gradient to refuse by: \"path\"")
+        } catch {
+            XCTAssertTrue("\(error)".contains("has no path control"))
+            XCTAssertTrue("\(error)".contains("by: \"stroke\""))
+            XCTAssertTrue("\(error)".contains("by: \"canvas\""))
+        }
+
+        // fake.trail has a format: "svg-path" control and accepts by: "path".
+        let ep = try await c.setEffectPaint("fake.trail", values: ["color": "#e11d48", "width": 14], map: ["by": "path"])
+        XCTAssertEqual(ep.map, PaintEffectStrokeMap(by: "path"))
+        XCTAssertEqual(ep.json["map"], ["by": "path"])
+
+        _ = try c.setBrushFacets(["tip": ["size": 12, "hardness": 1, "opacity": 1, "flow": 1], "behaviour": ["grain": 0]])
+        calls.removeAll()
+        let r = try c.paintStroke(PaintStrokeInit(seed: 1), points: [
+            PenPoint(x: 10, y: 20, pressure: 1),
+            PenPoint(x: 40, y: 20, pressure: 1),
+            PenPoint(x: 70, y: 20, pressure: 1),
+        ])
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls[0].id, "fake.trail")
+        XCTAssertEqual(calls[0].width, 80)
+        XCTAssertEqual(calls[0].height, 60)
+        XCTAssertEqual(calls[0].values?["path"], [10, 20, 40, 20, 70, 20])
+        XCTAssertEqual( try c.pickColor(40, 20, layerId: r.layerId)["color"], "#e11d48")
+        XCTAssertEqual( try c.pickColor(40, 50, layerId: r.layerId)["alpha"], 0)
+
+        // Replay shifts the path control points in canvas pixels.
+        calls.removeAll()
+        _ = try c.replayStrokes(ReplayOptions(strokeIds: [r.strokeId!], dy: 25))
+        XCTAssertEqual(calls.last?.values?["path"], [10, 45, 40, 45, 70, 45])
+        XCTAssertEqual(try c.pickColor(40, 45, layerId: r.layerId)["color"], "#e11d48")
+
+        // Very long strokes (> MAX_EFFECT_PATH_POINTS = 256) are simplified rather than refused.
+        calls.removeAll()
+        let manyPoints = (0..<400).map { i in PenPoint(x: 4 + (Double(i) / 399) * 72, y: 30, pressure: 1) }
+        _ = try c.paintStroke(PaintStrokeInit(seed: 2), points: manyPoints)
+        let pathArr = try XCTUnwrap(calls.last?.values?["path"]?.arrayValue)
+        XCTAssertEqual(pathArr.count, MAX_EFFECT_PATH_POINTS * 2)
+        XCTAssertEqual(pathArr[0], 4)
+        XCTAssertEqual(pathArr[1], 30)
+        XCTAssertEqual(pathArr[pathArr.count - 2], 76)
+        XCTAssertEqual(pathArr[pathArr.count - 1], 30)
+    }
 }
