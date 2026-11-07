@@ -1,0 +1,19 @@
+{
+  "domain": "chart",
+  "formatVersion": 1,
+  "document": {
+    "kind": "chart",
+    "formatVersion": 1
+  },
+  "counts": {
+    "providers": 3,
+    "tools": 56,
+    "commands": 45
+  },
+  "files": [
+    "commands.json",
+    "document.schema.json",
+    "tools.json",
+    "ui.json"
+  ]
+}
