@@ -68,6 +68,7 @@ the pitfalls, and uses the tools below.
 - `pixerate-paint-watercolour`: paper, light to dark, wet-in-wet and wet-on-dry, drying and glazing.
 - `pixerate-paint-oil-impasto`: toned ground, thin to thick, pigment mixing, impasto and its light.
 - `pixerate-paint-sketch-to-finish`: sketch, ink, flats, clipped shading and light, one layer per pass.
+- `pixerate-paint-mutation`: claim a user's mutation stroke (`read_mutation`), let it fade, and paint an answer (`answer_mutation`).
 
 ## Working method
 
@@ -77,36 +78,14 @@ the pitfalls, and uses the tools below.
    `new_canvas` with `paper`): cold pressed or rough for broken, sparkling texture, sanded pastel
    paper for pastel, charcoal paper for charcoal, cotton canvas or gesso for painterly work,
    smooth bristol for ink. Set `depth` for how much texture you want.
-3. **Block in big shapes first.** Put each pass on its own layer (`add_layer` with a name).
-   `fill_layer` gives a ground colour (flat) or a tonal layer that catches the grain
-   (`grain` 0.6..1, `pressure` 0.2..0.6). Paint large masses with a big soft pastel or airbrush
-   in a few long `paint_stroke`s rather than many small ones.
-4. **Plan and mix colours before painting.** `color_harmony` gives a palette around a key colour
-   (on the painter's red-yellow-blue wheel by default). `mix_colors` predicts what paints mixed
-   in given parts look like (Kubelka-Munk: blue and yellow make green, white tints rather than
-   greys); the mixing pad (`mixing_pad_stroke`, `pick_mixing_pad_color`) mixes by hand with a
-   palette knife. Keep chosen colours as swatches (`add_swatch`). Use the result as the stroke
-   `color`; `set_color` makes it the default.
-5. **Refine** with smaller brushes on new layers: pencil and ink for line, charcoal for value.
-   **Blend** on the layer that holds the paint: `blender` to melt neighbouring colours together
-   (pigment mixing, so blue next to yellow goes green), `smudge` / `wet-smudge` to drag paint
-   into soft edges and streaks, `mixer-brush` to paint wet into wet, `dirty-round` to paint with
-   a brush that picks up and carries colour, `multicolor-flat` for strokes loaded with several
-   colours. Glaze with a `watercolor` layer, warm or cool with `tint`, light with `highlight`,
-   shade with `shadow`.
-6. **Let the guides multiply your marks.** `set_symmetry` (mirror for faces and vases,
-   kaleidoscope for mandalas and ornaments) paints every copy from one stroke;
-   `set_perspective_guide` plus `paint_stroke` with `snapToPerspective` lays converging lines for
-   buildings and roads. To copy an image's composition and colours, `set_tracing_image` with
-   `sampleColors` and paint over it.
-7. **Repeat and vary instead of drawing every mark.** Paint one good stroke, then
-   `replay_strokes` it with `dx` / `dy`, `rotate`, `scale`, `flipX`, `color`, `brushId` and
-   `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
-8. **Check** with `render_preview` after each block of work, not after each stroke.
-   `pick_color` reads exact values. Undo what made it worse.
+3. **Block in big shapes first.** Put each pass on its own layer (`add_layer` with a name). `fill_layer` gives a ground colour (flat) or a tonal layer that catches the grain (`grain` 0.6..1, `pressure` 0.2..0.6). For line art, call `find_unfilled_regions` against the ink layer (`reference: inkLayerId`, `closeGap: 4..8`) to list enclosed shapes and their interior seed points, then `fill_region` on a flats layer below the ink (`reference: inkLayerId`, `closeGap: 4..8`, `expand: 1..2` so no halo shows at anti-aliased line edges, or `wet: true` to pour a watercolour wash into the region). For unoutlined masses, paint with a big soft pastel or airbrush in a few long `paint_stroke`s rather than many small ones.
+4. **Plan and mix colours before painting.** `color_harmony` gives a palette around a key colour (on the painter's red-yellow-blue wheel by default). `mix_colors` predicts what paints mixed in given parts look like (Kubelka-Munk: blue and yellow make green, white tints rather than greys); the mixing pad (`mixing_pad_stroke`, `pick_mixing_pad_color`) mixes by hand with a palette knife. Keep chosen colours as swatches (`add_swatch`). Use the result as the stroke `color`; `set_color` makes it the default.
+5. **Refine** with smaller brushes on new layers: pencil and ink for line, charcoal for value. **Blend** on the layer that holds the paint: `blender` to melt neighbouring colours together (pigment mixing, so blue next to yellow goes green), `smudge` / `wet-smudge` to drag paint into soft edges and streaks, `mixer-brush` to paint wet into wet, `dirty-round` to paint with a brush that picks up and carries colour, `multicolor-flat` for strokes loaded with several colours. Glaze with a `watercolor` layer, warm or cool with `tint`, light with `highlight`, shade with `shadow`.
+6. **Let the guides multiply your marks.** `set_symmetry` (mirror for faces and vases, kaleidoscope for mandalas and ornaments) paints every copy from one stroke; `set_perspective_guide` plus `paint_stroke` with `snapToPerspective` lays converging lines for buildings and roads. To copy an image's composition and colours, `set_tracing_image` with `sampleColors` and paint over it.
+7. **Repeat and vary instead of drawing every mark.** Paint one good stroke, then `replay_strokes` it with `dx` / `dy`, `rotate`, `scale`, `flipX`, `color`, `brushId` and `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
+8. **Check** with `render_preview` after each block of work, not after each stroke. `pick_color` reads exact values. Undo what made it worse.
 9. **Watercolour** is its own way of working: see "Wet media" below.
-10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
-   `save_paint_document` to keep the painting with its strokes (when the host has storage).
+10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop, `save_paint_document` to keep the painting with its strokes (when the host has storage).
 
 ## Best practices
 
@@ -142,10 +121,7 @@ Which facet sets which engine setting: [references/brush-facets.md](references/b
 
 ## Wet media
 
-Watercolour, gouache and wet oil run on a fluid simulation: lay washes light to dark, let them
-flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves for an agent
-until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and
-read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools.
+Watercolour, gouache and wet oil run on a fluid simulation: lay washes light to dark, let them flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves for an agent until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools. **Ghost paint and invisible ink** (`ghost` facet: `ghost-wash`, `ghost-gouache`, `ghost-oil`, `invisible-ink`) mix and flow while wet, then fade without leaving their own colour, leaving only a smear in the paint they touched: read [references/ghost.md](references/ghost.md).
 
 ## Oils and thick paint
 
@@ -211,21 +187,7 @@ for the controls and presets.
 
 ## Effect paint
 
-`set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every
-stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image).
-Its transparency paints nothing.
-
-1. `search_effects` (`use` generator, overlay or title) and `describe_effect` for the controls.
-2. `set_effect_paint` with `effect`, `values`, `time` (ms, default 0). Wait for it to return.
-3. Paint: dab, particle and bristle brushes take the colour per pixel; the Mixer Brush and pick-up
-   dab brushes take it per dab at its centre. Wet and impasto brushes take it per pixel, shifted by
-   paint they pick up (in watercolour and gouache it flows with the water; impasto keeps its relief).
-   Sprayed stickers each take the colour at their centre (they stay recolourable).
-4. `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour;
-   `update_effect` (target and effect `paint`, `values`) renders new values.
-5. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
-
-When to use which:
+`set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image); transparency paints nothing. Call `search_effects` (`use` generator, overlay or title) and `describe_effect`, then `set_effect_paint` with `effect`, `values`, `time` (ms, default 0) and wait for it to return before painting. `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour; `update_effect` (target and effect `paint`, `values`) renders new values. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
 
 | Want | Use |
 | --- | --- |
@@ -237,8 +199,7 @@ When to use which:
 
 ## Canvas-hosted layer
 
-When `get_canvas_info` has `bounds`, the painting is a layer of a larger canvas and every position
-is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hosted.md).
+When `get_canvas_info` has `bounds`, the painting is a layer of a larger canvas and every position is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hosted.md).
 
 ## Tool reference
 
@@ -254,9 +215,9 @@ is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hos
 | `get_paper` | Read every setting of the current paper (pattern, seed, scale, tiling, depth, shading, dry and wet tuning, and `metallic`, `backlight`, `backlightColor` when set). |
 | `set_paper` | Change the paper: `preset`, then any of `color`, `depth` (0..1), `scale` (0.25..8), `seed` (another sheet), `pattern`, `tiling`, `shading`, `dry` / `wet` tuning (`contrast` 0..3, `invert`), `metallic`, `backlight` (0..1, light from behind: glazes glow, opaque paint blocks; preset `stained-glass`) and `backlightColor`. Affects new strokes' grain and how the paper shows; strokes already painted keep their pixels. Returns the paper. |
 
-### Suggesting paint
+### Suggesting and answering paint
 
-Contributing while the user paints: suggest, don't paint. Read [references/painting-alongside.md](references/painting-alongside.md).
+Contributing while the user paints: suggest with proposals ([references/painting-alongside.md](references/painting-alongside.md)), or answer `mutation` strokes ([references/mutation.md](references/mutation.md), `pixerate-paint-mutation`).
 
 | Tool | Use |
 | --- | --- |
@@ -264,6 +225,10 @@ Contributing while the user paints: suggest, don't paint. Read [references/paint
 | `list_paint_proposals` | Read the pending paint proposals: id, title, rationale, who proposed it, op kinds, placement, bounds, the strokes it echoes and any since removed (`missing`), and whether accepting is allowed. Call before accepting or rejecting. |
 | `accept_paint_proposal` | Paint a pending proposal on a new layer as one undo step recorded as the proposer's (`proposalId`). Only when the user said yes. Returns the layer id, stroke ids and undo step name. Refuses when a stroke it echoes is gone. |
 | `reject_paint_proposal` | Dismiss a pending proposal (`proposalId`); nothing changes. Use it to withdraw a suggestion that no longer fits. Returns the id and title. |
+| `list_mutations` | List pending mutations (`id`, `layerId`, `medium`, `bounds`, `age`, `state`, `strokes`) raised after the user paints with a `mutation` brush (`mutation-wash`, `mutation-ink`) and pauses (`includeAll: true` includes claimed, answered and declined). Call before `read_mutation`. |
+| `read_mutation` | Claim a pending mutation (`id`) and start its fade so the user's paint sinks away (`padding` px around bounds, `maxSide` for the canvas preview). Returns `strokes` (points, colour, brush), `cropPng` and `canvasPng` (as images and structured data). Refused if already claimed. |
+| `answer_mutation` | Paint your answer to a claimed mutation (`id`, `strokes` with `brush`, `color`, `points`, optional `layerId`, `note`). Runs through the paint director when present and commits as one undo step (`agent:<id>`). Returns `strokeIds` and `bounds`. Refused if not claimed or already answered. |
+| `decline_mutation` | Give up on a mutation (`id`, optional `reason`) without answering so the user's paint stays on the canvas as ordinary paint. |
 
 ### Layers
 
@@ -284,6 +249,8 @@ Contributing while the user paints: suggest, don't paint. Read [references/paint
 | `move_layer` | Reorder: `index` among siblings (0 = bottom), optionally into `parentId` (or `null` for the top level). |
 | `merge_layer_down` | Merge a pixel layer into the pixel layer directly below (which keeps its settings). |
 | `fill_layer` | Fill a pixel layer with `color` at `opacity`: flat, or with `grain` 0..1 following the paper grain (`pressure` 0..1 decides how far into the valleys, default 0.5). The fastest way to lay a ground or a textured tone. Returns the bounds. |
+| `fill_region` | Flood-fill one or more enclosed regions on a pixel layer (`x`, `y` or `points: [{x, y}]`). Set `reference` to an ink layer id (or `"all"` / `"composite"`, or `"layer"`), `closeGap` (0..32 px) to bridge small gaps in line art without leaking, `expand` (-16..16 px, e.g. 1..2 px) to bleed under anti-aliased lines so no halo shows, `grain` (0..1) for paper texture, or `wet: true` to pour a watercolour wash into the region on the wet layer. One undo step. Returns `layerId`, `bounds`, `pixelCount`, `regions`, and `leaked` (`true` when the fill touched the canvas border). |
+| `find_unfilled_regions` | Find enclosed unfilled regions from a reference line-art layer (`reference: inkLayerId`) or `"all"` / `"composite"`, closing gaps up to `closeGap` px and excluding areas already painted on `layerId`. Changes nothing. Returns `regions` sorted largest first with an interior seed `point` (`{x, y}`) ready for `fill_region`, `centroid`, `bounds`, `pixelCount`, and `touchesEdge`. |
 | `clear_layer` | Remove every pixel of a layer. Returns the bounds that were cleared. |
 
 ### Brushes
@@ -293,7 +260,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `ghost`, `mutation`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -336,6 +303,9 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `convert_to_stroke_layer` | Make an empty pixel layer a stroke layer. Returns the layer. |
 | `rasterize_stroke_layer` | Turn a stroke layer into a plain pixel layer with the same pixels (strokes no longer editable). Do it before erasing, smudging or filling on it. |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
+| `breed_strokes` | Breed `count` (2..12, default 4) mutated variants from recorded `strokeIds` (1..16) as ghost paint proposals: `mutation` (`geometry`, `color`, `brush`, `seed`, each 0..1), `seed`. Returns `proposalIds` and each variant's `diff` and `bounds`. Read [references/evolution.md](references/evolution.md). |
+| `breed_proposal` | Breed `count` (2..12, default 4) next-generation variants from `proposalIds` (1 id mutates it; 2 ids cross their points and brush facets over, then mutate), with `mutation` and `seed`. Returns `proposalIds` and `proposals`. |
+| `get_proposal_genome` | Read a pending proposal's stroke genome (`proposalId`): `strokes` with full brush facets, points, colour and seed. |
 | `undo_paint` | Undo the last step (a wet stroke's undo puts the wet paint back as it was before it). Returns what was undone and what is next. |
 | `redo_paint` | Redo the step just undone. |
 
@@ -343,7 +313,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 
 | Tool | Use |
 | --- | --- |
-| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could, e.g. on one thread because the page is not cross-origin isolated (COOP / COEP)), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
+| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could, e.g. on one thread because the page is not cross-origin isolated (COOP / COEP)), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map, and `ghost: { remaining }` while ghost paint is fading). Call after wet strokes. |
 | `advance_wet_paint` | Let time pass: `steps` (120 = one second at the default speed) or `seconds`. The paint spreads, blooms, runs and dries. Not an undo step. Returns `steps`, `clock`, `stillWet`, `layers`. Call after a group of wet strokes, before `render_preview`. |
 | `dry_paint` | Dry wet paint at once where it is (one layer with `layerId` or all, optionally inside `rect`). One undo step. Returns `dried` (layer ids and rectangles) and `stillWet`. Dry before glazing over a wash. |
 | `wet_paper` | Pre-wet the paper with clear water over `rect` (default the canvas) on a layer, `amount` 0..1, for wet-in-wet. One undo step. Returns the rectangle and `wet`. Then paint into it. |
@@ -445,20 +415,13 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
 ## Pitfalls
 
 - With agent playback on, strokes, fills and replays are painted live by the director, and other writes open their panel (Colour, Wet, Paper, Layers, Effects) and point at the control. Results are unchanged.
-- **Stroke-by-stroke drawing is slow and expensive.** Do not draw a detailed picture point by
-  point. Block in with fills and big strokes, then replay and vary a few good strokes.
-- **A hidden or locked layer refuses paint**: show it (`update_layer visible true`) or unlock it.
-  `transparency` lock is not an error: paint only lands where the layer already has paint.
-- **Depth 0 means no grain** whatever the brush; grainy media then look smooth. Smooth bristol
-  has depth 0.
-- **Grain is fixed to the document**, not to the layer: moving content does not move the grain,
-  and two strokes on the same spot catch the same peaks.
-- **Blending tools need paint to blend.** Blender and smudge only move what is on the target
-  layer: blend on the layer you painted, not on an empty one above it.
-- **A dirty brush stays dirty** across strokes and colour changes until `clean_mixer_brush`.
-  Pick-up lifts only paint on the target layer: the paper and other layers lift nothing.
-- **Replays use the recorded load**: a replayed pick-up stroke starts with what the brush carried
-  when it was painted, not with the current load.
+- **Stroke-by-stroke drawing is slow and expensive.** Do not draw a detailed picture point by point. Block in with fills and big strokes, then replay and vary a few good strokes.
+- **A hidden or locked layer refuses paint**: show it (`update_layer visible true`) or unlock it. `transparency` lock is not an error: paint only lands where the layer already has paint.
+- **Depth 0 means no grain** whatever the brush; grainy media then look smooth. Smooth bristol has depth 0.
+- **Grain is fixed to the document**, not to the layer: moving content does not move the grain, and two strokes on the same spot catch the same peaks.
+- **Blending tools need paint to blend.** Blender and smudge only move what is on the target layer: blend on the layer you painted, not on an empty one above it.
+- **A dirty brush stays dirty** across strokes and colour changes until `clean_mixer_brush`. Pick-up lifts only paint on the target layer: the paper and other layers lift nothing.
+- **Replays use the recorded load**: a replayed pick-up stroke starts with what the brush carried when it was painted, not with the current load.
 - **Big soft brushes at full flow look flat.** Lower `flow` (airbrush 0.05..0.15) and build up.
 - **JPEG and WebP need a browser**; in Node use PNG. Exports never upscale (`scale` ≤ 1).
 - **Symmetry stays on until you turn it off.** Set `mode: "off"` after the symmetric part, or
@@ -476,11 +439,7 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
 - **Wet paint keeps changing.** A preview right after a wet stroke shows it before it has
   flowed; `advance_wet_paint` first. Paint that should stay exactly where it was laid needs
   `dry_paint` (or a dry medium).
-- **Wet strokes on one layer interact**; washes that must not mix go on separate layers, or dry
-  the first before painting the second (glazing). At most 8 layers hold wet paint at once, and the simulation holds at most 328 wet tiles (256 × 256 px each) across them; water that spreads past
-  that limit is lost (`dry_paint` frees tiles). Multi-threaded wet media needs a cross-origin isolated
-  page (COOP / COEP, for `SharedArrayBuffer`) and runs on one thread otherwise, more slowly but with
-  the same result.
+- **Wet strokes on one layer interact**; washes that must not mix go on separate layers, or dry the first before painting the second (glazing). Ghost paint (`ghost-wash`, `ghost-gouache`, `ghost-oil`, `invisible-ink`) only meets and smears paint on its own layer, so a ghost stroke on a new empty layer simply vanishes; ghost paint and light paint cannot share a layer while the ghost is fading. At most 8 layers hold wet paint at once, and the simulation holds at most 328 wet tiles (256 × 256 px each) across them; water that spreads past that limit is lost (`dry_paint` frees tiles). Multi-threaded wet media needs a cross-origin isolated page (COOP / COEP, for `SharedArrayBuffer`) and runs on one thread otherwise, more slowly but with the same result.
 - **Undoing far back** past the wet undo memory (512 MB by default) leaves that paint dry as it
   looked, rather than wet.
 - **Replays repeat what was recorded**: strokes, fills, clears, flattened relief and wet events.

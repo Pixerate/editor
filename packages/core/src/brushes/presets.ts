@@ -507,4 +507,47 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     iridescence: { thickness: 560, pressureToThickness: 0.25, ior: 1.55 },
     colour: { default: { light: '#475569', dark: '#f1f5f9' }, palette: [{ light: '#475569', dark: '#f1f5f9' }, '#fbcfe8', '#ddd6fe', '#bae6fd', '#fef3c7'] },
   },
+  // --- Ghost paint: wet paint whose colour vanishes, leaving only what it smeared ---
+  {
+    id: 'ghost-wash', name: 'Ghost wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 32, hardness: 0.55, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.65, rewet: 0.2 } },
+    ghost: {},
+  },
+  {
+    id: 'ghost-gouache', name: 'Ghost gouache', kind: 'mark', medium: 'paint', variety: 'gouache',
+    tip: { shape: 'round', size: 26, hardness: 0.7 },
+    dynamics: { smoothing: 0.25, minSize: 0.5 },
+    behaviour: { surface: 'wet', wet: { water: 0.35, pigment: 0.85, body: 1, rewet: 0.3 } },
+    ghost: { linger: 5, smear: 0.4 },
+  },
+  {
+    id: 'ghost-oil', name: 'Ghost oil', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'round', size: 24, hardness: 0.75, spacing: 0.08 },
+    dynamics: { smoothing: 0.25, minSize: 0.5 },
+    behaviour: { surface: 'wet', wet: { water: 0.4, pigment: 0.9, body: 1, load: 0.97 } },
+    ghost: { linger: 10, smear: 0.5 },
+  },
+  {
+    id: 'invisible-ink', name: 'Invisible ink', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 24, hardness: 0.65 },
+    dynamics: { smoothing: 0.3, minSize: 0.4 },
+    behaviour: { surface: 'wet', wet: { water: 0.45, pigment: 0, rewet: 0.35 } },
+    ghost: { smear: 0.65 },
+  },
+  // --- Mutation paint: strokes that sink away once claimed, and an agent answers ---
+  {
+    id: 'mutation-wash', name: 'Mutation wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 28, hardness: 0.6, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.6, rewet: 0.2 } },
+    mutation: {},
+  },
+  {
+    id: 'mutation-ink', name: 'Mutation ink', kind: 'mark', medium: 'ink', variety: 'pen',
+    tip: { shape: 'round', size: 6, hardness: 0.9, spacing: 0.06 },
+    dynamics: { smoothing: 0.35, pressureSmoothing: 0.25, minSize: 0.25 },
+    mutation: {},
+  },
 ];

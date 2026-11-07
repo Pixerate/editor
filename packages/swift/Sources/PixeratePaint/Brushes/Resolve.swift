@@ -103,6 +103,8 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("behaviour.mixing", "smudge.mixing", ["smudge"]))
     out.append(f("behaviour.strength", "wet.strength", ["wet"]))
     out += each("behaviour.wet", "wet", ["medium", "water", "pigment", "body", "rewet", "load", "thinner"], ["wet"])
+    out += each("ghost", "ghost", ["linger", "smear"], ["wet"])
+    out += each("mutation", "mutation", ["settle", "patience", "fade"], ["dab", "wet", "impasto", "particle", "bristle"])
     out.append(f("behaviour.thick.applicator", "impasto.tool", ["impasto"]))
     out += each("behaviour.thick", "impasto", ["thickness", "gloss", "metallic", "load", "thinner", "drag", "rim", "clarity"], ["impasto"])
     out.append(f("marks.physics", "particle.kind", ["particle"]))
@@ -226,6 +228,10 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
         let tool = brush["kind"]?.stringValue == "tool" ? WET_TOOL_OF.first { $0.0 == brush["tool"]?.stringValue }?.1 : "paint"
         setPath(&input, "wet.tool", tool.map { .string($0) } ?? .null)
         if let medium = resolveWetMedium(brush) { setPath(&input, "wet.medium", .string(medium)) }
+        if brush["ghost"] != nil && tool == "paint" { input["ghost"] = .object(input["ghost"]?.objectValue ?? [:]) }
+    }
+    if brush["mutation"] != nil && ["dab", "wet", "impasto", "particle", "bristle"].contains(engine) && (engine != "wet" || brush["kind"]?.stringValue != "tool") {
+        input["mutation"] = .object(brush["mutation"]?.objectValue ?? [:])
     }
     // Blenders and smudges only move paint already down.
     if engine == "blender" || engine == "smudge" { input["loadsColor"] = false }

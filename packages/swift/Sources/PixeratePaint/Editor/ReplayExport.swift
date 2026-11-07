@@ -201,6 +201,11 @@ extension PaintEditorController {
                 case "wet-paper":
                     let d = e.data?.objectValue ?? [:]
                     if let id = e.layerId, target.getLayer(id) != nil { _ = try? target.wetPaper(layerId: id, rect: sr(d["rect"]), amount: d["amount"]?.numberValue) }
+                case "ghost-release":
+                    let d = e.data?.objectValue ?? [:]
+                    if let id = e.layerId, target.getLayer(id) != nil { target.wet.releaseGhost(id, linger: d["linger"]?.numberValue) }
+                case "ghost-keep":
+                    if let id = e.layerId, target.getLayer(id) != nil { target.wet.keepGhost(id) }
                 default:
                     break
                 }
@@ -210,6 +215,34 @@ extension PaintEditorController {
                 switch e.kind {
                 case "fill":
                     _ = try target.fillLayer(layerId: e.layerId, color: d["color"]?.stringValue, opacity: d["opacity"]?.numberValue, grain: d["grain"]?.numberValue, pressure: d["pressure"]?.numberValue, blend: d["blend"]?.stringValue)
+                case "fill-region":
+                    var pts: [FillRegionPoint] = []
+                    if let arr = d["points"]?.arrayValue {
+                        for p in arr {
+                            if let po = p.objectValue, let px = po["x"]?.numberValue, let py = po["y"]?.numberValue {
+                                pts.append(FillRegionPoint(x: px * s, y: py * s))
+                            }
+                        }
+                    } else if let px = d["x"]?.numberValue, let py = d["y"]?.numberValue {
+                        pts.append(FillRegionPoint(x: px * s, y: py * s))
+                    }
+                    let cg = d["closeGap"]?.numberValue.map { Swift.min(32, $0 * s) }
+                    let exp = d["expand"]?.numberValue.map { Swift.max(-16, Swift.min(16, $0 * s)) }
+                    _ = try target.fillRegion(
+                        points: pts,
+                        layerId: e.layerId,
+                        reference: d["reference"]?.stringValue,
+                        color: d["color"]?.stringValue,
+                        opacity: d["opacity"]?.numberValue,
+                        blend: d["blend"]?.stringValue,
+                        tolerance: d["tolerance"]?.numberValue,
+                        closeGap: cg,
+                        expand: exp,
+                        antialias: d["antialias"]?.boolValue,
+                        grain: d["grain"]?.numberValue,
+                        pressure: d["pressure"]?.numberValue,
+                        wet: d["wet"]?.boolValue
+                    )
                 case "clear":
                     _ = try target.clearLayer(e.layerId)
                 case "live-strokes":

@@ -49,6 +49,15 @@ import {
   type RasterRect,
   type Tile,
 } from '../raster/surface';
+import {
+  fillRegionMask,
+  findUnfilledRegionsMask,
+  type FillRegionPoint,
+  type FillRegionSummary,
+  type UnfilledRegion,
+} from '../raster/fill';
+import { PIGMENT_UNIT } from '../paint/wet/film';
+import { WetMedium } from '../paint/wet/medium';
 import { brushToJSON, DEFAULT_BRUSH_ID, normalizePaintBrush, type PaintBrushInput, BRUSH_ID, type PaintBrush } from './brushes';
 import { BrushLibraryError, closest, createBrushLibrary, type BrushLibrary, type BrushLibraryFile } from '../brushes/library';
 import { migrateBrushV1 } from '../brushes/migrate';
@@ -122,7 +131,7 @@ import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, t
 import { isWetBrush } from './brushes';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
-import { MAX_WET_LANES, type WetBackendInfo, type WetSnapshot } from '../paint/wet/world';
+import { MAX_WET_LANES, type WetBackendInfo, type WetGhostState, type WetSnapshot } from '../paint/wet/world';
 import { wetSupport } from '../paint/wet/wasm';
 import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
@@ -130,6 +139,31 @@ import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } fro
 import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, withStrokePath, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, DEFAULT_VIEW_TILT, emptyThickChannels, FilmBuffer, hasThickChannels, LitCache, normalizeLighting, normalizeViewTilt, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type PaintViewTilt, type ThickChannels } from './thick';
+import {
+  mutationBrushRefusal,
+  type PaintMutationAnswerInput,
+  type PaintMutationAnswerResult,
+  type PaintMutationInfo,
+  type PaintMutationMedium,
+  type PaintMutationReadResult,
+  type PaintMutationRequestListener,
+  type PaintMutationState,
+  type PaintMutationStroke,
+} from './mutation';
+import type { PaintDirector, PaintStrokesResult } from './presence';
+import type { PresenceActorInfo } from '../animation/presence';
+import { createPaintProposals, type PaintProposals } from './collaboration';
+import {
+  crossoverGenomes,
+  describeGenomeDiff,
+  mutateGenome,
+  normalizeMutationRates,
+  proposalGenomeStrokes,
+  type BreedStrokesResult,
+  type BredProposalSummary,
+  type ProposalGenomeResult,
+  type StrokeMutationRates,
+} from './evolution';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -270,6 +304,10 @@ export interface PaintEditorState {
   stroking: boolean;
   /** Wet media. */
   wet: PaintWetStateInfo;
+  /** Pending and active mutation exchanges (editor state, not saved with the document). */
+  mutations: readonly PaintMutationInfo[];
+  /** Whether an agent is listening for mutation requests (`onMutationRequest` or `setMutationAgentConnected`). */
+  hasMutationAgent: boolean;
   /** Increments on every change. */
   version: number;
 }
@@ -307,6 +345,8 @@ export interface PaintLayerInfo {
   liveStrokes?: number;
   /** How many live layer effects (glows, shadows, strokes…) it has, when any (`getLayerEffects`). */
   effects?: number;
+  /** A temporary layer created for a dry mutation stroke (fades away once claimed or merges down if unanswered). */
+  temporary?: boolean;
 }
 
 /** A live stroke as it is painted (`onStrokeSample`), for agents that paint along with the user. */
@@ -404,6 +444,79 @@ export interface FillLayerOptions {
   blend?: BlendMode;
 }
 
+export type FillReference = 'layer' | 'all' | 'composite' | (string & {});
+
+export interface FillRegionOptions {
+  /** Seed x in document pixels (pass `x` and `y`, or `points`). */
+  x?: number;
+  /** Seed y in document pixels (pass `x` and `y`, or `points`). */
+  y?: number;
+  /** Multiple seed points in document pixels (filled together as one undo step). */
+  points?: ReadonlyArray<FillRegionPoint>;
+  /** Target layer id from `listLayers` (default the active layer). */
+  layerId?: string;
+  /**
+   * Which pixels define the region boundaries:
+   * - `'layer'` (default): the target layer itself.
+   * - `'all'` or `'composite'`: all visible layers composited (without paper).
+   * - a layer id from `listLayers`: that layer (e.g. an ink line-art layer above a flats layer).
+   */
+  reference?: FillReference;
+  /** Fill colour #rrggbb (default the editor's paint colour). */
+  color?: string;
+  /** Opacity 0..1 (default 1). */
+  opacity?: number;
+  /** Blend mode (default `'normal'`). */
+  blend?: BlendMode;
+  /** Alias for `blend`. */
+  blendMode?: BlendMode;
+  /** Colour/alpha similarity tolerance 0..255 (default 32). */
+  tolerance?: number;
+  /** Close small gaps in line art up to this width in pixels, 0..32 (default 0). */
+  closeGap?: number;
+  /** Expand (> 0, bleed under lines) or contract (< 0) the filled region in pixels, -16..16 (default 0). */
+  expand?: number;
+  /** Soften boundary edges (default true). */
+  antialias?: boolean;
+  /** Paper grain response 0..1 (default 0: flat fill). */
+  grain?: number;
+  /** With grain: pressure 0..1, how far the fill reaches into the valleys (default 0.5). */
+  pressure?: number;
+  /** Pour a wet watercolour wash into the region on the layer's wet layer (default false). */
+  wet?: boolean;
+}
+
+export interface FillRegionResult {
+  layerId: string;
+  bounds: RasterRect | null;
+  pixelCount: number;
+  leaked: boolean;
+  regions: FillRegionSummary[];
+  wet?: boolean;
+}
+
+export interface FindUnfilledRegionsOptions {
+  /** Target layer id from `listLayers` (when given, regions already painted on it are excluded). */
+  layerId?: string;
+  /**
+   * Which pixels define the line-art barriers:
+   * - `'all'` or `'composite'` (default): all visible layers composited (without paper).
+   * - `'layer'`: the target (or active) layer itself.
+   * - a layer id from `listLayers`: that layer (e.g. an ink line-art layer).
+   */
+  reference?: FillReference;
+  /** Alpha/colour threshold 0..255 above which a reference pixel is treated as line art (default 32). */
+  tolerance?: number;
+  /** Close small gaps in line art up to this width in pixels, 0..32 (default 0). */
+  closeGap?: number;
+  /** Ignore regions smaller than this many pixels (default 16). */
+  minArea?: number;
+  /** Include regions that touch the canvas border (default false: only enclosed shapes). */
+  includeEdge?: boolean;
+  /** Maximum number of regions to return, sorted largest first (default 100). */
+  maxRegions?: number;
+}
+
 /** Pixels to add on each side of the canvas (whole numbers, 0 or more; missing = 0). */
 export interface PaintCanvasExtension {
   left?: number;
@@ -473,6 +586,26 @@ interface HistoryEntry {
   wet?: { before: WetSnapshot | null; after: WetSnapshot | null; lost: boolean };
   /** Steps that move the guides with the paint (extending the canvas): the guides before and after. */
   guides?: { before: PaintGuides; after: PaintGuides };
+}
+
+interface MutationEntry {
+  id: string;
+  state: PaintMutationState;
+  layerId: string;
+  tempLayerId?: string;
+  medium: PaintMutationMedium;
+  strokes: PaintMutationStroke[];
+  bounds: RasterRect | null;
+  settle: number;
+  patience: number;
+  fade: number;
+  age: number;
+  sinceLastStroke: number;
+  sincePending: number;
+  fadeRemaining: number;
+  claimedBy?: string;
+  answerStrokeIds?: string[];
+  declineReason?: string;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -621,6 +754,15 @@ export class PaintEditorController {
   private readonly rasterizeSticker: StickerRasterizer;
   private readonly effectsRenderer = new PaintEffectsRenderer();
   private paperEffectNodeCache: ImageNode | null = null;
+  private mutations: MutationEntry[] = [];
+  private nextMutationId = 1;
+  private readonly mutationListeners = new Set<PaintMutationRequestListener>();
+  private mutationAgentConnected = false;
+  private mutationDirector: PaintDirector | null = null;
+  private readonly heldEvaporation = new Map<string, number>();
+  private readonly tempLayerTargets = new Map<string, string>();
+  private answeringMutation = false;
+  private lastMutationTick: number | null = null;
 
   constructor(options: PaintEditorOptions = {}) {
     this.historyLimit = Math.max(1, options.historyLimit ?? 200);
@@ -927,6 +1069,8 @@ export class PaintEditorController {
         gpu: this.wet.gpuMode,
         gpuActive: Boolean(this.wet.world?.gpuActive),
       },
+      mutations: this.mutations.map((m) => this.toMutationInfo(m)),
+      hasMutationAgent: this.mutationListeners.size > 0 || this.mutationAgentConnected,
       version: this.version,
     };
     return this.cached;
@@ -1049,7 +1193,10 @@ export class PaintEditorController {
     const wetIds = ids.filter((id) => this.wet.wetLayerIds().includes(id));
     if (!wetIds.length) return [];
     this.beginWetOp();
-    for (const id of wetIds) this.wet.dry(id);
+    for (const id of wetIds) {
+      this.wet.dry(id);
+      this.finishWetMutationsOnDry(id);
+    }
     this.logWet({ kind: 'dry', layerId: wetIds.join(',') });
     return wetIds;
   }
@@ -1090,6 +1237,7 @@ export class PaintEditorController {
       this.wet.restore(e.wet.lost ? null : e.wet.before);
       if (paper !== this.doc.paper) this.wet.paperChanged();
     }
+    this.reconcileMutationsAfterUndo();
     this.notifyCommit({ kind: 'undo', label: e.label, origin: this.getOrigin() });
     this.emit();
     return e.label;
@@ -1152,6 +1300,7 @@ export class PaintEditorController {
       this.beginWetOp();
       this.wet.reset();
     }
+    this.resetMutations();
     this.commit('New canvas', next);
     return next;
   }
@@ -1328,6 +1477,7 @@ export class PaintEditorController {
       bounds,
       ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: this.doc.liveStrokes[l.id].length } : {}),
       ...(l.effects?.items.length ? { effects: l.effects.items.length } : {}),
+      ...(l.type === 'pixel' && l.temporary ? { temporary: true } : {}),
       parentId,
       depth,
     };
@@ -1351,7 +1501,8 @@ export class PaintEditorController {
   }
 
   setActiveLayer(id: string): void {
-    this.requireLayer(id);
+    const l = this.requireLayer(id);
+    if (isPixelLayer(l) && l.temporary) throw new PaintEditorError('Temporary mutation layers fade away on their own; paint on the layer below.');
     if (this.doc.activeLayerId === id) return;
     // Selection of the active layer is editor state, not an undo step: keep the history's documents.
     this.doc = { ...this.doc, activeLayerId: id };
@@ -1665,6 +1816,275 @@ export class PaintEditorController {
     const light = lit ? withLayerLight(this.doc.light, l.id, scaleLight(lit, 1 - opacity)) : undefined;
     this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), ...(light ? { light } : {}) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
     return { layerId: l.id, bounds: rect };
+  }
+
+  /**
+   * Flood-fills one or more contiguous regions on a pixel layer (one undo step), sampling boundaries
+   * from the layer itself (`reference: 'layer'`), all visible layers (`'all'` / `'composite'`), or a
+   * specific reference layer id (e.g. an ink line-art layer above a flats layer). Closes line-art gaps
+   * up to `closeGap` px and expands (`> 0`, bleeding under lines) or contracts (`< 0`) by `expand` px.
+   * With `wet: true`, pours a watercolour wash into the region on the layer's wet layer.
+   */
+  fillRegion(options: FillRegionOptions): FillRegionResult {
+    this.requireIdle('filling');
+    const fillTarget = this.paintTarget(options.layerId, 'fill');
+    if (this.doc.stickers?.[fillTarget.id]?.length) throw new PaintEditorError(`Layer "${fillTarget.name}" is a sticker layer; fill another layer (add_layer).`);
+    if (this.doc.liveStrokes?.[fillTarget.id]) throw new PaintEditorError(`Layer "${fillTarget.name}" is a stroke layer (its pixels are drawn from its strokes); fill another layer (add_layer), or rasterize it first (rasterize_stroke_layer).`);
+
+    const { width, height } = this.doc.canvas;
+    const pts: FillRegionPoint[] = [];
+    if (options.points !== undefined) {
+      if (!Array.isArray(options.points) || !options.points.length) {
+        throw new PaintEditorError('points is empty; give at least one {x, y} in document pixels.');
+      }
+      for (let i = 0; i < options.points.length; i++) {
+        const p = options.points[i];
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+          throw new PaintEditorError(`points[${i}] needs finite x and y in document pixels.`);
+        }
+        pts.push({ x: p.x, y: p.y });
+      }
+    }
+    if (options.x !== undefined || options.y !== undefined) {
+      if (!Number.isFinite(options.x) || !Number.isFinite(options.y)) {
+        throw new PaintEditorError('x and y must be finite numbers in document pixels.');
+      }
+      if (!options.points) pts.push({ x: options.x!, y: options.y! });
+    }
+    if (!pts.length) {
+      throw new PaintEditorError('Pass x and y (or points) in document pixels to fill a region.');
+    }
+    for (const p of pts) {
+      const px = Math.floor(p.x);
+      const py = Math.floor(p.y);
+      if (px < 0 || py < 0 || px >= width || py >= height) {
+        throw new PaintEditorError(`(${p.x}, ${p.y}) is outside the ${width}×${height} canvas.`);
+      }
+    }
+
+    const refSpec = options.reference ?? 'layer';
+    if (refSpec !== 'layer' && refSpec !== 'all' && refSpec !== 'composite') {
+      this.requireLayer(refSpec);
+    }
+
+    const color = options.color === undefined ? this.color : parseColor(options.color);
+    const opacity = options.opacity ?? 1;
+    if (!(Number.isFinite(opacity) && opacity >= 0 && opacity <= 1)) throw new PaintEditorError(`opacity ${opacity} is out of range; use 0..1.`);
+    const blend = options.blend ?? options.blendMode ?? 'normal';
+    if (!isBlendMode(blend)) throw new PaintEditorError(`Unknown blend mode "${blend}".`);
+    const tolerance = options.tolerance ?? 32;
+    if (!(Number.isFinite(tolerance) && tolerance >= 0 && tolerance <= 255)) throw new PaintEditorError(`tolerance ${tolerance} is out of range; use 0..255.`);
+    const closeGap = options.closeGap ?? 0;
+    if (!(Number.isFinite(closeGap) && closeGap >= 0 && closeGap <= 32)) throw new PaintEditorError(`closeGap ${closeGap} is out of range; use 0..32 px.`);
+    const expand = options.expand ?? 0;
+    if (!(Number.isFinite(expand) && expand >= -16 && expand <= 16)) throw new PaintEditorError(`expand ${expand} is out of range; use -16..16 px.`);
+    const antialias = options.antialias ?? true;
+    if (typeof antialias !== 'boolean') throw new PaintEditorError('antialias must be true or false.');
+    const grainAmount = options.grain ?? 0;
+    if (!(Number.isFinite(grainAmount) && grainAmount >= 0 && grainAmount <= 1)) throw new PaintEditorError(`grain ${grainAmount} is out of range; use 0..1.`);
+    const pressure = options.pressure ?? 0.5;
+    if (!(Number.isFinite(pressure) && pressure >= 0 && pressure <= 1)) throw new PaintEditorError(`pressure ${pressure} is out of range; use 0..1.`);
+    const wet = options.wet === true;
+    if (wet && this.previewing) throw new PaintEditorError("Wet paint can't be previewed; suggest a dry fill instead.");
+    if (wet && !this.wet.wetLayerIds().includes(fillTarget.id) && this.wet.wetLayerIds().length >= MAX_WET_LANES) {
+      throw new PaintEditorError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one first (dry_paint).`);
+    }
+
+    const refPixels =
+      refSpec === 'layer'
+        ? this.compositePixels({ layerIds: [fillTarget.id], paper: false, wet: 'display' }).data
+        : refSpec === 'all' || refSpec === 'composite'
+          ? this.compositePixels({ paper: false, wet: 'display' }).data
+          : this.compositePixels({ layerIds: [refSpec], paper: false, wet: 'display' }).data;
+
+    const filled = fillRegionMask(refPixels, width, height, {
+      points: pts,
+      tolerance,
+      closeGap,
+      expand,
+      antialias,
+    });
+
+    const eventData: Record<string, unknown> = {
+      points: pts.map((p) => ({ x: p.x, y: p.y })),
+      reference: refSpec,
+      color,
+      opacity,
+      blend,
+      tolerance,
+      closeGap,
+      expand,
+      antialias,
+      grain: grainAmount,
+      pressure,
+      ...(wet ? { wet: true } : {}),
+    };
+
+    if (!filled.bounds || filled.pixelCount === 0) {
+      return {
+        layerId: fillTarget.id,
+        bounds: null,
+        pixelCount: 0,
+        leaked: false,
+        regions: filled.regions,
+        ...(wet ? { wet: this.wet.isWet(fillTarget.id) } : {}),
+      };
+    }
+
+    const rect = filled.bounds;
+    const depth = grainAmount * this.doc.paper.depth;
+    const grain = depth > 0 ? paperGrain(this.doc.paper) : null;
+
+    if (wet) {
+      this.requireWetIdle('filling');
+      const before = this.doc;
+      let l = fillTarget;
+      if (l.offset.x || l.offset.y) {
+        const moved: PaintPixelLayer = { ...l, surface: translateSurface(l.surface, l.offset.x, l.offset.y), offset: { x: 0, y: 0 } };
+        this.doc = { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => moved) };
+        l = moved;
+      }
+      this.beginWetOp();
+      const world = this.wet.ensureLane(l.id);
+      const [r, g, b] = hexToRgb8(color);
+      const medium = new WetMedium(world, l.id, {
+        water: 0.9 * Math.max(0.25, opacity),
+        mass: PIGMENT_UNIT * 2.5 * opacity,
+        body: 0,
+        light: 0,
+      });
+      const subCov = new Float32Array(rect.width * rect.height);
+      for (let yy = 0, k = 0; yy < rect.height; yy++) {
+        const py = rect.y + yy;
+        const row = py * width;
+        for (let xx = 0; xx < rect.width; xx++, k++) {
+          const px = rect.x + xx;
+          let v = filled.mask[row + px]!;
+          if (v > 0 && grain) v *= grainCatch(grain.at(px + 0.5, py + 0.5), depth, pressure);
+          subCov[k] = Math.round(v * 4096) / 4096;
+        }
+      }
+      medium.deposit(rect, subCov, 1, [r / 255, g / 255, b / 255], null);
+      if (this.wet.instantDry) {
+        this.wet.dry(l.id);
+        this.logWet({ kind: 'dry', layerId: l.id });
+      } else {
+        this.wet.syncDisplays();
+      }
+      const afterLayer = this.getLayer(l.id) as PaintPixelLayer;
+      this.commit(
+        'Fill region',
+        this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...afterLayer })) }), {
+          kind: 'fill-region',
+          layerId: l.id,
+          data: eventData,
+        }),
+        before
+      );
+      return {
+        layerId: l.id,
+        bounds: rect,
+        pixelCount: filled.pixelCount,
+        leaked: filled.leaked,
+        regions: filled.regions,
+        wet: this.wet.isWet(l.id),
+      };
+    }
+
+    this.dryLayersFirst([fillTarget.id]);
+    const l = this.paintTarget(options.layerId, 'fill');
+    const coverage = new CoverageMap();
+    const vals = new Float32Array(rect.width * rect.height);
+    for (let yy = 0, k = 0; yy < rect.height; yy++) {
+      const py = rect.y + yy;
+      const row = py * width;
+      for (let xx = 0; xx < rect.width; xx++, k++) {
+        const px = rect.x + xx;
+        let v = filled.mask[row + px]!;
+        if (v > 0 && grain) v *= grainCatch(grain.at(px + 0.5, py + 0.5), depth, pressure);
+        vals[k] = v;
+      }
+    }
+    coverage.accumulate(rect, vals, 1);
+    const apply: StrokeApply = {
+      mode: 'paint',
+      color: rgbaOf(color),
+      background: rgbaOf(this.doc.paper.color),
+      opacity,
+      blend,
+      lockTransparency: isLayerLocked(l, 'transparency'),
+      selection: null,
+      offset: l.offset,
+    };
+    const surface = this.applyCoverage(l, coverage, rect, apply);
+    this.commit(
+      'Fill region',
+      this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })) }), {
+        kind: 'fill-region',
+        layerId: l.id,
+        data: eventData,
+      })
+    );
+    return {
+      layerId: l.id,
+      bounds: rect,
+      pixelCount: filled.pixelCount,
+      leaked: filled.leaked,
+      regions: filled.regions,
+    };
+  }
+
+  /**
+   * Finds enclosed unfilled regions from a reference layer or the visible composite (without paper),
+   * closing line-art gaps up to `closeGap` px and returning each region's interior seed `point`,
+   * `centroid`, `bounds`, `pixelCount`, and `touchesEdge` flag.
+   */
+  findUnfilledRegions(options: FindUnfilledRegionsOptions = {}): { regions: UnfilledRegion[] } {
+    if (options.layerId !== undefined) {
+      const l = this.requireLayer(options.layerId);
+      if (!isPixelLayer(l)) throw new PaintEditorError(`Layer "${l.name}" is a group; pass a pixel layer inside it.`);
+    }
+    const refSpec = options.reference ?? 'all';
+    if (refSpec !== 'layer' && refSpec !== 'all' && refSpec !== 'composite') {
+      this.requireLayer(refSpec);
+    }
+    const tolerance = options.tolerance ?? 32;
+    if (!(Number.isFinite(tolerance) && tolerance >= 0 && tolerance <= 255)) throw new PaintEditorError(`tolerance ${tolerance} is out of range; use 0..255.`);
+    const closeGap = options.closeGap ?? 0;
+    if (!(Number.isFinite(closeGap) && closeGap >= 0 && closeGap <= 32)) throw new PaintEditorError(`closeGap ${closeGap} is out of range; use 0..32 px.`);
+    const minArea = options.minArea ?? 16;
+    if (!(Number.isInteger(minArea) && minArea >= 1 && minArea <= 10000000)) throw new PaintEditorError(`minArea ${minArea} is out of range; use a whole number of pixels, 1 or more.`);
+    const maxRegions = options.maxRegions ?? 100;
+    if (!(Number.isInteger(maxRegions) && maxRegions >= 1 && maxRegions <= 1000)) throw new PaintEditorError(`maxRegions ${maxRegions} is out of range; use 1..1000.`);
+    const includeEdge = options.includeEdge ?? false;
+    if (typeof includeEdge !== 'boolean') throw new PaintEditorError('includeEdge must be true or false.');
+
+    const { width, height } = this.doc.canvas;
+    let refPixels: Uint8ClampedArray;
+    if (refSpec === 'all' || refSpec === 'composite') {
+      refPixels = this.compositePixels({ paper: false, wet: 'display' }).data;
+    } else if (refSpec === 'layer') {
+      const targetId = options.layerId ?? this.doc.activeLayerId;
+      if (!targetId) throw new PaintEditorError('There is no active layer; pass layerId or reference.');
+      refPixels = this.compositePixels({ layerIds: [targetId], paper: false, wet: 'display' }).data;
+    } else {
+      refPixels = this.compositePixels({ layerIds: [refSpec], paper: false, wet: 'display' }).data;
+    }
+
+    const targetPixels =
+      options.layerId !== undefined && options.layerId !== refSpec && refSpec !== 'layer'
+        ? this.compositePixels({ layerIds: [options.layerId], paper: false, wet: 'display' }).data
+        : undefined;
+
+    const regions = findUnfilledRegionsMask(refPixels, width, height, {
+      target: targetPixels,
+      tolerance,
+      closeGap,
+      minArea,
+      includeEdge,
+      maxRegions,
+    });
+    return { regions };
   }
 
   private applyCoverage(l: PaintPixelLayer, coverage: CoverageMap, rect: RasterRect, apply: StrokeApply): TiledSurface {
@@ -2373,6 +2793,8 @@ export class PaintEditorController {
 
   private useBrush(next: PaintBrush, spec: Brush, builtin: boolean): void {
     next = normalizePaintBrush(next, next);
+    const refusal = mutationBrushRefusal(next);
+    if (refusal) throw new PaintEditorError(refusal);
     // The active brush is `builtin` only while it is an unchanged built-in preset.
     if (builtin) next.builtin = true;
     else delete next.builtin;
@@ -2655,8 +3077,22 @@ export class PaintEditorController {
       return l;
     })();
     const brush = this.strokeBrush(init);
+    const mutRefusal = mutationBrushRefusal(brush);
+    if (mutRefusal) throw new PaintEditorError(mutRefusal);
     // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
     if (this.previewing && isWetBrush(brush)) throw new PaintEditorError(`Wet paint can't be previewed; the ${brush.name} brush paints wet media. Suggest it with a dry brush.`);
+    if (brush.ghost) {
+      if (brush.light.amount > 0) throw new PaintEditorError(`Ghost paint (${brush.name}) shares the wet light channel and can't emit light; set light.amount to 0 or ghost to null (set_brush).`);
+      if (isPaintEffectPaint(init.paint) || (init.paint === undefined && init.color === undefined && Boolean(this.effectPaint))) {
+        throw new PaintEditorError(`Ghost paint (${brush.name}) needs a single colour to subtract as it fades, so it can't paint with an effect; set a solid colour (set_color) or pass color to paint_stroke.`);
+      }
+      if (brush.behavior.multicolor.mode !== 'off') throw new PaintEditorError(`Ghost paint (${brush.name}) needs a single colour to subtract as it fades, so it can't use multi-colour paint; set behavior.multicolor.mode to "off" (set_brush).`);
+      const gCol = init.color === undefined ? (this.ownColour(init.brushId) ?? this.color) : parseColor(init.color);
+      if (this.strokeGradient(init, brush, gCol)) throw new PaintEditorError(`Ghost paint (${brush.name}) needs a single colour to subtract as it fades, so it can't paint a gradient; set a solid colour (set_color) or pass color to paint_stroke.`);
+      if (Boolean(doc.light?.[layer.id]?.tiles.size) || Boolean(this.wet.world?.hasLane(layer.id) && this.wet.world.isLit(layer.id))) {
+        throw new PaintEditorError(`Layer "${layer.name}" holds light paint, and ghost paint shares the wet light channel; paint on another layer (add_layer) or clear the light first (clear_light).`);
+      }
+    }
     const effect = this.strokeEffect(init, brush, points);
     // A hand-painted path stroke is painted again from its path at the end, and the wet simulation can't be.
     if (!points && init.paint === undefined && effect?.source.map?.by === 'path' && isWetBrush(brush)) {
@@ -2664,6 +3100,9 @@ export class PaintEditorController {
     }
     if (brush.light.amount > 0) {
       if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).`);
+      if (Boolean(this.wet.world?.hasLane(layer.id) && this.wet.world.getGhost(layer.id)) || Boolean(this.wet.settings.get(layer.id)?.ghost)) {
+        throw new PaintEditorError(`Layer "${layer.name}" has ghost paint fading on it, which uses the wet light channel; paint light on another layer (add_layer), or finish the ghost first (dry_paint).`);
+      }
     }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
@@ -2730,6 +3169,7 @@ export class PaintEditorController {
         paint: effect ? null : wetGradient,
         effect: effect?.pixels ?? null,
         film: wetFilm,
+        speed: this.wet.speed,
       });
       init = { ...init, seed: seedW, load };
       wet = { driver, surface: () => world.display(id).surface };
@@ -2738,6 +3178,23 @@ export class PaintEditorController {
       this.dryLayersFirst([layer.id]);
       const dried = findLayer(this.doc.layers, layer.id)!.layer as PaintPixelLayer;
       layer = dried;
+    }
+    if (brush.mutation && !isWetBrush(brush) && !this.answeringMutation && !this.previewing && !this.getOrigin().startsWith('agent:')) {
+      const targetLayer = layer;
+      const existing = this.mutations.find((m) => m.state === 'settling' && m.medium === 'dry' && m.layerId === targetLayer.id && m.tempLayerId && findLayer(doc.layers, m.tempLayerId));
+      if (existing?.tempLayerId) {
+        layer = findLayer(doc.layers, existing.tempLayerId)!.layer as PaintPixelLayer;
+      } else {
+        const temp: PaintPixelLayer = {
+          ...createPaintLayer('Mutation'),
+          clipped: targetLayer.clipped,
+          temporary: true,
+        };
+        this.tempLayerTargets.set(temp.id, targetLayer.id);
+        this.doc = { ...this.doc, layers: insertAfter(this.doc.layers, targetLayer.id, temp) };
+        if (doc !== this.doc) doc = { ...doc, layers: insertAfter(doc.layers, targetLayer.id, temp) };
+        layer = temp;
+      }
     }
     // A brush with its own colour paints it (resolved for the scheme now, and recorded with the stroke).
     let color = init.color === undefined ? (this.ownColour(init.brushId) ?? this.color) : parseColor(init.color);
@@ -2864,6 +3321,8 @@ export class PaintEditorController {
             if (wetStroke) this.wet.restore(snap);
             this.doc = { ...this.doc, layers: before.layers };
             this.wet.syncDisplays();
+          } else if (this.doc.layers !== before.layers) {
+            this.doc = { ...this.doc, layers: before.layers };
           }
           this.emit();
           this.notifySample(cancelled ? 'cancel' : 'end', s, [], cancelled ? undefined : null);
@@ -2885,7 +3344,8 @@ export class PaintEditorController {
         // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
         const wetLight = wetStroke && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null;
         const light = withLayerLight(this.doc.light, l.id, s.lightChannel() ?? wetLight);
-        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}) }, stroke)), wetStroke ? before : this.doc);
+        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}) }, stroke)), before);
+        this.recordMutationStroke(stroke, s.result?.bounds ?? null);
         // After the commit, so a listener that paints in reply finds the editor idle.
         this.notifySample('end', s, [], stroke.id);
       },
@@ -3009,6 +3469,11 @@ export class PaintEditorController {
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
         this.paintedBounds.set(stroke, s.result?.bounds ?? null);
+        const targetId = this.tempLayerTargets.get(s.layerId);
+        if (targetId && !findLayer(out.layers, s.layerId)) {
+          const temp = findLayer(this.doc.layers, s.layerId)?.layer;
+          if (temp) out = { ...out, layers: insertAfter(out.layers, targetId, temp) };
+        }
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
         const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
         const thick = withLayerThick(out.thick, l.id, s.thickChannels());
@@ -3054,8 +3519,11 @@ export class PaintEditorController {
     }
     const { doc, result, brush } = run;
     if (result.mixerLoad) this.keepLoad(brush, result.mixerLoad);
-    if (doc !== before || this.wetOp) this.commit(`${brush.name} stroke`, this.withWetEvents(doc), before);
-    else this.emit([]);
+    if (doc !== before || this.wetOp) {
+      this.commit(`${brush.name} stroke`, this.withWetEvents(doc), before);
+      const lastStroke = this.doc.strokes[this.doc.strokes.length - 1];
+      if (lastStroke && lastStroke.id === result.strokeId) this.recordMutationStroke(lastStroke, result.bounds);
+    } else this.emit([]);
     return result;
   }
 
@@ -3095,8 +3563,13 @@ export class PaintEditorController {
     }
     const run = last as ReturnType<PaintEditorController['runStroke']> | null;
     if (run?.result.mixerLoad) this.keepLoad(run.brush, run.result.mixerLoad);
-    if (doc !== before || this.wetOp) this.commit(`${run?.brush.name ?? 'Brush'} path stroke`, this.withWetEvents(doc), before);
-    else this.emit([]);
+    if (doc !== before || this.wetOp) {
+      this.commit(`${run?.brush.name ?? 'Brush'} path stroke`, this.withWetEvents(doc), before);
+      for (const sid of strokeIds) {
+        const recorded = this.doc.strokes.find((s) => s.id === sid);
+        if (recorded) this.recordMutationStroke(recorded, this.paintedBounds.get(recorded) ?? null);
+      }
+    } else this.emit([]);
     const layerId = run?.result.layerId ?? stroke.layerId ?? this.doc.activeLayerId ?? '';
     return { layerId, bounds, dabs, strokeIds, ...(run?.result.mixerLoad ? { mixerLoad: run.result.mixerLoad } : {}), ...(run?.result.wet !== undefined ? { wet: run.result.wet } : {}) };
   }
@@ -3365,6 +3838,7 @@ export class PaintEditorController {
    * bindings do). Steps at the wet speed unless paused; resolves when the frame's steps are done.
    */
   tickWet(now: number): Promise<void> {
+    this.tickMutations(now);
     return this.wet.tick(now);
   }
 
@@ -3449,7 +3923,9 @@ export class PaintEditorController {
   async advanceWet(options: { steps?: number; seconds?: number }): Promise<{ steps: number; clock: number; stillWet: boolean; layers: WetLayerInfo[] }> {
     const steps = options.steps ?? Math.round((options.seconds ?? 1) * this.wet.speed);
     if (!(Number.isInteger(steps) && steps >= 0 && steps <= 100000)) throw new PaintEditorError(`steps ${steps} is out of range; use 0..100000 (or seconds).`);
+    const seconds = options.seconds ?? steps / this.wet.speed;
     const run = await this.wet.advance(steps);
+    if (seconds > 0) this.advanceMutations(seconds);
     this.emit();
     const st = this.wetState();
     return { steps: run, clock: st.clock, stillWet: st.wet, layers: st.layers };
@@ -3469,7 +3945,11 @@ export class PaintEditorController {
     if (!ids.length) return { dried: [], stillWet: this.wet.isWet() };
     const before = this.doc;
     this.beginWetOp();
-    const dried = ids.flatMap((id) => this.wet.dry(id, rect));
+    const dried = ids.flatMap((id) => {
+      const r = this.wet.dry(id, rect);
+      if (!rect) this.finishWetMutationsOnDry(id);
+      return r;
+    });
     this.logWet({ kind: 'dry', layerId: options.layerId, data: rect });
     this.commit('Dry paint', this.withWetEvents(this.doc), before);
     return { dried, stillWet: this.wet.isWet() };
@@ -3506,6 +3986,15 @@ export class PaintEditorController {
   setWetParams(layerId: string | undefined, update: Partial<WetParams>): WetParams {
     const l = this.wetLayer(layerId, 'change the wet settings of');
     this.requireWetIdle('changing wet settings');
+    if (this.heldEvaporation.has(l.id)) {
+      const current = this.wet.info(l.id).params;
+      const intended = normalizeWetParams({ ...current, evaporation: this.heldEvaporation.get(l.id), ...update });
+      this.heldEvaporation.set(l.id, intended.evaporation);
+      this.wet.setParams(l.id, { ...update, evaporation: 0 });
+      this.recordWetSetting({ kind: 'params', layerId: l.id, data: intended });
+      this.emit([]);
+      return intended;
+    }
     const params = this.wet.setParams(l.id, update);
     this.recordWetSetting({ kind: 'params', layerId: l.id, data: params });
     this.emit([]);
@@ -3749,14 +4238,49 @@ export class PaintEditorController {
   /** The document as JSON with inline PNG assets. */
   /** The document as saved: wet paint dried where it is (deterministically); wet settings as data. */
   private savedState(): PaintDocumentState {
-    const layers = this.driedLayers(this.doc.layers);
-    return layers === this.doc.layers ? this.doc : { ...this.doc, layers };
+    let state = this.doc;
+    for (const m of this.mutations) {
+      if (m.medium !== 'dry' || !m.tempLayerId || !findLayer(state.layers, m.tempLayerId)) continue;
+      if (m.state === 'claimed' || m.state === 'answered') {
+        const tempId = m.tempLayerId;
+        state = {
+          ...state,
+          layers: mapLayer(state.layers, tempId, () => null),
+          strokes: state.strokes.filter((s) => s.layerId !== tempId),
+        };
+      } else {
+        state = this.mergeTempLayerIntoTarget(state, m.tempLayerId, m.layerId);
+      }
+    }
+    for (const l of flattenLayers(state.layers)) {
+      if (isPixelLayer(l) && l.temporary) {
+        const targetId = this.tempLayerTargets.get(l.id);
+        if (targetId && findLayer(state.layers, targetId)) {
+          state = this.mergeTempLayerIntoTarget(state, l.id, targetId);
+        } else {
+          state = {
+            ...state,
+            layers: mapLayer(state.layers, l.id, () => null),
+            strokes: state.strokes.filter((s) => s.layerId !== l.id),
+          };
+        }
+      }
+    }
+    const layers = this.driedLayers(state.layers);
+    return layers === state.layers ? state : { ...state, layers };
   }
 
   /** Wet settings saved with the document (`null` when they are all defaults). */
   private wetJSON(): unknown {
     const layers: Record<string, WetLayerSettings> = {};
-    for (const [id, set] of this.wet.settings) if (findLayer(this.doc.layers, id)) layers[id] = { params: { ...set.params }, flow: { ...set.flow } };
+    for (const [id, set] of this.wet.settings) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      const ghost = this.wet.world?.hasLane(id) ? this.wet.world.getGhost(id) : set.ghost ?? null;
+      const savedGhost = ghost?.trigger === 'agent' ? null : ghost;
+      const heldEvap = this.heldEvaporation.get(id);
+      const params = heldEvap !== undefined ? { ...set.params, evaporation: heldEvap } : { ...set.params };
+      layers[id] = { params, flow: { ...set.flow }, ...(savedGhost ? { ghost: savedGhost } : {}) };
+    }
     const flat = this.wet.tilt.angle === 0;
     if (!Object.keys(layers).length && flat) return undefined;
     return { tilt: { ...this.wet.tilt }, layers };
@@ -3773,8 +4297,9 @@ export class PaintEditorController {
           problems.push(`wet.layers["${id}"] is not wet settings; skipped.`);
           continue;
         }
-        const x = v as { params?: Partial<WetParams>; flow?: Partial<WetFlowSpec> };
-        this.wet.settings.set(id, { params: normalizeWetParams(x.params ?? {}), flow: normalizeFlow(x.flow ?? {}) });
+        const x = v as { params?: Partial<WetParams>; flow?: Partial<WetFlowSpec>; ghost?: unknown };
+        const ghost = readWetGhost(x.ghost);
+        this.wet.settings.set(id, { params: normalizeWetParams(x.params ?? {}), flow: normalizeFlow(x.flow ?? {}), ...(ghost ? { ghost } : {}) });
       }
     }
   }
@@ -3937,6 +4462,7 @@ export class PaintEditorController {
     }
     this.undoStack = [];
     this.redoStack = [];
+    this.resetMutations();
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
     for (const list of Object.values(this.doc.liveStrokes ?? {})) {
       for (const s of list) {
@@ -5261,10 +5787,751 @@ export class PaintEditorController {
     }
   }
 
+  // --- Mutation paint --------------------------------------------------------------
+
+  /**
+   * Hears each mutation once it has settled (`settle` seconds after the user's last mutation
+   * stroke). Registering a listener marks an agent as connected (`state.hasMutationAgent`).
+   */
+  onMutationRequest(listener: PaintMutationRequestListener): () => void {
+    const had = this.mutationListeners.size > 0;
+    this.mutationListeners.add(listener);
+    if (!had) this.emit([]);
+    return () => {
+      this.mutationListeners.delete(listener);
+      if (this.mutationListeners.size === 0) this.emit([]);
+    };
+  }
+
+  /** Marks whether a mutation-answering agent is connected (for hosts that wake agents via tools). */
+  setMutationAgentConnected(connected: boolean): void {
+    if (this.mutationAgentConnected === connected) return;
+    this.mutationAgentConnected = connected;
+    this.emit([]);
+  }
+
+  /** Attaches a `PaintDirector` so `answerMutation` and `readMutation` animate the agent's cursor. */
+  setMutationDirector(director: PaintDirector | null): void {
+    this.mutationDirector = director;
+  }
+
+  /** Lists pending mutations (or all mutations when `includeAll` is true). */
+  listMutations(options: { includeAll?: boolean } = {}): PaintMutationInfo[] {
+    const list = options.includeAll ? this.mutations : this.mutations.filter((m) => m.state === 'pending' || m.state === 'settling');
+    return list.map((m) => this.toMutationInfo(m));
+  }
+
+  /** One mutation by id (`undefined` when unknown). */
+  getMutation(id: string): PaintMutationInfo | undefined {
+    const m = this.mutations.find((x) => x.id === id);
+    return m ? this.toMutationInfo(m) : undefined;
+  }
+
+  /**
+   * Claims a mutation (`id`) and starts its fade. Returns the strokes (points, colour, brush), a
+   * PNG of the area around them (`cropPng`), and a preview of the whole painting (`canvasPng`) so
+   * the agent can choose where to answer. Refused if already claimed, answered or declined.
+   */
+  readMutation(id: string, options: { actor?: string; padding?: number; maxSide?: number } = {}): PaintMutationReadResult {
+    const m = this.mutations.find((x) => x.id === id);
+    if (!m) throw new PaintEditorError(`Unknown mutation "${id}". Call list_mutations for the pending ids.`);
+    if (m.state === 'claimed' || m.state === 'answered') {
+      throw new PaintEditorError(`Mutation "${id}" has already been claimed${m.claimedBy ? ` by ${m.claimedBy}` : ''}.`);
+    }
+    if (m.state === 'declined') {
+      throw new PaintEditorError(`Mutation "${id}" was already declined.`);
+    }
+
+    const { width, height } = this.doc.canvas;
+    const pad = Math.max(0, Math.round(options.padding ?? 32));
+    const baseRect = m.bounds ?? { x: 0, y: 0, width, height };
+    const cropRect = clipRect(
+      { x: baseRect.x - pad, y: baseRect.y - pad, width: baseRect.width + pad * 2, height: baseRect.height + pad * 2 },
+      width,
+      height
+    ) ?? { x: 0, y: 0, width, height };
+
+    // Capture the crop and canvas preview before the fade begins so the agent sees the full strokes.
+    const full = this.compositePixels({ wet: 'display' });
+    const cropData = new Uint8ClampedArray(cropRect.width * cropRect.height * 4);
+    for (let y = 0; y < cropRect.height; y++) {
+      const srcRow = ((cropRect.y + y) * width + cropRect.x) * 4;
+      cropData.set(full.data.subarray(srcRow, srcRow + cropRect.width * 4), y * cropRect.width * 4);
+    }
+    const cropPngBase64 = bytesToBase64(encodePng(cropRect.width, cropRect.height, cropData));
+    const preview = this.renderPreview({ wet: 'display', maxSide: options.maxSide ?? 512 });
+    const canvasPngBase64 = bytesToBase64(encodePng(preview.width, preview.height, preview.data));
+
+    const actorId = options.actor ?? (this.getOrigin() !== 'user' ? this.getOrigin() : 'agent');
+    m.state = 'claimed';
+    m.claimedBy = actorId;
+    m.fadeRemaining = m.fade;
+
+    if (m.medium === 'wet') {
+      this.releaseMutationEvaporation(m.layerId);
+      this.wet.releaseGhost(m.layerId, m.fade);
+      this.recordWetSetting({ kind: 'ghost-release', layerId: m.layerId, data: { linger: m.fade } });
+    }
+
+    if (this.mutationDirector && m.bounds) {
+      const pid = actorId.replace(/^agent:/, '') || 'mutation-agent';
+      this.mutationDirector.presence.set({
+        id: pid,
+        name: 'Agent',
+        color: '#7c3aed',
+        x: m.bounds.x + m.bounds.width / 2,
+        y: m.bounds.y + m.bounds.height / 2,
+        message: 'Reading…',
+      });
+    }
+
+    this.emit([]);
+    return {
+      id: m.id,
+      state: 'claimed',
+      layerId: m.layerId,
+      medium: m.medium,
+      bounds: m.bounds ? { ...m.bounds } : null,
+      fade: m.fade,
+      strokes: m.strokes.map((s) => ({
+        ...s,
+        points: s.points.map((p) => ({ ...p })),
+        bounds: s.bounds ? { ...s.bounds } : null,
+      })),
+      cropPng: {
+        width: cropRect.width,
+        height: cropRect.height,
+        rect: cropRect,
+        data: cropPngBase64,
+      },
+      canvasPng: {
+        width: preview.width,
+        height: preview.height,
+        data: canvasPngBase64,
+      },
+    };
+  }
+
+  /**
+   * Paints the agent's answer to a claimed mutation (`id`). When a `PaintDirector` is attached (or
+   * passed in `options`), the agent's cursor is seen painting live; all strokes commit as one undo
+   * step with origin `agent:<id>`. A second answer to the same id is refused.
+   */
+  async answerMutation(
+    id: string,
+    input: PaintMutationAnswerInput,
+    options: { director?: PaintDirector; actor?: PresenceActorInfo } = {}
+  ): Promise<PaintMutationAnswerResult> {
+    const m = this.mutations.find((x) => x.id === id);
+    if (!m) throw new PaintEditorError(`Unknown mutation "${id}". Call list_mutations for the pending ids.`);
+    if (m.state === 'answered') throw new PaintEditorError(`Mutation "${id}" has already been answered.`);
+    if (m.state === 'declined') throw new PaintEditorError(`Mutation "${id}" was declined and cannot be answered.`);
+    if (m.state !== 'claimed') throw new PaintEditorError(`Mutation "${id}" has not been claimed yet; call read_mutation("${id}") first.`);
+    if (!Array.isArray(input?.strokes) || !input.strokes.length) {
+      throw new PaintEditorError('strokes is empty; give at least one stroke with points.');
+    }
+
+    const targetLayerId = input.layerId ?? m.layerId;
+    this.paintTarget(targetLayerId, 'paint on');
+
+    const cleanedStrokes = input.strokes.map((s) => {
+      const pts = this.checkPoints(s.points);
+      const layerId = s.layerId ?? targetLayerId;
+      this.paintTarget(layerId, 'paint on');
+      const baseBrush = s.brushId !== undefined ? this.requireBrush(s.brushId) : this.brush;
+      const stripAutoGhost = baseBrush.ghost?.trigger === 'agent' && !s.brush?.ghost;
+      const brushPatch: PaintBrushInput = {
+        ...(s.brush ?? {}),
+        mutation: null,
+        ...(stripAutoGhost ? { ghost: null } : {}),
+      };
+      return {
+        ...s,
+        layerId,
+        brush: brushPatch,
+        points: pts,
+      };
+    });
+
+    m.state = 'answered';
+    try {
+      for (const s of cleanedStrokes) {
+        await this.prepareStrokePathEffect(s, [s.points]);
+      }
+    } catch (e) {
+      m.state = 'claimed';
+      throw e;
+    }
+
+    const rawActorId = (options.actor?.id ?? m.claimedBy ?? 'mutation-agent').replace(/^agent:/, '') || 'mutation-agent';
+    const actor: PresenceActorInfo = options.actor ?? {
+      id: rawActorId,
+      name: 'Agent',
+      color: '#7c3aed',
+    };
+    const origin = this.getOrigin() !== 'user' ? this.getOrigin() : `agent:${actor.id}`;
+    const director = options.director ?? this.mutationDirector;
+
+    if (director) {
+      const perf = await this.withOrigin(origin, async () => {
+        this.answeringMutation = true;
+        try {
+          return await director.perform(
+            actor,
+            [{ kind: 'strokes', strokes: cleanedStrokes, label: 'Mutation answer', ...(input.note ? { note: input.note } : {}) }],
+            { key: m.id }
+          );
+        } finally {
+          this.answeringMutation = false;
+        }
+      });
+      const first = perf[0];
+      if (!first || !first.ok) {
+        m.state = 'claimed';
+        throw new PaintEditorError(first ? first.message : 'The mutation answer failed.');
+      }
+      const res = first.result as PaintStrokesResult;
+      m.answerStrokeIds = [...res.strokeIds];
+      this.cached = null;
+      this.emit([]);
+      return {
+        id: m.id,
+        state: 'answered',
+        layerId: res.layerId,
+        strokeIds: res.strokeIds,
+        bounds: res.bounds,
+        dabs: res.dabs,
+        ...(res.wet !== undefined ? { wet: res.wet } : {}),
+      };
+    }
+
+    return this.withOrigin(origin, () => {
+      this.answeringMutation = true;
+      try {
+        return this.group('Mutation answer', () => {
+          let bounds: RasterRect | null = null;
+          let dabs = 0;
+          const strokeIds: string[] = [];
+          let wet: boolean | undefined;
+          for (const s of cleanedStrokes) {
+            const r = this.paintStroke(s);
+            bounds = unionRect(bounds, r.bounds);
+            dabs += r.dabs;
+            if (r.strokeId) strokeIds.push(r.strokeId);
+            if (r.wet !== undefined) wet = r.wet;
+          }
+          m.answerStrokeIds = [...strokeIds];
+          this.cached = null;
+          return {
+            id: m.id,
+            state: 'answered' as const,
+            layerId: targetLayerId,
+            strokeIds,
+            bounds,
+            dabs,
+            ...(wet !== undefined ? { wet } : {}),
+          };
+        });
+      } catch (e) {
+        m.state = 'claimed';
+        throw e;
+      } finally {
+        this.answeringMutation = false;
+      }
+    });
+  }
+
+  /**
+   * Gives up on a mutation (`id`) without answering. The user's paint stays as ordinary paint (wet
+   * strokes stay in the wet layer, and dry temporary layers merge down into their target layer).
+   */
+  declineMutation(id: string, reason?: string): PaintMutationInfo {
+    const m = this.mutations.find((x) => x.id === id);
+    if (!m) throw new PaintEditorError(`Unknown mutation "${id}". Call list_mutations for the pending ids.`);
+    if (m.state === 'answered') throw new PaintEditorError(`Mutation "${id}" has already been answered.`);
+    if (m.state === 'declined') return this.toMutationInfo(m);
+    m.state = 'declined';
+    if (reason?.trim()) m.declineReason = reason.trim();
+    this.keepMutationPaint(m);
+    if (this.mutationDirector && m.claimedBy) {
+      this.mutationDirector.presence.remove(m.claimedBy.replace(/^agent:/, '') || 'mutation-agent');
+    }
+    this.emit();
+    return this.toMutationInfo(m);
+  }
+
+  /**
+   * Advances mutation timers (`settle`, `patience`, and dry temporary-layer `fade`) by `seconds`
+   * of simulated time. Called automatically from `tickMutations` and `advanceWet`.
+   */
+  advanceMutations(seconds: number): void {
+    if (!(seconds > 0) || !this.mutations.length) return;
+    let changed = false;
+    let dirty: RasterRect[] | 'all' = [];
+    for (const m of [...this.mutations]) {
+      const wasState = m.state;
+      if (wasState === 'settling' || wasState === 'pending' || wasState === 'claimed') {
+        m.age += seconds;
+        changed = true;
+      }
+      if (wasState === 'settling') {
+        m.sinceLastStroke += seconds;
+        if (m.sinceLastStroke >= m.settle - 1e-9) {
+          m.state = 'pending';
+          m.sincePending = Math.max(0, m.sinceLastStroke - m.settle);
+          const info = this.toMutationInfo(m);
+          for (const listener of [...this.mutationListeners]) {
+            listener(info);
+          }
+          if (m.state === 'pending' && m.sincePending >= m.patience - 1e-9) {
+            this.expireMutation(m);
+            dirty = 'all';
+          }
+        }
+      } else if (wasState === 'pending') {
+        m.sincePending += seconds;
+        if (m.sincePending >= m.patience - 1e-9) {
+          this.expireMutation(m);
+          dirty = 'all';
+        }
+      } else if (wasState === 'claimed' || wasState === 'answered') {
+        if (m.medium === 'dry' && m.tempLayerId) {
+          changed = true;
+          m.fadeRemaining = Math.max(0, m.fadeRemaining - seconds);
+          if (m.fadeRemaining <= 1e-9) {
+            this.removeTempMutationLayer(m);
+            dirty = 'all';
+          } else {
+            const opacity = m.fade > 0 ? Math.max(0, Math.min(1, m.fadeRemaining / m.fade)) : 0;
+            const tempId = m.tempLayerId;
+            if (findLayer(this.doc.layers, tempId)) {
+              this.doc = { ...this.doc, layers: mapLayer(this.doc.layers, tempId, (l) => ({ ...l, opacity })) };
+              dirty = 'all';
+            }
+          }
+        }
+      }
+    }
+    if (changed) {
+      this.cached = null;
+      this.emit(dirty);
+    }
+  }
+
+  /** Steps mutation timers with the wall clock (`performance.now()`, in ms). */
+  tickMutations(now: number): void {
+    if (!Number.isFinite(now)) return;
+    if (this.lastMutationTick === null) {
+      this.lastMutationTick = now;
+      return;
+    }
+    const dt = Math.max(0, Math.min(1, (now - this.lastMutationTick) / 1000));
+    this.lastMutationTick = now;
+    if (dt > 0 && !this.session) {
+      this.advanceMutations(dt);
+    }
+  }
+
+  private toMutationInfo(m: MutationEntry): PaintMutationInfo {
+    return {
+      id: m.id,
+      state: m.state,
+      layerId: m.layerId,
+      medium: m.medium,
+      bounds: m.bounds ? { ...m.bounds } : null,
+      strokeCount: m.strokes.length,
+      age: Math.round(m.age * 100) / 100,
+      settle: m.settle,
+      patience: m.patience,
+      fade: m.fade,
+      ...(m.claimedBy ? { claimedBy: m.claimedBy } : {}),
+      ...(m.answerStrokeIds ? { answerStrokeIds: [...m.answerStrokeIds] } : {}),
+      ...(m.declineReason ? { declineReason: m.declineReason } : {}),
+    };
+  }
+
+  private recordMutationStroke(stroke: RecordedStroke, bounds: RasterRect | null): void {
+    const mut = stroke.brush.mutation;
+    if (!mut || this.answeringMutation || this.previewing || this.getOrigin().startsWith('agent:')) return;
+    const medium: PaintMutationMedium = isWetBrush(stroke.brush) ? 'wet' : 'dry';
+    const tempLayerId = medium === 'dry' && this.tempLayerTargets.has(stroke.layerId) ? stroke.layerId : undefined;
+    const targetLayerId = tempLayerId ? this.tempLayerTargets.get(tempLayerId)! : stroke.layerId;
+
+    let entry = this.mutations.find((m) => m.state === 'settling' && m.layerId === targetLayerId && m.medium === medium);
+    if (!entry) {
+      entry = {
+        id: `m${this.nextMutationId++}`,
+        state: 'settling',
+        layerId: targetLayerId,
+        ...(tempLayerId ? { tempLayerId } : {}),
+        medium,
+        strokes: [],
+        bounds: null,
+        settle: mut.settle,
+        patience: mut.patience,
+        fade: mut.fade,
+        age: 0,
+        sinceLastStroke: 0,
+        sincePending: 0,
+        fadeRemaining: mut.fade,
+      };
+      this.mutations.push(entry);
+      if (medium === 'wet') this.holdMutationEvaporation(targetLayerId);
+    } else {
+      entry.settle = mut.settle;
+      entry.patience = mut.patience;
+      entry.fade = mut.fade;
+      entry.fadeRemaining = mut.fade;
+      entry.sinceLastStroke = 0;
+      if (tempLayerId && !entry.tempLayerId) entry.tempLayerId = tempLayerId;
+    }
+
+    const strokeRect = bounds ?? strokeBounds(stroke.points);
+    entry.strokes.push({
+      id: stroke.id,
+      color: stroke.color,
+      brushId: stroke.brush.id,
+      brushName: stroke.brush.name,
+      size: stroke.brush.tip.size,
+      points: stroke.points.map((p) => ({ ...p })),
+      bounds: strokeRect ? { ...strokeRect } : null,
+    });
+    entry.bounds = unionRect(entry.bounds, strokeRect);
+    this.cached = null;
+  }
+
+  private holdMutationEvaporation(layerId: string): void {
+    if (this.heldEvaporation.has(layerId)) return;
+    const currentEvap = (this.wet.settings.get(layerId)?.params ?? this.wet.info(layerId).params).evaporation;
+    this.heldEvaporation.set(layerId, currentEvap);
+    this.wet.setParams(layerId, { evaporation: 0 });
+  }
+
+  private releaseMutationEvaporation(layerId: string): void {
+    const stillWaiting = this.mutations.some(
+      (m) => m.medium === 'wet' && m.layerId === layerId && (m.state === 'settling' || m.state === 'pending')
+    );
+    if (stillWaiting) return;
+    const saved = this.heldEvaporation.get(layerId);
+    if (saved === undefined) return;
+    this.heldEvaporation.delete(layerId);
+    if (findLayer(this.doc.layers, layerId)) {
+      this.wet.setParams(layerId, { evaporation: saved });
+    }
+  }
+
+  private finishWetMutationsOnDry(layerId: string): void {
+    for (const m of this.mutations) {
+      if (m.medium === 'wet' && m.layerId === layerId && (m.state === 'settling' || m.state === 'pending')) {
+        m.state = 'declined';
+        m.declineReason = 'Dried before an agent claimed it.';
+      }
+    }
+    this.releaseMutationEvaporation(layerId);
+  }
+
+  private expireMutation(m: MutationEntry): void {
+    m.state = 'declined';
+    m.declineReason = 'No agent answered before patience ran out.';
+    this.keepMutationPaint(m);
+  }
+
+  private keepMutationPaint(m: MutationEntry): void {
+    if (m.medium === 'wet') {
+      this.releaseMutationEvaporation(m.layerId);
+      this.wet.keepGhost(m.layerId);
+      this.recordWetSetting({ kind: 'ghost-keep', layerId: m.layerId });
+      return;
+    }
+    const tempId = m.tempLayerId;
+    if (!tempId) return;
+    m.tempLayerId = undefined;
+    this.tempLayerTargets.delete(tempId);
+    if (!findLayer(this.doc.layers, tempId)) return;
+
+    this.doc = this.mergeTempLayerIntoTarget(this.doc, tempId, m.layerId);
+    // Update history entries that hold this temporary layer so undoing the unanswered mutation is one step.
+    for (const e of this.undoStack) {
+      if (findLayer(e.before.layers, tempId)) e.before = this.mergeTempLayerIntoTarget(e.before, tempId, m.layerId);
+      if (findLayer(e.after.layers, tempId)) e.after = this.mergeTempLayerIntoTarget(e.after, tempId, m.layerId);
+    }
+    // Collapse consecutive undo steps belonging to this multi-stroke mutation into a single undo step.
+    while (
+      this.undoStack.length >= 2 &&
+      !findLayer(this.undoStack[this.undoStack.length - 2]!.before.layers, tempId) &&
+      this.undoStack[this.undoStack.length - 1]!.before.strokes.some((s) => m.strokes.some((ms) => ms.id === s.id)) &&
+      this.undoStack[this.undoStack.length - 2]!.after.strokes.some((s) => m.strokes.some((ms) => ms.id === s.id))
+    ) {
+      const top = this.undoStack.pop()!;
+      const prev = this.undoStack[this.undoStack.length - 1]!;
+      prev.after = top.after;
+    }
+  }
+
+  private mergeTempLayerIntoTarget(doc: PaintDocumentState, tempLayerId: string, targetLayerId: string): PaintDocumentState {
+    const upper = findLayer(doc.layers, tempLayerId)?.layer;
+    const below = findLayer(doc.layers, targetLayerId)?.layer;
+    if (!isPixelLayer(upper)) return doc;
+    if (!isPixelLayer(below)) {
+      return {
+        ...doc,
+        layers: mapLayer(doc.layers, tempLayerId, () => null),
+        strokes: doc.strokes.filter((s) => s.layerId !== tempLayerId),
+      };
+    }
+    const rect = unionRect(this.describeLayer(below).bounds, this.describeLayer(upper).bounds);
+    let surface = below.surface;
+    let offset = below.offset;
+    if (rect) {
+      const base: PaintPixelLayer = { ...below, opacity: 1, blend: 'normal', visible: true, clipped: undefined, mask: undefined };
+      const top: PaintPixelLayer = { ...upper, opacity: 1, visible: true };
+      const px = createPaintCompositor().composite([base, top] as ViewLayer[], rect, this.sources());
+      surface = surfaceFromPixels({ width: rect.width, height: rect.height, data: px }, 4, rect.x, rect.y);
+      offset = { x: 0, y: 0 };
+    }
+    const merged: PaintPixelLayer = { ...below, surface, offset };
+    const layers = mapLayer(mapLayer(doc.layers, upper.id, () => null), below.id, () => merged);
+    const strokes = doc.strokes.map((s) => (s.layerId === tempLayerId ? { ...s, layerId: targetLayerId } : s));
+    return { ...doc, layers, strokes };
+  }
+
+  private removeTempMutationLayer(m: MutationEntry): void {
+    const tempId = m.tempLayerId;
+    if (!tempId) return;
+    m.tempLayerId = undefined;
+    this.tempLayerTargets.delete(tempId);
+    const strip = (d: PaintDocumentState): PaintDocumentState => {
+      if (!findLayer(d.layers, tempId) && !d.strokes.some((s) => s.layerId === tempId)) return d;
+      return {
+        ...d,
+        layers: mapLayer(d.layers, tempId, () => null),
+        strokes: d.strokes.filter((s) => s.layerId !== tempId),
+      };
+    };
+    this.doc = strip(this.doc);
+    // Strip the faded temporary layer from subsequent undo steps (e.g. the agent's answer step) so
+    // undoing the agent's answer doesn't resurrect a half-faded temporary layer.
+    const mutStrokeIds = new Set(m.strokes.map((s) => s.id));
+    for (const e of this.undoStack) {
+      const isMutationCreationStep =
+        !e.before.strokes.some((s) => mutStrokeIds.has(s.id)) && e.after.strokes.some((s) => mutStrokeIds.has(s.id));
+      if (!isMutationCreationStep) {
+        e.before = strip(e.before);
+        e.after = strip(e.after);
+      }
+    }
+  }
+
+  private reconcileMutationsAfterUndo(): void {
+    if (!this.mutations.length) return;
+    const remainingIds = new Set(this.doc.strokes.map((s) => s.id));
+    const kept: MutationEntry[] = [];
+    for (const m of this.mutations) {
+      m.strokes = m.strokes.filter((s) => remainingIds.has(s.id));
+      if (m.strokes.length === 0) {
+        this.mutationDirector?.cancel(m.id);
+        if (m.claimedBy && this.mutationDirector) {
+          this.mutationDirector.presence.remove(m.claimedBy.replace(/^agent:/, '') || 'mutation-agent');
+        }
+        if (m.tempLayerId) {
+          const tempId = m.tempLayerId;
+          this.tempLayerTargets.delete(tempId);
+          if (findLayer(this.doc.layers, tempId)) {
+            this.doc = {
+              ...this.doc,
+              layers: mapLayer(this.doc.layers, tempId, () => null),
+              strokes: this.doc.strokes.filter((s) => s.layerId !== tempId),
+            };
+          }
+        }
+        if (m.medium === 'wet') {
+          this.releaseMutationEvaporation(m.layerId);
+        }
+      } else {
+        m.bounds = m.strokes.reduce<RasterRect | null>((acc, s) => unionRect(acc, s.bounds), null);
+        kept.push(m);
+      }
+    }
+    this.mutations = kept;
+  }
+
+  private resetMutations(): void {
+    for (const m of this.mutations) {
+      this.mutationDirector?.cancel(m.id);
+    }
+    this.mutations = [];
+    this.heldEvaporation.clear();
+    this.tempLayerTargets.clear();
+    this.lastMutationTick = null;
+  }
+
   /** A layer's tile surface (live while stroking), for thumbnails. */
   layerSurface(id: string): TiledSurface | null {
     const l = findLayer(this.currentLayers(), id)?.layer;
     return isPixelLayer(l) ? l.surface : null;
+  }
+
+  // --- Proposals and evolutionary strokes ------------------------------------------
+
+  private proposalsStore: PaintProposals | null = null;
+
+  /** The pending paint proposals store attached to this editor (created on demand). */
+  get proposals(): PaintProposals {
+    return (this.proposalsStore ??= createPaintProposals({ controller: this }));
+  }
+
+  /** Attaches an external `PaintProposals` store so tools and panels share it. */
+  attachProposals(store: PaintProposals): void {
+    this.proposalsStore = store;
+  }
+
+  /**
+   * Breeds `count` (`2..12`, default `4`) mutated variants from `1..16` recorded strokes as
+   * pending paint proposals, generated one after another through `previewPaint`.
+   */
+  breedStrokes(options: {
+    strokeIds: readonly string[];
+    count?: number;
+    mutation?: StrokeMutationRates;
+    seed?: number;
+    origin?: string;
+  }): BreedStrokesResult {
+    const { strokeIds } = options;
+    if (!Array.isArray(strokeIds) || strokeIds.length < 1 || strokeIds.length > 16) {
+      throw new PaintEditorError(`strokeIds must have 1..16 stroke ids (got ${strokeIds?.length ?? 0}); call list_strokes for the ids.`);
+    }
+    const count = options.count ?? 4;
+    if (!Number.isInteger(count) || count < 2 || count > 12) {
+      throw new PaintEditorError(`count ${count} is out of range; use a whole number in 2..12.`);
+    }
+    const seed = options.seed ?? 1;
+    if (!Number.isInteger(seed) || seed < 0) {
+      throw new PaintEditorError(`seed ${seed} must be a whole number of 0 or more.`);
+    }
+    let rates;
+    try {
+      rates = normalizeMutationRates(options.mutation);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const liveAll = Object.values(this.doc.liveStrokes ?? {}).flat();
+    const byId = new Map<string, RecordedStroke>();
+    for (const s of this.doc.strokes) byId.set(s.id, s);
+    for (const s of liveAll) byId.set(s.id, s);
+    const parents = strokeIds.map((id) => {
+      const s = byId.get(id);
+      if (!s) throw new PaintEditorError(`Unknown stroke "${id}". Call list_strokes for the ids.`);
+      const refusal = liveStrokeRefusal(s.brush);
+      if (refusal) throw new PaintEditorError(refusal);
+      return s;
+    });
+    const proposals: BredProposalSummary[] = [];
+    for (let i = 0; i < count; i++) {
+      const variantSeed = (seed + i * 7919) | 0;
+      const children = mutateGenome(parents, rates, variantSeed);
+      const { diff, changes } = describeGenomeDiff(parents, children);
+      const prop = this.proposals.propose({
+        title: `Variant ${i + 1}`,
+        rationale: diff,
+        ...(options.origin ? { origin: options.origin } : {}),
+        ops: [{ kind: 'strokes', strokes: children }],
+      });
+      proposals.push({
+        proposalId: prop.id,
+        title: prop.title,
+        seed: variantSeed,
+        bounds: prop.bounds,
+        diff,
+        changes,
+      });
+    }
+    return { proposalIds: proposals.map((p) => p.proposalId), proposals };
+  }
+
+  /**
+   * Breeds `count` (`2..12`, default `4`) variants from `1` pending proposal (mutation) or `2`
+   * pending proposals (crossover + mutation), generated one after another through `previewPaint`.
+   */
+  breedProposal(options: {
+    proposalIds: readonly string[];
+    count?: number;
+    mutation?: StrokeMutationRates;
+    seed?: number;
+    origin?: string;
+  }): BreedStrokesResult {
+    const { proposalIds } = options;
+    if (!Array.isArray(proposalIds) || proposalIds.length < 1 || proposalIds.length > 2) {
+      throw new PaintEditorError(`proposalIds must have 1 or 2 proposal ids (1 to mutate, 2 to cross over; got ${proposalIds?.length ?? 0}); call list_paint_proposals for the ids.`);
+    }
+    const count = options.count ?? 4;
+    if (!Number.isInteger(count) || count < 2 || count > 12) {
+      throw new PaintEditorError(`count ${count} is out of range; use a whole number in 2..12.`);
+    }
+    const seed = options.seed ?? 1;
+    if (!Number.isInteger(seed) || seed < 0) {
+      throw new PaintEditorError(`seed ${seed} must be a whole number of 0 or more.`);
+    }
+    let rates;
+    try {
+      rates = normalizeMutationRates(options.mutation);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const parentProps = proposalIds.map((id) => {
+      const p = this.proposals.get(id);
+      if (!p) throw new PaintEditorError(`No pending paint proposal "${id}". Call list_paint_proposals for the ids.`);
+      return p;
+    });
+    const parentGenomes = parentProps.map((p) => {
+      const strokes = proposalGenomeStrokes(this, p);
+      if (!strokes.length) throw new PaintEditorError(`Proposal "${p.id}" has no stroke genome to breed from.`);
+      for (const s of strokes) {
+        const refusal = liveStrokeRefusal(s.brush);
+        if (refusal) throw new PaintEditorError(refusal);
+      }
+      return strokes;
+    });
+    const isCrossover = parentGenomes.length === 2;
+    const proposals: BredProposalSummary[] = [];
+    for (let i = 0; i < count; i++) {
+      const variantSeed = (seed + i * 7919) | 0;
+      const children = isCrossover
+        ? crossoverGenomes(parentGenomes[0]!, parentGenomes[1]!, rates, variantSeed)
+        : mutateGenome(parentGenomes[0]!, rates, variantSeed);
+      const { diff, changes } = describeGenomeDiff(parentGenomes[0]!, children, { crossover: isCrossover });
+      const title = isCrossover
+        ? `Crossover ${i + 1} (${parentProps[0]!.id} × ${parentProps[1]!.id})`
+        : `Variant ${i + 1} of ${parentProps[0]!.id}`;
+      const prop = this.proposals.propose({
+        title,
+        rationale: diff,
+        ...(options.origin ? { origin: options.origin } : {}),
+        ops: [{ kind: 'strokes', strokes: children }],
+      });
+      proposals.push({
+        proposalId: prop.id,
+        title: prop.title,
+        seed: variantSeed,
+        bounds: prop.bounds,
+        diff,
+        changes,
+      });
+    }
+    return { proposalIds: proposals.map((p) => p.proposalId), proposals };
+  }
+
+  /** Returns the full stroke genome records (`RecordedStrokeJSON[]`) of a pending paint proposal. */
+  getProposalGenome(proposalId: string): ProposalGenomeResult {
+    const p = this.proposals.get(proposalId);
+    if (!p) throw new PaintEditorError(`No pending paint proposal "${proposalId}". Call list_paint_proposals for the ids.`);
+    const strokes = proposalGenomeStrokes(this, p);
+    if (!strokes.length) throw new PaintEditorError(`Proposal "${proposalId}" has no stroke genome.`);
+    return {
+      proposalId: p.id,
+      title: p.title,
+      bounds: p.bounds,
+      strokes: strokes.map(strokeToJSON),
+    };
   }
 }
 
@@ -5380,7 +6647,19 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
       const list = e.kind === 'stickers' ? (e.data as { stickers?: Sticker[] } | undefined)?.stickers : undefined;
       if (list) return { ...e, data: { ...e.data, stickers: moveStickers(list) } };
       const strokes = e.kind === 'live-strokes' ? (e.data as { strokes?: RecordedStroke[] } | undefined)?.strokes : undefined;
-      return strokes ? { ...e, data: { ...e.data, strokes: strokes.map(moveStroke) } } : e;
+      if (strokes) return { ...e, data: { ...e.data, strokes: strokes.map(moveStroke) } };
+      if (e.kind === 'fill-region' && e.data) {
+        const d = e.data as { x?: number; y?: number; points?: Array<{ x: number; y: number }> };
+        return {
+          ...e,
+          data: {
+            ...e.data,
+            ...(typeof d.x === 'number' && typeof d.y === 'number' ? { x: d.x + dx, y: d.y + dy } : {}),
+            ...(Array.isArray(d.points) ? { points: d.points.map((p) => movePoint(p, dx, dy)) } : {}),
+          },
+        };
+      }
+      return e;
     });
   }
   if (doc.wetEvents) {
@@ -5460,4 +6739,15 @@ function clipToCanvas(rect: RasterRect, canvas: { width: number; height: number 
 /** Rendered effect pixels as effect paint (a copy; with its strip map when bent along the stroke). */
 function toEffectPaintPixels(p: PaintEffectPaint, pixels: EffectPixels): EffectPaintPixels {
   return { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>), ...(p.map?.by === 'stroke' ? { map: p.map } : {}) };
+}
+
+function readWetGhost(raw: unknown): WetGhostState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const g = raw as { pigment?: unknown; remaining?: unknown; total?: unknown; linger?: unknown };
+  if (!Array.isArray(g.pigment) || g.pigment.length !== 4 || !g.pigment.every((x) => typeof x === 'number' && Number.isFinite(x))) return null;
+  const remaining = typeof g.remaining === 'number' && Number.isFinite(g.remaining) ? Math.max(0, Math.round(g.remaining)) : 0;
+  if (remaining <= 0) return null;
+  const total = typeof g.total === 'number' && Number.isFinite(g.total) ? Math.max(1, Math.round(g.total)) : remaining;
+  const linger = typeof g.linger === 'number' && Number.isFinite(g.linger) ? Math.max(0.5, Math.min(60, g.linger)) : 4;
+  return { pigment: [g.pigment[0], g.pigment[1], g.pigment[2], g.pigment[3]], remaining, total, linger };
 }

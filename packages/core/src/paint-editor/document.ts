@@ -8,7 +8,7 @@
  * same layer tree loads in both editors), with the paper as plain settings.
  */
 
-import type { RasterGroupLayer, RasterLayer, RasterPixelLayer } from '../raster/layers';
+import type { RasterGroupLayer, RasterPixelLayer } from '../raster/layers';
 import { emptySurface, type TiledSurface } from '../raster/surface';
 import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
@@ -17,10 +17,13 @@ import type { ThickChannels } from './thick';
 import type { Sticker } from './stickers';
 import type { PaintEffectSource, PaintPaperEffect } from './effects';
 
-export type PaintPixelLayer = RasterPixelLayer;
+export type PaintPixelLayer = RasterPixelLayer & {
+  /** A temporary layer for a dry mutation stroke (fades on claim, merges down on timeout or save). */
+  temporary?: boolean;
+};
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
 /** A layer of the paint editor: the shared stack's pixel layers and groups. */
-export type PaintLayer = RasterLayer;
+export type PaintLayer = PaintPixelLayer | PaintGroupLayer;
 
 /** Canvas size limits (pixels per side). */
 export const MIN_CANVAS_SIDE = 1;
@@ -72,7 +75,7 @@ export interface PaintDocumentState {
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
 export interface PaintEvent {
   at: number;
-  kind: 'fill' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
+  kind: 'fill' | 'fill-region' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
   layerId: string;
   /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers or live strokes after an edit. */
   data?: Record<string, unknown>;

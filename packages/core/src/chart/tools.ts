@@ -8,7 +8,7 @@ import { parseCsv } from '../spreadsheet/csv.js';
 import { checkChartColors } from './color.js';
 import type { ChartController, ChartSeriesPatch, ChartSpecPatch } from './controller.js';
 import { chartHitTest, handleChartKey, startChartPointDrag } from './interaction.js';
-import { layoutChart } from './layout.js';
+import { layoutChart, type ChartTextMeasure } from './layout.js';
 import { chartTooltipFor } from './tooltip.js';
 import { chartFromMermaid, chartToMermaid } from './mermaid.js';
 import { chartFromOoxml, chartToOoxml } from './ooxml.js';
@@ -78,6 +78,8 @@ export interface ChartToolProviderOptions {
 	readOnly?: boolean | string | (() => boolean | string);
 	/** Size used for summaries, previews and pointer gestures (default 640 × 400). */
 	size?: { width: number; height: number };
+	/** Text width in pixels for layout, summaries and hit testing (default: the controller's `measureText`, else `estimateChartTextWidth`). */
+	measureText?: ChartTextMeasure;
 	/** Enables `import_chart_ooxml` (reading Office chart XML needs a DOMParser). Default: the global one, if any. */
 	DOMParser?: ParserCtor;
 	/**
@@ -127,6 +129,7 @@ function resolve<T>(result: { ok: boolean; message?: string } & T): T {
  */
 export function createChartToolProvider(controller: ChartController, options: ChartToolProviderOptions = {}): AgentToolProvider {
 	const size = options.size ?? { width: 640, height: 400 };
+	const measureText = options.measureText ?? controller.measureText;
 	const readOnlyReason = (): string | null => {
 		const r = typeof options.readOnly === 'function' ? options.readOnly() : options.readOnly;
 		if (!r) return null;
@@ -188,7 +191,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 				spec: controller.toJSON(),
 				table: table(),
 				selection: controller.getState().selection,
-				summary: summarizeChart(controller.toJSON(), { width, height }),
+				summary: summarizeChart(controller.toJSON(), { width, height, measureText }),
 				...(spec().tree.length ? { treeTable: treeTable() } : {}),
 				issues: controller.getState().issues,
 				...(reason ? { readOnly: reason } : {})
@@ -214,7 +217,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		handler: async ({ width = size.width, height = size.height, format = 'svg', time }) => {
 			const json = controller.toJSON();
 			const raceFrame = time !== undefined ? raceFrameOf(time) : controller.getState().raceFrame;
-			const scene = layoutChart(json, { width, height, selection: null, raceFrame });
+			const scene = layoutChart(json, { width, height, selection: null, raceFrame, measureText });
 			const svg = chartSceneToSvg(scene, { ariaLabel: json.title || undefined, description: describeChart(json) });
 			const warnings = scene.warnings;
 			if (format === 'png') {
@@ -1016,9 +1019,9 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		},
 		annotations: { title: 'Drag a chart point', ...WRITE },
 		handler: ({ from, to, fine, lockAxis, width = size.width, height = size.height }) => {
-			const scene = layoutChart(controller.toJSON(), { width, height });
+			const scene = layoutChart(controller.toJSON(), { width, height, measureText });
 			const start = { x: from.x * width, y: from.y * height };
-			const target = chartHitTest(scene, start);
+			const target = chartHitTest(scene, start, measureText);
 			if (target?.kind !== 'point') fail(`There is no bar or point at (${from.x}, ${from.y}); ${target ? `that is the ${target.kind}` : 'that is outside the chart'}. Use render_chart to find marks.`);
 			const t = target as Extract<ChartSelection, { kind: 'point' }>;
 			const before = controller.getSeries(t.seriesId)?.values[t.index] ?? null;
@@ -1048,7 +1051,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		},
 		annotations: { title: 'Press a key on the chart', ...DESTRUCTIVE },
 		handler: ({ key: k, shift, alt }) => {
-			const scene = layoutChart(controller.toJSON(), size);
+			const scene = layoutChart(controller.toJSON(), { ...size, measureText });
 			const used = handleChartKey(controller, scene, { key: k, shiftKey: shift, altKey: alt });
 			const sel = controller.getState().selection;
 			const value = sel?.kind === 'point' ? (controller.getSeries(sel.seriesId)?.values[sel.index] ?? null) : undefined;

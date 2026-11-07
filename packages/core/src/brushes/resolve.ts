@@ -93,6 +93,8 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('behaviour.strength', 'wet.strength', ['wet']),
   // Surfaces.
   ...each('behaviour.wet', 'wet', ['medium', 'water', 'pigment', 'body', 'rewet', 'load', 'thinner'], ['wet']),
+  ...each('ghost', 'ghost', ['linger', 'smear', 'trigger'], ['wet']),
+  ...each('mutation', 'mutation', ['settle', 'patience', 'fade'], ['dab', 'wet', 'impasto', 'particle', 'bristle']),
   f('behaviour.thick.applicator', 'impasto.tool', ['impasto']),
   ...each('behaviour.thick', 'impasto', ['thickness', 'gloss', 'metallic', 'load', 'thinner', 'drag', 'rim', 'clarity'], ['impasto']),
   // Marks.
@@ -223,7 +225,9 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');
     const medium = resolveWetMedium(brush);
     if (medium) setPath(input, 'wet.medium', medium);
+    if (brush.kind !== 'tool' && brush.ghost) input.ghost = { ...((input.ghost as object | undefined) ?? {}) };
   }
+  if (brush.kind !== 'tool' && brush.mutation) input.mutation = { ...((input.mutation as object | undefined) ?? {}) };
   // Blenders and smudges only move paint already down.
   if (engine === 'blender' || engine === 'smudge') input.loadsColor = false;
   const paint = brush.colour?.default;

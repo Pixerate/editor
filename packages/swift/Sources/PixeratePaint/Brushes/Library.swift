@@ -430,9 +430,9 @@ func engineChanges(_ base: PaintBrush, _ next: PaintBrush) -> JSONObject {
         if let ao = a?.objectValue, let bo = b.objectValue {
             var out = JSONObject()
             for (k, v) in bo { if let d = diff(ao[k], v) { out[k] = d } }
-            return out.isEmpty ? nil : .object(out)
+            return out.isEmpty ? .none : .object(out)
         }
-        return a == b ? nil : b
+        return a == b ? .none : b
     }
     var out = (diff(.object(base.json()), .object(next.json()))?.objectValue ?? [:]).without("id", "builtin")
     if base.iridescence != nil && next.iridescence == nil { out["iridescence"] = .null }

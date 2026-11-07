@@ -107,6 +107,8 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
     feature(profile.grain, nonZero(brush.path("behaviour.grain")), "behaviour.grain", "paper grain", "Set behaviour.grain to 0.")
     feature(profile.light, nonZero(brush.path("light.amount")), "light", "light paint (glow and spill)", "Remove light (or set light.amount to 0).")
     feature(profile.iridescence ?? "none", brush["iridescence"] != nil, "iridescence", "thin-film iridescence", "Remove iridescence.")
+    feature(profile.surfaces.contains("wet") && profile.light == "full" ? "full" : "none", brush["ghost"] != nil, "ghost", "ghost paint (fading wet colour)", "Remove ghost.")
+    feature(profile.id == "paint" ? "full" : "none", brush["mutation"] != nil, "mutation", "mutation paint (agent-answered strokes)", "Remove mutation.")
     if let m = brush["motion"]?.objectValue {
         feature(profile.motion, m["live"] == .bool(true) || nonZero(m["waveSpeed"]) || m["fps"] != nil, "motion", "animation", "Remove motion.")
     }
@@ -150,7 +152,9 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "marks":
             b["marks"] = nil
             if b.path("tip.shape") == "stamp" { edit("tip") { t in t["shape"] = "round"; t["stamps"] = nil } }
-        case "behaviour.surface": edit("behaviour") { o in o["surface"] = nil; o["wet"] = nil; o["thick"] = nil }
+        case "behaviour.surface":
+            edit("behaviour") { o in o["surface"] = nil; o["wet"] = nil; o["thick"] = nil }
+            b["ghost"] = nil
         case "behaviour.exchange.reservoir":
             edit("behaviour") { o in
                 var e = o["exchange"]?.objectValue ?? [:]
@@ -161,6 +165,8 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "behaviour.grain": edit("behaviour") { $0["grain"] = nil }
         case "tip.grain": edit("tip") { $0["grain"] = nil }
         case "dynamics.count": edit("dynamics") { $0["count"] = nil }
+        case "ghost": b["ghost"] = nil
+        case "mutation": b["mutation"] = nil
         case "light": b["light"] = nil
         case "iridescence": b["iridescence"] = nil
         case "motion": b["motion"] = nil

@@ -4,6 +4,8 @@ import {
   type PaintChange,
   type PaintChangeFeed,
   type PaintEditorController,
+  type PaintMutationInfo,
+  type PaintMutationRequestListener,
   type PaintProposal,
   type PaintProposals,
   type PaintProposalsOptions,
@@ -68,6 +70,56 @@ export function createPaintChangeWatcher(controller: PaintEditorController, opti
     feed,
     get last() {
       return last;
+    },
+  };
+}
+
+export interface PaintMutationRequestsRune {
+  /** Pending mutations waiting for an agent to claim them (`state === 'pending'`). */
+  readonly pending: readonly PaintMutationInfo[];
+  /** Every active or completed mutation in the session. */
+  readonly mutations: readonly PaintMutationInfo[];
+  /** The most recently raised pending mutation, or `null`. */
+  readonly last: PaintMutationInfo | null;
+  destroy(): void;
+}
+
+/**
+ * Subscribes to mutation requests raised when a user finishes a stroke with a `mutation` brush
+ * and pauses for `settle` seconds, as a Svelte 5 rune. While active, marks an agent listener as
+ * connected on the controller. The same API as React's `useMutationRequests`.
+ */
+export function createMutationRequests(
+  controller: PaintEditorController,
+  onRequest?: PaintMutationRequestListener
+): PaintMutationRequestsRune {
+  let mutations = $state.raw<readonly PaintMutationInfo[]>(controller.listMutations({ includeAll: true }));
+  let last = $state.raw<PaintMutationInfo | null>(null);
+  const offState = controller.subscribe(() => {
+    mutations = controller.listMutations({ includeAll: true });
+  });
+  const offReq = controller.onMutationRequest((m) => {
+    last = m;
+    onRequest?.(m);
+  });
+  $effect(() => () => {
+    offState();
+    offReq();
+  });
+  return {
+    get pending() {
+      return mutations.filter((m) => m.state === 'pending');
+    },
+    get mutations() {
+      return mutations;
+    },
+    get last() {
+      const p = mutations.filter((m) => m.state === 'pending');
+      return last && p.some((m) => m.id === last!.id) ? last : (p[p.length - 1] ?? null);
+    },
+    destroy() {
+      offState();
+      offReq();
     },
   };
 }

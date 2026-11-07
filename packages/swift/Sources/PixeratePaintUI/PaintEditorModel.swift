@@ -93,6 +93,8 @@ public final class PaintEditorModel {
     @ObservationIgnored private var isQuietFrameChange = false
     /// The active tool (`PaintUITables.tools` id).
     public var tool = "brush" { didSet { gesture.tool = tool } }
+    /// Options for the Fill tool (`tool == "fill"`).
+    public var fillOptions = PaintFillOptions() { didSet { gesture.fillOptions = fillOptions } }
     /// The last refusal or error, shown under the canvas.
     public var error: String?
     /// The picked stroke of the active stroke layer.
@@ -297,6 +299,47 @@ public final class PaintEditorModel {
         guard let facet = PAINT_BRUSH_OPTION_PATHS[item.id]?.facet else { return }
         attempt { _ = try controller.setBrushFacets(patchPath([:], facet, .number(value))) }
     }
+
+    /// The ghost-paint sliders (`PaintUITables.sliders.ghost`): linger and smear.
+    public var ghostSliders: [PaintUISlidersGhostItem] { tables.sliders.ghost }
+
+    /// The value of a ghost slider (`ghost.linger` or `ghost.smear`).
+    public func ghostValue(_ path: String) -> Double {
+        track()
+        guard let ghost = controller.brush.ghost else { return path == "ghost.smear" ? DEFAULT_GHOST.smear : DEFAULT_GHOST.linger }
+        return path == "ghost.smear" ? ghost.smear : ghost.linger
+    }
+
+    /// Sets a ghost slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setGhostValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// The mutation-paint sliders (`PaintUITables.sliders.mutation`): settle, patience and fade.
+    public var mutationSliders: [PaintUISlidersMutationItem] { tables.sliders.mutation }
+
+    /// The value of a mutation slider (`mutation.settle`, `mutation.patience` or `mutation.fade`).
+    public func mutationValue(_ path: String) -> Double {
+        track()
+        let m = controller.brush.mutation ?? DEFAULT_MUTATION
+        switch path {
+        case "mutation.settle": return m.settle
+        case "mutation.patience": return m.patience
+        case "mutation.fade": return m.fade
+        default: return 0
+        }
+    }
+
+    /// Sets a mutation slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setMutationValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// Whether an agent listener is connected for mutation requests.
+    public var hasMutationAgent: Bool { track(); return controller.hasMutationAgent }
+
+    /// The count of active mutations waiting for or being answered by an agent.
+    public var pendingMutationsCount: Int { track(); return controller.listMutations().count }
 
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
@@ -555,7 +598,7 @@ public final class PaintEditorModel {
         switch id {
         case .undo: undo()
         case .redo: redo()
-        case .toolBrush, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
+        case .toolBrush, .toolFill, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
             let t = String(command.id.dropFirst(5))
             guard PAINT_UI_TOOLS.contains(t) else { return false }
             tool = t

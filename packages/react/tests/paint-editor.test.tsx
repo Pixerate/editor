@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
 import { createFakeStickerProvider } from '@pixerate/editor/stickers';
 import { createBrushLibrary } from '@pixerate/editor/brushes';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, StrokePanel, PathStrokePanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, EvolutionPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, StrokePanel, PathStrokePanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let container: HTMLDivElement;
@@ -792,5 +792,35 @@ describe('React PathStrokePanel', () => {
     });
     expect((await c.brushLibrary.list({ source: 'user' })).map((e) => e.brush.id)).toEqual(['test-set-dry-ink', 'test-set-soft-round']);
     expect((await c.brushLibrary.listSources()).length).toBe(3);
+  });
+
+  it('EvolutionPanel breeds variants, crosses two proposals, exports a contact sheet, and accepts one in one undo step', () => {
+    const c = new PaintEditorController({ width: 96, height: 72 });
+    c.paintStroke({
+      brushId: 'ink-pen',
+      color: '#2563eb',
+      points: [
+        { x: 16, y: 20, pressure: 0.5 },
+        { x: 64, y: 44, pressure: 0.8 },
+      ],
+    });
+    render(<EvolutionPanel controller={c} />);
+    setValue(container.querySelector('input[aria-label="Variant count"]') as HTMLInputElement, '2', true);
+    click(byText('Breed strokes'));
+    expect(c.proposals.getState().proposals).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid^="evolution-variant-"]')).toHaveLength(2);
+
+    click(byText('Contact sheet'));
+    expect(container.querySelector('[data-testid="evolution-contact-sheet"]')).not.toBeNull();
+
+    const variantChips = Array.from(container.querySelectorAll('[data-testid^="evolution-variant-"] button[aria-pressed]'));
+    click(variantChips[0]!);
+    click(variantChips[1]!);
+    click(byText('Cross over (2)'));
+    expect(c.proposals.getState().proposals).toHaveLength(4);
+
+    const layersBefore = c.document.layers.length;
+    click(byText('Accept'));
+    expect(c.document.layers.length).toBe(layersBefore + 1);
   });
 });

@@ -1074,10 +1074,94 @@
               "surface": "dry",
               "tip": "flat",
               "variety": "iridescent"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "ghost-wash",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Ghost wash",
+              "size": 32,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "ghost-gouache",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Ghost gouache",
+              "size": 26,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "gouache"
+            },
+            {
+              "builtin": true,
+              "category": "oil",
+              "engine": "wet",
+              "id": "ghost-oil",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Ghost oil",
+              "size": 24,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "invisible-ink",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Invisible ink",
+              "size": 24,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "mutation-wash",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Mutation wash",
+              "size": 28,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "mutation-ink",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Mutation ink",
+              "size": 6,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "pen"
             }
           ],
           "host": "paint",
-          "total": 76
+          "total": 82
         }
       }
     },

@@ -10,6 +10,7 @@
     handlePaintShortcut,
     viewCssTransform,
     type PaintEditorController,
+    type FillRegionOptions,
     type PaintPresence,
     type PaintProposals,
     type PaintAgentStrokes,
@@ -27,6 +28,8 @@
     controller: PaintEditorController;
     /** The active tool (default brush). */
     tool?: PaintTool;
+    /** Options for the Fill tool (`tool === 'fill'`). */
+    fillOptions?: Omit<FillRegionOptions, 'x' | 'y' | 'points'>;
     /** Draw the symmetry axes and perspective lines (default true). */
     showGuides?: boolean;
     /** Fit the canvas in the viewport on mount (default true). */
@@ -43,7 +46,7 @@
     deviceTilt?: boolean;
     class?: string;
   }
-  let { controller, tool = 'brush', showGuides = true, fitOnMount = true, onerror, presence, proposals, agentStrokes, deviceTilt = false, class: className = '' }: Props = $props();
+  let { controller, tool = 'brush', fillOptions, showGuides = true, fitOnMount = true, onerror, presence, proposals, agentStrokes, deviceTilt = false, class: className = '' }: Props = $props();
   let agentLines = $state.raw<PaintAgentStrokesState>({ strokes: [] });
   $effect(() => {
     const store = agentStrokes;
@@ -74,6 +77,7 @@
   );
   $effect(() => {
     gesture.tool = tool;
+    if (fillOptions) gesture.fillOptions = fillOptions;
   });
   const doc = $derived(snap.document.canvas);
 

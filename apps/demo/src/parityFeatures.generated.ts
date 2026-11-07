@@ -2026,11 +2026,18 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`PaintEditorController.strokePath`"
       },
       {
-        "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `clear_layer`, `pick_color` agent tools)",
-        "core": "`addLayer`, `updateLayer`, `fillLayer`, `mergeDown`, `pickColor`",
-        "react": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
-        "svelte": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
-        "swift": "`PaintEditorController`, `PaintLayersPanel` (eyedropper in `PaintCanvasView`)"
+        "feature": "Evolutionary Strokes (breed and mutate `RecordedStroke` genomes into a grid of paint proposals (`kind: 'strokes'`, previewed one after another through `previewPaint`): geometry mutation with `varyStroke` and smoothed point jitter, perceptual colour drift in OKLCH, brush facet drift within schema bounds, deterministic seed reroll, and two-parent crossover that resamples paths and mixes facets; contact-sheet grid export; accepting paints on a new layer as one undo step; `breed_strokes`, `breed_proposal`, `get_proposal_genome` agent tools)",
+        "core": "`breedStrokes`, `breedProposal`, `getProposalGenome`, `mutateGenome`, `crossoverGenomes`, `EVOLUTION_SLIDERS`, `createPaintEvolutionToolProvider`",
+        "react": "`<EvolutionPanel>` (in `<PaintEditor>`'s Layers tab)",
+        "svelte": "`<EvolutionPanel>` (in `<PaintEditor>`'s Layers tab)",
+        "swift": "`PaintEditorController.breedStrokes`, `PaintEditorController.breedProposal`, `PaintEditorController.getProposalGenome`"
+      },
+      {
+        "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; reference-layer region / flats flood fill with gap closing (`closeGap`), line-edge bleed (`expand`), antialiasing, paper grain, wet wash pour (`wet: true`), leak warning and enclosed unfilled-region detection; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `fill_region`, `find_unfilled_regions`, `clear_layer`, `pick_color` agent tools)",
+        "core": "`addLayer`, `updateLayer`, `fillLayer`, `fillRegion`, `findUnfilledRegions`, `fillRegionMask`, `findUnfilledRegionsMask`, `mergeDown`, `pickColor`",
+        "react": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
+        "svelte": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
+        "swift": "`PaintEditorController` (`fillRegion`, `findUnfilledRegions`), `fillRegionMask`, `findUnfilledRegionsMask`, `PaintLayersPanel`, Fill tool (G) in `PaintToolbarView` & `PaintCanvasView` (eyedropper in `PaintCanvasView`)"
       },
       {
         "feature": "Paint View & Pen Input (zoom, pan, rotation and mirroring as view state only, pen azimuth and twist turned with the view; Pointer Events to pen samples with tilt, altitude / azimuth and twist, mouse pressure fix; palm rejection by drawing hand; `set_view`, `set_hand` agent tools)",
@@ -2143,6 +2150,20 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
         "svelte": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
         "swift": "✅ `EffectProvider`, `FakeEffectProvider`, `createPaintEffectsToolProvider`, `PaintEffectPaint`: effect paper, effect layers, fills, light baked onto dried paint, effect paint for dab, particle, bristle, Mixer Brush, wet and impasto strokes, saved and replayed; no effects panel in `PaintEditorView`, live playback in the view or export at a moment yet; sticker effect paint: Planned (#545)"
+      },
+      {
+        "feature": "Ghost Paint & Invisible Ink (wet paint with a `ghost` facet (`linger`, `smear`) that flows and mixes visibly with the colours it meets while wet, then fades away completely without leaving a trace of its own colour, leaving only the smear where it dragged and lifted the paint already on the layer; bare paper returns byte-identical; tracked linearly in the wet world's light mass channel and subtracted on simulation ticks and before baking; presets Ghost wash, Ghost gouache, Ghost oil and Invisible ink; `set_brush` `ghost` (`linger`, `smear`) and `ghost.remaining` per layer in `get_wet_paint`)",
+        "core": "`WetWorld.fadeGhost`, `GHOST_SLIDERS`, `DEFAULT_GHOST`, `normalizeGhost` (`/paint`, `/paint-editor`)",
+        "react": "Linger and Smear sliders in `<BrushPanel>`'s `<BrushEditor>`",
+        "svelte": "Linger and Smear sliders in `<BrushPanel>`'s `<BrushEditor>`",
+        "swift": "✅ `WetWorld.fadeGhost`, `GhostSettings`, `DEFAULT_GHOST`, `normalizeGhost`; Linger and Smear sliders in `PaintBrushPanel`"
+      },
+      {
+        "feature": "Mutation Paint (wet or dry paint with a `mutation` facet (`settle`, `patience`, `fade`) where strokes group after `settle` seconds and notify an agent via `onMutationRequest`; when claimed with `read_mutation`, the stroke sinks away over `fade` seconds — wet strokes hold evaporation while waiting and release their ghost fade (`ghost.trigger: \"agent\"`) on claim leaving only their smear, and dry strokes paint on a temporary layer above the active layer that fades in the view and is removed — while the agent paints its answer through `answer_mutation` (`PaintDirector` cursor, one undo step with origin `agent:<id>`); if declined (`decline_mutation`), `patience` expires, or no agent is connected, the paint stays as ordinary paint (dry temporary layers merge down as one undo step); presets Mutation wash and Mutation ink; agent tools `list_mutations`, `read_mutation`, `answer_mutation`, `decline_mutation`; workflow skill `pixerate-paint-mutation`)",
+        "core": "`createMutationTools`, `MUTATION_SLIDERS`, `DEFAULT_MUTATION`, `normalizeMutation`, `MutationSettings` (`/paint-editor`)",
+        "react": "`useMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
+        "svelte": "`createMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
+        "swift": "✅ `PaintMutationInfo`, `MutationSettings`, `DEFAULT_MUTATION`, `normalizeMutation`, `PaintEditorController` `onMutationRequest` / `listMutations` / `readMutation` / `answerMutation` / `declineMutation`; Settle / Patience / Fade sliders and agent status in `PaintBrushPanel`, Temporary badge in `PaintLayersPanel`"
       }
     ]
   },

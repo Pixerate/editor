@@ -60,7 +60,9 @@ export function paintEditorState(controller: () => PaintEditorController): { rea
  */
 export function createPaintDirector(controller: PaintEditorController, options: Omit<PaintDirectorOptions, 'clock'> = {}): { presence: PaintPresence; director: PaintDirector } {
   const presence = new PaintPresence();
-  return { presence, director: new PaintDirector(controller, presence, options) };
+  const director = new PaintDirector(controller, presence, options);
+  controller.setMutationDirector(director);
+  return { presence, director };
 }
 
 export { button, chip } from '../brushes/styles.js';

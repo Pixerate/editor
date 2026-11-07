@@ -144,7 +144,7 @@ public final class PaintLiveStroke {
         }
         c.liveStroke = nil
         let current = c.doc
-        let before = isWet ? beforeDoc : current
+        let before = isWet || c.tempLayerTargets[layerId] != nil ? beforeDoc : current
         let run: (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush)
         do {
             var finalSession = session
@@ -165,7 +165,14 @@ public final class PaintLiveStroke {
             throw error
         }
         if let load = run.result.mixerLoad { c.keepLoad(run.brush, load) }
-        if run.doc !== current || c.wetOp != nil { c.commit("\(run.brush.name) stroke", c.withWetEvents(run.doc), before: before) } else { c.emit() }
+        if run.doc !== current || c.wetOp != nil {
+            c.commit("\(run.brush.name) stroke", c.withWetEvents(run.doc), before: before)
+            if let sid = run.result.strokeId, let stroke = c.doc.strokes.last(where: { $0.id == sid }) {
+                c.recordMutationStroke(stroke, run.result.bounds)
+            }
+        } else {
+            c.emit()
+        }
         return run.result
     }
 
@@ -182,6 +189,8 @@ public final class PaintLiveStroke {
             try? c.wet.restore(snap)
             c.doc = c.doc.with { $0.layers = beforeDoc.layers }
             c.wet.syncDisplays()
+        } else if c.tempLayerTargets[layerId] != nil {
+            c.doc = c.doc.with { $0.layers = beforeDoc.layers }
         }
         c.emit()
     }
