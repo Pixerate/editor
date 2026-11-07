@@ -88,7 +88,7 @@ export function createPaintWetTools(c: PaintEditorController): PaintAgentTool[] 
       name: 'get_wet_paint',
       title: 'Get the wet paint',
       description:
-        'Reads the wet media: whether any paint is still wet, the simulation clock (steps), whether time is paused, its speed (steps per second), the canvas tilt, the kernel running it (typescript, wasm, wasm-threads with the thread count, and a message when it runs slower than it could, e.g. without cross-origin isolation), and each wet layer: wet cells, where the water is (wetBounds), live tiles, its settings and flow map. Also engine: Engine B, the GPU accelerator: WebGPU in browsers, Metal in the Swift editors (mode auto/off, state, reason, adapter, minTiles, activeTiles). Call it after wet strokes to see what is still wet.',
+        'Reads the wet media: whether any paint is still wet, the simulation clock (steps), whether time is paused, its speed (steps per second), the canvas tilt, the kernel running it (typescript, wasm, wasm-threads with the thread count, and a message when it runs slower than it could, e.g. without cross-origin isolation), and each wet layer: wet cells, where the water is (wetBounds), live tiles, its settings, flow map, and ghost: { remaining } (seconds of simulated time left when ghost paint is fading on the layer). Also engine: Engine B, the GPU accelerator: WebGPU in browsers, Metal in the Swift editors (mode auto/off, state, reason, adapter, minTiles, activeTiles). Call it after wet strokes to see what is still wet.',
       inputSchema: EMPTY,
       annotations: { title: 'Get the wet paint', ...READ },
       coordinates: { out: ['layers[].wetBounds', 'layers[].flow.center'] },

@@ -47,6 +47,8 @@ export interface BrushHostProfile {
   dabCount?: BrushSupport;
   /** Gray-Scott reaction-diffusion patterns in wet paint (`livePatterns`); missing: `none`. */
   livePatterns?: BrushSupport;
+  /** Structural colour (`iridescence`); missing: `none`. */
+  iridescence?: BrushSupport;
 }
 
 export interface BrushIssue {
@@ -87,6 +89,7 @@ export const PAINT_PROFILE: BrushHostProfile = {
   tipGrain: 'full',
   dabCount: 'full',
   livePatterns: 'full',
+  iridescence: 'full',
 };
 
 /** The image editor's brush: dry dabs on pixels, its Mixer Brush and the eraser. */
@@ -108,6 +111,7 @@ export const IMAGE_PROFILE: BrushHostProfile = {
   tilt: 'ignored',
   tipGrain: 'ignored',
   dabCount: 'ignored',
+  iridescence: 'none',
 };
 
 /**
@@ -132,6 +136,7 @@ export const CANVAS_PROFILE: BrushHostProfile = {
   tilt: 'full',
   tipGrain: 'ignored',
   dabCount: 'ignored',
+  iridescence: 'none',
 };
 
 /**
@@ -186,6 +191,19 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   feature(profile.grain, nonZero(brush.behaviour?.grain), 'behaviour.grain', 'paper grain', 'Set behaviour.grain to 0.');
   feature(profile.light, nonZero(brush.light?.amount), 'light', 'light paint (glow and spill)', 'Remove light (or set light.amount to 0).');
   feature(profile.livePatterns ?? 'none', Boolean(brush.livePatterns), 'livePatterns', 'live reaction-diffusion patterns', 'Remove livePatterns.');
+  const smartInks: BrushSupport = profile.id === 'paint' ? 'full' : 'none';
+  feature(smartInks, nonZero(brush.fluorescence?.amount), 'fluorescence', 'UV-fluorescent ink', 'Remove fluorescence (or set fluorescence.amount to 0).');
+  feature(smartInks, Boolean(brush.thermochromic?.hotColor), 'thermochromic', 'thermochromic ink', 'Remove thermochromic.');
+  feature(profile.iridescence ?? 'none', !!brush.iridescence, 'iridescence', 'thin-film iridescence', 'Remove iridescence.');
+  feature(profile.surfaces.includes('wet') && profile.light === 'full' ? 'full' : 'none', !!brush.ghost, 'ghost', 'ghost paint', 'Remove ghost.');
+  if (brush.mutation) {
+    if (profile.id !== 'paint') feature('none', true, 'mutation', 'mutation paint', 'Remove mutation.');
+    else if (brush.kind === 'tool') add('mutation', 'error', 'Tools work on paint already down and cannot be mutation brushes.', 'Use a mark brush, or remove mutation.');
+    else if (brush.marks?.kind === 'objects') add('mutation', 'error', 'Sticker brushes place objects rather than paint strokes and cannot be mutation brushes.', 'Remove marks (or use continuous marks), or remove mutation.');
+    else if (ex?.reservoir) add('mutation', 'error', 'A Mixer Brush reads paint from the layer beneath and cannot be a mutation brush.', 'Remove behaviour.exchange.reservoir, or remove mutation.');
+    else if (nonZero(ex?.pickup) || !!ex?.dirty) add('mutation', 'error', 'Mutation brushes must lay their own colour without picking up paint from beneath.', 'Remove behaviour.exchange (or set pickup to 0 and dirty to false), or remove mutation.');
+    else if (surface === 'wet' && nonZero(brush.light?.amount)) add('mutation', 'error', 'Wet mutation brushes use the wet light channel as their fade tracer.', 'Remove light (or set light.amount to 0), or remove mutation.');
+  }
   const m = brush.motion;
   feature(profile.motion, !!m && (!!m.live || nonZero(m.waveSpeed) || m.fps !== undefined), 'motion', 'animation', 'Remove motion.');
   const d = brush.dynamics ?? {};
@@ -275,9 +293,16 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         delete b.behaviour!.wet;
         delete b.behaviour!.thick;
         delete b.livePatterns;
+        delete b.ghost;
         break;
       case 'livePatterns':
         delete b.livePatterns;
+        break;
+      case 'ghost':
+        delete b.ghost;
+        break;
+      case 'mutation':
+        delete b.mutation;
         break;
       case 'behaviour.exchange.reservoir':
         delete b.behaviour!.exchange!.reservoir;
@@ -296,6 +321,15 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         break;
       case 'light':
         delete b.light;
+        break;
+      case 'fluorescence':
+        delete b.fluorescence;
+        break;
+      case 'thermochromic':
+        delete b.thermochromic;
+        break;
+      case 'iridescence':
+        delete b.iridescence;
         break;
       case 'motion':
         delete b.motion;

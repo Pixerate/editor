@@ -4,11 +4,13 @@
     PaintGesture,
     drawWaterOverlay,
     fitZoom,
+    startDeviceTilt,
     startWetClock,
     guideOverlay,
     handlePaintShortcut,
     viewCssTransform,
     type PaintEditorController,
+    type FillRegionOptions,
     type PaintPresence,
     type PaintProposals,
     type PaintAgentStrokes,
@@ -26,6 +28,8 @@
     controller: PaintEditorController;
     /** The active tool (default brush). */
     tool?: PaintTool;
+    /** Options for the Fill tool (`tool === 'fill'`). */
+    fillOptions?: Omit<FillRegionOptions, 'x' | 'y' | 'points'>;
     /** Draw the symmetry axes and perspective lines (default true). */
     showGuides?: boolean;
     /** Fit the canvas in the viewport on mount (default true). */
@@ -38,9 +42,11 @@
     proposals?: PaintProposals;
     /** Strokes an agent is painting live alongside the user's, drawn as soft lines (see `createPaintAgentStrokes`). */
     agentStrokes?: PaintAgentStrokes;
+    /** Follow device orientation (gyroscope tilt on iPhone and iPad) for thin-film iridescence view tilt. */
+    deviceTilt?: boolean;
     class?: string;
   }
-  let { controller, tool = 'brush', showGuides = true, fitOnMount = true, onerror, presence, proposals, agentStrokes, class: className = '' }: Props = $props();
+  let { controller, tool = 'brush', fillOptions, showGuides = true, fitOnMount = true, onerror, presence, proposals, agentStrokes, deviceTilt = false, class: className = '' }: Props = $props();
   let agentLines = $state.raw<PaintAgentStrokesState>({ strokes: [] });
   $effect(() => {
     const store = agentStrokes;
@@ -71,6 +77,7 @@
   );
   $effect(() => {
     gesture.tool = tool;
+    if (fillOptions) gesture.fillOptions = fillOptions;
   });
   const doc = $derived(snap.document.canvas);
 
@@ -112,6 +119,13 @@
   $effect(() => {
     const c = controller;
     return untrack(() => startWetClock(c));
+  });
+
+  // Device orientation shifts viewTilt when opted in.
+  $effect(() => {
+    const c = controller;
+    const on = deviceTilt;
+    return on ? untrack(() => startDeviceTilt(c)) : undefined;
   });
 
   // The water overlay.

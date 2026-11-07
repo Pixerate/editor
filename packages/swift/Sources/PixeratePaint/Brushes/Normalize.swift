@@ -165,7 +165,7 @@ private func readPaint(_ value: JSONValue, _ path: String, _ problems: inout [St
 }
 
 /// The facet order of a hand-written brush.
-let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "light", "motion", "colour", "livePatterns"]
+let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour", "livePatterns"]
 
 func orderedBrush(_ brush: JSONObject) -> Brush {
     var out = Brush()
@@ -194,8 +194,13 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 
     let rawColour = raw["colour"]
     let rawMarks = raw["marks"]
-    let rest = raw.without("colour", "marks", "kind", "id", "name", "tool")
-    let out = readObject(.object(rest), BrushSchema.schema, "brush", &problems) ?? [:]
+    var rest = raw.without("colour", "marks", "kind", "id", "name", "tool")
+    if let fl = rest["fluorescence"]?.finite { rest["fluorescence"] = ["amount": .number(fl)] }
+    var out = readObject(.object(rest), BrushSchema.schema, "brush", &problems) ?? [:]
+    if var th = out["thermochromic"]?.objectValue, let hc = th["hotColor"]?.stringValue {
+        th["hotColor"] = .string(hc.lowercased())
+        out["thermochromic"] = .object(th)
+    }
     var brush: JSONObject = ["id": .string(id), "name": .string(name)]
     for (k, v) in out { brush[k] = v }
     brush["kind"] = .string(kind)
@@ -256,6 +261,14 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             drop("marks", "tools lay no marks")
             brush["marks"] = nil
         }
+        if brush["iridescence"] != nil {
+            drop("iridescence", "tools lay no thin film")
+            brush["iridescence"] = nil
+        }
+    }
+    if brush.path("marks.kind")?.stringValue == "objects" && brush["iridescence"] != nil {
+        drop("iridescence", "object marks are stickers")
+        brush["iridescence"] = nil
     }
     tip = brush["tip"]!.objectValue!
     var behaviour = brush["behaviour"]?.objectValue
@@ -354,13 +367,48 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
         drop("livePatterns", "it needs a wet mark brush (kind mark and behaviour.surface wet)")
         brush["livePatterns"] = nil
     }
+    if brush["ghost"] != nil {
+        if kind == "tool" || behaviour?["surface"]?.stringValue != "wet" {
+            drop("ghost", "it needs a mark brush with behaviour.surface wet")
+            brush["ghost"] = nil
+        } else {
+            if brush["light"] != nil {
+                drop("light", "ghost paint uses the wet light channel as its tracer")
+                brush["light"] = nil
+            }
+            if var b = behaviour, b["exchange"] != nil {
+                drop("behaviour.exchange", "ghost paint does not pick paint up")
+                b["exchange"] = nil
+                behaviour = b
+                brush["behaviour"] = .object(b)
+            }
+        }
+    }
+    if brush["mutation"] != nil {
+        let marksKind = brush.path("marks.kind")?.stringValue
+        if kind == "tool" || marksKind == "objects" || behaviour?["exchange"]?.objectValue?["reservoir"] != nil {
+            drop("mutation", "it needs a wet or dry mark brush (not a tool, sticker or Mixer Brush)")
+            brush["mutation"] = nil
+        } else {
+            if behaviour?["surface"]?.stringValue == "wet" && brush["light"] != nil {
+                drop("light", "mutation wet paint uses ghost paint, which uses the wet light channel as its tracer")
+                brush["light"] = nil
+            }
+            if var b = behaviour, b["exchange"] != nil {
+                drop("behaviour.exchange", "mutation paint does not pick paint up")
+                b["exchange"] = nil
+                behaviour = b
+                brush["behaviour"] = .object(b)
+            }
+        }
+    }
     return orderedBrush(brush)
 }
 
 // MARK: - Patches (`brushes/patch.ts`)
 
 /// The facets a patch can remove (`unset`), back to the engine's defaults.
-public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "light", "motion", "colour", "livePatterns"]
+public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour", "livePatterns"]
 
 /// `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks.
 public func mergeBrushPatch(_ base: JSONObject, _ patch: JSONObject, _ path: String = "") -> JSONObject {

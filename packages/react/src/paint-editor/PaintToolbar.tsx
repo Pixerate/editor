@@ -1,28 +1,40 @@
 import React, { useRef, useState } from 'react';
-import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, quickStencil, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
+import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, quickStencil, timeLapseZip, type FillRegionOptions, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, button, chip, useAttempt } from './shared';
+
+export type PaintFillToolbarOptions = Omit<FillRegionOptions, 'x' | 'y' | 'points'>;
 
 export interface PaintToolbarProps {
   controller: PaintEditorController;
   tool: PaintTool;
   onToolChange: (tool: PaintTool) => void;
+  fillOptions?: PaintFillToolbarOptions;
+  onFillOptionsChange?: (options: PaintFillToolbarOptions) => void;
   /** Base name of saved and exported files (default `painting`). */
   fileName?: string;
   className?: string;
 }
 
 /**
- * Tools (brush, eyedropper, pan, rotate view), undo / redo, view rotation, mirroring and reset,
+ * Tools (brush, fill, eyedropper, pan, rotate view), undo / redo, view rotation, mirroring and reset,
  * the symmetry and perspective guides, stencils (ruler, circle, mask), the tracing image and reference images, the drawing hand,
  * and file actions: save / open JSON, export PNG, JPEG and PSD, a time-lapse (zipped frames, video
  * project and ffmpeg command) and a PNG repainted from the strokes at twice the size.
  */
-export const PaintToolbar: React.FC<PaintToolbarProps> = ({ controller, tool, onToolChange, fileName = 'painting', className }) => {
+export const PaintToolbar: React.FC<PaintToolbarProps> = ({ controller, tool, onToolChange, fillOptions: controlledFill, onFillOptionsChange, fileName = 'painting', className }) => {
   const state = usePaintEditorState(controller);
   const [error, attempt] = useAttempt();
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [localFill, setLocalFill] = useState<PaintFillToolbarOptions>({ reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true });
+  const fill = controlledFill ?? localFill;
+  const updateFill = (patch: Partial<PaintFillToolbarOptions>) => {
+    const next = { ...fill, ...patch };
+    setLocalFill(next);
+    onFillOptionsChange?.(next);
+  };
+  const layers = controller.listLayers().filter((l) => l.type === 'pixel');
   const openRef = useRef<HTMLInputElement>(null);
   const tracingRef = useRef<HTMLInputElement>(null);
   const refRef = useRef<HTMLInputElement>(null);
@@ -39,6 +51,66 @@ export const PaintToolbar: React.FC<PaintToolbarProps> = ({ controller, tool, on
           {t.label}
         </button>
       ))}
+      {tool === 'fill' && (
+        <div className="flex items-center gap-1.5 rounded border border-slate-700/80 bg-slate-900/60 px-2 py-0.5 text-[11px] text-slate-300" data-testid="paint-fill-options">
+          <label className="flex items-center gap-1">
+            <span>Ref</span>
+            <select
+              aria-label="Fill reference"
+              className="rounded bg-slate-800 px-1 py-0.5 text-[11px]"
+              value={fill.reference ?? 'all'}
+              onChange={(e) => updateFill({ reference: e.target.value })}
+            >
+              <option value="all">All layers</option>
+              <option value="layer">Active layer</option>
+              {layers.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1">
+            <span>Tol</span>
+            <input
+              type="number"
+              aria-label="Fill tolerance"
+              min={0}
+              max={255}
+              value={fill.tolerance ?? 32}
+              onChange={(e) => updateFill({ tolerance: Math.max(0, Math.min(255, Number(e.target.value) || 0)) })}
+              className="w-11 rounded bg-slate-800 px-1 py-0.5 text-[11px]"
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            <span>Gap</span>
+            <input
+              type="number"
+              aria-label="Close gap"
+              min={0}
+              max={32}
+              value={fill.closeGap ?? 4}
+              onChange={(e) => updateFill({ closeGap: Math.max(0, Math.min(32, Number(e.target.value) || 0)) })}
+              className="w-10 rounded bg-slate-800 px-1 py-0.5 text-[11px]"
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            <span>Expand</span>
+            <input
+              type="number"
+              aria-label="Expand fill"
+              min={-16}
+              max={16}
+              value={fill.expand ?? 1}
+              onChange={(e) => updateFill({ expand: Math.max(-16, Math.min(16, Number(e.target.value) || 0)) })}
+              className="w-10 rounded bg-slate-800 px-1 py-0.5 text-[11px]"
+            />
+          </label>
+          <button type="button" className={chip(Boolean(fill.wet))} aria-pressed={Boolean(fill.wet)} onClick={() => updateFill({ wet: !fill.wet })}>
+            Wet
+          </button>
+        </div>
+      )}
       <span className="mx-1 h-4 w-px bg-slate-700" />
       <button type="button" className={button} disabled={!state.canUndo} title={state.undoLabel ? `Undo ${state.undoLabel}` : 'Undo'} onClick={() => controller.undo()}>
         Undo

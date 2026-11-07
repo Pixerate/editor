@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint-editor] A Live-Adjust Gesture Must Only Undo Its Own Commit
+
+- **Issue / Symptom**: Dragging the Fill tool to adjust tolerance (or cancelling the drag) undid the user's previous edit, e.g. a stroke, when the fill itself had painted nothing.
+- **Root Cause**: The gesture called `undo()` before each refill on the assumption that the last fill made an undo step. `fillRegion` returns early without committing when its mask is empty (a negative `expand` can erase the whole region) or throws, so the blind `undo()` took back an unrelated step.
+- **Solution / Workaround**: Track whether the gesture's last call committed (`committed: result.bounds !== null` in `PaintGesture`, TS and Swift) and only undo when it did. Any gesture that re-applies an operation by undo-and-redo needs the same guard.
+
+### [core|swift/paint-editor] Evolutionary Stroke Mutation Keeps Geometry Scale Separate From Brush Size When `mutation.brush` Is 0
+
+- **Issue / Symptom**: Calling `breed_strokes` with `mutation: { geometry: 0.5, brush: 0 }` changed `brush.tip.size` on the child genome and reported a `tip.size` facet diff even though `mutation.brush` was explicitly set to `0`. Separately, when a host creates `createPaintProposals({ controller })` (`PaintProposals(controller:)` in Swift) alongside `createPaintEditorToolProvider(controller)`, `breed_strokes` and `accept_paint_proposal` would operate on different proposal stores unless linked.
+- **Root Cause**: `varyStroke` scales `brush.tip.size` by $\sqrt{|\det(m)|}$ when `scale !== 1`. In addition, `breed_strokes` / `breed_proposal` / `get_proposal_genome` live on `PaintEditorController`, while `accept_paint_proposal` / `reject_paint_proposal` live on `PaintProposals`.
+- **Solution / Workaround**: In `mutateStroke` (`evolution.ts` and `Evolution.swift`), restore `stroke.brush.tip.size` after `varyStroke` when `rates.brush === 0`, and round `tip.size` to `0.1` (`roundScale(..., 10)`) before `driftBrushFacets` when `rates.brush > 0`. In `createPaintProposals` and `PaintProposals.init`, call `controller.attachProposals(store)` so `controller.proposals` and the proposal tool provider always share the same pending proposal store.
+
 ### [svelte/canvas] `FloatingHorizontalScrollbar` Kept a Stale Position When Its Target Resized Quietly
 
 - **Issue / Symptom**: The bar stayed at its old `left` and `width` after the target changed size. In one host app it stayed 1022px wide while the board it tracks was 1313px wide.
@@ -4161,7 +4173,47 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Stroke layers redraw synchronously and need every overlapping stroke's render, and `replayStrokes` needs all of them before it starts, but `replayPainting` is asynchronous and needs one at a time.
 - **Solution / Workaround**: The limit stays 6 and rises only for what must be held together: the path strokes on stroke layers (`trimEffectPaints`) and the running batch (`effectPaintBatch`, cleared when `replayStrokes` ends). `replayPainting` prepares path strokes one by one, just before each is painted.
 
-### [swift] `JSONValue: ExpressibleByNilLiteral` Turns `cond ? nil : b` Into `.some(.null)` When `b: JSONValue`
-- **Issue / Symptom**: In `Library.swift` (`engineChanges`), `diff(_ a: JSONValue?, _ b: JSONValue) -> JSONValue?` returned `a == b ? nil : b`. When `a == b`, assigning `out["tip"] = diff(...)` stored `JSONValue.null` into the dictionary instead of omitting the key, wiping out `tip` (and every unchanged brush facet) when applying a partial brush patch on top of a preset.
-- **Root Cause**: Because `JSONValue` conforms to `ExpressibleByNilLiteral` (`nil` is `JSONValue.null`), a ternary expression `cond ? nil : b` where `b` is a non-optional `JSONValue` is type-checked as returning non-optional `JSONValue` (with `nil` resolved to `JSONValue.null`), and then wrapped into `Optional<JSONValue>.some(.null)` to match the function's `JSONValue?` return type.
-- **Solution / Workaround**: Never write `cond ? nil : nonOptionalJSONValue` in functions returning `JSONValue?`. Use explicit `.none` / `.some(b)` (or `if/else` return statements) whenever returning an optional `JSONValue?`.
+### [core|swift/paint] Thin-Film Iridescence (`ThickChannels.film`) Shades Flat Paint and Needs `#if canImport(CoreMotion) && os(iOS)` in Swift
+- **Issue / Symptom**: Flat brushes (`dab`, `mixer`, `particle`, `bristle`, `wet`) with `iridescence` showed no colour shift when `LitCache.lit` / `lightTile` returned early on `ch.height.tiles.size === 0` or `light.relief === 0`; and in Swift, guarding `CMMotionManager` with `#if canImport(CoreMotion)` alone failed to compile on macOS with `'CMMotionManager' is unavailable in macOS`.
+- **Root Cause**: `LitCache` and `lightTile` originally skipped tiles without height slopes, whereas flat iridescent strokes store `film` tiles with an empty `height` surface and rely on a flat normal `(0, 0, 1)` plus the half-vector from `lighting` and `viewTilt`. On macOS, the SDK ships `CoreMotion.framework` (for headphone motion), so `canImport(CoreMotion)` is true even though `CMMotionManager` is marked `API_UNAVAILABLE(macos)`.
+- **Solution / Workaround**: `LitCache.lit` and `lightTile` check both `hasRelief` (`height` non-empty and `light.relief > 0`) and `film` (and include `film` tile identity and `viewTilt` in the `LitCache` key). Guard `CMMotionManager` with `#if canImport(CoreMotion) && os(iOS)` in `PaintEditorModel.swift`.
+### [core|swift/paint] Ghost Paint Uses the Wet Light Channel as a Linear Tracer, Suspended Rewet, and Zero Pickup
+- **Issue / Symptom**: A ghost stroke (`brush.ghost`) must mix visibly with wet paint and smear dried paint, then fade away leaving bare paper byte-identical and no ghost colour tint on smeared paint, without adding planes to the wet kernels. Three subtle traps break this if missed:
+  1. Calling ordinary `world.rewet` before `world.drag` fails to smear dried paint on the same dab.
+  2. Allowing brush colour pickup (`behavior.pickup > 0`) leaves a residual colour tint after the ghost fades.
+  3. Depositing the ghost tracer through `world.paint(..., light)` sets `lane.lit = true`, making the stroke glow and baking the tracer into `doc.light`.
+- **Root Cause**:
+  1. `world.rewet` writes lifted dried pigment into the settled planes (`P_DR`, `P_DG`, `P_DB`, `P_DS`), which only enter the suspended planes (`P_R`, `P_G`, `P_B`, `P_S`) when the kernel steps (`liftRate`), whereas `world.drag` only advects suspended planes during the stroke dab.
+  2. `WetMedium.deposit` converts the brush's mixed RGB colour into Kubelka-Munk K and S non-linearly, so pigment mixed inside the brush reservoir cannot be separated from the single `lane.ghost` pigment vector by linear subtraction.
+  3. The wet world has a single light mass channel (`P_L`, `P_DL`), which normally drives `lane.lit`, `shadeLightSlot`, `lightDisplay` and `bakeKey` into `doc.light`.
+- **Solution / Workaround**:
+  1. `world.rewet` accepts `suspend = true` for ghost strokes, placing 65% of lifted pigment directly into the suspended planes and seeding water to at least `WET_MASK_H * 4` so `world.drag` moves it immediately on the same dab.
+  2. `normalizePaintBrush` and `resolveBrush` force `behavior.pickup = 0` whenever `brush.ghost` is set, and `sessionFor` refuses gradient, effect and multi-colour paint on ghost brushes.
+  3. When `lane.ghost` is active, `world.paint` does not set `lane.lit`, `shadeSlot` / `bakedLight` / `lightDisplay` skip light shading, and `afterBatch` / `bakeKey` / `dry` run `fadeGhost` (clearing sub-`1e-4` float dust when the tracer reaches 0 so bare paper is byte-identical). Ghost and light strokes refuse to share a layer while either is active.
+
+### [core|swift/paint] Mutation Paint: Held Wet Evaporation, Temporary Dry Layers, and Undo Reconciliation
+- **Issue / Symptom**: Implementing mutation paint (#686) across wet and dry brushes exposes four lifecycle traps:
+  1. Model calls take seconds, while watercolour evaporates in seconds, baking a wet mutation stroke before `read_mutation` can claim and fade it.
+  2. Dry paint cannot be subtracted from a shared layer once other paint lands over it, but creating a temporary layer must not change `activeLayerId`, show in the layer panel, or add an extra undo entry when merged down on `decline_mutation` / `patience` timeout.
+  3. If an agent answers a mutation while the user's active brush is still a mutation brush (`mutation-ink` or `mutation-wash`) and omits `brushId` or passes a partial `brush` patch, `answer_mutation`'s own stroke would inherit `mutation` (and `ghost.trigger: "agent"`) and trigger an infinite mutation loop.
+  4. In `advanceWet(steps:seconds:)`, advancing mutation timers only when `wet.advance(n) > 0` skips dry mutations (`mutation-ink`) whenever no wet lanes exist on the canvas.
+- **Root Cause**:
+  1. `WetWorld` steps evaporation continuously unless `evaporation` is held at 0, and `afterBatch` fades ghost lanes immediately unless `lane.ghost.held` is set.
+  2. `mergeLayerDown` commits a new history step and changes `activeLayerId`, whereas temporary dry mutation layers (`layer.temporary = true`) are an internal staging detail that must fold cleanly into the target layer across `doc`, `undoStack`, and `redoStack`.
+  3. `normalizePaintBrush` inherits `base.mutation` and auto-derives `ghost: { trigger: 'agent' }` from `mutation` unless `mutation: null` (and `ghost: null` when auto-derived) are explicitly stripped.
+  4. `wet.advance(n)` returns `0` when `world` has no active wet lanes, even when `advance_wet_paint` was called with `seconds` to advance simulated time.
+- **Solution / Workaround**:
+  1. Wet mutation brushes set `ghost.trigger = 'agent'`, which starts `lane.ghost.held = true`; `recordMutationStroke` saves the layer's evaporation and holds it at `0` via `wet.setParams(layerId, { evaporation: 0 })` until `read_mutation` (`releaseGhost`) or `decline_mutation` / timeout (`keepGhost`) restores it.
+  2. Dry mutation strokes paint onto a `temporary: true` pixel layer directly above the target layer while keeping `doc.activeLayerId` on the target layer, filtering `temporary` layers from `getState().layers`, and reconciling `doc`, `undoStack`, and `redoStack` in-place when merging down or removing after fade.
+  3. `answerMutation` always injects `mutation: null` (and `ghost: null` when the base brush's ghost was `trigger: 'agent'` and the stroke did not explicitly set `ghost`), and sets `answeringMutation = true` so answer strokes never record a new mutation.
+  4. `advanceWet` advances mutation timers by `seconds ?? n / wet.speed` regardless of whether `wet.advance(n)` stepped any wet lanes.
+
+### [swift] `JSONValue: ExpressibleByNilLiteral` Turns `cond ? nil : jsonValue` Into `.some(.null)` Instead of `Optional.none`
+- **Issue / Symptom**: In a Swift function returning `JSONValue?` (such as `engineChanges`'s inner `diff(_:_:)`), writing `return a == b ? nil : b` where `b` has type `JSONValue` (non-optional) returns `.some(.null)` instead of `nil` (`Optional<JSONValue>.none`), populating every unchanged key of a diff object with `null`.
+- **Root Cause**: `JSONValue` conforms to `ExpressibleByNilLiteral` (`init(nilLiteral: ()) { self = .null }`). In a ternary expression `cond ? nil : b` where `b` is a non-optional `JSONValue`, Swift unifies both branches to the non-optional type `JSONValue` (turning `nil` into `JSONValue.null`) and then wraps the result in `Optional.some`, rather than typing the ternary as `Optional<JSONValue>`.
+- **Solution / Workaround**: Always write `.none` instead of `nil` in ternary expressions returning `JSONValue?` when the other branch is a non-optional `JSONValue` (e.g., `return a == b ? .none : b` and `return out.isEmpty ? .none : .object(out)`).
+
+### [core|swift/paint] Live-Pattern Relief Rebuilds `ThickChannels`, So It Must Carry the Thin-Film `film` Channel and Ghost Lane State Along
+- **Issue / Symptom**: After merging live patterns (#705) with ghost paint, mutation paint and thin-film iridescence, a wet stroke on a layer with `livePatterns.relief > 0` could drop the layer's `film` channel (iridescence vanished), and a restored or re-created wet lane could lose its ghost fade or its reaction-diffusion field.
+- **Root Cause**: The relief pass rebuilds the layer's thick channels from `height` and `material` only (`ThickChannels(height:material:)` defaults `film` to empty in Swift). `newLane` / `WetLane.init`, `ensureLane`, `snapshot` and `restore` each grew a ghost argument on one branch and a `livePatterns` argument on the other, and either one is easy to drop when merging.
+- **Solution / Workaround**: Build relief from the previous channels with `film` included (`{ ...prevCh, height }` in TS, `ThickChannels(height:material:film: base.film)` in Swift), then pass the result through `withLayerThick`. Lane constructors take `(…, width, height, ghost, livePatterns)` in that order in both TS and Swift. Snapshots carry `ghost` and `livePatterns`. Wet layer settings persist `params` (with held evaporation restored), `flow`, `ghost` (not agent-triggered) and `livePatterns`.

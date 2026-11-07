@@ -16,6 +16,7 @@
  */
 
 import { encodePng } from '../raster/png';
+import type { BlendMode } from '../raster/blend';
 import { writeZip } from '../export/zip-writer';
 import { emptySurface } from '../raster/surface';
 import { mapLayer, flattenLayers } from '../raster/layers';
@@ -135,7 +136,33 @@ export async function replayPainting(
       const e = item.event;
       if (!target.getLayer(e.layerId)) continue;
       if (e.kind === 'fill') target.fillLayer({ layerId: e.layerId, ...(e.data as object) });
-      else if (e.kind === 'clear') target.clearLayer(e.layerId);
+      else if (e.kind === 'fill-region') {
+        const d = (e.data ?? {}) as {
+          points?: Array<{ x: number; y: number }>;
+          x?: number;
+          y?: number;
+          reference?: string;
+          color?: string;
+          opacity?: number;
+          blend?: BlendMode;
+          tolerance?: number;
+          closeGap?: number;
+          expand?: number;
+          antialias?: boolean;
+          grain?: number;
+          pressure?: number;
+          wet?: boolean;
+        };
+        if (d.wet) await target.wetIdle();
+        const pts = d.points ? d.points.map((p) => ({ x: p.x * s, y: p.y * s })) : d.x !== undefined && d.y !== undefined ? [{ x: d.x * s, y: d.y * s }] : [];
+        target.fillRegion({
+          ...d,
+          layerId: e.layerId,
+          points: pts,
+          ...(d.closeGap !== undefined ? { closeGap: Math.min(32, d.closeGap * s) } : {}),
+          ...(d.expand !== undefined ? { expand: Math.max(-16, Math.min(16, d.expand * s)) } : {}),
+        });
+      } else if (e.kind === 'clear') target.clearLayer(e.layerId);
       else if (e.kind === 'live-strokes') {
         const d = e.data as { strokes?: RecordedStroke[]; rasterized?: boolean } | undefined;
         if (d?.rasterized) target.replaceLiveStrokes(e.layerId, null);
@@ -204,6 +231,15 @@ export async function replayPainting(
                 ...(d.settings ? { ...d.settings, ...(d.settings.scale ? { scale: Math.min(4, d.settings.scale * s) } : {}) } : {}),
               });
             }
+            break;
+          }
+          case 'ghost-release': {
+            const d = e.data as { linger?: number } | undefined;
+            if (e.layerId && target.getLayer(e.layerId)) target.wet.releaseGhost(e.layerId, d?.linger);
+            break;
+          }
+          case 'ghost-keep': {
+            if (e.layerId && target.getLayer(e.layerId)) target.wet.keepGhost(e.layerId);
             break;
           }
         }

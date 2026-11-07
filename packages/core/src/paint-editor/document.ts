@@ -8,7 +8,7 @@
  * same layer tree loads in both editors), with the paper as plain settings.
  */
 
-import type { RasterGroupLayer, RasterLayer, RasterPixelLayer } from '../raster/layers';
+import type { RasterGroupLayer, RasterPixelLayer } from '../raster/layers';
 import { emptySurface, type TiledSurface } from '../raster/surface';
 import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
@@ -16,11 +16,15 @@ import type { WetEvent } from './wet';
 import type { ThickChannels } from './thick';
 import type { Sticker } from './stickers';
 import type { PaintEffectSource, PaintPaperEffect } from './effects';
+import type { HeatField } from './heat';
 
-export type PaintPixelLayer = RasterPixelLayer;
+export type PaintPixelLayer = RasterPixelLayer & {
+  /** A temporary layer for a dry mutation stroke (fades on claim, merges down on timeout or save). */
+  temporary?: boolean;
+};
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
 /** A layer of the paint editor: the shared stack's pixel layers and groups. */
-export type PaintLayer = RasterLayer;
+export type PaintLayer = PaintPixelLayer | PaintGroupLayer;
 
 /** Canvas size limits (pixels per side). */
 export const MIN_CANVAS_SIDE = 1;
@@ -56,6 +60,12 @@ export interface PaintDocumentState {
   liveStrokes?: Readonly<Record<string, RecordedStroke[]>>;
   /** Light paint: each layer's light channel, 0..255 per pixel in layer space (layers without light are missing). See `light.ts`. */
   light?: Readonly<Record<string, TiledSurface>>;
+  /** UV-fluorescent ink: each layer's 4-channel RGBA fluorescence surface in layer space (layers without fluorescence are missing). See `heat.ts`. */
+  fluor?: Readonly<Record<string, TiledSurface>>;
+  /** Thermochromic ink: each layer's 4-channel RGBA thermochromic surface (`[hotR, hotG, hotB, thresholdByte]`) in layer space. See `heat.ts`. */
+  thermo?: Readonly<Record<string, TiledSurface>>;
+  /** Coarse document-level heat field (1/4 resolution) for thermochromic ink and wet-paint drying. See `heat.ts`. */
+  heat?: HeatField;
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
   /** Effect layers: the provider effect each one is drawn from (layers that are gone are ignored). */
@@ -72,7 +82,7 @@ export interface PaintDocumentState {
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
 export interface PaintEvent {
   at: number;
-  kind: 'fill' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
+  kind: 'fill' | 'fill-region' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
   layerId: string;
   /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers or live strokes after an edit. */
   data?: Record<string, unknown>;

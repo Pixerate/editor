@@ -84,6 +84,7 @@ coverage). See `references/live-patterns.md` in `pixerate-paint-editor`.
 | A glowing (neon) wash | Dark paper (`set_paper` `color`), `glow-wash` or `light.amount` on a wet brush; flow, dry, `get_light` |
 | Stained glass, a lightbox | `set_paper` `stained-glass` (or `backlight`); strong glazes for panes, opaque black lines above |
 | Organic spots, coral dendrites or Turing stripes in a wash | Paint with `turing-wash` or `coral-ink` (or `seed_live_patterns` into a wet wash), `advance_wet_paint` to let it grow, then `dry_paint` to freeze it |
+| Disturb or smear a wash without adding colour | `ghost-wash`, `ghost-gouache` or `invisible-ink` (`ghost` `linger`, `smear`) on the same layer; see `references/ghost.md` |
 
 ## Recipes
 

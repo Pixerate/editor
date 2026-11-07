@@ -25,7 +25,7 @@ export const BRUSH_PATCH_PROPERTIES: Readonly<Record<string, JsonSchema>> = (() 
 })();
 
 /** The facets a patch can remove (`unset`), back to the engine's defaults. */
-export const UNSETTABLE_BRUSH_FACETS = ['description', 'tags', 'medium', 'variety', 'marks', 'dynamics', 'behaviour', 'light', 'motion', 'livePatterns', 'colour'] as const;
+export const UNSETTABLE_BRUSH_FACETS = ['description', 'tags', 'medium', 'variety', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'motion', 'livePatterns', 'colour'] as const;
 export type UnsettableBrushFacet = (typeof UNSETTABLE_BRUSH_FACETS)[number];
 
 /** The `unset` argument of tools that take a patch. */

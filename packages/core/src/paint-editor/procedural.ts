@@ -32,6 +32,7 @@ import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
 import { stampSampler } from './stamp-tip';
 import type { StickerArtLookup } from './sticker-art';
+import type { FilmBuffer } from './thick';
 import type { BristleSettings, ParticleSettings, StampKind } from './mark-settings';
 
 export {
@@ -65,6 +66,8 @@ export interface ProceduralStrokeOptions {
   effect?: EffectPaintPixels | null;
   /** Loaded sticker art, for textured dots of stickers from the sticker library. */
   stampArt?: StickerArtLookup;
+  /** Thin-film iridescence channel for procedural brushes with `iridescence`. */
+  film?: FilmBuffer | null;
 }
 
 /** What a coverage-building stroke engine provides to the stroke session. */
@@ -240,6 +243,7 @@ abstract class MarkStroke implements CoverageStroke {
       if (color && color.alpha < 1) for (let k = 0; k < n; k++) vals[k] *= color.alpha;
       this.coverage.accumulate(rect, vals, opacity, color ? color.rgb : null);
     }
+    if (this.brush.iridescence && this.options.film) this.options.film.deposit(rect, vals, opacity * this.brush.tip.opacity, this.brush.iridescence, pressure);
     rects.push(rect);
     this.dabCount++;
   }

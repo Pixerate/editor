@@ -18,7 +18,10 @@ func liveStrokeRefusal(_ brush: PaintBrush) -> String? {
     case "blender", "smudge": return "The \(brush.name) brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer."
     default: break
     }
+    if brush.mutation != nil { return "The \(brush.name) brush paints mutation strokes (which fade when an agent reads them), so it can't paint on a stroke layer; paint on a pixel layer (add_layer), or set mutation to null (set_brush)." }
     if brush.light.amount > 0 { return "The \(brush.name) brush lays light, which a stroke layer doesn't redraw yet; paint light on a pixel layer (add_layer), or set light.amount to 0 (set_brush)." }
+    if brush.fluorescence.amount > 0 { return "The \(brush.name) brush paints UV-fluorescent ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or set fluorescence.amount to 0 (set_brush)." }
+    if brush.thermochromic.hotColor != nil { return "The \(brush.name) brush paints thermochromic ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or remove thermochromic (set_brush)." }
     if brush.behavior.pickup > 0 { return "The \(brush.name) brush picks up the paint under it (pickup \(jsText(brush.behavior.pickup))), so it can't be redrawn on its own; set behavior.pickup to 0 (set_brush) or paint on a pixel layer." }
     return nil
 }
@@ -258,12 +261,21 @@ extension PaintEditorController {
     private func withLiveStrokes(_ d: PaintDocumentState, _ layer: PaintLayer, _ list: [RecordedStroke]) throws -> PaintDocumentState {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) first.") }
         let current = findLayer(d.layers, layer.id)?.layer ?? layer
-        let surface = try drawLiveStrokes(current, list)
+        let drawn = try drawLiveStrokes(current, list)
         let next = d.with { o in
-            o.layers = mapLayer(d.layers, layer.id) { $0.withSurface(surface, offset: LayerOffset(x: 0, y: 0)) }
+            o.layers = mapLayer(d.layers, layer.id) { $0.withSurface(drawn.surface, offset: LayerOffset(x: 0, y: 0)) }
             var live = o.liveStrokes ?? OrderedMap()
             live.set(layer.id, list)
             o.liveStrokes = live
+            let prev = o.thick?.get(layer.id) ?? emptyThickChannels()
+            let ch = ThickChannels(height: prev.height, material: prev.material, film: drawn.film)
+            if hasThickChannels(ch) {
+                var t = o.thick ?? OrderedMap()
+                t.set(layer.id, ch)
+                o.thick = t
+            } else if !prev.film.tiles.isEmpty {
+                o.removingThick([layer.id])
+            }
         }
         return withPaintEvent(next, kind: "live-strokes", layerId: layer.id, data: ["strokes": .array(list.map(recordedStrokeJSON))], strokes: list)
     }
@@ -283,29 +295,43 @@ extension PaintEditorController {
     }
 
     /// Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area it painted.
-    private func drawLiveStroke(_ d: PaintDocumentState, _ plain: PaintLayer, _ surface: TiledSurface, _ st: RecordedStroke) throws -> (surface: TiledSurface, bounds: RasterRect?) {
+    private func drawLiveStroke(_ d: PaintDocumentState, _ plain: PaintLayer, _ surface: TiledSurface, _ st: RecordedStroke, _ film: TiledSurface = emptySurface(4, 0)) throws -> (surface: TiledSurface, film: TiledSurface, bounds: RasterRect?) {
         var i = PaintStrokeInit(layerId: plain.id, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
         i.fixedBrush = st.brush
         i.paint = st.effect?.json ?? st.paint?.json
         i.snapToPerspective = false
         i.stencils = false
         i.maskStencils = st.stencils ?? []
-        let session = try sessionFor(d.with { $0.layers = mapLayer(d.layers, plain.id) { _ in plain.withSurface(surface) } }, i)
+        let baseDoc = d.with { o in
+            o.layers = mapLayer(d.layers, plain.id) { _ in plain.withSurface(surface) }
+            if !film.tiles.isEmpty || st.brush.iridescence != nil {
+                var t = o.thick ?? OrderedMap()
+                let prev = t.get(plain.id) ?? emptyThickChannels()
+                t.set(plain.id, ThickChannels(height: prev.height, material: prev.material, film: film))
+                o.thick = t
+            }
+        }
+        let session = try sessionFor(baseDoc, i)
         try session.push(st.points)
         let result = try session.end()
         // Only ever grown.
         let had = paintedBounds[st.key] ?? nil
         paintedBounds[st.key] = .some(had != nil && result.bounds != nil ? unionRect(had!, result.bounds!) : (result.bounds ?? had))
-        return (session.surfaceAfter ?? surface, result.bounds)
+        return (session.surfaceAfter ?? surface, session.filmChannel() ?? film, result.bounds)
     }
 
     /// A stroke layer's pixels drawn from its strokes, bottom first (every stroke drawn again).
-    private func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke]) throws -> TiledSurface {
+    private func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke]) throws -> (surface: TiledSurface, film: TiledSurface) {
         let plain = layer.copy(visible: true, locks: .some(nil)).withSurface(layer.pixelSurface, offset: LayerOffset(x: 0, y: 0))
         let base = doc.with { $0.liveStrokes = nil }
         var surface = emptySurface(4)
-        for st in list { surface = try drawLiveStroke(base, plain, surface, st).surface }
-        return surface
+        var film = emptySurface(4, 0)
+        for st in list {
+            let r = try drawLiveStroke(base, plain, surface, st, film)
+            surface = r.surface
+            film = r.film
+        }
+        return (surface, film)
     }
 }
 

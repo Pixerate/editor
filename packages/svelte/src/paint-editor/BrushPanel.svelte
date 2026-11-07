@@ -56,22 +56,27 @@
   const carried = $derived(brushLoadColor(snap.mixerLoad));
   // The brush's suggested colours, resolved for the colour scheme: one click makes one the paint colour.
   const palette = $derived((spec.colour?.palette ?? []).flatMap((c) => brushColourHex(c, snap.colorScheme) ?? []));
-  const loads = $derived(['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint'));
+  const loads = $derived((['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint')) && !brush.ghost && !brush.mutation);
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
 </script>
 
 {#snippet extra(section: string)}
   {#if section === 'shape' && brush.engine === 'sticker'}
     <StickerPicker {controller} label="Sticker stamps" selected={brush.sticker.stamps} onpick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />
-  {:else if section === 'behaviour' && loads}
-    <div class="flex items-center gap-1">
-      <span class="text-slate-400">Carries</span>
-      <span aria-label="Brush load" title={carried ?? 'Clean'} class="h-4 w-4 rounded ring-1 ring-slate-700" style={`background: ${carried ?? 'transparent'}`}></span>
-      {#if brush.engine === 'mixer'}
-        <button type="button" class={button} onclick={() => controller.loadMixerBrush()}>Load</button>
-      {/if}
-      <button type="button" class={button} onclick={() => controller.cleanMixerBrush(brush.engine === 'mixer')}>Clean</button>
-    </div>
+  {:else if section === 'behaviour'}
+    {#if brush.mutation && !snap.hasMutationAgent}
+      <p class="text-[11px] text-amber-400" role="status" data-paint-mutation-unconnected>No agent is connected — mutation strokes will stay as ordinary paint.</p>
+    {/if}
+    {#if loads}
+      <div class="flex items-center gap-1">
+        <span class="text-slate-400">Carries</span>
+        <span aria-label="Brush load" title={carried ?? 'Clean'} class="h-4 w-4 rounded ring-1 ring-slate-700" style={`background: ${carried ?? 'transparent'}`}></span>
+        {#if brush.engine === 'mixer'}
+          <button type="button" class={button} onclick={() => controller.loadMixerBrush()}>Load</button>
+        {/if}
+        <button type="button" class={button} onclick={() => controller.cleanMixerBrush(brush.engine === 'mixer')}>Clean</button>
+      </div>
+    {/if}
   {:else if section === 'colour'}
     {#if palette.length}
       <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Paint with a palette colour">

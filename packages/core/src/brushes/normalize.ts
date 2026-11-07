@@ -133,12 +133,14 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   if (kind === 'tool' && !tool) throw new Error(`Brush "${raw.id}" is a tool and needs tool: one of ${BRUSH_TOOLS.join(', ')}.`);
 
   const { colour: rawColour, marks: rawMarks, kind: _k, id: _i, name: _n, tool: _t, ...rest } = raw;
+  if (typeof rest.fluorescence === 'number' && Number.isFinite(rest.fluorescence)) rest.fluorescence = { amount: rest.fluorescence };
   const out = readObject(rest, BRUSH_JSON_SCHEMA, 'brush', problems) as Partial<Brush>;
+  if (out.thermochromic?.hotColor) out.thermochromic.hotColor = out.thermochromic.hotColor.toLowerCase();
   const brush: Brush = { id: raw.id, name, ...out, kind, ...(tool ? { tool } : {}), tip: out.tip ?? { shape: 'round' } } as Brush;
   // Keep the key order of a hand-written brush: identity, what it is, then the facets.
   const ordered = (): Brush => {
-    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, livePatterns, colour } = brush;
-    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, livePatterns, colour };
+    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, motion, livePatterns, colour } = brush;
+    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, motion, livePatterns, colour };
     return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as unknown as Brush;
   };
 
@@ -191,6 +193,14 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       drop('marks', 'tools lay no marks');
       delete brush.marks;
     }
+    if (brush.iridescence) {
+      drop('iridescence', 'tools lay no film');
+      delete brush.iridescence;
+    }
+  }
+  if (brush.iridescence && brush.marks?.kind === 'objects') {
+    drop('iridescence', 'object marks are stickers, not film');
+    delete brush.iridescence;
   }
   if (brush.marks?.kind === 'scatter') {
     // Spray droplets are dabs of a round or stamp tip (they may pick paint up): not bristles, wet or thick paint, or the Mixer Brush.
@@ -286,6 +296,21 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   if (brush.livePatterns && (kind !== 'mark' || brush.behaviour?.surface !== 'wet' || brush.marks?.kind === 'particles' || brush.marks?.kind === 'objects' || brush.tip.shape === 'bristle')) {
     drop('livePatterns', 'only wet paint brushes grow live patterns (set behaviour.surface to wet)');
     delete brush.livePatterns;
+  }
+  if (brush.ghost) {
+    if (kind === 'tool' || brush.behaviour?.surface !== 'wet') {
+      drop('ghost', 'it needs a mark brush with behaviour.surface wet');
+      delete brush.ghost;
+    } else {
+      if (brush.light) {
+        drop('light', 'ghost paint uses the wet light channel as its tracer');
+        delete brush.light;
+      }
+      if (brush.behaviour?.exchange) {
+        drop('behaviour.exchange', 'ghost paint does not pick paint up');
+        delete brush.behaviour.exchange;
+      }
+    }
   }
   return ordered();
 }

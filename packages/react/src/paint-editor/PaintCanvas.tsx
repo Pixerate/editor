@@ -4,6 +4,7 @@ import {
   PaintGesture,
   documentToScreen,
   drawWaterOverlay,
+  startDeviceTilt,
   startWetClock,
   fitZoom,
   guideOverlay,
@@ -13,6 +14,7 @@ import {
   paintAgentStrokePoints,
   paintProposalGhost,
   type PaintAgentStrokes,
+  type FillRegionOptions,
   type PaintPresence,
   type PaintProposal,
   type PaintProposals,
@@ -25,6 +27,8 @@ export interface PaintCanvasProps {
   controller: PaintEditorController;
   /** The active tool (default brush). */
   tool?: PaintTool;
+  /** Options for the Fill tool (`tool === 'fill'`). */
+  fillOptions?: Omit<FillRegionOptions, 'x' | 'y' | 'points'>;
   /** Draw the symmetry axes and perspective lines (default true). */
   showGuides?: boolean;
   /** Fit the canvas in the viewport on mount (default true). */
@@ -37,6 +41,8 @@ export interface PaintCanvasProps {
   proposals?: PaintProposals;
   /** Strokes an agent is painting live alongside the user's, drawn as soft lines (see `createPaintAgentStrokes`). */
   agentStrokes?: PaintAgentStrokes;
+  /** Follow device orientation (gyroscope tilt on iPhone and iPad) for thin-film iridescence view tilt. */
+  deviceTilt?: boolean;
   className?: string;
 }
 
@@ -47,7 +53,7 @@ export interface PaintCanvasProps {
  * tail drawn as a thin preview, palm rejection, middle-button pan, wheel zoom and Shift+wheel
  * rotation. Guides and floating reference images are drawn on top.
  */
-export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, className }) => {
+export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', fillOptions, showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, deviceTilt = false, className }) => {
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -68,6 +74,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
     [controller]
   );
   gesture.tool = tool;
+  if (fillOptions) gesture.fillOptions = fillOptions;
   const { canvas: doc } = state.document;
 
   useEffect(() => {
@@ -101,6 +108,9 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
 
   // Wet paint flows with the display.
   useEffect(() => startWetClock(controller), [controller]);
+
+  // Device orientation shifts viewTilt when opted in.
+  useEffect(() => (deviceTilt ? startDeviceTilt(controller) : undefined), [controller, deviceTilt]);
 
   // The water overlay.
   useEffect(() => {

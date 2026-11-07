@@ -201,23 +201,6 @@ public struct PaintUISlidersWetSpeed: Equatable, Sendable {
     }
 }
 
-public struct PaintUISlidersLivePatternsItem: Equatable, Sendable {
-    public var path: String
-    public var label: String
-    public var min: Double
-    public var max: Double
-    public var step: Double
-
-    public init(json: JSONValue) throws {
-        let o = try ContractTable.object(json, "PaintUISlidersLivePatternsItem")
-        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersLivePatternsItem")
-        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersLivePatternsItem")
-        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersLivePatternsItem")
-        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersLivePatternsItem")
-        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersLivePatternsItem")
-    }
-}
-
 public struct PaintUISlidersLightItem: Equatable, Sendable {
     public var path: String
     public var label: String
@@ -232,6 +215,91 @@ public struct PaintUISlidersLightItem: Equatable, Sendable {
         min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersLightItem")
         max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersLightItem")
         step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersLightItem")
+    }
+}
+
+public struct PaintUISlidersUvLightItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersUvLightItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersUvLightItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersUvLightItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersUvLightItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersUvLightItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersUvLightItem")
+    }
+}
+
+public struct PaintUISlidersViewTiltItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersViewTiltItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersViewTiltItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersViewTiltItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersViewTiltItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersViewTiltItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersViewTiltItem")
+    }
+}
+
+public struct PaintUISlidersGhostItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersGhostItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersGhostItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersGhostItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersGhostItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersGhostItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersGhostItem")
+    }
+}
+
+public struct PaintUISlidersMutationItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersMutationItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersMutationItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersMutationItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersMutationItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersMutationItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersMutationItem")
+    }
+}
+
+public struct PaintUISlidersLivePatternsItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersLivePatternsItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersLivePatternsItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersLivePatternsItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersLivePatternsItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersLivePatternsItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersLivePatternsItem")
     }
 }
 
@@ -274,8 +342,12 @@ public struct PaintUISliders: Equatable, Sendable {
     public var wet: [PaintUISlidersWetItem]
     public var wetTilt: [PaintUISlidersWetTiltItem]
     public var wetSpeed: PaintUISlidersWetSpeed
-    public var livePatterns: [PaintUISlidersLivePatternsItem]
     public var light: [PaintUISlidersLightItem]
+    public var uvLight: [PaintUISlidersUvLightItem]
+    public var viewTilt: [PaintUISlidersViewTiltItem]
+    public var ghost: [PaintUISlidersGhostItem]
+    public var mutation: [PaintUISlidersMutationItem]
+    public var livePatterns: [PaintUISlidersLivePatternsItem]
     public var stroke: [PaintUISlidersStrokeItem]
     public var sticker: [PaintUISlidersStickerItem]
 
@@ -285,8 +357,12 @@ public struct PaintUISliders: Equatable, Sendable {
         wet = try ContractTable.field(try o["wet"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersWetItem") { v in try v.map(PaintUISlidersWetItem.init(json:)) } }, "wet", "PaintUISliders")
         wetTilt = try ContractTable.field(try o["wetTilt"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersWetTiltItem") { v in try v.map(PaintUISlidersWetTiltItem.init(json:)) } }, "wetTilt", "PaintUISliders")
         wetSpeed = try ContractTable.field(try o["wetSpeed"].map(PaintUISlidersWetSpeed.init(json:)), "wetSpeed", "PaintUISliders")
-        livePatterns = try ContractTable.field(try o["livePatterns"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersLivePatternsItem") { v in try v.map(PaintUISlidersLivePatternsItem.init(json:)) } }, "livePatterns", "PaintUISliders")
         light = try ContractTable.field(try o["light"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersLightItem") { v in try v.map(PaintUISlidersLightItem.init(json:)) } }, "light", "PaintUISliders")
+        uvLight = try ContractTable.field(try o["uvLight"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersUvLightItem") { v in try v.map(PaintUISlidersUvLightItem.init(json:)) } }, "uvLight", "PaintUISliders")
+        viewTilt = try ContractTable.field(try o["viewTilt"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersViewTiltItem") { v in try v.map(PaintUISlidersViewTiltItem.init(json:)) } }, "viewTilt", "PaintUISliders")
+        ghost = try ContractTable.field(try o["ghost"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersGhostItem") { v in try v.map(PaintUISlidersGhostItem.init(json:)) } }, "ghost", "PaintUISliders")
+        mutation = try ContractTable.field(try o["mutation"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersMutationItem") { v in try v.map(PaintUISlidersMutationItem.init(json:)) } }, "mutation", "PaintUISliders")
+        livePatterns = try ContractTable.field(try o["livePatterns"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersLivePatternsItem") { v in try v.map(PaintUISlidersLivePatternsItem.init(json:)) } }, "livePatterns", "PaintUISliders")
         stroke = try ContractTable.field(try o["stroke"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStrokeItem") { v in try v.map(PaintUISlidersStrokeItem.init(json:)) } }, "stroke", "PaintUISliders")
         sticker = try ContractTable.field(try o["sticker"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStickerItem") { v in try v.map(PaintUISlidersStickerItem.init(json:)) } }, "sticker", "PaintUISliders")
     }

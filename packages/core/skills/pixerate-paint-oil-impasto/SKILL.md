@@ -69,6 +69,7 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference an
 | A glowing, glassy bead (a neon or glass tube) | `glow-gel` (light paint with rim and clarity, on dark paper; one loop per layer where they cross) |
 | Dry, broken strokes over texture | `dry-brush`, or a lower `behaviour.thick.load` |
 | A metallic highlight | `metallic-paint` |
+| Iridescent structural colour (beetle shell, soap film, pearl glaze) | `scarab-lacquer`, `soap-film`, `pearl-glaze` (or `iridescence` facet); tilt view with `set_view_tilt` |
 | Paint that stays exactly as laid | `set_instant_dry` on |
 
 ## Recipes
@@ -98,7 +99,7 @@ light → short strokes following the form → `set_lighting` → `get_relief`.
 - `add_layer`, `update_layer`: a layer per pass
 - `mix_colors`, `color_harmony`, `add_swatch`, `set_color`: palette
 - `set_brush`, `paint_stroke`, `clean_mixer_brush`: block in, build, blend and impasto strokes
-- `set_lighting`, `get_relief`, `flatten_relief`: the relief and its light
+- `set_lighting`, `set_view_tilt`, `get_view_tilt`, `get_relief`, `flatten_relief`: the relief, thin-film iridescence and their light / view angle
 - `set_instant_dry`: strokes that dry as they end
 - `undo_paint`: take back a step
 - `export_image`: deliver

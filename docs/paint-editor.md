@@ -76,6 +76,8 @@ Watercolour, gouache and oil (`WET_MEDIA`) run on one simulation with different 
 
 **Controls and tools:** dry now, advance, pause, drying speed, add water / wet the paper, blow, canvas tilt for drips, flow maps, a water overlay, re-wetting and lifting.
 
+**Ghost paint and invisible ink (#685):** a wet paint brush with a `ghost` facet (`linger` 0.5..60 s, `smear` 0..1; presets `ghost-wash`, `ghost-gouache`, `ghost-oil` and `invisible-ink`) flows and mixes visibly while wet, then fades away without leaving its own colour, leaving only the smear where it lifted (`rewet` scaled by `smear`, suspended immediately) and dragged (`world.drag`) the paint already on the layer. Because Kubelka-Munk pigment channels (`K_R`, `K_G`, `K_B`, `S`) and the wet world's light mass channel (`P_L`, `P_DL`) share the same linear flux, bleed, deposition and lift in `kernel.ts`, a ghost lane lays a tracer in the light channel equal to its pigment amount and stores its pigment-per-unit in `lane.ghost`. On multiples of `FREE_INTERVAL` in `afterBatch` (and in full before `bakeKey` or `dry`), `WetWorld.fadeGhost` subtracts the proportional ghost pigment from both suspended and settled channels, clearing sub-threshold float dust when the tracer reaches zero so bare paper returns byte-identical. Ghost lanes skip `lane.lit` and light shading/baking so the tracer never glows.
+
 ## Thick paint
 
 A pixel layer can carry a **height** map and a **material** map (gloss and metallic) next to its colour, lit at render time from `PaintLighting` with a Blinn-Phong highlight (`thick.ts`). Relighting never repaints, and only tiles whose inputs changed are relit. Impasto strokes lay colour through the pick-up / mix exchange and raise the height: `brush` (bristle ridges), `tube` (domed blobs), `knife` (scrapes flat while smearing), `roller` and `gloop`. Brushes have paint loading (the paint runs out along a stroke), thinners and an instant-dry toggle, and colours can be metallic.
@@ -111,6 +113,7 @@ An agent that contributes while the user paints suggests rather than paints:
   - Accepting paints it on a new layer of its own (on top, at the bottom, or above a layer) as one undo step recorded as the proposer's. The user's active layer stays theirs.
   - Suggestions use dry brushes only: wet media can't be previewed and rolled back.
 - **Painting at the same time.** `onStrokeSample` streams the user's live strokes as they're painted: begin, each batch of samples, then end or cancel, with the brush and colour. `getLiveStroke` and the `get_live_stroke` tool give a snapshot. The editor paints one stroke at a time, so an agent playing along draws its companion strokes live into `createPaintAgentStrokes`, which `PaintCanvas` (`agentStrokes`) draws as soft lines. It then paints them for real at `end`; the editor is idle by then.
+- **Mutation paint (#686).** Any wet or dry paint brush can carry a `mutation` facet (`settle` 0.5..10 s, `patience` 5..300 s, `fade` 0.5..10 s; presets `mutation-wash` and `mutation-ink`). Strokes painted with a mutation brush settle after `settle` seconds into a pending mutation (`onMutationRequest`, React `useMutationRequests`, Svelte `createMutationRequestStore`). When an agent calls `read_mutation`, it claims the mutation and starts the fade: wet strokes release their held `ghost.trigger: "agent"` fade while restoring evaporation, and dry strokes fade their temporary `"Mutation"` layer in the view and remove it once faded. The agent then paints its response with `answer_mutation` (routed through `PaintDirector` when attached so its presence cursor is seen painting, committed as one undo step with origin `agent:<id>`), or calls `decline_mutation`. If `patience` expires or the mutation is declined, nothing is lost: wet paint stays as ordinary paint and dry temporary layers merge down silently without creating an extra undo step.
 
 ## Phases
 
@@ -123,7 +126,7 @@ An agent that contributes while the user paints suggests rather than paints:
 | 4–5. Oils and replay | #241 | Thick paint and lighting, oils, paint loading and thinners, drying controls, tilt and drips, time-lapse and high-resolution export |
 | 6. Procedural | #242 | Particle and bristle brushes, stickers, stencils |
 | 7. Paths | #271, #274, #277, #305, #306 | Brushstrokes on canvas and vector paths through one shared renderer |
-| Later | #273, #275, #284 | Gradient paint, canvas paint-layer helpers, provider effects |
+| Later | #273, #275, #284, #685, #686 | Gradient paint, canvas paint-layer helpers, provider effects, ghost paint and invisible ink, mutation paint |
 
 ## Decisions
 

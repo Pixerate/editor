@@ -21,6 +21,10 @@ more; this is where each one went.
 | A brush's own gradient (paint) | `colour.default` (a gradient); `unset: ['colour']` drops it |
 | Light | `light` (`amount`, `pressure`) |
 | Live reaction-diffusion patterns in wet paint | `livePatterns` (`pattern`: `spots` / `stripes` / `coral` / `maze` / `worms`, `feed`, `kill`, `scale`, `contrast`, `secondColor`, `relief`); `unset: ['livePatterns']` drops it |
+| UV-fluorescent ink (glows under `set_uv_light`, optional invisible ink) | `fluorescence` (`amount` 0..1, `invisible`); `unset: ['fluorescence']` drops it |
+| Thermochromic ink (shifts toward `hotColor` where `paint_heat` warms the canvas) | `thermochromic` (`hotColor` `#rrggbb`, `threshold` 0.05..0.95); `unset: ['thermochromic']` drops it |
+| Thin-film iridescence | `iridescence` (`thickness` 100..1000 nm, `pressureToThickness` 0..1, `ior` 1.2..2.0); `unset: ['iridescence']` drops it |
+| Ghost paint (linger, smear) | `ghost` (`linger`, `smear`); `unset: ['ghost']` drops it |
 
 ## Examples
 

@@ -23,15 +23,27 @@ extension PaintEditorController {
             result = try fn()
         } catch {
             grouping = nil
+            if let op = wetOp {
+                wetOp = nil
+                pendingWetEvents = []
+                try? wet.restore(op.before)
+            }
             doc = before
+            wet.syncDisplays()
             throw error
         }
         let g = grouping!
         grouping = nil
-        if g.changed && doc !== before {
-            undoStack.append(HistoryEntry(label: label, before: before, after: doc))
+        if (g.changed && doc !== before) || wetOp != nil {
+            let entry = HistoryEntry(label: label, before: before, after: doc)
+            if let op = wetOp {
+                entry.wet = (op.before, wet.snapshot(), false)
+                wetOp = nil
+            }
+            undoStack.append(entry)
             if undoStack.count > historyLimit { undoStack.removeFirst() }
             redoStack = []
+            trimWetHistory()
         }
         // Listeners hear the group once, at its end.
         emit()

@@ -50,7 +50,8 @@
     "tilt": "full",
     "tipGrain": "full",
     "dabCount": "full",
-    "livePatterns": "full"
+    "livePatterns": "full",
+    "iridescence": "full"
   },
   {
     "id": "image",
@@ -86,7 +87,8 @@
     "velocity": "ignored",
     "tilt": "ignored",
     "tipGrain": "ignored",
-    "dabCount": "ignored"
+    "dabCount": "ignored",
+    "iridescence": "none"
   },
   {
     "id": "canvas",
@@ -119,7 +121,8 @@
     "velocity": "ignored",
     "tilt": "full",
     "tipGrain": "ignored",
-    "dabCount": "ignored"
+    "dabCount": "ignored",
+    "iridescence": "none"
   },
   {
     "id": "vector",
@@ -157,6 +160,7 @@
     "velocity": "ignored",
     "tilt": "full",
     "tipGrain": "ignored",
-    "dabCount": "ignored"
+    "dabCount": "ignored",
+    "iridescence": "none"
   }
 ]
