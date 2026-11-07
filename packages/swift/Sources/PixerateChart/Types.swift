@@ -954,6 +954,649 @@ public enum ChartSelection: Sendable, Equatable {
             return .object(JSONObject([("kind", .string("trendline")), ("seriesId", .string(seriesId)), ("index", .number(Double(index)))]))
         }
     }
+
+    public init?(json: JSONValue) {
+        guard let obj = json.objectValue, let kind = obj["kind"]?.stringValue else { return nil }
+        switch kind {
+        case "chart": self = .chart
+        case "title": self = .title
+        case "subtitle": self = .subtitle
+        case "legend": self = .legend
+        case "axis":
+            guard let axisStr = obj["axis"]?.stringValue,
+                  let axis = ChartSelectionAxis(rawValue: axisStr) else { return nil }
+            self = .axis(axis)
+        case "series":
+            guard let seriesId = obj["seriesId"]?.stringValue else { return nil }
+            self = .series(seriesId: seriesId)
+        case "point":
+            guard let seriesId = obj["seriesId"]?.stringValue,
+                  let index = obj["index"]?.intValue else { return nil }
+            self = .point(seriesId: seriesId, index: index)
+        case "category":
+            guard let index = obj["index"]?.intValue else { return nil }
+            self = .category(index: index)
+        case "trendline":
+            guard let seriesId = obj["seriesId"]?.stringValue,
+                  let index = obj["index"]?.intValue else { return nil }
+            self = .trendline(seriesId: seriesId, index: index)
+        default:
+            return nil
+        }
+    }
+}
+
+public enum ChartMarkRole: String, CaseIterable, Sendable, Equatable {
+    case background
+    case title
+    case subtitle
+    case grid
+    case axis
+    case tick
+    case tickLabel = "tick-label"
+    case axisTitle = "axis-title"
+    case bar
+    case line
+    case area
+    case point
+    case slice
+    case cell
+    case box
+    case whisker
+    case outlier
+    case connector
+    case trendline
+    case trendlineLabel = "trendline-label"
+    case errorBar = "error-bar"
+    case dataLabel = "data-label"
+    case legendSwatch = "legend-swatch"
+    case legendLabel = "legend-label"
+    case dragReadout = "drag-readout"
+    case referenceLine = "reference-line"
+    case referenceBand = "reference-band"
+    case referenceLabel = "reference-label"
+    case callout
+    case node
+    case raceTime = "race-time"
+    case region
+    case mapLand = "map-land"
+    case link
+    case note
+    case selection
+    case empty
+}
+
+public enum ChartTextAnchor: String, CaseIterable, Sendable, Equatable {
+    case start
+    case middle
+    case end
+}
+
+public enum ChartTextBaseline: String, CaseIterable, Sendable, Equatable {
+    case top
+    case middle
+    case bottom
+}
+
+public struct ChartRectMark: Sendable, Equatable {
+    public var key: String
+    public var role: ChartMarkRole
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+    public var fill: String
+    public var stroke: String?
+    public var strokeWidth: Double?
+    public var radius: Double?
+    public var opacity: Double?
+    public var target: ChartSelection?
+    public var selected: Bool?
+
+    public init(
+        key: String,
+        role: ChartMarkRole,
+        x: Double,
+        y: Double,
+        width: Double,
+        height: Double,
+        fill: String,
+        stroke: String? = nil,
+        strokeWidth: Double? = nil,
+        radius: Double? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) {
+        self.key = key
+        self.role = role
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.fill = fill
+        self.stroke = stroke
+        self.strokeWidth = strokeWidth
+        self.radius = radius
+        self.opacity = opacity
+        self.target = target
+        self.selected = selected
+    }
+
+    public func toJSON() -> JSONValue {
+        var obj = JSONObject([
+            ("kind", .string("rect")),
+            ("key", .string(key)),
+            ("role", .string(role.rawValue)),
+            ("x", .number(x)),
+            ("y", .number(y)),
+            ("width", .number(width)),
+            ("height", .number(height)),
+            ("fill", .string(fill))
+        ])
+        if let stroke { obj["stroke"] = .string(stroke) }
+        if let strokeWidth { obj["strokeWidth"] = .number(strokeWidth) }
+        if let radius { obj["radius"] = .number(radius) }
+        if let opacity { obj["opacity"] = .number(opacity) }
+        if let target { obj["target"] = target.toJSON() }
+        if let selected { obj["selected"] = .bool(selected) }
+        return .object(obj)
+    }
+}
+
+public struct ChartPathMark: Sendable, Equatable {
+    public var key: String
+    public var role: ChartMarkRole
+    public var d: String
+    public var fill: String?
+    public var stroke: String?
+    public var strokeWidth: Double?
+    public var dash: String?
+    public var opacity: Double?
+    public var target: ChartSelection?
+    public var selected: Bool?
+
+    public init(
+        key: String,
+        role: ChartMarkRole,
+        d: String,
+        fill: String? = nil,
+        stroke: String? = nil,
+        strokeWidth: Double? = nil,
+        dash: String? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) {
+        self.key = key
+        self.role = role
+        self.d = d
+        self.fill = fill
+        self.stroke = stroke
+        self.strokeWidth = strokeWidth
+        self.dash = dash
+        self.opacity = opacity
+        self.target = target
+        self.selected = selected
+    }
+
+    public func toJSON() -> JSONValue {
+        var obj = JSONObject([
+            ("kind", .string("path")),
+            ("key", .string(key)),
+            ("role", .string(role.rawValue)),
+            ("d", .string(d))
+        ])
+        if let fill { obj["fill"] = .string(fill) }
+        if let stroke { obj["stroke"] = .string(stroke) }
+        if let strokeWidth { obj["strokeWidth"] = .number(strokeWidth) }
+        if let dash { obj["dash"] = .string(dash) }
+        if let opacity { obj["opacity"] = .number(opacity) }
+        if let target { obj["target"] = target.toJSON() }
+        if let selected { obj["selected"] = .bool(selected) }
+        return .object(obj)
+    }
+}
+
+public struct ChartCircleMark: Sendable, Equatable {
+    public var key: String
+    public var role: ChartMarkRole
+    public var cx: Double
+    public var cy: Double
+    public var r: Double
+    public var fill: String
+    public var stroke: String?
+    public var strokeWidth: Double?
+    public var opacity: Double?
+    public var target: ChartSelection?
+    public var selected: Bool?
+
+    public init(
+        key: String,
+        role: ChartMarkRole,
+        cx: Double,
+        cy: Double,
+        r: Double,
+        fill: String,
+        stroke: String? = nil,
+        strokeWidth: Double? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) {
+        self.key = key
+        self.role = role
+        self.cx = cx
+        self.cy = cy
+        self.r = r
+        self.fill = fill
+        self.stroke = stroke
+        self.strokeWidth = strokeWidth
+        self.opacity = opacity
+        self.target = target
+        self.selected = selected
+    }
+
+    public func toJSON() -> JSONValue {
+        var obj = JSONObject([
+            ("kind", .string("circle")),
+            ("key", .string(key)),
+            ("role", .string(role.rawValue)),
+            ("cx", .number(cx)),
+            ("cy", .number(cy)),
+            ("r", .number(r)),
+            ("fill", .string(fill))
+        ])
+        if let stroke { obj["stroke"] = .string(stroke) }
+        if let strokeWidth { obj["strokeWidth"] = .number(strokeWidth) }
+        if let opacity { obj["opacity"] = .number(opacity) }
+        if let target { obj["target"] = target.toJSON() }
+        if let selected { obj["selected"] = .bool(selected) }
+        return .object(obj)
+    }
+}
+
+public struct ChartLineMark: Sendable, Equatable {
+    public var key: String
+    public var role: ChartMarkRole
+    public var x1: Double
+    public var y1: Double
+    public var x2: Double
+    public var y2: Double
+    public var stroke: String
+    public var strokeWidth: Double?
+    public var dash: String?
+    public var opacity: Double?
+    public var target: ChartSelection?
+    public var selected: Bool?
+
+    public init(
+        key: String,
+        role: ChartMarkRole,
+        x1: Double,
+        y1: Double,
+        x2: Double,
+        y2: Double,
+        stroke: String,
+        strokeWidth: Double? = nil,
+        dash: String? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) {
+        self.key = key
+        self.role = role
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.stroke = stroke
+        self.strokeWidth = strokeWidth
+        self.dash = dash
+        self.opacity = opacity
+        self.target = target
+        self.selected = selected
+    }
+
+    public func toJSON() -> JSONValue {
+        var obj = JSONObject([
+            ("kind", .string("line")),
+            ("key", .string(key)),
+            ("role", .string(role.rawValue)),
+            ("x1", .number(x1)),
+            ("y1", .number(y1)),
+            ("x2", .number(x2)),
+            ("y2", .number(y2)),
+            ("stroke", .string(stroke))
+        ])
+        if let strokeWidth { obj["strokeWidth"] = .number(strokeWidth) }
+        if let dash { obj["dash"] = .string(dash) }
+        if let opacity { obj["opacity"] = .number(opacity) }
+        if let target { obj["target"] = target.toJSON() }
+        if let selected { obj["selected"] = .bool(selected) }
+        return .object(obj)
+    }
+}
+
+public struct ChartTextMark: Sendable, Equatable {
+    public var key: String
+    public var role: ChartMarkRole
+    public var x: Double
+    public var y: Double
+    public var text: String
+    public var anchor: ChartTextAnchor
+    public var baseline: ChartTextBaseline
+    public var size: Double
+    public var weight: Double?
+    public var fill: String
+    public var rotate: Double?
+    public var opacity: Double?
+    public var target: ChartSelection?
+    public var selected: Bool?
+
+    public init(
+        key: String,
+        role: ChartMarkRole,
+        x: Double,
+        y: Double,
+        text: String,
+        anchor: ChartTextAnchor,
+        baseline: ChartTextBaseline,
+        size: Double,
+        weight: Double? = nil,
+        fill: String,
+        rotate: Double? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) {
+        self.key = key
+        self.role = role
+        self.x = x
+        self.y = y
+        self.text = text
+        self.anchor = anchor
+        self.baseline = baseline
+        self.size = size
+        self.weight = weight
+        self.fill = fill
+        self.rotate = rotate
+        self.opacity = opacity
+        self.target = target
+        self.selected = selected
+    }
+
+    public func toJSON() -> JSONValue {
+        var obj = JSONObject([
+            ("kind", .string("text")),
+            ("key", .string(key)),
+            ("role", .string(role.rawValue)),
+            ("x", .number(x)),
+            ("y", .number(y)),
+            ("text", .string(text)),
+            ("anchor", .string(anchor.rawValue)),
+            ("baseline", .string(baseline.rawValue)),
+            ("size", .number(size))
+        ])
+        if let weight { obj["weight"] = .number(weight) }
+        obj["fill"] = .string(fill)
+        if let rotate { obj["rotate"] = .number(rotate) }
+        if let opacity { obj["opacity"] = .number(opacity) }
+        if let target { obj["target"] = target.toJSON() }
+        if let selected { obj["selected"] = .bool(selected) }
+        return .object(obj)
+    }
+}
+
+public enum ChartMark: Sendable, Equatable {
+    case rect(ChartRectMark)
+    case path(ChartPathMark)
+    case circle(ChartCircleMark)
+    case line(ChartLineMark)
+    case text(ChartTextMark)
+
+    public var key: String {
+        switch self {
+        case .rect(let m): return m.key
+        case .path(let m): return m.key
+        case .circle(let m): return m.key
+        case .line(let m): return m.key
+        case .text(let m): return m.key
+        }
+    }
+
+    public var role: ChartMarkRole {
+        switch self {
+        case .rect(let m): return m.role
+        case .path(let m): return m.role
+        case .circle(let m): return m.role
+        case .line(let m): return m.role
+        case .text(let m): return m.role
+        }
+    }
+
+    public var target: ChartSelection? {
+        get {
+            switch self {
+            case .rect(let m): return m.target
+            case .path(let m): return m.target
+            case .circle(let m): return m.target
+            case .line(let m): return m.target
+            case .text(let m): return m.target
+            }
+        }
+        set {
+            switch self {
+            case .rect(var m): m.target = newValue; self = .rect(m)
+            case .path(var m): m.target = newValue; self = .path(m)
+            case .circle(var m): m.target = newValue; self = .circle(m)
+            case .line(var m): m.target = newValue; self = .line(m)
+            case .text(var m): m.target = newValue; self = .text(m)
+            }
+        }
+    }
+
+    public var selected: Bool? {
+        get {
+            switch self {
+            case .rect(let m): return m.selected
+            case .path(let m): return m.selected
+            case .circle(let m): return m.selected
+            case .line(let m): return m.selected
+            case .text(let m): return m.selected
+            }
+        }
+        set {
+            switch self {
+            case .rect(var m): m.selected = newValue; self = .rect(m)
+            case .path(var m): m.selected = newValue; self = .path(m)
+            case .circle(var m): m.selected = newValue; self = .circle(m)
+            case .line(var m): m.selected = newValue; self = .line(m)
+            case .text(var m): m.selected = newValue; self = .text(m)
+            }
+        }
+    }
+
+    public var opacity: Double? {
+        get {
+            switch self {
+            case .rect(let m): return m.opacity
+            case .path(let m): return m.opacity
+            case .circle(let m): return m.opacity
+            case .line(let m): return m.opacity
+            case .text(let m): return m.opacity
+            }
+        }
+        set {
+            switch self {
+            case .rect(var m): m.opacity = newValue; self = .rect(m)
+            case .path(var m): m.opacity = newValue; self = .path(m)
+            case .circle(var m): m.opacity = newValue; self = .circle(m)
+            case .line(var m): m.opacity = newValue; self = .line(m)
+            case .text(var m): m.opacity = newValue; self = .text(m)
+            }
+        }
+    }
+
+    public func toJSON() -> JSONValue {
+        switch self {
+        case .rect(let m): return m.toJSON()
+        case .path(let m): return m.toJSON()
+        case .circle(let m): return m.toJSON()
+        case .line(let m): return m.toJSON()
+        case .text(let m): return m.toJSON()
+        }
+    }
+
+    public static func rect(
+        key: String,
+        role: ChartMarkRole,
+        x: Double,
+        y: Double,
+        width: Double,
+        height: Double,
+        fill: String,
+        stroke: String? = nil,
+        strokeWidth: Double? = nil,
+        radius: Double? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) -> ChartMark {
+        .rect(ChartRectMark(
+            key: key,
+            role: role,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            fill: fill,
+            stroke: stroke,
+            strokeWidth: strokeWidth,
+            radius: radius,
+            opacity: opacity,
+            target: target,
+            selected: selected
+        ))
+    }
+
+    public static func path(
+        key: String,
+        role: ChartMarkRole,
+        d: String,
+        fill: String? = nil,
+        stroke: String? = nil,
+        strokeWidth: Double? = nil,
+        dash: String? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) -> ChartMark {
+        .path(ChartPathMark(
+            key: key,
+            role: role,
+            d: d,
+            fill: fill,
+            stroke: stroke,
+            strokeWidth: strokeWidth,
+            dash: dash,
+            opacity: opacity,
+            target: target,
+            selected: selected
+        ))
+    }
+
+    public static func circle(
+        key: String,
+        role: ChartMarkRole,
+        cx: Double,
+        cy: Double,
+        r: Double,
+        fill: String,
+        stroke: String? = nil,
+        strokeWidth: Double? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) -> ChartMark {
+        .circle(ChartCircleMark(
+            key: key,
+            role: role,
+            cx: cx,
+            cy: cy,
+            r: r,
+            fill: fill,
+            stroke: stroke,
+            strokeWidth: strokeWidth,
+            opacity: opacity,
+            target: target,
+            selected: selected
+        ))
+    }
+
+    public static func line(
+        key: String,
+        role: ChartMarkRole,
+        x1: Double,
+        y1: Double,
+        x2: Double,
+        y2: Double,
+        stroke: String,
+        strokeWidth: Double? = nil,
+        dash: String? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) -> ChartMark {
+        .line(ChartLineMark(
+            key: key,
+            role: role,
+            x1: x1,
+            y1: y1,
+            x2: x2,
+            y2: y2,
+            stroke: stroke,
+            strokeWidth: strokeWidth,
+            dash: dash,
+            opacity: opacity,
+            target: target,
+            selected: selected
+        ))
+    }
+
+    public static func text(
+        key: String,
+        role: ChartMarkRole,
+        x: Double,
+        y: Double,
+        text: String,
+        anchor: ChartTextAnchor,
+        baseline: ChartTextBaseline,
+        size: Double,
+        weight: Double? = nil,
+        fill: String,
+        rotate: Double? = nil,
+        opacity: Double? = nil,
+        target: ChartSelection? = nil,
+        selected: Bool? = nil
+    ) -> ChartMark {
+        .text(ChartTextMark(
+            key: key,
+            role: role,
+            x: x,
+            y: y,
+            text: text,
+            anchor: anchor,
+            baseline: baseline,
+            size: size,
+            weight: weight,
+            fill: fill,
+            rotate: rotate,
+            opacity: opacity,
+            target: target,
+            selected: selected
+        ))
+    }
 }
 
 public struct ChartTheme: Sendable, Equatable {
@@ -1147,6 +1790,7 @@ public struct ChartScene: Sendable, Equatable {
     public var width: Double
     public var height: Double
     public var plot: ChartRect
+    public var marks: [ChartMark]
     public var valueScale: ChartValueScale?
     public var valueScale2: ChartValueScale?
     public var xScale: ChartValueScale?
@@ -1159,6 +1803,7 @@ public struct ChartScene: Sendable, Equatable {
         width: Double = 640,
         height: Double = 400,
         plot: ChartRect = ChartRect(x: 0, y: 0, width: 640, height: 400),
+        marks: [ChartMark] = [],
         valueScale: ChartValueScale? = nil,
         valueScale2: ChartValueScale? = nil,
         xScale: ChartValueScale? = nil,
@@ -1170,6 +1815,7 @@ public struct ChartScene: Sendable, Equatable {
         self.width = width
         self.height = height
         self.plot = plot
+        self.marks = marks
         self.valueScale = valueScale
         self.valueScale2 = valueScale2
         self.xScale = xScale
@@ -1177,5 +1823,22 @@ public struct ChartScene: Sendable, Equatable {
         self.percent = percent
         self.theme = theme
         self.warnings = warnings
+    }
+
+    public func toJSON() -> JSONValue {
+        var obj = JSONObject([
+            ("width", .number(width)),
+            ("height", .number(height)),
+            ("plot", plot.toJSON()),
+            ("marks", .array(marks.map { $0.toJSON() })),
+            ("percent", .bool(percent)),
+            ("theme", theme.toJSON()),
+            ("warnings", .array(warnings.map { $0.toJSON() }))
+        ])
+        if let valueScale { obj["valueScale"] = valueScale.toJSON() }
+        if let valueScale2 { obj["valueScale2"] = valueScale2.toJSON() }
+        if let xScale { obj["xScale"] = xScale.toJSON() }
+        if let categoryScale { obj["categoryScale"] = categoryScale.toJSON() }
+        return .object(obj)
     }
 }
