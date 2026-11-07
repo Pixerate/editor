@@ -533,7 +533,8 @@ public func bakeFerroIntoThick(
         color: TiledSurface(channels: 4, tiles: colorTiles, defaultValue: color.defaultValue),
         thick: ThickChannels(
             height: TiledSurface(channels: 1, tiles: heightTiles, defaultValue: 0),
-            material: TiledSurface(channels: 4, tiles: materialTiles, defaultValue: 0)
+            material: TiledSurface(channels: 4, tiles: materialTiles, defaultValue: 0),
+            film: baseThick.film
         ),
         maxSpikeHeight: maxSpikeHeight,
         spikePixels: spikePixels,

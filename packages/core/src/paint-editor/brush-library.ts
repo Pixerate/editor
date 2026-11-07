@@ -106,5 +106,7 @@ export function engineChanges(base: PaintBrush, next: PaintBrush): Omit<Partial<
     return JSON.stringify(a) === JSON.stringify(b) ? undefined : copyJSON(b);
   };
   const { id: _i, builtin: _b, ...rest } = (diff(base, next) as Record<string, unknown> | undefined) ?? {};
+  if (base.iridescence && !next.iridescence) rest.iridescence = null;
+  if (base.tipGrain && !next.tipGrain) rest.tipGrain = null;
   return rest as Omit<Partial<PaintBrush>, 'id'>;
 }

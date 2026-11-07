@@ -13,7 +13,7 @@ import type { MixerLoad } from '../paint/exchange';
 import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
 import type { ImpastoTool, PaintBrush, PaintBrushInput, WetMediumKind, WetTool } from './brushes';
 import { TILE, type RasterRect } from '../raster/surface';
-import type { PaintEditorController } from './controller';
+import type { FillRegionOptions, PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
 import { perspectiveGuideLines, symmetryAxisSegments, type Point2 } from './guides';
 import { stencilOutline, type StencilInput } from './stencils';
@@ -40,10 +40,11 @@ export interface PaintPointerEvent extends PointerSample {
   getPredictedEvents?(): PaintPointerEvent[];
 }
 
-export type PaintTool = 'brush' | 'eyedropper' | 'pan' | 'rotate' | 'sticker' | 'stroke';
+export type PaintTool = 'brush' | 'fill' | 'eyedropper' | 'pan' | 'rotate' | 'sticker' | 'stroke';
 
 export const PAINT_TOOLS: ReadonlyArray<{ id: PaintTool; label: string; key: string }> = [
   { id: 'brush', label: 'Brush', key: 'b' },
+  { id: 'fill', label: 'Fill', key: 'g' },
   { id: 'eyedropper', label: 'Eyedropper', key: 'i' },
   { id: 'sticker', label: 'Stickers', key: 's' },
   { id: 'stroke', label: 'Select stroke', key: 'v' },
@@ -61,6 +62,9 @@ export interface ViewportBox {
 
 type Mode =
   | { kind: 'stroke'; pointerId: number }
+  /** Filling a region: dragging horizontally adjusts the tolerance live (one undo step). */
+  /** `committed`: the last fill made an undo step (an empty or refused fill makes none, so there is nothing to undo). */
+  | { kind: 'fill'; pointerId: number; startX: number; p: Point2; baseTolerance: number; lastTolerance: number; committed: boolean }
   /** Dragging a stroke of a stroke layer: where the pointer went down and where it is now. */
   | { kind: 'move-stroke'; pointerId: number; id: string; from: Point2; to: Point2 }
   /** Dragging a sticker: (dx, dy) from the pointer to its centre, and where it was last shown. */
@@ -69,6 +73,8 @@ type Mode =
 
 export class PaintGesture {
   tool: PaintTool = 'brush';
+  /** Options the Fill tool (`tool === 'fill'`) passes to `fillRegion` (click to fill; drag horizontally to adjust tolerance). */
+  fillOptions: Omit<FillRegionOptions, 'x' | 'y' | 'points'> = { reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true };
   /** The last refusal (a hidden or locked layer), for the editor to show. */
   error: string | null = null;
   /** The predicted tail of the current stroke in document pixels (draw it as a thin preview). */
@@ -119,6 +125,7 @@ export class PaintGesture {
       this.pick(e);
       return false;
     }
+    if (tool === 'fill') return this.fillDown(e);
     if (tool === 'sticker') return this.stickerDown(e);
     try {
       const p = this.pen(e);
@@ -193,6 +200,19 @@ export class PaintGesture {
     this.controller.setColor(this.controller.pickColor(p.x, p.y).color);
   }
 
+  private fillDown(e: PaintPointerEvent): boolean {
+    const p = this.doc(e);
+    const baseTolerance = this.fillOptions.tolerance ?? 32;
+    try {
+      const filled = this.controller.fillRegion({ ...this.fillOptions, tolerance: baseTolerance, x: p.x, y: p.y });
+      this.mode = { kind: 'fill', pointerId: e.pointerId, startX: e.clientX, p, baseTolerance, lastTolerance: baseTolerance, committed: filled.bounds !== null };
+      return true;
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
   move(e: PaintPointerEvent): void {
     if (e.pointerType === 'pen') this.penAt = { x: e.clientX, y: e.clientY };
     const m = this.mode;
@@ -211,6 +231,22 @@ export class PaintGesture {
     }
     if (m.kind === 'move-stroke') {
       m.to = this.doc(e);
+      return;
+    }
+    if (m.kind === 'fill') {
+      const dx = e.clientX - m.startX;
+      if (Math.abs(dx) < 4) return;
+      const nextTol = Math.max(0, Math.min(255, Math.round(m.baseTolerance + dx * 0.5)));
+      if (nextTol === m.lastTolerance) return;
+      m.lastTolerance = nextTol;
+      try {
+        // Only take back this gesture's own fill: an empty fill made no undo step.
+        if (m.committed) this.controller.undo();
+        m.committed = false;
+        m.committed = this.controller.fillRegion({ ...this.fillOptions, tolerance: nextTol, x: m.p.x, y: m.p.y }).bounds !== null;
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : String(err);
+      }
       return;
     }
     if (m.kind === 'sticker') {
@@ -277,6 +313,7 @@ export class PaintGesture {
     this.penDown = false;
     this.predicted = [];
     if (this.mode?.kind === 'stroke') this.controller.activeStroke?.cancel();
+    if (this.mode?.kind === 'fill' && this.mode.committed) this.controller.undo();
     if (this.mode?.kind === 'sticker') this.controller.cancelStickerPreview();
     this.mode = null;
   }
@@ -452,7 +489,7 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
   return out;
 }
 
-export { BRUSH_SLIDERS, brushEngineControls, multiColorSliders, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
+export { BRUSH_SLIDERS, brushEngineControls, GHOST_SLIDERS, IRIDESCENCE_SLIDERS, multiColorSliders, MUTATION_SLIDERS, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
 import type { SliderControl } from './brush-controls';
 
 export const PAPER_SLIDERS: readonly SliderControl[] = [
@@ -674,6 +711,84 @@ export const LIGHT_SLIDERS: readonly SliderControl[] = [
   { path: 'relief', label: 'Relief', min: 0, max: 1, step: 0.01 },
 ];
 
+/** The UV blacklight sliders. */
+export const UV_LIGHT_SLIDERS: readonly SliderControl[] = [
+  { path: 'strength', label: 'UV strength', min: 0, max: 2, step: 0.05 },
+  { path: 'ambient', label: 'Ambient light', min: 0, max: 1, step: 0.01 },
+];
+
+/** The view tilt sliders (thin-film iridescence and specular highlights). */
+export const VIEW_TILT_SLIDERS: readonly SliderControl[] = [
+  { path: 'x', label: 'View tilt X', min: -1, max: 1, step: 0.01 },
+  { path: 'y', label: 'View tilt Y', min: -1, max: 1, step: 0.01 },
+];
+
+/**
+ * Maps `DeviceOrientationEvent` angles (`beta` front-to-back in degrees, `gamma` left-to-right in
+ * degrees) relative to `rest` (default `{ beta: 45, gamma: 0 }`, a tablet held in hand) into a
+ * `viewTilt` in `-1..1` (35° reaches full tilt), rounded to 0.01.
+ */
+export function deviceOrientationToViewTilt(
+  betaOrEvent: number | { beta?: number | null; gamma?: number | null } | null | undefined,
+  gammaOrRest?: number | { beta: number; gamma: number } | null | undefined,
+  rest: { beta: number; gamma: number } = { beta: 45, gamma: 0 }
+): { x: number; y: number } {
+  const isObj = typeof betaOrEvent === 'object' && betaOrEvent !== null;
+  const r = isObj && typeof gammaOrRest === 'object' && gammaOrRest !== null ? gammaOrRest : rest;
+  const rawBeta = isObj ? betaOrEvent.beta : betaOrEvent;
+  const rawGamma = isObj ? betaOrEvent.gamma : typeof gammaOrRest === 'number' ? gammaOrRest : undefined;
+  const b = typeof rawBeta === 'number' && Number.isFinite(rawBeta) ? rawBeta : r.beta;
+  const g = typeof rawGamma === 'number' && Number.isFinite(rawGamma) ? rawGamma : r.gamma;
+  const clamp = (v: number) => Math.round(Math.max(-1, Math.min(1, v)) * 100) / 100;
+  return { x: clamp((g - r.gamma) / 35), y: clamp((b - r.beta) / 35) };
+}
+
+/**
+ * Asks iOS Safari for `DeviceOrientationEvent` permission when `requestPermission` is present
+ * (must be called from a user gesture on iOS 13+). Resolves to `'granted'` on browsers that do not
+ * gate `deviceorientation` behind a permission prompt, or `'unsupported'` without `DeviceOrientationEvent`.
+ */
+export async function requestDeviceTiltPermission(): Promise<'granted' | 'denied' | 'unsupported'> {
+  const g = globalThis as {
+    DeviceOrientationEvent?: {
+      requestPermission?: () => Promise<'granted' | 'denied'>;
+    };
+  };
+  if (!g.DeviceOrientationEvent) return 'unsupported';
+  if (typeof g.DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      return (await g.DeviceOrientationEvent.requestPermission()) === 'granted' ? 'granted' : 'denied';
+    } catch {
+      return 'denied';
+    }
+  }
+  return 'granted';
+}
+
+/**
+ * Listens to `deviceorientation` events on `globalThis` and updates `controller.setViewTilt` relative
+ * to the first reading's orientation. Returns a cleanup function.
+ */
+export function startDeviceTilt(controller: PaintEditorController): () => void {
+  const g = globalThis as {
+    addEventListener?: (type: string, listener: (e: { beta?: number | null; gamma?: number | null }) => void) => void;
+    removeEventListener?: (type: string, listener: (e: { beta?: number | null; gamma?: number | null }) => void) => void;
+  };
+  if (typeof g.addEventListener !== 'function') return () => {};
+  let rest: { beta: number; gamma: number } | null = null;
+  const onOrientation = (e: { beta?: number | null; gamma?: number | null }) => {
+    if (typeof e.beta !== 'number' || typeof e.gamma !== 'number') return;
+    if (!rest) rest = { beta: e.beta, gamma: e.gamma };
+    const next = deviceOrientationToViewTilt(e.beta, e.gamma, rest);
+    const cur = controller.getViewTilt();
+    if (next.x !== cur.x || next.y !== cur.y) controller.setViewTilt(next);
+  };
+  g.addEventListener('deviceorientation', onOrientation);
+  return () => {
+    g.removeEventListener?.('deviceorientation', onOrientation);
+  };
+}
+
 /** Labels of the particle kinds and renders. */
 export const PARTICLE_KIND_LABELS: Readonly<Record<ParticleKind, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow', elastic: 'Elastic', fuzzy: 'Fuzzy' };
 export const PARTICLE_RENDER_LABELS: Readonly<Record<ParticleRender, string>> = { dot: 'Dots', line: 'Lines', sequence: 'Beads', ribbon: 'Ribbon' };
@@ -736,6 +851,14 @@ export const STICKER_SLIDERS: readonly SliderControl[] = [
   { path: 'size', label: 'Size', min: 2, max: 400, step: 1 },
   { path: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1 },
   { path: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01 },
+];
+
+/** The evolution panel's mutation sliders (`0..1`). */
+export const EVOLUTION_SLIDERS: readonly SliderControl[] = [
+  { path: 'geometry', label: 'Geometry', min: 0, max: 1, step: 0.05 },
+  { path: 'color', label: 'Colour', min: 0, max: 1, step: 0.05 },
+  { path: 'brush', label: 'Brush', min: 0, max: 1, step: 0.05 },
+  { path: 'seed', label: 'Seed', min: 0, max: 1, step: 0.05 },
 ];
 
 /** The ferrofluid panel's sliders for a magnet (`strength` and `radius`). */

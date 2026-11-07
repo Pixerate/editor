@@ -57,7 +57,10 @@ extension PaintEditorController {
         let wetIds = ids.filter { wet.wetLayerIds().contains($0) }
         if wetIds.isEmpty { return [] }
         beginWetOp()
-        for id in wetIds { _ = try? wet.dry(id) }
+        for id in wetIds {
+            finishWetMutationsOnDry(id)
+            _ = try? wet.dry(id)
+        }
         logWet("dry", layerId: wetIds.joined(separator: ","))
         return wetIds
     }
@@ -76,7 +79,7 @@ extension PaintEditorController {
     }
 
     /// Records a settings change as a wet event (not an undo step).
-    private func recordWetSetting(_ kind: String, layerId: String? = nil, data: JSONValue) {
+    func recordWetSetting(_ kind: String, layerId: String? = nil, data: JSONValue? = nil) {
         let d = doc
         doc = d.with { $0.wetEvents = (d.wetEvents ?? []) + [WetEvent(clock: wet.world?.clock ?? 0, at: d.strokes.count, kind: kind, layerId: layerId, data: data)] }
     }
@@ -139,7 +142,8 @@ extension PaintEditorController {
      */
     @discardableResult
     public func tickWet(_ now: Double, maxSteps: Int = 8) -> Int {
-        wet.tick(now, maxSteps: maxSteps)
+        tickMutations(now)
+        return wet.tick(now, maxSteps: maxSteps)
     }
 
     /// Lets the CPU engine run alone (`off`) or lets Metal shade large wet areas (`auto`). Not an undo step.
@@ -157,6 +161,8 @@ extension PaintEditorController {
         let n = steps ?? Int(JS.round((seconds ?? 1) * wet.speed))
         if !(n >= 0 && n <= 100000) { throw PaintEditorError("steps \(n) is out of range; use 0..100000 (or seconds).") }
         let run = wet.advance(n)
+        let sec = seconds ?? Double(n) / wet.speed
+        if sec > 0 { advanceMutations(sec) }
         emit()
         let st = wetState()
         return ["steps": .number(Double(run)), "clock": st["clock"]!, "stillWet": st["wet"]!, "layers": st["layers"]!]
@@ -172,7 +178,10 @@ extension PaintEditorController {
         let before = doc
         beginWetOp()
         var dried: [JSONValue] = []
-        for id in ids { for d in try wet.dry(id, rect) { dried.append(["layerId": .string(d.layerId), "bounds": rectJSON(d.bounds)]) } }
+        for id in ids {
+            if rect == nil { finishWetMutationsOnDry(id) }
+            for d in try wet.dry(id, rect) { dried.append(["layerId": .string(d.layerId), "bounds": rectJSON(d.bounds)]) }
+        }
         logWet("dry", layerId: layerId, data: rect.map { $0.json })
         commit("Dry paint", withWetEvents(doc), before: before)
         return ["dried": .array(dried), "stillWet": .bool(wet.isWet())]
@@ -209,6 +218,19 @@ extension PaintEditorController {
     /// Changes a layer's wet settings. Saved with the document, not an undo step.
     public func setWetParams(_ layerId: String?, _ update: JSONObject) throws -> WetParams {
         let l = try wetLayer(layerId, "change the wet settings of")
+        if let held = heldEvaporation[l.id] {
+            var merged = wet.info(l.id).params.json.objectValue ?? [:]
+            merged["evaporation"] = .number(held)
+            for (k, v) in update { merged[k] = v }
+            let intended = normalizeWetParams(merged)
+            heldEvaporation[l.id] = intended.evaporation
+            var heldUpdate = update
+            heldUpdate["evaporation"] = .number(0)
+            _ = try wet.setParams(l.id, heldUpdate)
+            recordWetSetting("params", layerId: l.id, data: intended.json)
+            emit()
+            return intended
+        }
         let params = try wet.setParams(l.id, update)
         recordWetSetting("params", layerId: l.id, data: params.json)
         emit()
@@ -283,7 +305,14 @@ extension PaintEditorController {
     /// Wet settings saved with the document (nil when they are all defaults).
     func wetJSON() -> JSONValue? {
         var layers = JSONObject()
-        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil { layers[id] = ["params": s.params.json, "flow": s.flow.json] }
+        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil {
+            var params = s.params
+            if let held = heldEvaporation[id] { params.evaporation = held }
+            var entry: JSONObject = ["params": params.json, "flow": s.flow.json]
+            let ghost = wet.world?.hasLane(id) == true ? wet.world?.getGhost(id) : s.ghost
+            if let ghost, ghost.trigger != "agent" { entry["ghost"] = ghost.json }
+            layers[id] = .object(entry)
+        }
         if layers.isEmpty && wet.tilt.angle == 0 { return nil }
         return ["tilt": wet.tilt.json, "layers": .object(layers)]
     }
@@ -328,7 +357,18 @@ extension PaintEditorController {
         return lighting
     }
 
-    /// A layer's relief: where it is, its highest point (0..255); nil when it has none.
+    /// The current viewer tilt for thin-film iridescence and specular highlights.
+    public func getViewTilt() -> PaintViewTilt { viewTilt }
+
+    /// Tilts the viewer angle (`-1..1` on each axis). View state only (not saved with the document or an undo step).
+    public func setViewTilt(x: Double?, y: Double?) throws -> PaintViewTilt {
+        if let x, !(x.isFinite && x >= -1 && x <= 1) { throw PaintEditorError("x \(jsText(x)) is out of range; use -1..1.") }
+        if let y, !(y.isFinite && y >= -1 && y <= 1) { throw PaintEditorError("y \(jsText(y)) is out of range; use -1..1.") }
+        viewTilt = normalizeViewTilt(x: x, y: y, viewTilt)
+        return viewTilt
+    }
+
+    /// A layer's relief: where it is and its highest point (0..255); nil when it has none.
     public func reliefOf(_ layerId: String? = nil) throws -> (layerId: String, bounds: RasterRect?, maxHeight: Int)? {
         guard let id = layerId ?? doc.activeLayerId else { return nil }
         _ = try requireLayer(id)
@@ -365,10 +405,10 @@ extension PaintEditorController {
             let ferroInput = ferroSurf != nil && !ferroSurf!.tiles.isEmpty
                 ? FerroLayerInput(surface: ferroSurf!, magnets: magnets, settings: ferroSettings, offset: l.pixelOffset)
                 : nil
-            if ch.height.tiles.isEmpty && ferroInput == nil { continue }
+            if ch.height.tiles.isEmpty && ch.film.tiles.isEmpty && ferroInput == nil { continue }
             let cache = litCaches[id] ?? LitCache()
             litCaches[id] = cache
-            let lit = cache.lit(l.pixelSurface, ch, lighting, ferroInput)
+            let lit = cache.lit(l.pixelSurface, ch, lighting, viewTilt, ferroInput)
             if lit !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(lit) } }
         }
         return out
@@ -386,7 +426,188 @@ extension PaintEditorController {
         for (id, s) in lightSpills.sorted(by: { $0.key < $1.key }) where findLayer(doc.layers, id) != nil { spills[id] = s.json }
         if !spills.isEmpty { out["lightSpill"] = .object(spills) }
         if lighting != DEFAULT_LIGHTING { out["lighting"] = lighting.json }
+        var fluor = JSONObject()
+        for (id, f) in doc.fluor ?? OrderedMap() where findLayer(doc.layers, id) != nil {
+            if let saved = fluorToJSON(f) { fluor[id] = saved }
+        }
+        if !fluor.isEmpty { out["fluor"] = .object(fluor) }
+        var thermo = JSONObject()
+        for (id, th) in doc.thermo ?? OrderedMap() where findLayer(doc.layers, id) != nil {
+            if let saved = thermoToJSON(th) { thermo[id] = saved }
+        }
+        if !thermo.isEmpty { out["thermo"] = .object(thermo) }
+        if let heat = doc.heat, let savedHeat = heatToJSON(heat) { out["heat"] = savedHeat }
+        if uvLight != DEFAULT_UV_LIGHT { out["uvLight"] = uvLight.json }
         return out
+    }
+
+    // MARK: - UV blacklight and thermochromic heat
+
+    /// The UV / blacklight view setting.
+    public func getUvLight() -> UvLightSettings {
+        uvLight
+    }
+
+    /// Layers that carry UV-fluorescent ink.
+    public func fluorescentLayerIds() -> [String] {
+        (doc.fluor ?? OrderedMap()).compactMap { id, s in
+            !s.tiles.isEmpty && findLayer(doc.layers, id) != nil ? id : nil
+        }
+    }
+
+    /// Layers that carry thermochromic ink.
+    public func thermochromicLayerIds() -> [String] {
+        (doc.thermo ?? OrderedMap()).compactMap { id, s in
+            !s.tiles.isEmpty && findLayer(doc.layers, id) != nil ? id : nil
+        }
+    }
+
+    /// Switches or tunes the virtual UV / blacklight. Saved with the document, not an undo step.
+    public func setUvLight(on: Bool? = nil, strength: Double? = nil, ambient: Double? = nil) throws -> UvLightSettings {
+        if let s = strength, !(s.isFinite && s >= 0 && s <= 2) {
+            throw PaintEditorError("strength \(jsText(s)) is out of range; use 0..2.")
+        }
+        if let a = ambient, !(a.isFinite && a >= 0 && a <= 1) {
+            throw PaintEditorError("ambient \(jsText(a)) is out of range; use 0..1.")
+        }
+        uvLight = normalizeUvLight(on: on, strength: strength, ambient: ambient, uvLight)
+        return uvLight
+    }
+
+    /// Reads the document's heat field stats, optional temperature samples at `points`, and `thermochromicLayerIds`.
+    public func getHeat(points: [Point2] = []) throws -> JSONObject {
+        var samples: [JSONValue] = []
+        for (i, p) in points.enumerated() {
+            if !p.x.isFinite || !p.y.isFinite {
+                throw PaintEditorError("points[\(i)] needs finite x and y in document pixels.")
+            }
+            let temp = doc.heat.map { JS.round(sampleHeatAt($0, p.x, p.y) * 1000) / 1000 } ?? 0
+            samples.append(HeatSample(x: p.x, y: p.y, temperature: temp).json)
+        }
+        var out = heatStats(doc.heat).json
+        out["samples"] = .array(samples)
+        out["thermochromicLayerIds"] = .array(thermochromicLayerIds().map { .string($0) })
+        return out
+    }
+
+    /// Warms (or with `temperature` 0 cools) the canvas heat field along `points`. One undo step.
+    public func paintHeat(points: [Point2], radius radiusIn: Double? = nil, temperature tempIn: Double? = nil) throws -> JSONObject {
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before painting heat.") }
+        if points.isEmpty { throw PaintEditorError("At least one point is required.") }
+        for (i, p) in points.enumerated() where !p.x.isFinite || !p.y.isFinite {
+            throw PaintEditorError("Point \(i) has non-finite coordinates.")
+        }
+        let radius = radiusIn ?? 28
+        if !(radius.isFinite && radius >= 1 && radius <= 512) {
+            throw PaintEditorError("radius \(jsText(radius)) is out of range; use 1..512 px.")
+        }
+        let temperature = tempIn ?? 1
+        if !(temperature.isFinite && temperature >= 0 && temperature <= 1) {
+            throw PaintEditorError("temperature \(jsText(temperature)) is out of range; use 0..1 (0 cools back to ambient).")
+        }
+        let before = doc
+        let field = doc.heat.map(cloneHeatField) ?? createHeatField(doc.canvas.width, doc.canvas.height)
+        let painted = paintHeatField(field, points, radius: radius, temperature: temperature)
+        let dried = try dryWetFromHeat(field)
+        let next = doc.with { $0.heat = painted.stats.max > 0 ? field : nil }
+        if painted.stats.max > 0 || before.heat != nil || wetOp != nil {
+            commit("Paint heat", withWetEvents(next), before: before)
+        } else {
+            emit()
+        }
+        var out = painted.stats.json
+        out["dried"] = .array(dried)
+        return out
+    }
+
+    /// Advances the heat field by `steps` simulation steps (1..200, default 10). Not an undo step.
+    public func advanceHeat(steps stepsIn: Int? = nil) throws -> JSONObject {
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before advancing heat.") }
+        let steps = stepsIn ?? 10
+        if !(steps >= 1 && steps <= 200) {
+            throw PaintEditorError("steps \(steps) is out of range; use a whole number 1..200.")
+        }
+        guard let heat = doc.heat, heatStats(heat).max > 0 else {
+            return ["steps": .number(Double(steps)), "max": .number(0), "mean": .number(0), "hotCells": .number(0), "bounds": .null, "dried": .array([])]
+        }
+        let field = cloneHeatField(heat)
+        let stats = advanceHeatField(field, steps: steps)
+        let dried = try dryWetFromHeat(field)
+        let next = doc.with { $0.heat = stats.max > 0 ? field : nil }
+        doc = withWetEvents(next)
+        emit()
+        var out = stats.json
+        out["steps"] = JSONValue.number(Double(steps))
+        out["dried"] = JSONValue.array(dried)
+        return out
+    }
+
+    /// Cools the whole canvas heat field to 0 at once (one undo step when anything was warm).
+    public func clearHeat() throws -> JSONObject {
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before clearing heat.") }
+        guard let heat = doc.heat, heatStats(heat).max > 0 else {
+            return ["cleared": .bool(false)]
+        }
+        commit("Clear heat", doc.with { $0.heat = nil })
+        return ["cleared": .bool(true)]
+    }
+
+    private func dryWetFromHeat(_ field: HeatField) throws -> [JSONValue] {
+        let ids = wet.wetLayerIds()
+        if ids.isEmpty { return [] }
+        guard let hotRect = hotCellsBounds(field, HEAT_DRY_THRESHOLD) else { return [] }
+        beginWetOp()
+        var dried: [JSONValue] = []
+        for id in ids {
+            for d in try wet.dry(id, hotRect) where d.bounds != nil {
+                dried.append(["layerId": .string(d.layerId), "bounds": rectJSON(d.bounds)])
+            }
+        }
+        if !dried.isEmpty { logWet("dry", data: hotRect.json) }
+        return dried
+    }
+
+    /// The layers with thermochromic paint shifted toward its hot colour where the canvas is warm.
+    func thermoLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
+        guard let thermo = doc.thermo, let heat = doc.heat, heat.max > 0 else { return layers }
+        var out = layers
+        for (id, th) in thermo {
+            guard !th.tiles.isEmpty, let l = findLayer(out, id)?.layer, l.isPixel else { continue }
+            let cache = thermoCaches[id] ?? ThermoCache()
+            thermoCaches[id] = cache
+            let shifted = cache.render(l.pixelSurface, th, l.pixelOffset, heat)
+            if shifted !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(shifted) } }
+        }
+        return out
+    }
+
+    /// Under the UV blacklight: every pixel layer's daylight paint dims to `uvLight.ambient`, any fluorescent ink glows in its own colour, and each fluorescent layer casts a Linear Dodge (`::uv`) spill layer directly above it.
+    func uvLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
+        guard uvLight.on else { return layers }
+        let fluor = doc.fluor ?? OrderedMap()
+        func visit(_ list: [PaintLayer]) -> [PaintLayer] {
+            var out: [PaintLayer] = []
+            for l in list {
+                if let children = l.children {
+                    out.append(l.withChildren(visit(children)))
+                    continue
+                }
+                guard l.isPixel else {
+                    out.append(l)
+                    continue
+                }
+                let cache = uvCaches[l.id] ?? UvCache()
+                uvCaches[l.id] = cache
+                let fl = fluor.get(l.id)
+                let surface = cache.render(l.pixelSurface, fl, uvLight)
+                out.append(surface !== l.pixelSurface ? l.withSurface(surface) : l)
+                if let fl, let spill = cache.spill(fl, uvLight) {
+                    out.append(RasterLayer(id: "\(l.id)::uv", name: "\(l.name) UV", visible: l.visible, opacity: l.opacity, blend: .mode(.linearDodge), content: .pixel(surface: spill, offset: l.pixelOffset, fillOpacity: nil)))
+                }
+            }
+            return out
+        }
+        return visit(layers)
     }
 }
 
@@ -455,11 +676,51 @@ func paintWetHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] 
         let x = try SetLightingArguments(a)
         return try c.setLighting(azimuth: x.azimuth, elevation: x.elevation, relief: x.relief).json
     }
+    h["get_view_tilt"] = { _ in c.getViewTilt().json }
+    h["set_view_tilt"] = { a in
+        let x = try SetViewTiltArguments(a)
+        return try c.setViewTilt(x: x.x, y: x.y).json
+    }
     h["get_relief"] = { a in
         let r = try c.reliefOf(try GetReliefArguments(a).layerId)
-        return ["relief": r.map { ["layerId": .string($0.layerId), "bounds": rectJSON($0.bounds), "maxHeight": .number(Double($0.maxHeight))] } ?? .null, "lighting": c.lighting.json]
+        return [
+            "relief": r.map { info in ["layerId": .string(info.layerId), "bounds": rectJSON(info.bounds), "maxHeight": .number(Double(info.maxHeight))] } ?? .null,
+            "lighting": c.lighting.json,
+        ]
     }
     h["flatten_relief"] = { a in .object(try c.flattenRelief(try FlattenReliefArguments(a).layerId)) }
     h["set_instant_dry"] = { a in ["instantDry": .bool(c.setInstantDry(a["on"]?.boolValue ?? false))] }
+    h["set_uv_light"] = { a in
+        let uv = try c.setUvLight(on: a["on"]?.boolValue, strength: a["strength"]?.numberValue, ambient: a["ambient"]?.numberValue)
+        return ["on": .bool(uv.on), "strength": .number(uv.strength), "ambient": .number(uv.ambient), "fluorescentLayerIds": .array(c.fluorescentLayerIds().map { .string($0) })]
+    }
+    h["get_uv_light"] = { _ in
+        let uv = c.getUvLight()
+        return ["on": .bool(uv.on), "strength": .number(uv.strength), "ambient": .number(uv.ambient), "fluorescentLayerIds": .array(c.fluorescentLayerIds().map { .string($0) })]
+    }
+    h["paint_heat"] = { a in
+        let pts = (a["points"]?.arrayValue ?? []).map { p -> Point2 in
+            let o = p.objectValue ?? [:]
+            return Point2(x: o["x"]?.numberValue ?? .nan, y: o["y"]?.numberValue ?? .nan)
+        }
+        return .object(try c.paintHeat(points: pts, radius: a["radius"]?.numberValue, temperature: a["temperature"]?.numberValue))
+    }
+    h["advance_heat"] = { a in
+        let steps: Int? = try a["steps"].map { v in
+            guard let n = v.numberValue, n.isFinite, n == JS.floor(n) else {
+                throw PaintEditorError("steps \(v.stringified()) is out of range; use a whole number 1..200.")
+            }
+            return Int(n)
+        }
+        return .object(try c.advanceHeat(steps: steps))
+    }
+    h["clear_heat"] = { _ in .object(try c.clearHeat()) }
+    h["get_heat"] = { a in
+        let pts = (a["points"]?.arrayValue ?? []).map { p -> Point2 in
+            let o = p.objectValue ?? [:]
+            return Point2(x: o["x"]?.numberValue ?? .nan, y: o["y"]?.numberValue ?? .nan)
+        }
+        return .object(try c.getHeat(points: pts))
+    }
     return h
 }

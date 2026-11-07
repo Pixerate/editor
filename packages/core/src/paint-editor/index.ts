@@ -36,6 +36,7 @@ export { BLEND_MODES, PAINTERLY_BLEND_MODES, isBlendMode, isPainterlyBlendMode, 
 export * from './wet';
 export * from './wet-tools';
 export * from './thick';
+export * from './heat';
 export { BACKLIGHT_SPILL, DEFAULT_BACKLIGHT_COLOR, backlightOf } from './backlight';
 export * from './thick-tools';
 export * from './ferro';
@@ -63,5 +64,20 @@ export type { StickerProvider, StickerRef, StickerSummary } from '../stickers/ty
 export * from './sticker-art';
 export * from './collaboration';
 export * from './collaboration-tools';
+export * from './mutation';
+export * from './mutation-tools';
+export * from './evolution';
+export * from './evolution-tools';
 export { samplePath, MAX_PATH_SAMPLES, type PathSampleOptions } from './path-samples';
 export { createPaintConformanceHost, paintContracts, PAINT_CONTRACT_FORMAT_VERSION, PAINT_DOCUMENT_JSON_SCHEMA } from './contract';
+export {
+  squaredDistanceTransform,
+  fillRegionMask,
+  findUnfilledRegionsMask,
+  type FillRegionPoint,
+  type FillRegionSummary,
+  type FillRegionMaskOptions,
+  type FillRegionMaskResult,
+  type UnfilledRegion,
+  type FindUnfilledRegionsMaskOptions,
+} from '../raster/fill';

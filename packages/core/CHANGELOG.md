@@ -1,5 +1,43 @@
 # @pixerate/editor
 
+## 0.275.0
+
+### Minor Changes
+
+- 7b7c216: Add mutation paint (`mutation` facet with `settle`, `patience` and `fade`; presets `mutation-wash` and `mutation-ink`): wet or dry paint strokes that settle into a pending mutation request (`onMutationRequest`, React `useMutationRequests`, Svelte `createMutationRequestStore`), sink away when claimed by an agent via `read_mutation` (releasing held wet ghost fade or fading a temporary dry layer), and are answered by the agent's presence cursor via `answer_mutation` (or kept as ordinary paint on `decline_mutation` or timeout). Includes `createMutationTools` (`list_mutations`, `read_mutation`, `answer_mutation`, `decline_mutation`), the `pixerate-paint-mutation` workflow skill with evals, Settle / Patience / Fade brush panel controls and agent connection status in React, Svelte and Swift, and full Swift parity.
+- 59d0cd4: Add structural colour thin-film iridescence brush facet (`iridescence`), `ThickChannels.film` surface channel, built-in iridescent brush presets (`scarab-lacquer`, `soap-film`, `pearl-glaze`), view tilt shading (`set_view_tilt` / `get_view_tilt`), and opt-in `deviceTilt` gyroscope/orientation tracking across TypeScript core, React, Svelte, and Swift.
+- 7809354: Add UV-fluorescent and thermochromic smart inks to the paint editor (`fluorescence` and `thermochromic` brush facets, `uv-marker` and `thermo-ink` presets, virtual UV blacklight view/document settings, coarse canvas heat field with diffusion, Newtonian cooling, and wet-paint drying, plus `set_uv_light`, `get_uv_light`, `paint_heat`, `advance_heat`, `clear_heat`, and `get_heat` agent tools and UI controls across React, Svelte, and Swift).
+
+## 0.274.0
+
+### Minor Changes
+
+- 0a20011: feat(paint): Evolutionary strokes: breed and mutate stroke variants (`RecordedStroke` genomes) as pending paint proposals with smoothed point jitter, OKLCH colour drift, brush facet drift, seed reroll, crossover, agent tools (`breed_strokes`, `breed_proposal`, `get_proposal_genome`), React/Svelte `EvolutionPanel` UI, contact-sheet export, and Swift parity.
+
+## 0.273.0
+
+### Minor Changes
+
+- f8806de: Add reference-layer region fill (`fillRegion` / `fill_region`) with morphological gap closing (`closeGap` 0..32 px), boundary expansion under anti-aliased line art (`expand` -16..16 px), soft boundary antialiasing, paper grain modulation, and optional watercolour wash fill (`wet: true`), plus enclosed region detection (`findUnfilledRegions` / `find_unfilled_regions`) and an interactive Fill tool (`G`, drag to adjust tolerance) across TypeScript, React, Svelte, and Swift.
+
+## 0.272.1
+
+### Patch Changes
+
+- 6ec9a09: Export chart domain contracts (`@pixerate/conformance/domains/chart`) and `createChartConformanceHost` for deterministic chart conformance testing.
+
+## 0.272.0
+
+### Minor Changes
+
+- 0646d72: Add ghost paint and invisible ink (`ghost` facet with `linger` and `smear`): wet paint that flows and mixes visibly with the colours it meets while wet, then fades away completely without leaving a trace of its own colour, leaving only the smear where it lifted and dragged the paint already on the layer. Includes presets `ghost-wash`, `ghost-gouache`, `ghost-oil` and `invisible-ink`, `ghost.remaining` per layer in `get_wet_paint`, Linger and Smear sliders in React, Svelte and Swift brush panels, and full Swift parity.
+
+## 0.271.0
+
+### Minor Changes
+
+- a2b66e5: Add path-native effect paint (`map: { by: 'path' }`) for effects with a `format: 'svg-path'` control, passing each stroke's centreline in canvas pixels (simplified to at most 256 points) to the effect's path control, with UI placement ("Along the stroke (native)") in React and Svelte and full Swift parity. A stroke painted by hand shows the effect along the path drawn so far while it is drawn (Swift: `needsPathPreview` / `renderPreview()`, which `PaintGesture` runs) and is painted along its whole path when it ends: `strokeRendering` (TS) and `needsPathRender` / `renderPath()` (Swift) cover providers that render asynchronously. `EffectRenderer` gains an optional `renderSync`.
+
 ## 0.270.0
 
 ### Minor Changes

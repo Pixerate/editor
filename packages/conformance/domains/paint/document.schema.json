@@ -253,6 +253,67 @@
               "radius"
             ]
           }
+        },
+        "fluor": {
+          "type": "object",
+          "description": "Per-layer UV-fluorescent ink channels (layerId → bounds + PNG data URL).",
+          "additionalProperties": {
+            "type": "object"
+          }
+        },
+        "thermo": {
+          "type": "object",
+          "description": "Per-layer thermochromic ink channels (layerId → bounds + PNG data URL).",
+          "additionalProperties": {
+            "type": "object"
+          }
+        },
+        "heat": {
+          "type": "object",
+          "description": "Coarse document heat field (width, height, png) when the canvas is warm.",
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Heat grid width in cells (1/4 canvas resolution)."
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Heat grid height in cells (1/4 canvas resolution)."
+            },
+            "png": {
+              "type": "string",
+              "description": "Heat grid encoded as an RGBA PNG data URL."
+            }
+          },
+          "required": [
+            "width",
+            "height",
+            "png"
+          ]
+        },
+        "uvLight": {
+          "type": "object",
+          "description": "Virtual UV blacklight settings when non-default.",
+          "properties": {
+            "on": {
+              "type": "boolean",
+              "description": "Whether the UV blacklight is switched on."
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2,
+              "description": "UV emission and spill strength (0..2)."
+            },
+            "ambient": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Remaining daylight ambient level (0..1)."
+            }
+          }
         }
       },
       "required": [

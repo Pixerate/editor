@@ -526,6 +526,7 @@ export function bakeFerroIntoThick(
     thick: {
       height: new TiledSurface(1, heightTiles, 0),
       material: new TiledSurface(4, materialTiles, 0),
+      film: baseThick.film,
     },
     maxSpikeHeight,
     spikePixels,

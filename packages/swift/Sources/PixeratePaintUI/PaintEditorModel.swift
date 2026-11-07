@@ -5,6 +5,9 @@ import PixeratePaint
 import PixerateRaster
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(CoreMotion) && os(iOS)
+import CoreMotion
+#endif
 
 /// Reads `a.b` from a JSON object as a number, 0 when missing (`readPath` in `paint-editor/ui.ts`).
 public func readPath(_ obj: JSONObject, _ path: String) -> Double {
@@ -90,6 +93,8 @@ public final class PaintEditorModel {
     @ObservationIgnored private var isQuietFrameChange = false
     /// The active tool (`PaintUITables.tools` id).
     public var tool = "brush" { didSet { gesture.tool = tool } }
+    /// Options for the Fill tool (`tool == "fill"`).
+    public var fillOptions = PaintFillOptions() { didSet { gesture.fillOptions = fillOptions } }
     /// The last refusal or error, shown under the canvas.
     public var error: String?
     /// The picked stroke of the active stroke layer.
@@ -102,6 +107,15 @@ public final class PaintEditorModel {
     @ObservationIgnored public private(set) var gesture: PaintGesture!
     @ObservationIgnored private var subscriptions: [Cancellable] = []
     @ObservationIgnored private var fitted: String?
+    #if canImport(CoreMotion) && os(iOS)
+    @ObservationIgnored private var motionManager: CMMotionManager?
+    #endif
+    /// Whether device motion (gyroscope on iPhone / iPad) drives `viewTilt`.
+    public var deviceTiltEnabled = false {
+        didSet {
+            if deviceTiltEnabled != oldValue { updateDeviceMotion() }
+        }
+    }
 
     /// A model over `controller` (default a new 1024 × 768 painting), with its tools in `registry` (default a new one).
     public init(controller: PaintEditorController? = nil, registry: ToolRegistry? = nil) throws {
@@ -286,6 +300,47 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], facet, .number(value))) }
     }
 
+    /// The ghost-paint sliders (`PaintUITables.sliders.ghost`): linger and smear.
+    public var ghostSliders: [PaintUISlidersGhostItem] { tables.sliders.ghost }
+
+    /// The value of a ghost slider (`ghost.linger` or `ghost.smear`).
+    public func ghostValue(_ path: String) -> Double {
+        track()
+        guard let ghost = controller.brush.ghost else { return path == "ghost.smear" ? DEFAULT_GHOST.smear : DEFAULT_GHOST.linger }
+        return path == "ghost.smear" ? ghost.smear : ghost.linger
+    }
+
+    /// Sets a ghost slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setGhostValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// The mutation-paint sliders (`PaintUITables.sliders.mutation`): settle, patience and fade.
+    public var mutationSliders: [PaintUISlidersMutationItem] { tables.sliders.mutation }
+
+    /// The value of a mutation slider (`mutation.settle`, `mutation.patience` or `mutation.fade`).
+    public func mutationValue(_ path: String) -> Double {
+        track()
+        let m = controller.brush.mutation ?? DEFAULT_MUTATION
+        switch path {
+        case "mutation.settle": return m.settle
+        case "mutation.patience": return m.patience
+        case "mutation.fade": return m.fade
+        default: return 0
+        }
+    }
+
+    /// Sets a mutation slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setMutationValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// Whether an agent listener is connected for mutation requests.
+    public var hasMutationAgent: Bool { track(); return controller.hasMutationAgent }
+
+    /// The count of active mutations waiting for or being answered by an agent.
+    public var pendingMutationsCount: Int { track(); return controller.listMutations().count }
+
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
         let size = controller.brush.tip.size
@@ -321,8 +376,50 @@ public final class PaintEditorModel {
     public func setLighting(_ path: String, _ value: Double) {
         attempt { _ = try controller.setLighting(azimuth: path == "azimuth" ? value : nil, elevation: path == "elevation" ? value : nil, relief: path == "relief" ? value : nil) }
     }
+    /// The view tilt sliders (`PaintUITables.sliders.viewTilt`): viewer X and Y tilt for thin-film iridescence and specular highlights.
+    public var viewTiltSliders: [PaintUISlidersViewTiltItem] { tables.sliders.viewTilt }
+    public var viewTilt: PaintViewTilt { track(); return controller.viewTilt }
+    public func viewTiltValue(_ path: String) -> Double { readPath(viewTilt.json.objectValue ?? [:], path) }
+    /// Tilts the viewer angle (not an undo step: thin-film iridescence and specular highlights shift).
+    public func setViewTilt(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setViewTilt(x: path == "x" ? value : nil, y: path == "y" ? value : nil) }
+    }
+    private func updateDeviceMotion() {
+        #if canImport(CoreMotion) && os(iOS)
+        if deviceTiltEnabled {
+            let mgr = motionManager ?? CMMotionManager()
+            motionManager = mgr
+            guard mgr.isDeviceMotionAvailable else { return }
+            mgr.deviceMotionUpdateInterval = 1.0 / 60.0
+            mgr.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+                guard let self, let attitude = motion?.attitude else { return }
+                let x = Swift.min(1, Swift.max(-1, attitude.roll / (.pi / 4)))
+                let y = Swift.min(1, Swift.max(-1, (attitude.pitch - .pi / 6) / (.pi / 4)))
+                MainActor.assumeIsolated {
+                    _ = try? self.controller.setViewTilt(x: x, y: y)
+                }
+            }
+        } else {
+            motionManager?.stopDeviceMotionUpdates()
+        }
+        #endif
+    }
     /// Flattens the active layer's relief (one undo step).
     public func flattenRelief() { attempt { _ = try controller.flattenRelief() } }
+
+    // MARK: - UV blacklight and thermochromic heat
+
+    public var uvLight: UvLightSettings { track(); return controller.uvLight }
+    public func setUvLight(on: Bool? = nil, strength: Double? = nil, ambient: Double? = nil) {
+        attempt { _ = try controller.setUvLight(on: on, strength: strength, ambient: ambient) }
+    }
+    public var heatSummary: (max: Double, hotCells: Int) {
+        track()
+        let st = try? controller.getHeat()
+        return (st?["max"]?.numberValue ?? 0, Int(st?["hotCells"]?.numberValue ?? 0))
+    }
+    public func advanceHeat(steps: Int = 10) { attempt { _ = try controller.advanceHeat(steps: steps) } }
+    public func clearHeat() { attempt { _ = try controller.clearHeat() } }
 
     /// The active layer's light paint (`get_light`): whether it has any and its spill.
     public var activeLight: (hasLight: Bool, radius: Double, strength: Double)? {
@@ -541,7 +638,7 @@ public final class PaintEditorModel {
         switch id {
         case .undo: undo()
         case .redo: redo()
-        case .toolBrush, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
+        case .toolBrush, .toolFill, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
             let t = String(command.id.dropFirst(5))
             guard PAINT_UI_TOOLS.contains(t) else { return false }
             tool = t

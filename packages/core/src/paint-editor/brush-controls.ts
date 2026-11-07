@@ -58,14 +58,34 @@ export interface BrushEngineControls {
   stickerStamps?: boolean;
   /** Light paint: the "light follows pressure" toggle (`light.pressure`); the Light slider is in `sliders`. */
   light?: boolean;
+  /** Thin-film iridescence: whether the brush can lay a thin-film iridescent coat (`iridescence`; `IRIDESCENCE_SLIDERS` are in `sliders` when enabled). */
+  iridescence?: boolean;
 }
 
 /** The light paint slider (every engine that lays colour but sticker brushes; wet brushes when they paint). */
 const LIGHT_SLIDER: SliderControl = { path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 };
 
+/** The thin-film iridescence sliders (appended when `brush.iridescence` is set). */
+export const IRIDESCENCE_SLIDERS: readonly SliderControl[] = [
+  { path: 'iridescence.thickness', label: 'Film thickness (nm)', min: 100, max: 1000, step: 5 },
+  { path: 'iridescence.pressureToThickness', label: 'Pressure → thickness', min: 0, max: 1, step: 0.01 },
+  { path: 'iridescence.ior', label: 'Refractive index', min: 1.2, max: 2, step: 0.01 },
+];
+
 const PICKUP_SLIDERS: readonly SliderControl[] = [
   { path: 'behavior.pickup', label: 'Pick-up', min: 0, max: 1, step: 0.01 },
   { path: 'behavior.mix', label: 'Mix', min: 0, max: 1, step: 0.01 },
+];
+
+export const GHOST_SLIDERS: readonly SliderControl[] = [
+  { path: 'ghost.linger', label: 'Linger', min: 0.5, max: 60, step: 0.5 },
+  { path: 'ghost.smear', label: 'Smear', min: 0, max: 1, step: 0.01 },
+];
+
+export const MUTATION_SLIDERS: readonly SliderControl[] = [
+  { path: 'mutation.settle', label: 'Settle', min: 0.5, max: 10, step: 0.5 },
+  { path: 'mutation.patience', label: 'Patience', min: 5, max: 300, step: 5 },
+  { path: 'mutation.fade', label: 'Fade', min: 0.5, max: 10, step: 0.5 },
 ];
 
 /**
@@ -75,16 +95,21 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  * pigment choice; dab and mixer brushes also have the dirty and multi-colour controls. Pick-up
  * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
  */
-export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
+export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; iridescence?: PaintBrush['iridescence']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
   const c = engineControls(brush);
-  const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint';
-  if (!c || !(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine))) return c;
+  if (!c) return null;
+  const mut = brush.mutation ? MUTATION_SLIDERS : [];
+  const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint' && !brush.ghost && !brush.mutation;
+  if (!(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine))) {
+    return mut.length ? { ...c, sliders: [...c.sliders, ...mut] } : c;
+  }
   // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
   const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
-  return { ...c, sliders: [...c.sliders, LIGHT_SLIDER, ...extra], light: true };
+  const film: readonly SliderControl[] = brush.iridescence ? IRIDESCENCE_SLIDERS : [];
+  return { ...c, sliders: [...c.sliders, ...mut, LIGHT_SLIDER, ...extra, ...film], light: true, iridescence: true };
 }
 
-function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
+function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
   switch (brush.engine) {
     case 'particle':
       return {
@@ -153,16 +178,17 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
           { path: 'impasto.load', label: 'Load', min: 0, max: 1, step: 0.01 },
           { path: 'impasto.thinner', label: 'Thinner', min: 0, max: 1, step: 0.01 },
           { path: 'impasto.drag', label: 'Drag', min: 0, max: 1, step: 0.01 },
-          ...PICKUP_SLIDERS,
+          ...(brush.mutation ? [] : PICKUP_SLIDERS),
         ],
         mixingPath: 'behavior.mixing',
-        dirty: true,
+        dirty: !brush.mutation,
         multicolor: false,
-        load: true,
+        load: !brush.mutation,
         impastoTool: true,
       };
     case 'wet': {
       const tool = brush.wet?.tool ?? 'paint';
+      const ghost = tool === 'paint' && (Boolean(brush.ghost) || Boolean(brush.mutation));
       const sliders: SliderControl[] =
         tool === 'paint'
           ? [
@@ -172,7 +198,7 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
               { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
               { path: 'wet.load', label: 'Load', min: 0, max: 1, step: 0.01 },
               { path: 'wet.thinner', label: 'Thinner', min: 0, max: 1, step: 0.01 },
-              ...PICKUP_SLIDERS,
+              ...(brush.mutation ? [{ path: 'ghost.smear', label: 'Smear', min: 0, max: 1, step: 0.01 }] : ghost ? GHOST_SLIDERS : PICKUP_SLIDERS),
             ]
           : tool === 'water'
             ? [
@@ -180,7 +206,7 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
                 { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
               ]
             : [{ path: 'wet.strength', label: 'Strength', min: 0, max: 1, step: 0.01 }];
-      return { title: 'Wet brush', sliders, mixingPath: tool === 'paint' ? 'behavior.mixing' : null, dirty: tool === 'paint', multicolor: false, load: tool === 'paint', wetTool: true };
+      return { title: 'Wet brush', sliders, mixingPath: tool === 'paint' ? 'behavior.mixing' : null, dirty: tool === 'paint' && !ghost, multicolor: false, load: tool === 'paint' && !ghost, wetTool: true };
     }
     case 'blender':
       return {
@@ -209,7 +235,7 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
     case 'mixer':
       return { title: 'Mixer Brush', sliders: [...PICKUP_SLIDERS, { path: 'mixer.load', label: 'Load', min: 0, max: 1, step: 0.01 }], mixingPath: 'behavior.mixing', dirty: true, multicolor: true, load: true };
     case 'dab':
-      return { title: 'Paint behaviour', sliders: PICKUP_SLIDERS, mixingPath: 'behavior.mixing', dirty: true, multicolor: true, load: true };
+      return { title: 'Paint behaviour', sliders: brush.mutation ? [] : PICKUP_SLIDERS, mixingPath: 'behavior.mixing', dirty: !brush.mutation, multicolor: !brush.mutation, load: !brush.mutation };
     default:
       return null;
   }

@@ -16,6 +16,8 @@ const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', '
 const EXCHANGE: readonly PaintBrushEngine[] = ['dab', 'wet', 'impasto'];
 /** Engines that lay dabs from the pen dab walker: tip grain, count and flip apply. */
 const DABS: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge'];
+/** Mark engines that can deposit a thin-film iridescence channel. */
+const FILM: readonly PaintBrushEngine[] = ['dab', 'mixer', 'wet', 'impasto', 'particle', 'bristle'];
 
 /** One facet field and the engine field it sets. */
 export interface BrushField {
@@ -68,6 +70,9 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('tip.grain', 'tipGrain', DABS),
   f('behaviour.grain', 'grain'),
   ...each('light', 'light', ['amount', 'pressure']),
+  ...each('fluorescence', 'fluorescence', ['amount', 'invisible']),
+  ...each('thermochromic', 'thermochromic', ['hotColor', 'threshold']),
+  ...each('iridescence', 'iridescence', ['thickness', 'pressureToThickness', 'ior'], FILM),
   ...each('ferro', 'ferro', ['amount', 'wavelength', 'threshold']),
   // Paint exchange: the dab, wet and impasto engines' behaviour, or the Mixer Brush's settings.
   f('behaviour.exchange.pickup', 'behavior.pickup', EXCHANGE),
@@ -91,6 +96,8 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('behaviour.strength', 'wet.strength', ['wet']),
   // Surfaces.
   ...each('behaviour.wet', 'wet', ['medium', 'water', 'pigment', 'body', 'rewet', 'load', 'thinner'], ['wet']),
+  ...each('ghost', 'ghost', ['linger', 'smear', 'trigger'], ['wet']),
+  ...each('mutation', 'mutation', ['settle', 'patience', 'fade'], ['dab', 'wet', 'impasto', 'particle', 'bristle']),
   f('behaviour.thick.applicator', 'impasto.tool', ['impasto']),
   ...each('behaviour.thick', 'impasto', ['thickness', 'gloss', 'metallic', 'load', 'thinner', 'drag', 'rim', 'clarity'], ['impasto']),
   // Marks.
@@ -216,11 +223,14 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   }
   // Spray marks: the dab engine with droplets (their settings come from the fields above).
   if (engine === 'dab' && brush.marks?.kind === 'scatter') input.spray = { ...((input.spray as object | undefined) ?? {}) };
+  if (brush.iridescence && FILM.includes(engine)) input.iridescence = { ...((input.iridescence as object | undefined) ?? {}) };
   if (engine === 'wet') {
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');
     const medium = resolveWetMedium(brush);
     if (medium) setPath(input, 'wet.medium', medium);
+    if (brush.kind !== 'tool' && brush.ghost) input.ghost = { ...((input.ghost as object | undefined) ?? {}) };
   }
+  if (brush.kind !== 'tool' && brush.mutation) input.mutation = { ...((input.mutation as object | undefined) ?? {}) };
   // Blenders and smudges only move paint already down.
   if (engine === 'blender' || engine === 'smudge') input.loadsColor = false;
   const paint = brush.colour?.default;

@@ -46,9 +46,15 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
 4. **Hide the sketch.** `update_layer` the Sketch layer `visible: false` (or lower its `opacity`
    while inking, then hide it).
    **Check:** `list_layers` shows it hidden.
-5. **Flats.** `add_layer` "Flats", then `move_layer` it below the Ink layer; fill each shape with
-   its base colour (`marker` or a flat brush, or `fill_layer` for a background).
-   **Check:** `pick_color` inside a shape is the flat colour; on a line still the ink.
+5. **Flats.** `add_layer` "Flats", then `move_layer` it below the Ink layer. Call
+   `find_unfilled_regions` (`reference` set to the Ink layer id or `"all"`, `layerId` set to the
+   Flats layer, `closeGap: 4..8`) to get each enclosed shape's interior seed `point` and `bounds`.
+   Fill each shape in one call with `fill_region` (`x`, `y` or `points` for same-coloured shapes,
+   `reference` set to the Ink layer id or `"all"`, `closeGap: 4..8` to bridge small line gaps,
+   `expand: 1..2` to bleed under anti-aliased ink edges so no white halo shows, or `wet: true` for a
+   watercolour wash). Check `leaked`: if `true`, undo (`undo_paint`) and raise `closeGap` or close
+   the open line. Use `fill_layer` for a full-canvas ground.
+   **Check:** `pick_color` inside a shape is the flat colour; on a line still the ink; `leaked` is `false`.
 6. **Shading and light.** `add_layer` "Shading" directly above the flats, `update_layer`
    `blend: "multiply"` (or `shadow`) and `clipped: true`; paint shadows on the side away from the
    light. A "Light" layer the same way with `highlight` or `screen`.
@@ -64,7 +70,8 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
 | Sketch | `pencil-hb`, light colour, own layer, hidden at the end |
 | Line art | `ink-pen` (even), `brush-pen` (swelling); own layer on top |
 | Clean geometric lines (curves, circles, borders) | `stroke_path` with SVG path data and a `pressure` taper, on the Ink layer |
-| Flats | `marker` or a flat brush on a layer under the ink |
+| Flats inside line art | `find_unfilled_regions` then `fill_region` (`reference` = Ink layer id or `"all"`, `closeGap: 4..8`, `expand: 1..2`) on a Flats layer under the ink |
+| Watercolour wash inside line art | `fill_region` with `wet: true`, `reference` = Ink layer id, `closeGap: 4..8`, `expand: 1` |
 | Patterned or textured flats (sky, gradient, galaxy) | `set_effect_paint` with a provider generator, then a flat dry brush on the Flats layer; `set_color` after |
 | Textured passes (dry brush, sponge, foliage) | A brush with `tip.grain` (`set_brush` `{ tip: { grain: { source: "sanded", depth: 0.6 } } }`) or an image tip from the brush library, with `dynamics.angleJitter` and `flip` so repeats don't show |
 | Shadows | Clipped layer, `multiply` or `shadow`, a cool colour |
@@ -75,7 +82,10 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
 ## Recipes
 
 **Flats under ink.** `add_layer` "Flats" → `move_layer` with the new layer's id and `index` below
-the Ink layer → `set_brush` `marker` → `set_color` → strokes inside the shape.
+the Ink layer → `find_unfilled_regions` `{ reference: inkLayerId, layerId: flatsLayerId, closeGap: 4 }`
+→ `fill_region` `{ x, y, color, reference: inkLayerId, closeGap: 4, expand: 1 }` (or pass `points`
+to fill multiple regions of the same colour in one undo step). If `leaked: true`, `undo_paint` and
+increase `closeGap`.
 
 **Effect flats.** With an effects provider: `search_effects` (`use` generator) → `describe_effect`
 → `set_effect_paint` → `marker` strokes inside the shape on the Flats layer (the effect shows
@@ -100,6 +110,7 @@ clipped: true }` → `set_brush` `airbrush` → paint the shadow side.
 
 - `get_canvas_info`, `list_layers`, `list_strokes`, `pick_color`, `render_preview`: read and check
 - `set_paper`, `fill_layer`: the ground and backgrounds
+- `find_unfilled_regions`, `fill_region`: inspect enclosed line-art shapes and fill flats under the ink with gap closing and edge expansion
 - `add_layer`, `update_layer`, `move_layer`, `remove_layer`: one layer per pass; hide, clip, blend
 - `set_brush`, `set_color`, `paint_stroke`, `replay_strokes`: sketch, ink, flats and shading
 - `stroke_path`: clean geometric line art from SVG path data

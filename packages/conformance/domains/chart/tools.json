@@ -1,0 +1,3651 @@
+{
+  "providers": [
+    {
+      "id": "chart",
+      "title": "Chart editor",
+      "skill": "pixerate-chart",
+      "tools": [
+        {
+          "name": "get_chart",
+          "title": "Read the chart",
+          "description": "Returns the chart spec (type, titles, axes, legend, series with ids and settings), its data as a table (header row of series names, then one row per category), grouped data as treeTable (path of names to each item, then its value) when the chart has a tree, the current selection, and a summary at the given size: per-series min / max / mean / trend, the axes as drawn, layout warnings (hidden labels, thinned lines), a colour check and a plain-language description. Use the series ids and category indexes it returns with the write tools.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 4096,
+                "description": "Width in pixels (default 640)."
+              },
+              "height": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 4096,
+                "description": "Height in pixels (default 400)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read the chart",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "render_chart",
+          "title": "Render the chart",
+          "description": "Draws the chart without changing it so you can check how it looks: SVG text by default, or a PNG image with format \"png\" when the host can rasterize. Returns the layout warnings (hidden or thinned labels, dropped markers) alongside. An image costs tokens, so render after a batch of edits rather than after each one, and use it to check what text cannot tell you: overlapping or cut-off labels, a crowded legend, unreadable colours, whether the chart reads at the given size. For values, ids and warnings alone, get_chart is cheaper.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 4096,
+                "description": "Width in pixels (default 640)."
+              },
+              "height": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 4096,
+                "description": "Height in pixels (default 400)."
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "svg",
+                  "png"
+                ],
+                "description": "svg (default): the SVG document as text. png: an image to look at (only when the host can rasterize; costs image tokens)."
+              },
+              "time": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "description": "Bar race only: the moment to draw (default: the one shown). Time point label (a category, e.g. \"2023\") or index from 0; an index may be fractional, 2.5 being halfway between the third and fourth time points."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Render the chart",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "check_chart_colors",
+          "title": "Check chart colours",
+          "description": "Checks whether the chart's colours are accessible: that colour-blind readers can tell them apart (protanopia, deuteranopia and tritanopia, by OKLab distance after simulation) as well as people with normal vision, and that they stand out from the background. Checks the chart's own series (or slice) colours unless colours are given. Returns the closest pair per vision, contrast ratios and problems as sentences.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "description": "Colours to check instead of the chart's (hex or rgb())."
+              },
+              "surface": {
+                "type": "string",
+                "description": "Background colour (default white)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Check chart colours",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "recommend_chart",
+          "title": "Recommend chart types",
+          "description": "Suggests chart types for data, best first, each with a reason: from CSV text when given, else from the chart's current data. Uses the shape of the data (series count, points, dates, negative values).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "csv": {
+                "type": "string",
+                "description": "CSV or TSV text to analyse instead of the current data (first row may be series names, first column categories)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Recommend chart types",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "get_chart_trendline",
+          "title": "Read a trendline fit",
+          "description": "Returns a trendline's fitted coefficients (in x for category charts, x = 1, 2, 3, …), R², equation and the number of points, or the moving-average points.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "series": {
+                "type": "string",
+                "description": "Series id (from get_chart) or exact series name."
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Trendline index on the series (0 = first)."
+              }
+            },
+            "required": [
+              "series",
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read a trendline fit",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "get_chart_tooltip",
+          "title": "Read a chart tooltip",
+          "description": "Returns what a viewer sees when hovering a category (or one series in it): the category label and, for each visible series with a value there, its name, colour, value, share (percent-stacked and pie charts, 0–1) and the value as the chart writes it. Returns null for charts without one value per category (histogram, box, treemap, sunburst, sankey, …) or when no visible series has a value there.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": [
+                  "string",
+                  "integer"
+                ],
+                "description": "Category index (0-based) or exact category label."
+              },
+              "series": {
+                "type": "string",
+                "description": "Series id (from get_chart) or exact series name. Omit to include every visible series in the category."
+              }
+            },
+            "required": [
+              "category"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read a chart tooltip",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "get_chart_race_ranking",
+          "title": "Read a bar race ranking",
+          "description": "Returns who leads a bar race at a moment without changing what is shown: the top raceTopN names with their rank, series id and value (eased between time points). Defaults to the moment shown. Works for any chart, reading categories as time points and series as names.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "description": "Time point label (a category, e.g. \"2023\") or index from 0; an index may be fractional, 2.5 being halfway between the third and fourth time points."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read a bar race ranking",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "list_chart_map_regions",
+          "title": "List map regions",
+          "description": "Lists the maps a choropleth can draw and the regions of one (default: the chart's map), each with the id and name that categories may use, and how the chart's categories match them: matched (category → region id) and unmatched. Use it to pick category labels before set_chart_data, and to fix unmatched ones.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "map": {
+                "type": "string",
+                "description": "Map id (default: the chart's map)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List map regions",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "list_chart_presets",
+          "title": "List chart presets",
+          "description": "Lists the quick layouts and colour schemes apply_chart_preset accepts, with what each changes.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List chart presets",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "export_chart_mermaid",
+          "title": "Export chart as Mermaid",
+          "description": "Returns the chart as Mermaid text for Markdown or chat: xychart-beta, pie or radar-beta, sankey-beta for Sankey diagrams with flows, treemap-beta for treemaps and sunbursts (with their levels). With meta (default true) one \"%% @pixerate {…}\" comment keeps what Mermaid cannot express, so import_chart_mermaid gets the chart back exactly.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "boolean",
+                "description": "Include the round-trip comment (default true)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Export chart as Mermaid",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "export_chart_ooxml",
+          "title": "Export chart as Office XML",
+          "description": "Returns the chart as a DrawingML chart part (c:chartSpace) for Word or PowerPoint files, with what could not be written as sentences.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Export chart as Office XML",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "update_chart",
+          "title": "Change chart presentation",
+          "description": "Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale \"log\"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total, radar rings (radarTicks) and grid shape (radarGraticule), note, highlight, reference lines and bands (whole lists), and varyColors. All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "bar",
+                  "line",
+                  "area",
+                  "scatter",
+                  "bubble",
+                  "pie",
+                  "donut",
+                  "radar",
+                  "waterfall",
+                  "histogram",
+                  "box",
+                  "funnel",
+                  "treemap",
+                  "sunburst",
+                  "sankey",
+                  "streamgraph",
+                  "slope",
+                  "likert",
+                  "parliament",
+                  "barrace",
+                  "choropleth"
+                ],
+                "description": "Chart type. streamgraph stacks areas symmetrically around a center baseline; slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups; sankey draws the flows (set_chart_links); barrace reads categories as time points and series as names, and animates their ranking; choropleth shades the regions of a map, each category naming a region by code (FRA) or name (France)."
+              },
+              "title": {
+                "type": "string",
+                "description": "Title (\"\" for none)."
+              },
+              "subtitle": {
+                "type": "string",
+                "description": "Subtitle (\"\" for none)."
+              },
+              "xAxis": {
+                "type": "object",
+                "description": "Category axis (or numeric x axis of scatter / bubble charts).",
+                "properties": {
+                  "show": {
+                    "type": "boolean",
+                    "description": "Draw the axis labels (default true)."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Axis title (\"\" for none)."
+                  },
+                  "min": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Fixed lower bound, or null for automatic."
+                  },
+                  "max": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Fixed upper bound, or null for automatic."
+                  },
+                  "step": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "exclusiveMinimum": 0,
+                    "description": "Fixed distance between ticks, or null for automatic."
+                  },
+                  "gridlines": {
+                    "type": "boolean",
+                    "description": "Grid lines at each tick."
+                  },
+                  "format": {
+                    "type": "object",
+                    "description": "How numbers are written on this axis or series.",
+                    "properties": {
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "number",
+                          "percent",
+                          "currency",
+                          "compact"
+                        ],
+                        "description": "number (default), percent (0.25 → 25%), currency or compact (1.2K)."
+                      },
+                      "decimals": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10,
+                        "description": "Fixed decimals (default: what the ticks need)."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "description": "ISO currency code for style \"currency\", e.g. \"EUR\" (default USD)."
+                      },
+                      "prefix": {
+                        "type": "string",
+                        "description": "Text before every number."
+                      },
+                      "suffix": {
+                        "type": "string",
+                        "description": "Text after every number."
+                      },
+                      "code": {
+                        "type": "string",
+                        "description": "Spreadsheet format code such as \"#,##0.0,,\\\"M\\\"\" or \"0.0%\"; wins over the other fields."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "kind": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "category",
+                      "date",
+                      null
+                    ],
+                    "description": "Category axis only: \"date\" reads categories as dates and labels them by calendar steps."
+                  },
+                  "scale": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "linear",
+                      "log",
+                      null
+                    ],
+                    "description": "Value axes and the numeric x axis of scatter / bubble charts: \"log\" spaces ticks by powers of logBase (values of 0 or less are skipped; min and max must be above 0; not with percent stacking). \"linear\" or null is the default. Ignored on a category axis."
+                  },
+                  "logBase": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 2,
+                    "maximum": 1000,
+                    "description": "Base of a log axis, 2 to 1000 (default 10; null resets)."
+                  },
+                  "reverse": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ],
+                    "description": "Run the axis the other way: values from the top down (or right to left), categories from the far end. Default false."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "yAxis": {
+                "type": "object",
+                "description": "Value axis.",
+                "properties": {
+                  "show": {
+                    "type": "boolean",
+                    "description": "Draw the axis labels (default true)."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Axis title (\"\" for none)."
+                  },
+                  "min": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Fixed lower bound, or null for automatic."
+                  },
+                  "max": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Fixed upper bound, or null for automatic."
+                  },
+                  "step": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "exclusiveMinimum": 0,
+                    "description": "Fixed distance between ticks, or null for automatic."
+                  },
+                  "gridlines": {
+                    "type": "boolean",
+                    "description": "Grid lines at each tick."
+                  },
+                  "format": {
+                    "type": "object",
+                    "description": "How numbers are written on this axis or series.",
+                    "properties": {
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "number",
+                          "percent",
+                          "currency",
+                          "compact"
+                        ],
+                        "description": "number (default), percent (0.25 → 25%), currency or compact (1.2K)."
+                      },
+                      "decimals": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10,
+                        "description": "Fixed decimals (default: what the ticks need)."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "description": "ISO currency code for style \"currency\", e.g. \"EUR\" (default USD)."
+                      },
+                      "prefix": {
+                        "type": "string",
+                        "description": "Text before every number."
+                      },
+                      "suffix": {
+                        "type": "string",
+                        "description": "Text after every number."
+                      },
+                      "code": {
+                        "type": "string",
+                        "description": "Spreadsheet format code such as \"#,##0.0,,\\\"M\\\"\" or \"0.0%\"; wins over the other fields."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "kind": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "category",
+                      "date",
+                      null
+                    ],
+                    "description": "Category axis only: \"date\" reads categories as dates and labels them by calendar steps."
+                  },
+                  "scale": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "linear",
+                      "log",
+                      null
+                    ],
+                    "description": "Value axes and the numeric x axis of scatter / bubble charts: \"log\" spaces ticks by powers of logBase (values of 0 or less are skipped; min and max must be above 0; not with percent stacking). \"linear\" or null is the default. Ignored on a category axis."
+                  },
+                  "logBase": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 2,
+                    "maximum": 1000,
+                    "description": "Base of a log axis, 2 to 1000 (default 10; null resets)."
+                  },
+                  "reverse": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ],
+                    "description": "Run the axis the other way: values from the top down (or right to left), categories from the far end. Default false."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "yAxis2": {
+                "type": "object",
+                "description": "Secondary value axis (for series with axis \"secondary\").",
+                "properties": {
+                  "show": {
+                    "type": "boolean",
+                    "description": "Draw the axis labels (default true)."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Axis title (\"\" for none)."
+                  },
+                  "min": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Fixed lower bound, or null for automatic."
+                  },
+                  "max": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Fixed upper bound, or null for automatic."
+                  },
+                  "step": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "exclusiveMinimum": 0,
+                    "description": "Fixed distance between ticks, or null for automatic."
+                  },
+                  "gridlines": {
+                    "type": "boolean",
+                    "description": "Grid lines at each tick."
+                  },
+                  "format": {
+                    "type": "object",
+                    "description": "How numbers are written on this axis or series.",
+                    "properties": {
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "number",
+                          "percent",
+                          "currency",
+                          "compact"
+                        ],
+                        "description": "number (default), percent (0.25 → 25%), currency or compact (1.2K)."
+                      },
+                      "decimals": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10,
+                        "description": "Fixed decimals (default: what the ticks need)."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "description": "ISO currency code for style \"currency\", e.g. \"EUR\" (default USD)."
+                      },
+                      "prefix": {
+                        "type": "string",
+                        "description": "Text before every number."
+                      },
+                      "suffix": {
+                        "type": "string",
+                        "description": "Text after every number."
+                      },
+                      "code": {
+                        "type": "string",
+                        "description": "Spreadsheet format code such as \"#,##0.0,,\\\"M\\\"\" or \"0.0%\"; wins over the other fields."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "kind": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "category",
+                      "date",
+                      null
+                    ],
+                    "description": "Category axis only: \"date\" reads categories as dates and labels them by calendar steps."
+                  },
+                  "scale": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "linear",
+                      "log",
+                      null
+                    ],
+                    "description": "Value axes and the numeric x axis of scatter / bubble charts: \"log\" spaces ticks by powers of logBase (values of 0 or less are skipped; min and max must be above 0; not with percent stacking). \"linear\" or null is the default. Ignored on a category axis."
+                  },
+                  "logBase": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 2,
+                    "maximum": 1000,
+                    "description": "Base of a log axis, 2 to 1000 (default 10; null resets)."
+                  },
+                  "reverse": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ],
+                    "description": "Run the axis the other way: values from the top down (or right to left), categories from the far end. Default false."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "legend": {
+                "type": "object",
+                "description": "Legend.",
+                "properties": {
+                  "show": {
+                    "type": "boolean",
+                    "description": "Show the legend."
+                  },
+                  "position": {
+                    "type": "string",
+                    "enum": [
+                      "top",
+                      "bottom",
+                      "left",
+                      "right"
+                    ],
+                    "description": "Where the legend goes."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "stacking": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "stacked",
+                  "percent"
+                ],
+                "description": "none, stacked, or percent (each category scaled to 100%)."
+              },
+              "orientation": {
+                "type": "string",
+                "enum": [
+                  "vertical",
+                  "horizontal"
+                ],
+                "description": "horizontal draws bars sideways."
+              },
+              "curve": {
+                "type": "string",
+                "enum": [
+                  "linear",
+                  "smooth",
+                  "step"
+                ],
+                "description": "Line shape: linear, smooth or step."
+              },
+              "points": {
+                "type": "boolean",
+                "description": "Dots on line and area series."
+              },
+              "dataLabels": {
+                "type": "boolean",
+                "description": "Value labels on bars, points and slices."
+              },
+              "labelPosition": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "inside",
+                  "outside",
+                  "center"
+                ],
+                "description": "Bar label position; auto drops labels that do not fit."
+              },
+              "palette": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "description": "Series colours in order (CSS colours)."
+              },
+              "innerRadius": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.9,
+                "description": "Donut hole as a fraction of the radius."
+              },
+              "gapWidth": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.9,
+                "description": "Space between bar groups as a fraction of the category (default 0.28)."
+              },
+              "overlap": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1,
+                "description": "Bar overlap within a group as a fraction of a bar (negative: a gap; default -0.12)."
+              },
+              "bins": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "maximum": 500,
+                "description": "Histogram bin count, or null for √n."
+              },
+              "showTotal": {
+                "type": "boolean",
+                "description": "Waterfall: append a total bar."
+              },
+              "radarTicks": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "maximum": 50,
+                "description": "Radar: number of evenly spaced rings from the value axis min to max, or null for round-number rings (default null)."
+              },
+              "radarGraticule": {
+                "type": "string",
+                "enum": [
+                  "polygon",
+                  "circle"
+                ],
+                "description": "Radar: draw rings as polygons through the spokes or as circles (default polygon)."
+              },
+              "note": {
+                "type": "string",
+                "description": "A source or footnote written under the chart (\"\" for none)."
+              },
+              "highlight": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Category labels and series names (or ids) to draw normally while the rest are muted; [] shows everything. highlight_chart checks the names."
+              },
+              "referenceLines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number",
+                      "description": "Where the line crosses its axis, in data units."
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "Text written on it, e.g. \"Target\" (default none)."
+                    },
+                    "axis": {
+                      "type": "string",
+                      "enum": [
+                        "y",
+                        "y2",
+                        "x"
+                      ],
+                      "description": "Axis it is measured on: y (default) is the value axis, y2 the secondary value axis (needs a series there), x the numeric x axis of a scatter or bubble chart."
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "CSS colour (default: the text colour)."
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Replaces every reference line (targets, floors, averages across the plot). add_chart_reference_line adds one."
+              },
+              "referenceBands": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "number",
+                      "description": "One end of the band on its axis, in data units."
+                    },
+                    "to": {
+                      "type": "number",
+                      "description": "The other end of the band, in data units (ends may come in either order)."
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "Text written on it, e.g. \"Target\" (default none)."
+                    },
+                    "axis": {
+                      "type": "string",
+                      "enum": [
+                        "y",
+                        "y2",
+                        "x"
+                      ],
+                      "description": "Axis it is measured on: y (default) is the value axis, y2 the secondary value axis (needs a series there), x the numeric x axis of a scatter or bubble chart."
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "CSS colour (default: the text colour)."
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Replaces every reference band (target ranges across the plot). add_chart_reference_band adds one."
+              },
+              "varyColors": {
+                "type": "boolean",
+                "description": "A one-series bar, line, area or scatter chart colours each category from the palette, and its legend lists the categories (default false)."
+              },
+              "likertNeutral": {
+                "type": "string",
+                "enum": [
+                  "split",
+                  "separate"
+                ],
+                "description": "Likert with an odd number of answers: split (default) puts the middle answer across the centre line; separate draws it in its own column on the right."
+              },
+              "likertSort": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "positive",
+                  "negative"
+                ],
+                "description": "Likert: order the questions by agreement (positive), by disagreement (negative) or as given (none, default)."
+              },
+              "parliamentArc": {
+                "type": "number",
+                "minimum": 90,
+                "maximum": 360,
+                "description": "Parliament: sweep of the hemicycle in degrees (default 180)."
+              },
+              "parliamentMajority": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "description": "Parliament: seats needed for a majority, drawn as a dashed line (null: half of the seats plus one)."
+              },
+              "parliamentLabel": {
+                "type": "string",
+                "description": "Parliament: caption under the seat total (\"\" writes \"seats\")."
+              },
+              "sunburstLabel": {
+                "type": "string",
+                "description": "Sunburst: caption under the total in the centre (\"\" for none)."
+              },
+              "sankeyLinkColor": {
+                "type": "string",
+                "enum": [
+                  "source",
+                  "target",
+                  "gray"
+                ],
+                "description": "Sankey: colour each flow by its source node (default), its target node, or grey."
+              },
+              "map": {
+                "type": "string",
+                "description": "Choropleth: the registered map to draw (list_chart_map_regions lists them; \"europe\" by default)."
+              },
+              "mapSteps": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 9,
+                "description": "Choropleth: number of equal colour classes between the smallest and largest value (default 5)."
+              },
+              "mapThresholds": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 8,
+                "description": "Choropleth: class breaks in ascending order, e.g. [100, 250, 500], used instead of mapSteps; [] goes back to equal classes."
+              },
+              "raceTopN": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30,
+                "description": "Bar race: how many bars each moment shows (default 10)."
+              },
+              "sankeyNodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Sankey: node names in the order to stack them within their columns (reorder to untangle crossing flows); nodes left out follow in the order the flows name them."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Change chart presentation",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_chart_data",
+          "title": "Replace chart data",
+          "description": "Replaces the categories and / or the series as one undo step. Each series has one value per category (padded with gaps). Returns the data table and the series ids.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Category labels in order."
+              },
+              "series": {
+                "type": "array",
+                "description": "The new series (replaces all).",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Stable id (optional)."
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Series name (legend and data grid header)."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "number",
+                          "string",
+                          "null"
+                        ],
+                        "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                      },
+                      "description": "One value per category, in category order (padded with gaps)."
+                    },
+                    "color": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "CSS colour, or null for the palette colour."
+                    },
+                    "type": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "bar",
+                        "line",
+                        "area",
+                        "scatter",
+                        null
+                      ],
+                      "description": "Draw this series as bar, line, area or scatter (a combo chart); null follows the chart type."
+                    },
+                    "hidden": {
+                      "type": "boolean",
+                      "description": "Hide the series (its data is kept)."
+                    },
+                    "axis": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "primary",
+                        "secondary",
+                        null
+                      ],
+                      "description": "Value axis: secondary is drawn on the right with its own scale."
+                    },
+                    "x": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "number",
+                          "string",
+                          "null"
+                        ],
+                        "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                      },
+                      "description": "Numeric x per category, for scatter and bubble charts."
+                    },
+                    "sizes": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "number",
+                          "string",
+                          "null"
+                        ],
+                        "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                      },
+                      "description": "Bubble sizes per category (area is proportional to size)."
+                    },
+                    "pointColors": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "description": "Colour per category (null keeps the series colour)."
+                    },
+                    "callouts": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "description": "A label pinned to each point that matters, one per category (null: none); null removes them all. Bar, line, area and scatter charts. set_chart_callout sets one."
+                    },
+                    "marker": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "circle",
+                        "square",
+                        "diamond",
+                        "triangle",
+                        "cross",
+                        "none",
+                        null
+                      ],
+                      "description": "Point marker shape for line, area and scatter series."
+                    },
+                    "curve": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "linear",
+                        "smooth",
+                        "step",
+                        null
+                      ],
+                      "description": "Line shape for this series: linear, smooth or step."
+                    },
+                    "dataLabels": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "Value labels for this series (null follows the chart)."
+                    },
+                    "format": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "How this series' labels are written (null follows the value axis).",
+                      "properties": {
+                        "style": {
+                          "type": "string",
+                          "enum": [
+                            "number",
+                            "percent",
+                            "currency",
+                            "compact"
+                          ],
+                          "description": "number (default), percent (0.25 → 25%), currency or compact (1.2K)."
+                        },
+                        "decimals": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10,
+                          "description": "Fixed decimals (default: what the ticks need)."
+                        },
+                        "currency": {
+                          "type": "string",
+                          "description": "ISO currency code for style \"currency\", e.g. \"EUR\" (default USD)."
+                        },
+                        "prefix": {
+                          "type": "string",
+                          "description": "Text before every number."
+                        },
+                        "suffix": {
+                          "type": "string",
+                          "description": "Text after every number."
+                        },
+                        "code": {
+                          "type": "string",
+                          "description": "Spreadsheet format code such as \"#,##0.0,,\\\"M\\\"\" or \"0.0%\"; wins over the other fields."
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "errorBars": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "Error bars along the value axis (bar, line, area and scatter series; on stacked charts they sit on the stack top). null removes them.",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "fixed",
+                            "percent",
+                            "stddev",
+                            "stderr",
+                            "custom"
+                          ],
+                          "description": "fixed: the same amount at every point; percent: a percentage of each value; stddev: value standard deviations of the series, drawn around the series mean (as Excel does); stderr: the standard error of the series at every point; custom: per-point plus / minus amounts."
+                        },
+                        "value": {
+                          "type": "number",
+                          "minimum": 0,
+                          "description": "Amount in data units for fixed (default 1), percent of each value for percent (default 5), number of standard deviations for stddev (default 1). Not for stderr or custom."
+                        },
+                        "plus": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "string",
+                              "null"
+                            ],
+                            "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                          },
+                          "description": "custom only: amount above each point, one per category, in data units (0 or more; null for none)."
+                        },
+                        "minus": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "string",
+                              "null"
+                            ],
+                            "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                          },
+                          "description": "custom only: amount below each point, one per category (default: the plus amounts)."
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "both",
+                            "plus",
+                            "minus"
+                          ],
+                          "description": "both (default), plus (only above) or minus (only below)."
+                        },
+                        "cap": {
+                          "type": "boolean",
+                          "description": "Draw end caps (default true)."
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "xErrorBars": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "Error bars along the x axis (scatter and bubble charts with numeric x values; amounts in x units). null removes them.",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "fixed",
+                            "percent",
+                            "stddev",
+                            "stderr",
+                            "custom"
+                          ],
+                          "description": "fixed: the same amount at every point; percent: a percentage of each value; stddev: value standard deviations of the series, drawn around the series mean (as Excel does); stderr: the standard error of the series at every point; custom: per-point plus / minus amounts."
+                        },
+                        "value": {
+                          "type": "number",
+                          "minimum": 0,
+                          "description": "Amount in data units for fixed (default 1), percent of each value for percent (default 5), number of standard deviations for stddev (default 1). Not for stderr or custom."
+                        },
+                        "plus": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "string",
+                              "null"
+                            ],
+                            "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                          },
+                          "description": "custom only: amount above each point, one per category, in data units (0 or more; null for none)."
+                        },
+                        "minus": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "string",
+                              "null"
+                            ],
+                            "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                          },
+                          "description": "custom only: amount below each point, one per category (default: the plus amounts)."
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "both",
+                            "plus",
+                            "minus"
+                          ],
+                          "description": "both (default), plus (only above) or minus (only below)."
+                        },
+                        "cap": {
+                          "type": "boolean",
+                          "description": "Draw end caps (default true)."
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Replace chart data",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_chart_values",
+          "title": "Set chart values",
+          "description": "Sets individual values as one undo step (all-or-nothing). Series by id or name, category by index or label. Returns the values as stored.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "cells": {
+                "type": "array",
+                "minItems": 1,
+                "description": "Values to set.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "series": {
+                      "type": "string",
+                      "description": "Series id (from get_chart) or exact series name."
+                    },
+                    "category": {
+                      "type": [
+                        "string",
+                        "integer"
+                      ],
+                      "description": "Category index (0-based) or exact category label."
+                    },
+                    "value": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    }
+                  },
+                  "required": [
+                    "series",
+                    "category",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "cells"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Set chart values",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "add_chart_series",
+          "title": "Add a series",
+          "description": "Adds a series (values padded to the categories) and selects it. Returns its id and stored values.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Series name (legend and data grid header)."
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "number",
+                    "string",
+                    "null"
+                  ],
+                  "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                },
+                "description": "One value per category, in category order (padded with gaps)."
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CSS colour, or null for the palette colour."
+              },
+              "type": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "bar",
+                  "line",
+                  "area",
+                  "scatter",
+                  null
+                ],
+                "description": "Draw this series as bar, line, area or scatter (a combo chart); null follows the chart type."
+              },
+              "hidden": {
+                "type": "boolean",
+                "description": "Hide the series (its data is kept)."
+              },
+              "axis": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "primary",
+                  "secondary",
+                  null
+                ],
+                "description": "Value axis: secondary is drawn on the right with its own scale."
+              },
+              "x": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "number",
+                    "string",
+                    "null"
+                  ],
+                  "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                },
+                "description": "Numeric x per category, for scatter and bubble charts."
+              },
+              "sizes": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "number",
+                    "string",
+                    "null"
+                  ],
+                  "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                },
+                "description": "Bubble sizes per category (area is proportional to size)."
+              },
+              "pointColors": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "Colour per category (null keeps the series colour)."
+              },
+              "callouts": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "A label pinned to each point that matters, one per category (null: none); null removes them all. Bar, line, area and scatter charts. set_chart_callout sets one."
+              },
+              "marker": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "circle",
+                  "square",
+                  "diamond",
+                  "triangle",
+                  "cross",
+                  "none",
+                  null
+                ],
+                "description": "Point marker shape for line, area and scatter series."
+              },
+              "curve": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "linear",
+                  "smooth",
+                  "step",
+                  null
+                ],
+                "description": "Line shape for this series: linear, smooth or step."
+              },
+              "dataLabels": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Value labels for this series (null follows the chart)."
+              },
+              "format": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "How this series' labels are written (null follows the value axis).",
+                "properties": {
+                  "style": {
+                    "type": "string",
+                    "enum": [
+                      "number",
+                      "percent",
+                      "currency",
+                      "compact"
+                    ],
+                    "description": "number (default), percent (0.25 → 25%), currency or compact (1.2K)."
+                  },
+                  "decimals": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10,
+                    "description": "Fixed decimals (default: what the ticks need)."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "description": "ISO currency code for style \"currency\", e.g. \"EUR\" (default USD)."
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "description": "Text before every number."
+                  },
+                  "suffix": {
+                    "type": "string",
+                    "description": "Text after every number."
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Spreadsheet format code such as \"#,##0.0,,\\\"M\\\"\" or \"0.0%\"; wins over the other fields."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "errorBars": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Error bars along the value axis (bar, line, area and scatter series; on stacked charts they sit on the stack top). null removes them.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "fixed",
+                      "percent",
+                      "stddev",
+                      "stderr",
+                      "custom"
+                    ],
+                    "description": "fixed: the same amount at every point; percent: a percentage of each value; stddev: value standard deviations of the series, drawn around the series mean (as Excel does); stderr: the standard error of the series at every point; custom: per-point plus / minus amounts."
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Amount in data units for fixed (default 1), percent of each value for percent (default 5), number of standard deviations for stddev (default 1). Not for stderr or custom."
+                  },
+                  "plus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount above each point, one per category, in data units (0 or more; null for none)."
+                  },
+                  "minus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount below each point, one per category (default: the plus amounts)."
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "both",
+                      "plus",
+                      "minus"
+                    ],
+                    "description": "both (default), plus (only above) or minus (only below)."
+                  },
+                  "cap": {
+                    "type": "boolean",
+                    "description": "Draw end caps (default true)."
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              "xErrorBars": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Error bars along the x axis (scatter and bubble charts with numeric x values; amounts in x units). null removes them.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "fixed",
+                      "percent",
+                      "stddev",
+                      "stderr",
+                      "custom"
+                    ],
+                    "description": "fixed: the same amount at every point; percent: a percentage of each value; stddev: value standard deviations of the series, drawn around the series mean (as Excel does); stderr: the standard error of the series at every point; custom: per-point plus / minus amounts."
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Amount in data units for fixed (default 1), percent of each value for percent (default 5), number of standard deviations for stddev (default 1). Not for stderr or custom."
+                  },
+                  "plus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount above each point, one per category, in data units (0 or more; null for none)."
+                  },
+                  "minus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount below each point, one per category (default: the plus amounts)."
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "both",
+                      "plus",
+                      "minus"
+                    ],
+                    "description": "both (default), plus (only above) or minus (only below)."
+                  },
+                  "cap": {
+                    "type": "boolean",
+                    "description": "Draw end caps (default true)."
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              "id": {
+                "type": "string",
+                "description": "Id to use (default: series-N)."
+              },
+              "at": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Position (default: last)."
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Add a series",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "update_chart_series",
+          "title": "Change a series",
+          "description": "Renames, recolours, hides, moves to the secondary axis or changes how a series is drawn (marker, curve, labels, format, x values, bubble sizes, point colours, error bars). null resets a field. Values change with set_chart_values. Returns the series.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "series": {
+                "type": "string",
+                "description": "Series id (from get_chart) or exact series name."
+              },
+              "name": {
+                "type": "string",
+                "description": "Series name (legend and data grid header)."
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CSS colour, or null for the palette colour."
+              },
+              "type": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "bar",
+                  "line",
+                  "area",
+                  "scatter",
+                  null
+                ],
+                "description": "Draw this series as bar, line, area or scatter (a combo chart); null follows the chart type."
+              },
+              "hidden": {
+                "type": "boolean",
+                "description": "Hide the series (its data is kept)."
+              },
+              "axis": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "primary",
+                  "secondary",
+                  null
+                ],
+                "description": "Value axis: secondary is drawn on the right with its own scale."
+              },
+              "x": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "number",
+                    "string",
+                    "null"
+                  ],
+                  "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                },
+                "description": "Numeric x per category, for scatter and bubble charts."
+              },
+              "sizes": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "number",
+                    "string",
+                    "null"
+                  ],
+                  "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                },
+                "description": "Bubble sizes per category (area is proportional to size)."
+              },
+              "pointColors": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "Colour per category (null keeps the series colour)."
+              },
+              "callouts": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "A label pinned to each point that matters, one per category (null: none); null removes them all. Bar, line, area and scatter charts. set_chart_callout sets one."
+              },
+              "marker": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "circle",
+                  "square",
+                  "diamond",
+                  "triangle",
+                  "cross",
+                  "none",
+                  null
+                ],
+                "description": "Point marker shape for line, area and scatter series."
+              },
+              "curve": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "linear",
+                  "smooth",
+                  "step",
+                  null
+                ],
+                "description": "Line shape for this series: linear, smooth or step."
+              },
+              "dataLabels": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Value labels for this series (null follows the chart)."
+              },
+              "format": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "How this series' labels are written (null follows the value axis).",
+                "properties": {
+                  "style": {
+                    "type": "string",
+                    "enum": [
+                      "number",
+                      "percent",
+                      "currency",
+                      "compact"
+                    ],
+                    "description": "number (default), percent (0.25 → 25%), currency or compact (1.2K)."
+                  },
+                  "decimals": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10,
+                    "description": "Fixed decimals (default: what the ticks need)."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "description": "ISO currency code for style \"currency\", e.g. \"EUR\" (default USD)."
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "description": "Text before every number."
+                  },
+                  "suffix": {
+                    "type": "string",
+                    "description": "Text after every number."
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Spreadsheet format code such as \"#,##0.0,,\\\"M\\\"\" or \"0.0%\"; wins over the other fields."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "errorBars": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Error bars along the value axis (bar, line, area and scatter series; on stacked charts they sit on the stack top). null removes them.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "fixed",
+                      "percent",
+                      "stddev",
+                      "stderr",
+                      "custom"
+                    ],
+                    "description": "fixed: the same amount at every point; percent: a percentage of each value; stddev: value standard deviations of the series, drawn around the series mean (as Excel does); stderr: the standard error of the series at every point; custom: per-point plus / minus amounts."
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Amount in data units for fixed (default 1), percent of each value for percent (default 5), number of standard deviations for stddev (default 1). Not for stderr or custom."
+                  },
+                  "plus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount above each point, one per category, in data units (0 or more; null for none)."
+                  },
+                  "minus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount below each point, one per category (default: the plus amounts)."
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "both",
+                      "plus",
+                      "minus"
+                    ],
+                    "description": "both (default), plus (only above) or minus (only below)."
+                  },
+                  "cap": {
+                    "type": "boolean",
+                    "description": "Draw end caps (default true)."
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              "xErrorBars": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Error bars along the x axis (scatter and bubble charts with numeric x values; amounts in x units). null removes them.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "fixed",
+                      "percent",
+                      "stddev",
+                      "stderr",
+                      "custom"
+                    ],
+                    "description": "fixed: the same amount at every point; percent: a percentage of each value; stddev: value standard deviations of the series, drawn around the series mean (as Excel does); stderr: the standard error of the series at every point; custom: per-point plus / minus amounts."
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Amount in data units for fixed (default 1), percent of each value for percent (default 5), number of standard deviations for stddev (default 1). Not for stderr or custom."
+                  },
+                  "plus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount above each point, one per category, in data units (0 or more; null for none)."
+                  },
+                  "minus": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "string",
+                        "null"
+                      ],
+                      "description": "A number, numeric text (\"1,200\", \"12%\", \"$40\", \"(3)\") or null for a gap."
+                    },
+                    "description": "custom only: amount below each point, one per category (default: the plus amounts)."
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "both",
+                      "plus",
+                      "minus"
+                    ],
+                    "description": "both (default), plus (only above) or minus (only below)."
+                  },
+                  "cap": {
+                    "type": "boolean",
+                    "description": "Draw end caps (default true)."
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "series"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Change a series",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_chart_series",
+          "title": "Delete a series",
+          "description": "Deletes a series and its values. Returns the remaining series ids.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "series": {
+                "type": "string",
+                "description": "Series id (from get_chart) or exact series name."
+              }
+            },
+            "required": [
+              "series"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete a series",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "add_chart_category",
+          "title": "Add a category",
+          "description": "Inserts a category (a gap in every series) and returns its index.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Category label (default: its number)."
+              },
+              "at": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Index to insert at (default: the end)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Add a category",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_chart_category",
+          "title": "Delete a category",
+          "description": "Deletes a category and its value in every series. Returns the remaining categories.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": [
+                  "string",
+                  "integer"
+                ],
+                "description": "Category index (0-based) or exact category label."
+              }
+            },
+            "required": [
+              "category"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete a category",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "import_chart_csv",
+          "title": "Import chart data from CSV",
+          "description": "Replaces the data with CSV or TSV text as one undo step. By default the first row holds series names and the first column categories (detected when \"auto\"). chartType \"auto\" also picks the recommended chart type (two unlabelled numeric columns become a scatter of x against y). Returns the data table, the chart type and cells that were not numbers.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "csv": {
+                "type": "string",
+                "description": "CSV or TSV text (tabs are detected)."
+              },
+              "seriesIn": {
+                "type": "string",
+                "enum": [
+                  "columns",
+                  "rows"
+                ],
+                "description": "Series run down columns (default) or along rows. Ignored with chartType \"auto\"."
+              },
+              "header": {
+                "type": [
+                  "boolean",
+                  "string"
+                ],
+                "enum": [
+                  true,
+                  false,
+                  "auto"
+                ],
+                "description": "The first row holds series names: true (default), false or \"auto\". Ignored with chartType \"auto\"."
+              },
+              "chartType": {
+                "type": "string",
+                "enum": [
+                  "keep",
+                  "auto"
+                ],
+                "description": "\"keep\" (default) keeps the chart type; \"auto\" reads the table shape and picks a type."
+              }
+            },
+            "required": [
+              "csv"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Import chart data from CSV",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "import_chart_mermaid",
+          "title": "Import a Mermaid chart",
+          "description": "Replaces the chart with Mermaid xychart-beta, pie, radar-beta, sankey-beta or treemap-beta text as one undo step (a \"%% @pixerate\" comment from export_chart_mermaid restores everything else). Lines that cannot be read are skipped and listed with their line numbers. Returns the spec.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "mermaid": {
+                "type": "string",
+                "description": "Mermaid text, optionally inside a ```mermaid fence."
+              }
+            },
+            "required": [
+              "mermaid"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Import a Mermaid chart",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "import_chart_ooxml",
+          "title": "Import an Office chart",
+          "description": "Replaces the chart with an Office chart part (DrawingML c:chartSpace, or chartex for waterfall, funnel, treemap, histogram and box charts) as one undo step. Returns the spec, problems, and the features the editor cannot hold.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "xml": {
+                "type": "string",
+                "description": "The chart part XML, e.g. word/charts/chart1.xml."
+              }
+            },
+            "required": [
+              "xml"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Import an Office chart",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "add_chart_trendline",
+          "title": "Add a trendline",
+          "description": "Fits a trendline to a series and draws it (unstacked bar, line, area, scatter and bubble charts). Returns its index and the fit: coefficients, R² and equation.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "series": {
+                "type": "string",
+                "description": "Series id (from get_chart) or exact series name."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "linear",
+                  "exponential",
+                  "logarithmic",
+                  "power",
+                  "polynomial",
+                  "moving-average"
+                ],
+                "description": "Fit: linear, exponential, logarithmic, power, polynomial or moving-average."
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 6,
+                "description": "Polynomial order (default 2)."
+              },
+              "period": {
+                "type": "integer",
+                "minimum": 2,
+                "description": "Moving-average period in points (default 2)."
+              },
+              "forward": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Extend the line this many x units past the last point (default 0)."
+              },
+              "backward": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Extend the line this many x units before the first point (default 0)."
+              },
+              "intercept": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Force the fit through this y at x = 0 (linear, polynomial, exponential)."
+              },
+              "showEquation": {
+                "type": "boolean",
+                "description": "Write the fitted equation on the chart."
+              },
+              "showR2": {
+                "type": "boolean",
+                "description": "Write R² on the chart."
+              },
+              "name": {
+                "type": "string",
+                "description": "Legend name (default e.g. \"Linear (Sales)\")."
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour (default: the series colour)."
+              }
+            },
+            "required": [
+              "series",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Add a trendline",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_chart_trendline",
+          "title": "Delete a trendline",
+          "description": "Deletes a trendline from a series. Returns the series' remaining trendlines.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "series": {
+                "type": "string",
+                "description": "Series id (from get_chart) or exact series name."
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Trendline index on the series (0 = first)."
+              }
+            },
+            "required": [
+              "series",
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete a trendline",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "add_chart_reference_line",
+          "title": "Add a reference line",
+          "description": "Draws a dashed line across the plot at one value: a target, a floor, an average (bar, line, area, scatter and bubble charts). The axis grows to keep it in view. Returns its index and the reference lines.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "description": "Where the line crosses its axis, in data units."
+              },
+              "label": {
+                "type": "string",
+                "description": "Text written on it, e.g. \"Target\" (default none)."
+              },
+              "axis": {
+                "type": "string",
+                "enum": [
+                  "y",
+                  "y2",
+                  "x"
+                ],
+                "description": "Axis it is measured on: y (default) is the value axis, y2 the secondary value axis (needs a series there), x the numeric x axis of a scatter or bubble chart."
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour (default: the text colour)."
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Add a reference line",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "update_chart_reference_line",
+          "title": "Change a reference line",
+          "description": "Changes a reference line by index (all-or-nothing); label, axis and color take null to remove them. Returns the line as stored.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Reference line index (0 = first), as get_chart lists them in spec.referenceLines."
+              },
+              "value": {
+                "type": "number",
+                "description": "Where the line crosses its axis, in data units."
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Text written on it; null removes it."
+              },
+              "axis": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "y",
+                  "y2",
+                  "x",
+                  null
+                ],
+                "description": "Axis it is measured on (y, y2 or x); null goes back to y."
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CSS colour; null goes back to the text colour."
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Change a reference line",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_chart_reference_line",
+          "title": "Delete a reference line",
+          "description": "Deletes a reference line by index; the ones after it move up one. Returns the reference lines left.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Reference line index (0 = first), as get_chart lists them in spec.referenceLines."
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete a reference line",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "add_chart_reference_band",
+          "title": "Add a reference band",
+          "description": "Shades a band across the plot between two values: a target or normal range (bar, line, area, scatter and bubble charts), drawn under the data. The axis grows to keep it in view. Returns its index and the reference bands.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "number",
+                "description": "One end of the band on its axis, in data units."
+              },
+              "to": {
+                "type": "number",
+                "description": "The other end of the band, in data units (ends may come in either order)."
+              },
+              "label": {
+                "type": "string",
+                "description": "Text written on it, e.g. \"Target\" (default none)."
+              },
+              "axis": {
+                "type": "string",
+                "enum": [
+                  "y",
+                  "y2",
+                  "x"
+                ],
+                "description": "Axis it is measured on: y (default) is the value axis, y2 the secondary value axis (needs a series there), x the numeric x axis of a scatter or bubble chart."
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour (default: the text colour)."
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Add a reference band",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "update_chart_reference_band",
+          "title": "Change a reference band",
+          "description": "Changes a reference band by index (all-or-nothing); label, axis and color take null to remove them. Returns the band as stored.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Reference band index (0 = first), as get_chart lists them in spec.referenceBands."
+              },
+              "from": {
+                "type": "number",
+                "description": "One end of the band on its axis, in data units."
+              },
+              "to": {
+                "type": "number",
+                "description": "The other end of the band, in data units (ends may come in either order)."
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Text written on it; null removes it."
+              },
+              "axis": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "y",
+                  "y2",
+                  "x",
+                  null
+                ],
+                "description": "Axis it is measured on (y, y2 or x); null goes back to y."
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CSS colour; null goes back to the text colour."
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Change a reference band",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_chart_reference_band",
+          "title": "Delete a reference band",
+          "description": "Deletes a reference band by index; the ones after it move up one. Returns the reference bands left.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Reference band index (0 = first), as get_chart lists them in spec.referenceBands."
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete a reference band",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_chart_callout",
+          "title": "Pin a label to a point",
+          "description": "Pins a short label to one bar or point, with a leader line, to say why it matters (\"Record quarter\", \"Launch\"); label null or \"\" removes it. Bar, line, area, scatter and bubble charts; the point must have a value. Selects the point and returns the series id, category index and label.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "series": {
+                "type": "string",
+                "description": "Series id (from get_chart) or exact series name."
+              },
+              "category": {
+                "type": [
+                  "string",
+                  "integer"
+                ],
+                "description": "Category index (0-based) or exact category label."
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The label (keep it to a few words), or null to remove it."
+              }
+            },
+            "required": [
+              "series",
+              "category",
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Pin a label to a point",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "highlight_chart",
+          "title": "Highlight categories or series",
+          "description": "Draws the named categories (labels) and series (names or ids) normally and mutes the rest, to draw attention to the marks the chart is about; [] shows everything again. A point stays bright when its category or its series is named. Unknown names change nothing and are reported. Returns the category indexes and series ids that matched.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Category labels and / or series names or ids, exactly as get_chart shows them. [] clears the highlight."
+              }
+            },
+            "required": [
+              "names"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Highlight categories or series",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_chart_tree",
+          "title": "Replace grouped data",
+          "description": "Replaces the chart's data with groups of items (a tree) for treemaps and sunbursts, as one undo step: items {\"name\", \"value\"} and groups {\"name\", \"children\"}, up to 6 levels, names unique among siblings. The top-level groups become the categories and their totals the first series, so other chart types draw the totals. [] goes back to plain data (the totals stay as values). Returns the tree, each group's total and the depth.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "tree": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/chartTreeNode"
+                },
+                "description": "The top-level nodes; [] removes the grouping."
+              }
+            },
+            "required": [
+              "tree"
+            ],
+            "additionalProperties": false,
+            "$defs": {
+              "chartTreeNode": {
+                "type": "object",
+                "description": "An item ({\"name\", \"value\"}) or a group ({\"name\", \"children\": [nodes]}, whose value is the sum of its items).",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Label; unique among its siblings."
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Items only: the amount, 0 or more."
+                  },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/chartTreeNode"
+                    },
+                    "description": "Groups only: the nodes inside it (up to 6 levels in all)."
+                  },
+                  "color": {
+                    "type": "string",
+                    "description": "CSS colour (default: the palette colour of its top-level group, lighter further in)."
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "annotations": {
+            "title": "Replace grouped data",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "import_chart_tree_csv",
+          "title": "Import grouped data from CSV",
+          "description": "Replaces the data with grouped data from CSV or TSV: every column but the last holds names (group, subgroup, …, item), the last holds the value. A blank group name repeats the one above, as spreadsheets lay out groups. One undo step. Returns the tree, group totals and depth.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "csv": {
+                "type": "string",
+                "description": "CSV or TSV text, e.g. \"Region,Country,Customers\\nEurope,France,40\\n,Spain,25\"."
+              },
+              "header": {
+                "type": [
+                  "boolean",
+                  "string"
+                ],
+                "enum": [
+                  true,
+                  false,
+                  "auto"
+                ],
+                "description": "The first row holds column names (default auto: when its last cell is not a number)."
+              }
+            },
+            "required": [
+              "csv"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Import grouped data from CSV",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "add_chart_tree_node",
+          "title": "Add an item or group",
+          "description": "Adds an item or a group (with children) under a group of the grouped data, or at the top level. Returns its path and its parent's new total.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "parent": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Path of the group to add to; [] or omitted for the top level."
+              },
+              "node": {
+                "$ref": "#/$defs/chartTreeNode",
+                "description": "The item ({\"name\", \"value\"}) or group ({\"name\", \"children\"}) to add."
+              },
+              "at": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Position among its siblings (default: the end)."
+              }
+            },
+            "required": [
+              "node"
+            ],
+            "additionalProperties": false,
+            "$defs": {
+              "chartTreeNode": {
+                "type": "object",
+                "description": "An item ({\"name\", \"value\"}) or a group ({\"name\", \"children\": [nodes]}, whose value is the sum of its items).",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Label; unique among its siblings."
+                  },
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Items only: the amount, 0 or more."
+                  },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/chartTreeNode"
+                    },
+                    "description": "Groups only: the nodes inside it (up to 6 levels in all)."
+                  },
+                  "color": {
+                    "type": "string",
+                    "description": "CSS colour (default: the palette colour of its top-level group, lighter further in)."
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "annotations": {
+            "title": "Add an item or group",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "update_chart_tree_node",
+          "title": "Change an item or group",
+          "description": "Renames a node, sets an item's value, or sets a node's colour (null goes back to the palette). Groups have no value of their own. Returns the node's path (new if renamed) and the node.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "description": "Names from the top level down to the node, e.g. [\"Europe\", \"France\"] (from get_chart treeTable or spec.tree)."
+              },
+              "name": {
+                "type": "string",
+                "description": "New name (unique among its siblings)."
+              },
+              "value": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Items only: the new amount."
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CSS colour, or null for the palette colour."
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Change an item or group",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_chart_tree_node",
+          "title": "Delete an item or group",
+          "description": "Deletes a node of the grouped data with everything under it (a group left empty becomes an item with value 0). Returns the group totals left.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "description": "Names from the top level down to the node, e.g. [\"Europe\", \"France\"] (from get_chart treeTable or spec.tree)."
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete an item or group",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_chart_links",
+          "title": "Replace the flows",
+          "description": "Replaces the chart's data with flows between named nodes for a Sankey diagram, as one undo step: each {\"source\", \"target\", \"value\"} with a value above 0. Flows only go forwards (no loops) and a source-target pair appears once. The nodes become the categories and how much passes through each the first series. nodes (optional) sets the stacking order. [] goes back to plain data. Returns the flows and each node's throughput.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "description": "Name of the node the flow leaves."
+                    },
+                    "target": {
+                      "type": "string",
+                      "description": "Name of the node it reaches (a different node; flows only go forwards, no loops)."
+                    },
+                    "value": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "How much flows, above 0 (its width)."
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "CSS colour (default: by sankeyLinkColor)."
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "target",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "All the flows; [] removes them."
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Node names in stacking order (default: as the flows first name them)."
+              }
+            },
+            "required": [
+              "links"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Replace the flows",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "import_chart_links_csv",
+          "title": "Import flows from CSV",
+          "description": "Replaces the data with flows from CSV or TSV rows of source, target and value (as Mermaid sankey-beta and spreadsheets write them). One undo step. Returns the flows and each node's throughput.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "csv": {
+                "type": "string",
+                "description": "CSV or TSV text, e.g. \"Website,Signup,120\\nSignup,Paid,30\"."
+              },
+              "header": {
+                "type": [
+                  "boolean",
+                  "string"
+                ],
+                "enum": [
+                  true,
+                  false,
+                  "auto"
+                ],
+                "description": "The first row holds column names (default auto: when its third cell is not a number)."
+              }
+            },
+            "required": [
+              "csv"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Import flows from CSV",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "add_chart_link",
+          "title": "Add a flow",
+          "description": "Adds a flow from one node to another (new names add nodes). Refused when the pair exists already or it would close a loop. Returns its index and the throughput of its two nodes.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "description": "Name of the node the flow leaves."
+              },
+              "target": {
+                "type": "string",
+                "description": "Name of the node it reaches (a different node; flows only go forwards, no loops)."
+              },
+              "value": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "How much flows, above 0 (its width)."
+              },
+              "color": {
+                "type": "string",
+                "description": "CSS colour (default: by sankeyLinkColor)."
+              }
+            },
+            "required": [
+              "source",
+              "target",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Add a flow",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "update_chart_link",
+          "title": "Change a flow",
+          "description": "Changes a flow by index: its source, target, value or colour (null goes back to the default). Checked like a new flow. Returns the flow as stored.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Flow index (0 = first), as get_chart lists them in spec.links."
+              },
+              "source": {
+                "type": "string",
+                "description": "Name of the node the flow leaves."
+              },
+              "target": {
+                "type": "string",
+                "description": "Name of the node it reaches (a different node; flows only go forwards, no loops)."
+              },
+              "value": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "How much flows, above 0 (its width)."
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CSS colour, or null for the default."
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Change a flow",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_chart_link",
+          "title": "Delete a flow",
+          "description": "Deletes a flow by index; the ones after it move up one, and nodes no flow uses any more go. Returns the flows left.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Flow index (0 = first), as get_chart lists them in spec.links."
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete a flow",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_chart_race_frame",
+          "title": "Show a bar race moment",
+          "description": "Shows the bar race at a time point (or between two), and stops playback. This is view state like the selection: it is not an undo step and is not saved in the chart. Returns the moment and the ranking shown.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ],
+                "description": "Time point label (a category, e.g. \"2023\") or index from 0; an index may be fractional, 2.5 being halfway between the third and fourth time points. null shows the last time point."
+              }
+            },
+            "required": [
+              "time"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Show a bar race moment",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "play_chart_race",
+          "title": "Play the bar race",
+          "description": "Starts playing the bar race for the user from the moment shown (from the start when it is at the end), one time point every msPerStep ms, and returns at once. set_chart_race_frame stops it. Nothing in the chart changes.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "msPerStep": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 10000,
+                "description": "Milliseconds per time point (default 1000)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Play the bar race",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "apply_chart_preset",
+          "title": "Apply a chart style",
+          "description": "Applies a quick layout (legend, labels and grid lines together) and / or a colour scheme as one undo step. See list_chart_presets for the names. Returns the new spec.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "layout": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "minimal",
+                  "labelled",
+                  "legend-right",
+                  "presentation",
+                  "analysis"
+                ],
+                "description": "Quick layout id."
+              },
+              "colors": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "okabe-ito",
+                  "office",
+                  "warm",
+                  "cool",
+                  "monochrome-blue",
+                  "monochrome-green",
+                  "monochrome-orange",
+                  "monochrome-gray"
+                ],
+                "description": "Colour scheme id."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Apply a chart style",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "transpose_chart",
+          "title": "Switch rows and columns",
+          "description": "Swaps series and categories (each category becomes a series) as one undo step. Per-series colours and settings are dropped. Returns the data table.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Switch rows and columns",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "select_chart_element",
+          "title": "Select a chart element",
+          "description": "Selects part of the chart (as a click would), for press_chart_key and for the user to see. kind \"none\" clears the selection. Returns the selection.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "chart",
+                  "title",
+                  "subtitle",
+                  "legend",
+                  "axis",
+                  "series",
+                  "point",
+                  "category",
+                  "trendline"
+                ],
+                "description": "What to select."
+              },
+              "series": {
+                "type": "string",
+                "description": "Series id or name (series, point, trendline)."
+              },
+              "category": {
+                "type": [
+                  "string",
+                  "integer"
+                ],
+                "description": "Category index or label (point, category)."
+              },
+              "axis": {
+                "type": "string",
+                "enum": [
+                  "x",
+                  "y",
+                  "y2"
+                ],
+                "description": "Axis (axis)."
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Trendline index (trendline)."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Select a chart element",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "drag_chart_point",
+          "title": "Drag a chart point",
+          "description": "Drags on the chart as a pointer would, through the same code as the mouse: from a bar or point to a new position, with the same snapping (to other values, zero and ticks), fine adjustment (fine: Alt) and axis lock on scatter charts (lockAxis: Shift). Positions are 0–1 fractions of the chart's width and height at the given size (use render_chart to see where marks are). One undo step. Returns what was dragged and the value before and after.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "object",
+                "description": "Start, as fractions of the chart (0,0 top-left).",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Fraction of the width."
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Fraction of the height."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "to": {
+                "type": "object",
+                "description": "End, as fractions of the chart.",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Fraction of the width."
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Fraction of the height."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "fine": {
+                "type": "boolean",
+                "description": "Move a tenth as far (Alt)."
+              },
+              "lockAxis": {
+                "type": "boolean",
+                "description": "Scatter charts: change only the axis moved along most (Shift)."
+              },
+              "width": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 4096,
+                "description": "Width in pixels (default 640)."
+              },
+              "height": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 4096,
+                "description": "Height in pixels (default 400)."
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Drag a chart point",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "press_chart_key",
+          "title": "Press a key on the chart",
+          "description": "Sends a key to the chart as the keyboard would, acting on the selection (select_chart_element first): ← → move between categories, ↑ ↓ change the selected value by a tenth of a tick (shift: a whole tick, alt: a hundredth), Delete removes the selection, Escape clears it. Returns whether the key did anything and the new selection.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "enum": [
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "ArrowUp",
+                  "ArrowDown",
+                  "Delete",
+                  "Backspace",
+                  "Escape"
+                ],
+                "description": "Key name."
+              },
+              "shift": {
+                "type": "boolean",
+                "description": "Hold Shift."
+              },
+              "alt": {
+                "type": "boolean",
+                "description": "Hold Alt / Option."
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Press a key on the chart",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "undo_chart",
+          "title": "Undo a chart edit",
+          "description": "Undoes the last chart edit. Returns whether something was undone and what the next undo would be.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Undo a chart edit",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "redo_chart",
+          "title": "Redo a chart edit",
+          "description": "Redoes the last undone chart edit. Returns whether something was redone.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Redo a chart edit",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "chart-style",
+      "title": "Chart house style",
+      "skill": "pixerate-chart",
+      "tools": [
+        {
+          "name": "check_chart_style",
+          "title": "Check chart house style",
+          "description": "Checks the chart against the house style (see get_style with domain \"chart\"): runs the checks its profile turns on (palette-only, distinguishable, min-contrast, allowed-type). Returns findings with a severity, a sentence saying how to fix it, a target selection (series id or point) for update_chart_series or update_chart, and the layer that asked for it; plus the checks that ran and the ones skipped with the reason. Check after a batch of edits and again after fixing.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Check chart house style",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "office-charts",
+      "title": "Office charts",
+      "skill": "pixerate-chart",
+      "tools": [
+        {
+          "name": "list_open_files",
+          "title": "List open files",
+          "description": "Lists the Office files the user opened that charts can be read from. Returns their names and sizes in bytes.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List open files",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "list_file_charts",
+          "title": "List the charts in an Office file",
+          "description": "Reads an Excel workbook, PowerPoint deck or Word document and lists its charts in file order: id, where it sits (sheet name and anchor cell, or slide number), title, type, series names, number of categories, read problems, features the chart editor cannot hold, and whether it reads losslessly. Pass an id to get_file_chart or load_file_chart.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "Name of an open file, as list_open_files returns it."
+              }
+            },
+            "required": [
+              "file"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List the charts in an Office file",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "get_file_chart",
+          "title": "Get a chart from an Office file",
+          "description": "Returns one chart of an Office file with its full chart spec (data, axes, series styles), where it sits and its read problems.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "Name of an open file, as list_open_files returns it."
+              },
+              "chartId": {
+                "type": "string",
+                "description": "Chart id from list_file_charts, e.g. \"chart-1\"."
+              }
+            },
+            "required": [
+              "file",
+              "chartId"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Get a chart from an Office file",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "load_file_chart",
+          "title": "Load a chart from an Office file",
+          "description": "Replaces the chart in the editor with a chart from an Office file, as one undo step. Returns the new spec, read problems and features the editor could not keep.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "Name of an open file, as list_open_files returns it."
+              },
+              "chartId": {
+                "type": "string",
+                "description": "Chart id from list_file_charts, e.g. \"chart-1\"."
+              }
+            },
+            "required": [
+              "file",
+              "chartId"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Load a chart from an Office file",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ]
+    }
+  ]
+}

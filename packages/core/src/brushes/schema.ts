@@ -10,7 +10,7 @@ import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
-import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS } from './types';
+import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
 
 /** Most colours in a brush's palette. */
 export const MAX_BRUSH_PALETTE = 16;
@@ -226,6 +226,34 @@ const LIGHT = object('Light the brush gives off with its colour (glow and spill)
   glow: bool('Suggest a glow layer effect for the layer (glow stays a layer effect).'),
 });
 
+const FLUORESCENCE = object('UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.', {
+  amount: unit('Fluorescence intensity under UV blacklight, 0 (none) .. 1.'),
+  invisible: bool('Invisible ink in normal light: lays no daylight paint and glows only under UV (default false).'),
+});
+
+const THERMOCHROMIC = object('Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.', {
+  hotColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Colour (#rrggbb) the ink turns when heated.' },
+  threshold: num(0.05, 0.95, 'Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5).'),
+});
+
+const IRIDESCENCE = object('Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt. Missing fields take their defaults.', {
+  thickness: num(100, 1000, 'Film thickness in nanometres, 100..1000 (default 400).'),
+  pressureToThickness: unit('How much pen pressure shifts the film thickness per dab, 0..1 (default 0: uniform thickness).'),
+  ior: num(1.2, 2.0, 'Refractive index of the film, 1.2..2.0 (default 1.5; water/soap ~1.33, pearl ~1.55, beetle lacquer ~1.65).'),
+});
+
+const GHOST = object('Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").', {
+  linger: num(0.5, 60, 'Seconds of simulated time before the ghost paint has fully faded (default 4).'),
+  smear: unit('How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3).'),
+  trigger: oneOf(GHOST_TRIGGERS, 'When the fade starts: immediate (default) counts down as soon as the paint is laid; agent holds the fade until read_mutation claims the stroke.'),
+});
+
+const MUTATION = object('Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).', {
+  settle: num(0.5, 10, 'Seconds after the last stroke before it counts as finished and raises a mutation request (default 1.5).'),
+  patience: num(5, 300, 'Seconds to wait for an agent before giving up and keeping the paint as ordinary paint (default 45).'),
+  fade: num(0.5, 10, 'Seconds the paint takes to sink away once claimed by read_mutation (default 2).'),
+});
+
 const FERRO = object('Liquid ferrofluid paint: rises into glossy Rosensweig spikes near magnets until cured.', {
   amount: unit('How much liquid ferrofluid the brush lays per dab (default 0: none).'),
   wavelength: num(4, 64, 'Capillary wavelength (spike-to-spike spacing) in pixels (default 16).'),
@@ -302,6 +330,11 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
+    fluorescence: FLUORESCENCE,
+    thermochromic: THERMOCHROMIC,
+    iridescence: IRIDESCENCE,
+    ghost: GHOST,
+    mutation: MUTATION,
     ferro: FERRO,
     motion: MOTION,
     colour: COLOUR,
@@ -317,6 +350,11 @@ export const BRUSH_FACET_SCHEMAS = {
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
+  fluorescence: FLUORESCENCE,
+  thermochromic: THERMOCHROMIC,
+  iridescence: IRIDESCENCE,
+  ghost: GHOST,
+  mutation: MUTATION,
   ferro: FERRO,
   motion: MOTION,
   colour: COLOUR,

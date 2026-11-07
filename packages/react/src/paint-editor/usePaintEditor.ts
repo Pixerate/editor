@@ -11,6 +11,8 @@ import {
   type PaintDirectorOptions,
   type PaintEditorOptions,
   type PaintEditorState,
+  type PaintMutationInfo,
+  type PaintMutationRequestListener,
   type PaintProposal,
   type PaintProposals,
   type PaintProposalsOptions,
@@ -58,7 +60,47 @@ export function usePaintDirector(controller: PaintEditorController, options: Omi
     const presence = new PaintPresence();
     return { presence, director: new PaintDirector(controller, presence, options) };
   });
+  useEffect(() => {
+    controller.setMutationDirector(value.director);
+    return () => controller.setMutationDirector(null);
+  }, [controller, value.director]);
   return value;
+}
+
+export interface UseMutationRequestsReturn {
+  /** Pending mutations waiting for an agent to claim them (`state === 'pending'`). */
+  pending: readonly PaintMutationInfo[];
+  /** Every active or completed mutation in the session. */
+  mutations: readonly PaintMutationInfo[];
+  /** The most recently raised pending mutation, or `null`. */
+  last: PaintMutationInfo | null;
+}
+
+/**
+ * Subscribes to mutation requests raised when a user finishes a stroke with a `mutation` brush
+ * and pauses for `settle` seconds. While mounted, marks an agent listener as connected on the
+ * controller so the brush panel does not warn that no agent is listening.
+ */
+export function useMutationRequests(
+  controller: PaintEditorController,
+  onRequest?: PaintMutationRequestListener
+): UseMutationRequestsReturn {
+  const state = usePaintEditorState(controller);
+  const cbRef = useRef(onRequest);
+  cbRef.current = onRequest;
+  const [last, setLast] = useState<PaintMutationInfo | null>(null);
+  useEffect(() => {
+    return controller.onMutationRequest((m) => {
+      setLast(m);
+      cbRef.current?.(m);
+    });
+  }, [controller]);
+  const pending = useMemo(() => state.mutations.filter((m) => m.state === 'pending'), [state.mutations]);
+  return {
+    pending,
+    mutations: state.mutations,
+    last: last && state.mutations.some((m) => m.id === last.id && m.state === 'pending') ? last : (pending[pending.length - 1] ?? null),
+  };
 }
 
 export interface PaintProposalsHandle {

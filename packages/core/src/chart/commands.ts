@@ -96,7 +96,7 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			params: object({ width: WIDTH, height: HEIGHT }),
 			run: (_ctx: unknown, params: { width?: number; height?: number } = {}) => {
 				const spec = controller.getSpec();
-				return { spec: controller.toJSON(), table: chartDataToTable(spec), summary: summarizeChart(controller.toJSON(), { width: params?.width ?? 640, height: params?.height ?? 400 }), issues: controller.getState().issues };
+				return { spec: controller.toJSON(), table: chartDataToTable(spec), summary: summarizeChart(controller.toJSON(), { width: params?.width ?? 640, height: params?.height ?? 400, measureText: controller.measureText }), issues: controller.getState().issues };
 			}
 		},
 		{
@@ -652,7 +652,7 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			description: 'Returns the chart drawn as a standalone, accessible SVG string (with <title> and <desc>).',
 			params: object({ width: WIDTH, height: HEIGHT }),
 			run: (_ctx: unknown, params: { width?: number; height?: number } = {}) => ({
-				svg: chartToSvg(controller.toJSON(), { width: params?.width ?? 640, height: params?.height ?? 400 })
+				svg: chartToSvg(controller.toJSON(), { width: params?.width ?? 640, height: params?.height ?? 400, measureText: controller.measureText })
 			})
 		},
 		{

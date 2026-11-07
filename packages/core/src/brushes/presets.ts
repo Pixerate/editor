@@ -481,6 +481,92 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
     colour: { palette: ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#a855f7', '#111827', '#f8fafc'] },
   },
+  // --- Smart inks: UV-fluorescent and thermochromic ------------------------------------
+  // Invisible UV marker: invisible in normal light, glows brightly under the UV blacklight.
+  {
+    id: 'uv-marker', name: 'UV marker', kind: 'mark', medium: 'ink', variety: 'uv-ink',
+    tip: { shape: 'round', size: 18, hardness: 0.75, spacing: 0.06, opacity: 0.9 },
+    dynamics: { smoothing: 0.3, minSize: 0.5 },
+    fluorescence: { amount: 0.9, invisible: true },
+    colour: { default: '#22d3ee', palette: ['#22d3ee', '#a855f7', '#4ade80', '#f472b6'] },
+  },
+  // Thermochromic ink: shifts smoothly toward its hot colour where the canvas heat field warms it.
+  {
+    id: 'thermo-ink', name: 'Thermochromic ink', kind: 'mark', medium: 'ink', variety: 'thermochromic',
+    tip: { shape: 'round', size: 12, hardness: 0.85, spacing: 0.05 },
+    dynamics: { smoothing: 0.3, minSize: 0.4 },
+    thermochromic: { hotColor: '#ff7a18', threshold: 0.45 },
+    colour: { default: '#1e3a8a', palette: ['#1e3a8a', '#312e81', '#065f46', '#7f1d1d'] },
+  },
+  // --- Structural colour (thin-film iridescence) ---------------------------------------
+  // Scarab lacquer: thick metallic impasto under a high-index chitin-like thin film.
+  {
+    id: 'scarab-lacquer', name: 'Scarab lacquer', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'round', size: 22, hardness: 0.75, spacing: 0.06 },
+    dynamics: { smoothing: 0.25, minSize: 0.3 },
+    behaviour: { surface: 'thick', thick: { thickness: 0.7, gloss: 0.85, metallic: 0.5 } },
+    iridescence: { thickness: 480, pressureToThickness: 0.35, ior: 1.65 },
+    colour: { default: '#065f46', palette: ['#065f46', '#1e3a8a', '#581c87', '#7c2d12', '#111827'] },
+  },
+  // Soap film: a soft glaze whose thin watery film shifts across the spectrum with pressure.
+  {
+    id: 'soap-film', name: 'Soap film', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'round', size: 32, hardness: 0.4, spacing: 0.06, opacity: 0.85, flow: 0.75 },
+    dynamics: { smoothing: 0.35, pressureOpacity: true, minSize: 0.35 },
+    iridescence: { thickness: 340, pressureToThickness: 0.8, ior: 1.33 },
+    colour: { default: { light: '#0284c7', dark: '#bae6fd' }, palette: [{ light: '#0284c7', dark: '#bae6fd' }, '#f472b6', '#a78bfa', '#34d399'] },
+  },
+  // Pearl glaze: a flat nacre glaze with gentle interference colour shifts.
+  {
+    id: 'pearl-glaze', name: 'Pearl glaze', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'flat', size: 28, hardness: 0.5, spacing: 0.06, angle: 25, roundness: 0.4, opacity: 0.9, flow: 0.85 },
+    dynamics: { smoothing: 0.3, rotation: 'stroke', minSize: 0.4 },
+    iridescence: { thickness: 560, pressureToThickness: 0.25, ior: 1.55 },
+    colour: { default: { light: '#475569', dark: '#f1f5f9' }, palette: [{ light: '#475569', dark: '#f1f5f9' }, '#fbcfe8', '#ddd6fe', '#bae6fd', '#fef3c7'] },
+  },
+  // --- Ghost paint: wet paint whose colour vanishes, leaving only what it smeared ---
+  {
+    id: 'ghost-wash', name: 'Ghost wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 32, hardness: 0.55, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.65, rewet: 0.2 } },
+    ghost: {},
+  },
+  {
+    id: 'ghost-gouache', name: 'Ghost gouache', kind: 'mark', medium: 'paint', variety: 'gouache',
+    tip: { shape: 'round', size: 26, hardness: 0.7 },
+    dynamics: { smoothing: 0.25, minSize: 0.5 },
+    behaviour: { surface: 'wet', wet: { water: 0.35, pigment: 0.85, body: 1, rewet: 0.3 } },
+    ghost: { linger: 5, smear: 0.4 },
+  },
+  {
+    id: 'ghost-oil', name: 'Ghost oil', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'round', size: 24, hardness: 0.75, spacing: 0.08 },
+    dynamics: { smoothing: 0.25, minSize: 0.5 },
+    behaviour: { surface: 'wet', wet: { water: 0.4, pigment: 0.9, body: 1, load: 0.97 } },
+    ghost: { linger: 10, smear: 0.5 },
+  },
+  {
+    id: 'invisible-ink', name: 'Invisible ink', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 24, hardness: 0.65 },
+    dynamics: { smoothing: 0.3, minSize: 0.4 },
+    behaviour: { surface: 'wet', wet: { water: 0.45, pigment: 0, rewet: 0.35 } },
+    ghost: { smear: 0.65 },
+  },
+  // --- Mutation paint: strokes that sink away once claimed, and an agent answers ---
+  {
+    id: 'mutation-wash', name: 'Mutation wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 28, hardness: 0.6, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.6, rewet: 0.2 } },
+    mutation: {},
+  },
+  {
+    id: 'mutation-ink', name: 'Mutation ink', kind: 'mark', medium: 'ink', variety: 'pen',
+    tip: { shape: 'round', size: 6, hardness: 0.9, spacing: 0.06 },
+    dynamics: { smoothing: 0.35, pressureSmoothing: 0.25, minSize: 0.25 },
+    mutation: {},
+  },
   // --- Ferrofluid paint: liquid magnetic paint that rises into lit Rosensweig spikes near magnets ---
   {
     id: 'ferrofluid', name: 'Ferrofluid', kind: 'mark', medium: 'paint', variety: 'ferrofluid',

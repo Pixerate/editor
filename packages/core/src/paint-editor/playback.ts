@@ -45,7 +45,7 @@ export function planPaintToolPlayback(tool: string, _args: Record<string, any>):
 	return steps.length ? steps : null;
 }
 
-const DIRECTED = new Set(['paint_stroke', 'stroke_path', 'fill_layer', 'replay_strokes']);
+const DIRECTED = new Set(['paint_stroke', 'stroke_path', 'fill_layer', 'fill_region', 'replay_strokes']);
 
 /**
  * Gives a paint tool provider agent playback on `surface`. An explicit `surface` wins over the

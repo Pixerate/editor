@@ -18,6 +18,8 @@ private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impast
 private let EXCHANGE = ["dab", "wet", "impasto"]
 /// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
 private let DABS = ["dab", "eraser", "mixer", "blender", "smudge"]
+/// Engines that can deposit a thin-film iridescence coat.
+private let FILM = ["dab", "mixer", "wet", "impasto", "particle", "bristle"]
 
 /// One facet field and the engine field it sets.
 struct BrushField: Sendable {
@@ -81,6 +83,9 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("tip.grain", "tipGrain", DABS))
     out.append(f("behaviour.grain", "grain"))
     out += each("light", "light", ["amount", "pressure"])
+    out += each("fluorescence", "fluorescence", ["amount", "invisible"])
+    out += each("thermochromic", "thermochromic", ["hotColor", "threshold"])
+    out += each("iridescence", "iridescence", ["thickness", "pressureToThickness", "ior"], FILM)
     out += each("ferro", "ferro", ["amount", "wavelength", "threshold"])
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))
     out.append(f("behaviour.exchange.mix", "behavior.mix", EXCHANGE))
@@ -101,6 +106,8 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("behaviour.mixing", "smudge.mixing", ["smudge"]))
     out.append(f("behaviour.strength", "wet.strength", ["wet"]))
     out += each("behaviour.wet", "wet", ["medium", "water", "pigment", "body", "rewet", "load", "thinner"], ["wet"])
+    out += each("ghost", "ghost", ["linger", "smear"], ["wet"])
+    out += each("mutation", "mutation", ["settle", "patience", "fade"], ["dab", "wet", "impasto", "particle", "bristle"])
     out.append(f("behaviour.thick.applicator", "impasto.tool", ["impasto"]))
     out += each("behaviour.thick", "impasto", ["thickness", "gloss", "metallic", "load", "thinner", "drag", "rim", "clarity"], ["impasto"])
     out.append(f("marks.physics", "particle.kind", ["particle"]))
@@ -219,10 +226,15 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     }
     // Spray marks: the dab engine with droplets.
     if engine == "dab" && marksKind == "scatter" { input["spray"] = .object(input["spray"]?.objectValue ?? [:]) }
+    if brush["iridescence"] != nil && FILM.contains(engine) { input["iridescence"] = .object(input["iridescence"]?.objectValue ?? [:]) }
     if engine == "wet" {
         let tool = brush["kind"]?.stringValue == "tool" ? WET_TOOL_OF.first { $0.0 == brush["tool"]?.stringValue }?.1 : "paint"
         setPath(&input, "wet.tool", tool.map { .string($0) } ?? .null)
         if let medium = resolveWetMedium(brush) { setPath(&input, "wet.medium", .string(medium)) }
+        if brush["ghost"] != nil && tool == "paint" { input["ghost"] = .object(input["ghost"]?.objectValue ?? [:]) }
+    }
+    if brush["mutation"] != nil && ["dab", "wet", "impasto", "particle", "bristle"].contains(engine) && (engine != "wet" || brush["kind"]?.stringValue != "tool") {
+        input["mutation"] = .object(brush["mutation"]?.objectValue ?? [:])
     }
     // Blenders and smudges only move paint already down.
     if engine == "blender" || engine == "smudge" { input["loadsColor"] = false }

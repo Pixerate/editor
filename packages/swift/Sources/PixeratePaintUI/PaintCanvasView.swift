@@ -24,11 +24,14 @@ public struct PaintCanvasView: View {
     private let showGuides: Bool
     /// Take pointer input (default true). Off for still images: `ImageRenderer` draws AppKit and UIKit views as placeholders.
     private let interactive: Bool
+    /// Follow device tilt (gyroscope on iPhone / iPad) to shift `viewTilt` for thin-film iridescence.
+    private let deviceTilt: Bool
 
-    public init(model: PaintEditorModel, showGuides: Bool = true, interactive: Bool = true) {
+    public init(model: PaintEditorModel, showGuides: Bool = true, interactive: Bool = true, deviceTilt: Bool = false) {
         self.model = model
         self.showGuides = showGuides
         self.interactive = interactive
+        self.deviceTilt = deviceTilt
         _presenter = State(initialValue: PaintCanvasPresenter(controller: model.controller))
     }
 
@@ -84,8 +87,12 @@ public struct PaintCanvasView: View {
                 .accessibilityLabel("Painting")
                 if interactive { PaintInputView(model: model) }
             }
-            .onAppear { layout(geo.size) }
+            .onAppear {
+                layout(geo.size)
+                if deviceTilt { model.deviceTiltEnabled = true }
+            }
             .onChange(of: geo.size) { _, size in layout(size) }
+            .onChange(of: deviceTilt) { _, on in model.deviceTiltEnabled = on }
         }
         .background(Color(white: 0.17))
         .clipped()
