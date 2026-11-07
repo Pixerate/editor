@@ -79,6 +79,7 @@ struct WetStrokeInit {
     var mask: PaintSelection?
     var paint: PaintGradientSource?
     var effect: EffectPaintPixels?
+    var speed: Double?
 }
 
 private final class WetCopyState {
@@ -120,12 +121,17 @@ final class WetStrokeDriver {
         let spacing = Swift.max(0.02, brush.tip.spacing)
         let perDab = Swift.min(1, spacing * 1.2)
         let thin = wet.thinner
+        let body = wet.body * (1 - thin)
         medium = WetMedium(i.world, i.laneId, WetMedium.Options(
             water: STROKE_WATER * Swift.min(1, wet.water * (1 + thin)) * perDab,
             mass: STROKE_MASS * wet.pigment * (1 - 0.6 * thin) * perDab,
-            body: wet.body * (1 - thin),
+            body: body,
             light: 0
         ))
+        if wet.tool == "paint", let ghost = brush.ghost, wet.pigment > 0 {
+            let one = pigmentOf(i.color, body)
+            try? i.world.startGhost(i.laneId, pigment: one, linger: ghost.linger, stepsPerSecond: i.speed ?? 120)
+        }
         lightBase = wet.tool == "paint" ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0
         let rates = exchangeRates(brush.behavior.pickup, brush.behavior.mix, wet.load, brush.behavior.mixing)
         states = copies.enumerated().map { k, c in
@@ -241,6 +247,22 @@ final class WetStrokeDriver {
         if !(k > 0) { return }
         switch wet.tool {
         case "paint":
+            if let ghost = brush.ghost {
+                let smear = ghost.smear
+                if wet.pigment > 0 {
+                    medium.options.light = medium.options.mass
+                    try medium.deposit(rect, cov, k, initValues.color)
+                } else {
+                    medium.options.light = 0
+                    try world.paint(laneId, rect, cov, water: medium.options.water * k * (wet.water > 0 ? 1 : 0), pigment: nil)
+                }
+                if smear > 0 {
+                    let rw = Swift.max(wet.rewet, 0.6) * smear
+                    if rw > 0 { try world.rewet(laneId, rect, cov, amount: rw * k * 0.5, paper: initValues.paperColor, suspend: true) }
+                    if let last = st.last { try world.drag(laneId, rect, tip, dx: d.dab.x - last.dab.x, dy: d.dab.y - last.dab.y, strength: smear * k) }
+                }
+                break
+            }
             let ex = st.exchange!
             medium.options.light = lightBase * (brush.light.pressure ? d.pressure : 1)
             var flow = 1.0
@@ -300,6 +322,7 @@ let WET_MEDIUM_PARAMS: [String: JSONObject] = [
 public struct WetLayerSettings: Equatable {
     public var params: WetParams
     public var flow: WetFlowSpec
+    public var ghost: WetGhostState? = nil
 }
 
 /// One wet layer as tools describe it.
@@ -311,9 +334,12 @@ public struct WetLayerInfo {
     public var activeTiles: Int
     public var params: WetParams
     public var flow: WetFlowSpec
+    public var ghostRemaining: Double? = nil
 
     public var json: JSONValue {
-        ["layerId": .string(layerId), "wet": .bool(wet), "wetCells": .number(Double(wetCells)), "wetBounds": rectJSON(wetBounds), "activeTiles": .number(Double(activeTiles)), "params": params.json, "flow": flow.json]
+        var o: JSONObject = ["layerId": .string(layerId), "wet": .bool(wet), "wetCells": .number(Double(wetCells)), "wetBounds": rectJSON(wetBounds), "activeTiles": .number(Double(activeTiles)), "params": params.json, "flow": flow.json]
+        if let ghostRemaining { o["ghost"] = ["remaining": .number(ghostRemaining)] }
+        return .object(o)
     }
 }
 
@@ -540,7 +566,7 @@ public final class PaintWetLayers {
         if !w.hasLane(layerId) {
             let base = host.layerSurface(layerId) ?? emptySurface(4)
             let s = settingsOf(layerId, medium ?? "watercolor")
-            try w.ensureLane(layerId, params: s.params, base: base, light: host.layerLight(layerId))
+            try w.ensureLane(layerId, params: s.params, base: base, light: host.layerLight(layerId), ghost: s.ghost)
             let c = host.canvas()
             if s.flow.kind != "none" { try w.setFlow(layerId, flowField(s.flow, c.width, c.height), strength: s.flow.strength) }
         }
@@ -579,7 +605,9 @@ public final class PaintWetLayers {
     func info(_ layerId: String) -> WetLayerInfo {
         let s = settingsOf(layerId)
         let st: WetLaneStats? = world.flatMap { $0.hasLane(layerId) ? try? $0.stats(layerId) : nil }
-        return WetLayerInfo(layerId: layerId, wet: (st?.wetCells ?? 0) > 0, wetCells: st?.wetCells ?? 0, wetBounds: st?.wetBounds, activeTiles: st?.activeTiles ?? 0, params: s.params, flow: s.flow)
+        let g: WetGhostState? = world != nil && world!.hasLane(layerId) ? world!.getGhost(layerId) : s.ghost
+        let rem = g.map { JS.round(((Double($0.remaining) * Double(FREE_INTERVAL)) / speed) * 100) / 100 }
+        return WetLayerInfo(layerId: layerId, wet: (st?.wetCells ?? 0) > 0, wetCells: st?.wetCells ?? 0, wetBounds: st?.wetBounds, activeTiles: st?.activeTiles ?? 0, params: s.params, flow: s.flow, ghostRemaining: rem)
     }
 
     func backend() -> WetBackendInfo? { world?.backend() }
@@ -634,6 +662,7 @@ public final class PaintWetLayers {
             guard let base = try? w.getBase(id) else { continue }
             let light = w.isLit(id) ? try? w.getLight(id) : nil
             try? w.removeLane(id)
+            if var s = settings.get(id), s.ghost != nil { s.ghost = nil; settings.set(id, s) }
             if let light, host.layerLight(id) !== light { var m = OrderedMap<String, TiledSurface>(); m.set(id, light); host.updateLights(m) }
             var m = OrderedMap<String, TiledSurface>()
             m.set(id, base)

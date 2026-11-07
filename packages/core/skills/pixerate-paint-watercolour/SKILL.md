@@ -77,6 +77,7 @@ block the light. See `references/light-paint.md` in `pixerate-paint-editor`.
 | Cauliflower blooms | Add water into a drying wash; `bloom` up |
 | A glowing (neon) wash | Dark paper (`set_paper` `color`), `glow-wash` or `light.amount` on a wet brush; flow, dry, `get_light` |
 | Stained glass, a lightbox | `set_paper` `stained-glass` (or `backlight`); strong glazes for panes, opaque black lines above |
+| Disturb or smear a wash without adding colour | `ghost-wash`, `ghost-gouache` or `invisible-ink` (`ghost` `linger`, `smear`) on the same layer; see `references/ghost.md` |
 
 ## Recipes
 

@@ -68,6 +68,11 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
   { path: 'behavior.mix', label: 'Mix', min: 0, max: 1, step: 0.01 },
 ];
 
+export const GHOST_SLIDERS: readonly SliderControl[] = [
+  { path: 'ghost.linger', label: 'Linger', min: 0.5, max: 60, step: 0.5 },
+  { path: 'ghost.smear', label: 'Smear', min: 0, max: 1, step: 0.01 },
+];
+
 /**
  * The controls the active brush's engine adds to the brush panel (`null` for the eraser):
  * blender strength and blend distance; smudge strength and length; the Mixer Brush's pick-up,
@@ -75,16 +80,16 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  * pigment choice; dab and mixer brushes also have the dirty and multi-colour controls. Pick-up
  * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
  */
-export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
+export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; ghost?: PaintBrush['ghost'] }): BrushEngineControls | null {
   const c = engineControls(brush);
-  const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint';
+  const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint' && !brush.ghost;
   if (!c || !(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine))) return c;
   // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
   const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
   return { ...c, sliders: [...c.sliders, LIGHT_SLIDER, ...extra], light: true };
 }
 
-function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
+function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; ghost?: PaintBrush['ghost'] }): BrushEngineControls | null {
   switch (brush.engine) {
     case 'particle':
       return {
@@ -163,6 +168,7 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
       };
     case 'wet': {
       const tool = brush.wet?.tool ?? 'paint';
+      const ghost = tool === 'paint' && Boolean(brush.ghost);
       const sliders: SliderControl[] =
         tool === 'paint'
           ? [
@@ -172,7 +178,7 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
               { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
               { path: 'wet.load', label: 'Load', min: 0, max: 1, step: 0.01 },
               { path: 'wet.thinner', label: 'Thinner', min: 0, max: 1, step: 0.01 },
-              ...PICKUP_SLIDERS,
+              ...(ghost ? GHOST_SLIDERS : PICKUP_SLIDERS),
             ]
           : tool === 'water'
             ? [
@@ -180,7 +186,7 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
                 { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
               ]
             : [{ path: 'wet.strength', label: 'Strength', min: 0, max: 1, step: 0.01 }];
-      return { title: 'Wet brush', sliders, mixingPath: tool === 'paint' ? 'behavior.mixing' : null, dirty: tool === 'paint', multicolor: false, load: tool === 'paint', wetTool: true };
+      return { title: 'Wet brush', sliders, mixingPath: tool === 'paint' ? 'behavior.mixing' : null, dirty: tool === 'paint' && !ghost, multicolor: false, load: tool === 'paint' && !ghost, wetTool: true };
     }
     case 'blender':
       return {

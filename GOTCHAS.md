@@ -4160,3 +4160,17 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Raising the effect paint cache to fit path strokes holds hundreds of MB for everyone, and growing it per replay holds one canvas per stroke for good (about 33 MB each at 4K). Keeping it small makes a stroke layer redraw throw once its path strokes outnumber it.
 - **Root Cause**: Stroke layers redraw synchronously and need every overlapping stroke's render, and `replayStrokes` needs all of them before it starts, but `replayPainting` is asynchronous and needs one at a time.
 - **Solution / Workaround**: The limit stays 6 and rises only for what must be held together: the path strokes on stroke layers (`trimEffectPaints`) and the running batch (`effectPaintBatch`, cleared when `replayStrokes` ends). `replayPainting` prepares path strokes one by one, just before each is painted.
+
+### [core|swift/paint] Ghost Paint Uses the Wet Light Channel as a Linear Tracer, Suspended Rewet, and Zero Pickup
+- **Issue / Symptom**: A ghost stroke (`brush.ghost`) must mix visibly with wet paint and smear dried paint, then fade away leaving bare paper byte-identical and no ghost colour tint on smeared paint, without adding planes to the wet kernels. Three subtle traps break this if missed:
+  1. Calling ordinary `world.rewet` before `world.drag` fails to smear dried paint on the same dab.
+  2. Allowing brush colour pickup (`behavior.pickup > 0`) leaves a residual colour tint after the ghost fades.
+  3. Depositing the ghost tracer through `world.paint(..., light)` sets `lane.lit = true`, making the stroke glow and baking the tracer into `doc.light`.
+- **Root Cause**:
+  1. `world.rewet` writes lifted dried pigment into the settled planes (`P_DR`, `P_DG`, `P_DB`, `P_DS`), which only enter the suspended planes (`P_R`, `P_G`, `P_B`, `P_S`) when the kernel steps (`liftRate`), whereas `world.drag` only advects suspended planes during the stroke dab.
+  2. `WetMedium.deposit` converts the brush's mixed RGB colour into Kubelka-Munk K and S non-linearly, so pigment mixed inside the brush reservoir cannot be separated from the single `lane.ghost` pigment vector by linear subtraction.
+  3. The wet world has a single light mass channel (`P_L`, `P_DL`), which normally drives `lane.lit`, `shadeLightSlot`, `lightDisplay` and `bakeKey` into `doc.light`.
+- **Solution / Workaround**:
+  1. `world.rewet` accepts `suspend = true` for ghost strokes, placing 65% of lifted pigment directly into the suspended planes and seeding water to at least `WET_MASK_H * 4` so `world.drag` moves it immediately on the same dab.
+  2. `normalizePaintBrush` and `resolveBrush` force `behavior.pickup = 0` whenever `brush.ghost` is set, and `sessionFor` refuses gradient, effect and multi-colour paint on ghost brushes.
+  3. When `lane.ghost` is active, `world.paint` does not set `lane.lit`, `shadeSlot` / `bakedLight` / `lightDisplay` skip light shading, and `afterBatch` / `bakeKey` / `dry` run `fadeGhost` (clearing sub-`1e-4` float dust when the tracer reaches 0 so bare paper is byte-identical). Ghost and light strokes refuse to share a layer while either is active.

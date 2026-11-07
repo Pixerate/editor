@@ -62,6 +62,18 @@ public struct WetLaneStats {
     public var wetBounds: RasterRect?
 }
 
+/// A wet layer's active ghost paint state: pigment per unit tracer and fade countdown.
+public struct WetGhostState: Equatable, Sendable {
+    public var pigment: [Double]
+    public var remaining: Int
+    public var total: Int
+    public var linger: Double
+
+    public var json: JSONValue {
+        ["pigment": .array(pigment.map { .number($0) }), "remaining": .number(Double(remaining)), "total": .number(Double(total)), "linger": .number(linger)]
+    }
+}
+
 /// A copy of the whole simulation (for undo).
 public final class WetSnapshot {
     let clock: Int
@@ -81,6 +93,7 @@ public final class WetSnapshot {
         var base: TiledSurface
         var light: TiledSurface
         var lit: Bool
+        var ghost: WetGhostState?
     }
 
     init(clock: Int, tilt: WetTilt, lanes: [SnapLane], slots: [(key: Int, planes: [Float], last: UInt32)], bytes: Int) {
@@ -145,12 +158,14 @@ final class WetLane {
     var light: TiledSurface
     /// The lane has light (under it, or laid since): only then is light shaded.
     var lit: Bool
+    /// Active ghost paint using the light mass channel as tracer.
+    var ghost: WetGhostState?
     var lightShaded = OrderedMap<TileKey, (stamp: Int, tile: Tile?)>()
     var lightDisplay: TiledSurface?
     var lightKey = -1
     var prm: [Float] = []
 
-    init(id: String, index: Int, params: WetParams, flow: WetFlowField?, flowStrength: Double, base: TiledSurface, light: TiledSurface?) {
+    init(id: String, index: Int, params: WetParams, flow: WetFlowField?, flowStrength: Double, base: TiledSurface, light: TiledSurface?, ghost: WetGhostState? = nil) {
         self.id = id
         self.index = index
         self.params = params
@@ -159,7 +174,8 @@ final class WetLane {
         self.base = base
         let l = light ?? emptySurface(1, 0)
         self.light = l
-        lit = !l.tiles.isEmpty
+        self.ghost = ghost
+        lit = ghost == nil && !l.tiles.isEmpty
     }
 }
 
@@ -270,29 +286,31 @@ public final class WetWorld {
     public func laneIds() -> [String] { lanes.compactMap { $0?.id } }
 
     /// Adds a wet layer (or updates it). Throws when `MAX_WET_LANES` are in use.
-    public func ensureLane(_ id: String, params: JSONObject? = nil, base: TiledSurface? = nil, flow: WetFlowField? = nil, flowStrength: Double? = nil, light: TiledSurface? = nil) throws {
+    public func ensureLane(_ id: String, params: JSONObject? = nil, base: TiledSurface? = nil, flow: WetFlowField? = nil, flowStrength: Double? = nil, light: TiledSurface? = nil, ghost: WetGhostState? = nil) throws {
         if let existing = lanes.first(where: { $0?.id == id }) ?? nil {
             if let params { _ = try setParams(id, normalizeWetParams(params, existing.params)) }
             if let base { setBase(id, base) }
             if let light { setLight(id, light) }
+            if let ghost { try setGhost(id, ghost) }
             return
         }
         guard let index = lanes.firstIndex(where: { $0 == nil }) else { throw WetWorldError("At most \(MAX_WET_LANES) layers can hold wet paint at once; dry one (dry_paint) first.") }
-        let lane = WetLane(id: id, index: index, params: normalizeWetParams(params ?? [:], DEFAULT_WET_PARAMS), flow: flow, flowStrength: flow != nil ? (flowStrength ?? 1) : 0, base: base ?? emptySurface(4), light: light)
+        let lane = WetLane(id: id, index: index, params: normalizeWetParams(params ?? [:], DEFAULT_WET_PARAMS), flow: flow, flowStrength: flow != nil ? (flowStrength ?? 1) : 0, base: base ?? emptySurface(4), light: light, ghost: ghost)
         lanes[index] = lane
         pack(lane)
     }
 
     /// Adds a wet layer with settings (`ensureLane` with a `WetParams`).
-    func ensureLane(_ id: String, params: WetParams, base: TiledSurface, light: TiledSurface?) throws {
+    func ensureLane(_ id: String, params: WetParams, base: TiledSurface, light: TiledSurface?, ghost: WetGhostState? = nil) throws {
         if hasLane(id) {
             _ = try setParams(id, params)
             setBase(id, base)
             if let light { setLight(id, light) }
+            if let ghost { try setGhost(id, ghost) }
             return
         }
         guard let index = lanes.firstIndex(where: { $0 == nil }) else { throw WetWorldError("At most \(MAX_WET_LANES) layers can hold wet paint at once; dry one (dry_paint) first.") }
-        let lane = WetLane(id: id, index: index, params: params, flow: nil, flowStrength: 0, base: base, light: light)
+        let lane = WetLane(id: id, index: index, params: params, flow: nil, flowStrength: 0, base: base, light: light, ghost: ghost)
         lanes[index] = lane
         pack(lane)
     }
@@ -368,18 +386,45 @@ public final class WetWorld {
     public func getLight(_ id: String) throws -> TiledSurface { try laneOf(id).light }
 
     /// Whether a layer has light paint, under its wet paint or in it.
-    public func isLit(_ id: String) -> Bool { (try? laneOf(id).lit) ?? false }
+    public func isLit(_ id: String) -> Bool {
+        guard let l = try? laneOf(id) else { return false }
+        return l.lit && l.ghost == nil
+    }
 
     /// Replaces the light paint under a layer's wet paint.
     public func setLight(_ id: String, _ light: TiledSurface) {
         guard let lane = try? laneOf(id), light !== lane.light else { return }
         let old = lane.light
         lane.light = light
-        if !light.tiles.isEmpty { lane.lit = true }
+        if !light.tiles.isEmpty && lane.ghost == nil { lane.lit = true }
         for tk in Array(lane.lightShaded.keys) where old.tiles.get(tk) !== light.tiles.get(tk) {
             _ = lane.lightShaded.delete(tk)
         }
         lane.stamp += 1
+    }
+
+    /// Active ghost paint state on the layer, or nil.
+    public func getGhost(_ id: String) -> WetGhostState? { (try? laneOf(id))?.ghost }
+
+    /// Sets or clears a layer's active ghost paint state.
+    public func setGhost(_ id: String, _ ghost: WetGhostState?) throws {
+        let lane = try laneOf(id)
+        lane.ghost = ghost
+        if ghost != nil { lane.lit = false }
+    }
+
+    /// Starts a ghost paint fade on `id` with `pigment` per unit tracer and `linger` seconds.
+    /// If an earlier ghost of a different colour is still fading on the layer, it finishes at once first.
+    public func startGhost(_ id: String, pigment: [Double], linger: Double, stepsPerSecond: Double = 120) throws {
+        let lane = try laneOf(id)
+        let p = [Double(Float(pigment[0])), Double(Float(pigment[1])), Double(Float(pigment[2])), Double(Float(pigment[3]))]
+        if let g = lane.ghost?.pigment {
+            let same = abs(g[0] - p[0]) <= 1e-6 && abs(g[1] - p[1]) <= 1e-6 && abs(g[2] - p[2]) <= 1e-6 && abs(g[3] - p[3]) <= 1e-6
+            if !same { try fadeGhost(id, amount: 1) }
+        }
+        let total = Swift.max(1, Int(JS.round((linger * stepsPerSecond) / Double(FREE_INTERVAL))))
+        lane.ghost = WetGhostState(pigment: p, remaining: total, total: total, linger: linger)
+        lane.lit = false
     }
 
     private func pack(_ lane: WetLane) {
@@ -605,6 +650,13 @@ public final class WetWorld {
         var woke = false
         for key in wakeups { woke = activate(key) || woke }
         if clock % FREE_INTERVAL == 0 {
+            for lane in lanes {
+                guard let lane, var g = lane.ghost else { continue }
+                let amount = g.remaining <= 1 ? 1.0 : 1.0 / Double(g.remaining)
+                g.remaining = Swift.max(0, g.remaining - 1)
+                lane.ghost = g
+                try? fadeGhost(lane.id, amount: amount)
+            }
             let dead = active.filter { key in
                 if last[key] & FLAG_ALIVE != 0 { return false }
                 let laneBase = laneIndexOf(key) * perLane
@@ -720,7 +772,10 @@ public final class WetWorld {
     public func paint(_ id: String, _ rect: RasterRect, _ cov: [Float]?, water: Double, pigment: [Double]?, field: [Float]? = nil, light: Double = 0) throws {
         if !(water >= 0) { throw WetWorldError("water \(jsText(water)) must be 0 or more.") }
         if !(light >= 0) { throw WetWorldError("light \(jsText(light)) must be 0 or more.") }
-        if light > 0 { try laneOf(id).lit = true }
+        if light > 0 {
+            let l = try laneOf(id)
+            if l.ghost == nil { l.lit = true }
+        }
         let p0 = pigment?[0] ?? 0, p1 = pigment?[1] ?? 0, p2 = pigment?[2] ?? 0, p3 = pigment?[3] ?? 0
         let hasPigment = pigment != nil
         try footprint(id, rect, cov) { c, w, x, y in
@@ -856,13 +911,13 @@ public final class WetWorld {
      * into the paper as settled pigment, and the same share of its light paint as settled light.
      * Only where there is surface water.
      */
-    public func rewet(_ id: String, _ rect: RasterRect, _ cov: [Float]?, amount: Double, paper: [Int]) throws {
+    public func rewet(_ id: String, _ rect: RasterRect, _ cov: [Float]?, amount: Double, paper: [Int], suspend: Bool = false) throws {
         let lane = try laneOf(id)
         var tiles = lane.base.tiles
         var written = Set<TileKey>()
         var writtenOrder: [TileKey] = []
         var work: [TileKey: [UInt8]] = [:]
-        var lightTiles: OrderedMap<TileKey, Tile>? = lane.lit ? lane.light.tiles : nil
+        var lightTiles: OrderedMap<TileKey, Tile>? = lane.lit && lane.ghost == nil ? lane.light.tiles : nil
         var lightWork: [TileKey: [UInt8]] = [:]
         var lightOrder: [TileKey] = []
         var scratch = [UInt8](repeating: 0, count: 4)
@@ -898,8 +953,8 @@ public final class WetWorld {
             if !(pig[0] > 0 || pig[1] > 0 || pig[2] > 0) { return }
             filmPixel(pig[0] * (1 - a), pig[1] * (1 - a), pig[2] * (1 - a), 0, clear, 0, paper, 0, &scratch, 0)
             for j in 0..<4 { work[key]![i + j] = scratch[j] }
-            let d = single(c) + P_D0 * PL
-            for q in 0..<3 { d[q * PL] = Float(Double(d[q * PL]) + Double(Float(pig[q] * a))) }
+            let into = suspend ? c + P_P0 * PL : single(c) + P_D0 * PL
+            for q in 0..<3 { into[q * PL] = Float(Double(into[q * PL]) + Double(Float(pig[q] * a))) }
         }
         if !writtenOrder.isEmpty {
             for key in writtenOrder {
@@ -913,6 +968,110 @@ public final class WetWorld {
             }
             setLight(id, TiledSurface(channels: 1, tiles: lightTiles!, defaultValue: 0))
         }
+    }
+
+    /**
+     * Subtracts `amount` (0..1) of a ghost lane's remaining tracer (`P_L`, `P_DL`) and proportional
+     * ghost pigment (`lane.ghost.pigment`) across all live tiles of `id`. Speeds up in cells that
+     * are nearly dry so drying paint never pops. Clears the lane's `ghost` state once no tracer remains.
+     */
+    public func fadeGhost(_ id: String, amount: Double) throws {
+        let lane = try laneOf(id)
+        guard lane.ghost != nil else { return }
+        let keys = active.filter { laneIndexOf($0) == lane.index }
+        var anyRemaining = false
+        for key in keys {
+            if fadeGhostKey(key, lane, amount) { anyRemaining = true }
+        }
+        if !anyRemaining || amount >= 1 - 1e-6 { lane.ghost = nil }
+        refreshHalos()
+    }
+
+    /// Whether any live tile of `lane` still holds ghost tracer (`P_L > 0` or `P_DL > 0`).
+    private func hasGhostTracer(_ lane: WetLane) -> Bool {
+        for key in active where laneIndexOf(key) == lane.index {
+            let b = slotPtr(slotOf(key))
+            let cur = b + parity * SET_PLANES * PL
+            for y in 1...WET_TILE {
+                for x in 1...WET_TILE {
+                    let c = y * S + x
+                    if cur[P_L * PL + c] > 0 || b[P_DL * PL + c] > 0 { return true }
+                }
+            }
+        }
+        return false
+    }
+
+    /// Fades ghost tracer and pigment in one slot by `amount` (0..1). Returns whether any tracer remains in the slot.
+    @discardableResult
+    private func fadeGhostKey(_ key: Int, _ lane: WetLane, _ amount: Double) -> Bool {
+        guard let g = lane.ghost else { return false }
+        let pig = g.pigment
+        let slot = slotOf(key)
+        if slot < 0 { return false }
+        let b = slotPtr(slot)
+        let cur = b + parity * SET_PLANES * PL
+        let baseAmt = Swift.min(1, Swift.max(0, amount))
+        var remainingTracer = false
+        var yMin = WET_TILE + 1
+        var yMax = 0
+        for y in 1...WET_TILE {
+            for x in 1...WET_TILE {
+                let c = y * S + x
+                let tl = Double(cur[P_L * PL + c])
+                let dl = Double(b[P_DL * PL + c])
+                if !(tl > 0 || dl > 0) { continue }
+                let water = Double(cur[P_RHO * PL + c]) + Double(cur[P_SW * PL + c])
+                let dryFade = water <= DRY_EPS ? 1.0 : water < 0.02 ? (1.0 - water / 0.02) * 0.5 : 0.0
+                let a = baseAmt >= 1 - 1e-6 ? 1.0 : Swift.min(1.0, Swift.max(baseAmt, dryFade))
+                if !(a > 0) {
+                    remainingTracer = true
+                    continue
+                }
+                if y < yMin { yMin = y }
+                if y > yMax { yMax = y }
+                if tl > 0 {
+                    let done = a >= 1 || tl * (1 - a) <= 1e-7
+                    let dt = done ? tl : Double(Float(tl * a))
+                    let tNew: Float = done ? 0 : Float(tl - dt)
+                    cur[P_L * PL + c] = tNew
+                    for q in 0..<4 {
+                        let idx = (P_P0 + q) * PL + c
+                        let eps = Swift.max(1e-3, pig[q] * 2e-4)
+                        let v = Swift.max(Float(0), Float(Double(cur[idx]) - Double(Float(dt * pig[q]))))
+                        cur[idx] = tNew == 0 && Double(v) <= eps ? 0 : v
+                    }
+                    if tNew > 0 { remainingTracer = true }
+                }
+                if dl > 0 {
+                    let done = a >= 1 || dl * (1 - a) <= 1e-7
+                    let dd = done ? dl : Double(Float(dl * a))
+                    let dNew: Float = done ? 0 : Float(dl - dd)
+                    b[P_DL * PL + c] = dNew
+                    for q in 0..<4 {
+                        let idx = (P_D0 + q) * PL + c
+                        let eps = Swift.max(1e-3, pig[q] * 2e-4)
+                        let v = Swift.max(Float(0), Float(Double(b[idx]) - Double(Float(dd * pig[q]))))
+                        b[idx] = dNew == 0 && Double(v) <= eps ? 0 : v
+                    }
+                    if dNew > 0 { remainingTracer = true }
+                }
+                if cur[P_L * PL + c] == 0 && b[P_DL * PL + c] == 0 {
+                    for q in 0..<4 {
+                        let eps = Float(Swift.max(1e-3, pig[q] * 2e-4))
+                        let pi = (P_P0 + q) * PL + c
+                        if cur[pi] <= eps { cur[pi] = 0 }
+                        let di = (P_D0 + q) * PL + c
+                        if b[di] <= eps { b[di] = 0 }
+                    }
+                }
+            }
+        }
+        if yMax >= yMin {
+            lane.urgent.insert(tileKeyOf(key))
+            lane.stamp += 1
+        }
+        return remainingTracer
     }
 
     /**
@@ -939,10 +1098,28 @@ public final class WetWorld {
                 free(key)
                 continue
             }
+            let pig = lane.ghost?.pigment
             for y in y0..<y1 {
                 for x in x0..<x1 {
                     guard let c = cell(lane, x, y) else { continue }
                     let d = single(c) + P_D0 * PL
+                    if let pig {
+                        let tl = Double(c[P_L * PL])
+                        let dl = Double(d[4 * PL])
+                        if tl > 0 || dl > 0 {
+                            c[P_L * PL] = 0
+                            d[4 * PL] = 0
+                            for q in 0..<4 {
+                                let eps = Swift.max(1e-3, pig[q] * 2e-4)
+                                let pi = (P_P0 + q) * PL
+                                let pv = Swift.max(Float(0), Float(Double(c[pi]) - Double(Float(tl * pig[q]))))
+                                c[pi] = Double(pv) <= eps ? 0 : pv
+                                let di = q * PL
+                                let dv = Swift.max(Float(0), Float(Double(d[di]) - Double(Float(dl * pig[q]))))
+                                d[di] = Double(dv) <= eps ? 0 : dv
+                            }
+                        }
+                    }
                     for q in 0..<MASS_CHANNELS {
                         d[q * PL] = d[q * PL] + c[(P_P0 + q) * PL]
                         c[(P_P0 + q) * PL] = 0
@@ -957,6 +1134,7 @@ public final class WetWorld {
             bounds = unionRectWet(bounds, RasterRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0))
             markEdited(lane, x0, y0, x1, y1)
         }
+        if lane.ghost != nil && !hasGhostTracer(lane) { lane.ghost = nil }
         syncList()
         refreshHalos()
         lane.stamp += 1
@@ -967,10 +1145,14 @@ public final class WetWorld {
     @discardableResult
     private func bakeKey(_ key: Int, _ all: Bool) -> Bool {
         guard let lane = lanes[laneIndexOf(key)] else { return false }
+        if lane.ghost != nil {
+            fadeGhostKey(key, lane, 1)
+            if !hasGhostTracer(lane) { lane.ghost = nil }
+        }
         let tk = tileKeyOf(key)
         // Light first: its dimming reads the pigment over it, which the colour bake leaves in place.
         var lightChanged = false
-        if lane.lit, let lout = shadeLightSlot(key, lane.light.tiles.get(tk), all ? .bakeAll : .bake) {
+        if lane.lit && lane.ghost == nil, let lout = shadeLightSlot(key, lane.light.tiles.get(tk), all ? .bakeAll : .bake) {
             var tiles = lane.light.tiles
             if let t = finishTile(lout, 1, 0) { tiles.set(tk, t) } else { _ = tiles.delete(tk) }
             setLight(lane.id, TiledSurface(channels: 1, tiles: tiles, defaultValue: 0))
@@ -1006,7 +1188,8 @@ public final class WetWorld {
         var out = src ?? [UInt8](repeating: 0, count: TILE * TILE * 4)
         let w = Swift.min(WET_TILE, width - tx * WET_TILE)
         let h = Swift.min(WET_TILE, height - ty * WET_TILE)
-        let lit = lanes[laneIndexOf(key)]!.lit
+        let lane = lanes[laneIndexOf(key)]!
+        let lit = lane.lit && lane.ghost == nil
         let changed = shadeTile(
             b, P_D0 * PL, mode == .bake ? -1 : cur + P_P0 * PL, mode == .display ? cur + P_RHO * PL : -1, cur + P_SW * PL, src, &out, w, h, paperBytes,
             lit ? P_DL * PL : -1, lit && mode != .bake ? cur + P_L * PL : -1
@@ -1020,7 +1203,42 @@ public final class WetWorld {
         var tiles = lane.base.tiles
         for key in active where laneIndexOf(key) == lane.index {
             let tk = tileKeyOf(key)
-            guard let out = shadeSlot(key, lane.base.tiles.get(tk)?.data, .bakeAll) else { continue }
+            let out: [UInt8]?
+            if let g = lane.ghost {
+                let b = slotPtr(slotOf(key))
+                let cur = b + parity * SET_PLANES * PL
+                let count = MASS_CHANNELS * PL
+                var savedP = [Float](repeating: 0, count: count)
+                var savedD = [Float](repeating: 0, count: count)
+                savedP.withUnsafeMutableBufferPointer { $0.baseAddress!.update(from: cur + P_P0 * PL, count: count) }
+                savedD.withUnsafeMutableBufferPointer { $0.baseAddress!.update(from: b + P_D0 * PL, count: count) }
+                let pig = g.pigment
+                for y in 1...WET_TILE {
+                    for x in 1...WET_TILE {
+                        let c = y * S + x
+                        let tl = Double(cur[P_L * PL + c])
+                        let dl = Double(b[P_DL * PL + c])
+                        if !(tl > 0 || dl > 0) { continue }
+                        cur[P_L * PL + c] = 0
+                        b[P_DL * PL + c] = 0
+                        for q in 0..<4 {
+                            let eps = Swift.max(1e-3, pig[q] * 2e-4)
+                            let pi = (P_P0 + q) * PL + c
+                            let pv = Swift.max(Float(0), Float(Double(cur[pi]) - Double(Float(tl * pig[q]))))
+                            cur[pi] = Double(pv) <= eps ? 0 : pv
+                            let di = (P_D0 + q) * PL + c
+                            let dv = Swift.max(Float(0), Float(Double(b[di]) - Double(Float(dl * pig[q]))))
+                            b[di] = Double(dv) <= eps ? 0 : dv
+                        }
+                    }
+                }
+                out = shadeSlot(key, lane.base.tiles.get(tk)?.data, .bakeAll)
+                savedP.withUnsafeBufferPointer { (cur + P_P0 * PL).update(from: $0.baseAddress!, count: count) }
+                savedD.withUnsafeBufferPointer { (b + P_D0 * PL).update(from: $0.baseAddress!, count: count) }
+            } else {
+                out = shadeSlot(key, lane.base.tiles.get(tk)?.data, .bakeAll)
+            }
+            guard let out else { continue }
             if let t = finishTile(out, 4, 0) { tiles.set(tk, t) } else { _ = tiles.delete(tk) }
         }
         return TiledSurface(channels: 4, tiles: tiles, defaultValue: 0)
@@ -1029,7 +1247,7 @@ public final class WetWorld {
     /// The layer's light paint with all its wet paint dried where it is; changes nothing.
     public func bakedLight(_ id: String) throws -> TiledSurface {
         let lane = try laneOf(id)
-        if !lane.lit { return lane.light }
+        if !lane.lit || lane.ghost != nil { return lane.light }
         var tiles = lane.light.tiles
         for key in active where laneIndexOf(key) == lane.index {
             let tk = tileKeyOf(key)
@@ -1200,7 +1418,7 @@ public final class WetWorld {
     /// The layer's light paint with its live light shaded in (nil when the layer has none).
     public func lightDisplay(_ id: String) throws -> TiledSurface? {
         let lane = try laneOf(id)
-        if !lane.lit { return nil }
+        if !lane.lit || lane.ghost != nil { return nil }
         let keys = active.filter { laneIndexOf($0) == lane.index }
         var changed = false
         var live = Set<TileKey>()
@@ -1357,7 +1575,7 @@ public final class WetWorld {
             out.append((key, planes, last[key]))
             bytes += planes.count * 4
         }
-        let ls = lanes.compactMap { $0 }.map { l in WetSnapshot.SnapLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit) }
+        let ls = lanes.compactMap { $0 }.map { l in WetSnapshot.SnapLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: l.ghost) }
         return WetSnapshot(clock: clock, tilt: tilt, lanes: ls, slots: out, bytes: bytes)
     }
 
@@ -1367,8 +1585,8 @@ public final class WetWorld {
         lanes = Array(repeating: nil, count: MAX_WET_LANES)
         tilt = snap.tilt
         for l in snap.lanes {
-            let lane = WetLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light)
-            lane.lit = lane.lit || l.lit
+            let lane = WetLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, ghost: l.ghost)
+            lane.lit = lane.ghost == nil && (lane.lit || l.lit)
             lanes[l.index] = lane
             pack(lane)
         }

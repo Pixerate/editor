@@ -56,7 +56,7 @@
   const carried = $derived(brushLoadColor(snap.mixerLoad));
   // The brush's suggested colours, resolved for the colour scheme: one click makes one the paint colour.
   const palette = $derived((spec.colour?.palette ?? []).flatMap((c) => brushColourHex(c, snap.colorScheme) ?? []));
-  const loads = $derived(['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint'));
+  const loads = $derived((['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint')) && !brush.ghost);
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
 </script>
 

@@ -116,6 +116,18 @@ export interface WetWorldOptions {
   threads?: number | 'auto';
 }
 
+/** A wet layer's active ghost paint state: pigment per unit tracer and fade countdown. */
+export interface WetGhostState {
+  /** Pigment per unit of tracer (K_r, K_g, K_b, S). */
+  pigment: [number, number, number, number];
+  /** Free-interval ticks left before the ghost has fully faded. */
+  remaining: number;
+  /** Total free-interval ticks configured for the current ghost fade. */
+  total: number;
+  /** Linger seconds configured for the current ghost fade. */
+  linger: number;
+}
+
 export interface WetLaneOptions {
   params?: Partial<WetParams>;
   /** The layer's pixels under the wet paint (default empty). */
@@ -125,6 +137,8 @@ export interface WetLaneOptions {
   flowStrength?: number;
   /** The layer's light paint under the wet paint (one channel; default none). */
   light?: TiledSurface | null;
+  /** Active ghost paint state on the layer, if any. */
+  ghost?: WetGhostState | null;
 }
 
 interface Lane {
@@ -148,6 +162,8 @@ interface Lane {
   light: TiledSurface;
   /** The lane has light (under it, or laid since): only then is light shaded. */
   lit: boolean;
+  /** Active ghost paint using the light mass channel as tracer. */
+  ghost: WetGhostState | null;
   /** Shaded light tiles by tile key, with the stamp they were shaded at. */
   lightShaded: Map<number, { stamp: number; tile: Tile | null }>;
   lightDisplay: TiledSurface | null;
@@ -156,9 +172,14 @@ interface Lane {
 
 const noLight = () => new TiledSurface(1, new Map(), 0);
 
-function newLane(id: string, index: number, params: WetParams, flow: WetFlowField | null, flowStrength: number, base: TiledSurface, light: TiledSurface | null | undefined): Lane {
+function cloneGhost(g: WetGhostState | null | undefined): WetGhostState | null {
+  return g ? { pigment: [...g.pigment] as [number, number, number, number], remaining: g.remaining, total: g.total, linger: g.linger } : null;
+}
+
+function newLane(id: string, index: number, params: WetParams, flow: WetFlowField | null, flowStrength: number, base: TiledSurface, light: TiledSurface | null | undefined, ghost?: WetGhostState | null): Lane {
   const l = light ?? noLight();
-  return { id, index, params, flow, flowStrength, base, shaded: new Map(), urgent: new Set(), stamp: 1, display: null, shadedVersion: 0, displayKey: '', light: l, lit: l.tiles.size > 0, lightShaded: new Map(), lightDisplay: null, lightKey: '' };
+  const g = cloneGhost(ghost);
+  return { id, index, params, flow, flowStrength, base, shaded: new Map(), urgent: new Set(), stamp: 1, display: null, shadedVersion: 0, displayKey: '', light: l, lit: !g && l.tiles.size > 0, ghost: g, lightShaded: new Map(), lightDisplay: null, lightKey: '' };
 }
 
 /** Totals for one wet layer. */
@@ -179,7 +200,7 @@ export interface WetLaneStats {
 export interface WetSnapshot {
   readonly clock: number;
   readonly tilt: WetTilt;
-  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean }>;
+  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean; ghost?: WetGhostState | null }>;
   /** Per active key: the current set and the deposit planes; and its last flags. */
   readonly slots: ReadonlyMap<number, { planes: Float32Array; last: number }>;
   /** Bytes held. */
@@ -367,11 +388,12 @@ export class WetWorld {
       if (options.params) this.setParams(id, options.params);
       if (options.base) this.setBase(id, options.base);
       if (options.light) this.setLight(id, options.light);
+      if (options.ghost !== undefined) this.setGhost(id, options.ghost);
       return;
     }
     const index = this.lanes.indexOf(null);
     if (index < 0) throw new WetWorldError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one (dry_paint) first.`);
-    this.lanes[index] = newLane(id, index, normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS), options.flow ?? null, options.flow ? (options.flowStrength ?? 1) : 0, options.base ?? new TiledSurface(4, new Map(), 0), options.light);
+    this.lanes[index] = newLane(id, index, normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS), options.flow ?? null, options.flow ? (options.flowStrength ?? 1) : 0, options.base ?? new TiledSurface(4, new Map(), 0), options.light, options.ghost);
     this.pack(this.lanes[index]!);
   }
 
@@ -456,7 +478,8 @@ export class WetWorld {
 
   /** Whether a layer has light paint, under its wet paint or in it. */
   isLit(id: string): boolean {
-    return this.laneOf(id).lit;
+    const l = this.laneOf(id);
+    return l.lit && !l.ghost;
   }
 
   /** Replaces the light paint under a layer's wet paint. */
@@ -464,9 +487,40 @@ export class WetWorld {
     const lane = this.laneOf(id);
     if (light === lane.light) return;
     lane.light = light;
-    if (light.tiles.size) lane.lit = true;
+    if (light.tiles.size && !lane.ghost) lane.lit = true;
     lane.lightShaded.clear();
     lane.stamp++;
+  }
+
+  /** Active ghost paint state on the layer, or `null`. */
+  getGhost(id: string): WetGhostState | null {
+    return cloneGhost(this.laneOf(id).ghost);
+  }
+
+  /** Sets or clears a layer's active ghost paint state. */
+  setGhost(id: string, ghost: WetGhostState | null): void {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    lane.ghost = cloneGhost(ghost);
+    if (lane.ghost) lane.lit = false;
+  }
+
+  /**
+   * Starts a ghost paint fade on `id` with `pigment` per unit tracer and `linger` seconds. If an
+   * earlier ghost of a different colour is still fading on the layer, it finishes at once first.
+   */
+  startGhost(id: string, pigment: readonly [number, number, number, number], linger: number, stepsPerSecond = 120): void {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    const p: [number, number, number, number] = [Math.fround(pigment[0]), Math.fround(pigment[1]), Math.fround(pigment[2]), Math.fround(pigment[3])];
+    if (lane.ghost) {
+      const g = lane.ghost.pigment;
+      const same = Math.abs(g[0] - p[0]) <= 1e-6 && Math.abs(g[1] - p[1]) <= 1e-6 && Math.abs(g[2] - p[2]) <= 1e-6 && Math.abs(g[3] - p[3]) <= 1e-6;
+      if (!same) this.fadeGhost(id, 1);
+    }
+    const total = Math.max(1, Math.round((linger * stepsPerSecond) / FREE_INTERVAL));
+    lane.ghost = { pigment: p, remaining: total, total, linger };
+    lane.lit = false;
   }
 
   private pack(lane: Lane): void {
@@ -724,6 +778,13 @@ export class WetWorld {
     let woke = false;
     for (const key of wakeups) woke = this.activate(key) || woke;
     if (this.clock % FREE_INTERVAL === 0) {
+      for (const lane of this.lanes) {
+        if (!lane?.ghost) continue;
+        const g = lane.ghost;
+        const amount = g.remaining <= 1 ? 1 : 1 / g.remaining;
+        g.remaining = Math.max(0, g.remaining - 1);
+        this.fadeGhost(lane.id, amount);
+      }
       const dead = this.active.filter((key) => {
         if (this.u32[lastBase + key] & FLAG_ALIVE) return false;
         const laneBase = this.laneIndexOf(key) * perLane;
@@ -935,7 +996,10 @@ export class WetWorld {
   paint(id: string, rect: RasterRect, cov: ArrayLike<number> | null, water: number, pigment: ArrayLike<number> | null, field: ArrayLike<number> | null = null, light = 0): void {
     if (!(water >= 0)) throw new WetWorldError(`water ${water} must be 0 or more.`);
     if (!(light >= 0)) throw new WetWorldError(`light ${light} must be 0 or more.`);
-    if (light > 0) this.laneOf(id).lit = true;
+    if (light > 0) {
+      const l = this.laneOf(id);
+      if (!l.ghost) l.lit = true;
+    }
     this.footprint(id, rect, cov, (c, w, x, y) => {
       const dw = Math.fround(water * w);
       if (dw > 0) this.addWaterAt(c, dw);
@@ -1095,12 +1159,12 @@ export class WetWorld {
    * the paper as settled pigment, so water can move it again, and the same share of its light
    * paint (`light`) as settled light. Only where there is surface water.
    */
-  rewet(id: string, rect: RasterRect, cov: ArrayLike<number> | null, amount: number, paper: readonly [number, number, number]): void {
+  rewet(id: string, rect: RasterRect, cov: ArrayLike<number> | null, amount: number, paper: readonly [number, number, number], suspend = false): void {
     const lane = this.laneOf(id);
     const pig = [0, 0, 0, 0];
     const tiles = new Map(lane.base.tiles);
     const written = new Set<number>();
-    const lightTiles = lane.lit ? new Map(lane.light.tiles) : null;
+    const lightTiles = lane.lit && !lane.ghost ? new Map(lane.light.tiles) : null;
     const lightWritten = new Set<number>();
     const scratch = new Uint8ClampedArray(4);
     this.footprint(
@@ -1139,12 +1203,12 @@ export class WetWorld {
         if (tile.data[i + 3] === 0) return;
         pixelPigment(tile.data, i, paper, pig);
         if (!(pig[0] > 0 || pig[1] > 0 || pig[2] > 0)) return;
-        // What stays: (1 − a) of the film over the paper, as a pixel; what is lifted goes to the deposit.
+        // What stays: (1 − a) of the film over the paper, as a pixel; what is lifted goes to the deposit (or suspended when `suspend`).
         const clear = new Uint8ClampedArray([0, 0, 0, 0]);
         filmPixel(pig[0] * (1 - a), pig[1] * (1 - a), pig[2] * (1 - a), 0, clear, 0, paper, 0, scratch, 0);
         tile.data.set(scratch, i);
-        const d = this.single(c) + P_D0 * PLANE;
-        for (let q = 0; q < 3; q++) this.f32[d + q * PLANE] += Math.fround(pig[q] * a);
+        const into = suspend ? c + P_P0 * PLANE : this.single(c) + P_D0 * PLANE;
+        for (let q = 0; q < 3; q++) this.f32[into + q * PLANE] += Math.fround(pig[q] * a);
       },
       false
     );
@@ -1164,6 +1228,117 @@ export class WetWorld {
       }
       this.setLight(id, new TiledSurface(1, lightTiles!, 0));
     }
+  }
+
+  /**
+   * Subtracts `amount` (0..1) of a ghost lane's remaining tracer (`P_L`, `P_DL`) and proportional
+   * ghost pigment (`lane.ghost.pigment`) across all live tiles of `id`. Speeds up in cells that
+   * are nearly dry so drying paint never pops. Clears the lane's `ghost` state once no tracer remains.
+   */
+  fadeGhost(id: string, amount: number): void {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (!lane.ghost) return;
+    const keys = this.active.filter((k) => this.laneIndexOf(k) === lane.index);
+    let anyRemaining = false;
+    for (const key of keys) {
+      if (this.fadeGhostKey(key, lane, amount)) anyRemaining = true;
+    }
+    if (!anyRemaining || amount >= 1 - 1e-6) lane.ghost = null;
+    this.refreshHalos();
+  }
+
+  /** Whether any live tile of `lane` still holds ghost tracer (`P_L > 0` or `P_DL > 0`). */
+  private hasGhostTracer(lane: Lane): boolean {
+    const f = this.f32;
+    for (const key of this.active) {
+      if (this.laneIndexOf(key) !== lane.index) continue;
+      const b = this.slotBase(this.slotOf(key));
+      const cur = b + this.parity * SET_PLANES * PLANE;
+      for (let y = 1; y <= WET_TILE; y++) {
+        for (let x = 1; x <= WET_TILE; x++) {
+          const c = y * S + x;
+          if (f[cur + P_L * PLANE + c] > 0 || f[b + P_DL * PLANE + c] > 0) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Fades ghost tracer and pigment in one slot by `amount` (0..1). Returns whether any tracer
+   * remains in the slot.
+   */
+  private fadeGhostKey(key: number, lane: Lane, amount: number): boolean {
+    if (!lane.ghost) return false;
+    const pig = lane.ghost.pigment;
+    const slot = this.slotOf(key);
+    if (slot < 0) return false;
+    const b = this.slotBase(slot);
+    const cur = b + this.parity * SET_PLANES * PLANE;
+    const f = this.f32;
+    const baseAmt = Math.min(1, Math.max(0, amount));
+    let remainingTracer = false;
+    let yMin = WET_TILE + 1;
+    let yMax = 0;
+    for (let y = 1; y <= WET_TILE; y++) {
+      for (let x = 1; x <= WET_TILE; x++) {
+        const c = y * S + x;
+        const tl = f[cur + P_L * PLANE + c];
+        const dl = f[b + P_DL * PLANE + c];
+        if (!(tl > 0 || dl > 0)) continue;
+        const water = f[cur + P_RHO * PLANE + c] + f[cur + P_SW * PLANE + c];
+        const dryFade = water <= DRY_EPS ? 1 : water < 0.02 ? (1 - water / 0.02) * 0.5 : 0;
+        const a = baseAmt >= 1 - 1e-6 ? 1 : Math.min(1, Math.max(baseAmt, dryFade));
+        if (!(a > 0)) {
+          remainingTracer = true;
+          continue;
+        }
+        if (y < yMin) yMin = y;
+        if (y > yMax) yMax = y;
+        if (tl > 0) {
+          const done = a >= 1 || tl * (1 - a) <= 1e-7;
+          const dt = done ? tl : Math.fround(tl * a);
+          const tNew = done ? 0 : Math.fround(tl - dt);
+          f[cur + P_L * PLANE + c] = tNew;
+          for (let q = 0; q < 4; q++) {
+            const idx = cur + (P_P0 + q) * PLANE + c;
+            const eps = Math.max(1e-3, pig[q] * 2e-4);
+            const v = Math.max(0, Math.fround(f[idx] - Math.fround(dt * pig[q])));
+            f[idx] = tNew === 0 && v <= eps ? 0 : v;
+          }
+          if (tNew > 0) remainingTracer = true;
+        }
+        if (dl > 0) {
+          const done = a >= 1 || dl * (1 - a) <= 1e-7;
+          const dd = done ? dl : Math.fround(dl * a);
+          const dNew = done ? 0 : Math.fround(dl - dd);
+          f[b + P_DL * PLANE + c] = dNew;
+          for (let q = 0; q < 4; q++) {
+            const idx = b + (P_D0 + q) * PLANE + c;
+            const eps = Math.max(1e-3, pig[q] * 2e-4);
+            const v = Math.max(0, Math.fround(f[idx] - Math.fround(dd * pig[q])));
+            f[idx] = dNew === 0 && v <= eps ? 0 : v;
+          }
+          if (dNew > 0) remainingTracer = true;
+        }
+        if (f[cur + P_L * PLANE + c] === 0 && f[b + P_DL * PLANE + c] === 0) {
+          for (let q = 0; q < 4; q++) {
+            const eps = Math.max(1e-3, pig[q] * 2e-4);
+            const pi = cur + (P_P0 + q) * PLANE + c;
+            if (f[pi] <= eps) f[pi] = 0;
+            const di = b + (P_D0 + q) * PLANE + c;
+            if (f[di] <= eps) f[di] = 0;
+          }
+        }
+      }
+    }
+    if (yMax >= yMin) {
+      lane.urgent.add(this.tileKeyOf(key));
+      this.gpuDirtySlot(slot, yMin, yMax);
+      lane.stamp++;
+    }
+    return remainingTracer;
   }
 
   /**
@@ -1193,10 +1368,28 @@ export class WetWorld {
         continue;
       }
       const f = this.f32;
+      const pig = lane.ghost?.pigment ?? null;
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
           const c = this.cell(lane, x, y);
           const d = this.single(c) + P_D0 * PLANE;
+          if (pig) {
+            const tl = f[c + P_L * PLANE];
+            const dl = f[d + 4 * PLANE];
+            if (tl > 0 || dl > 0) {
+              f[c + P_L * PLANE] = 0;
+              f[d + 4 * PLANE] = 0;
+              for (let q = 0; q < 4; q++) {
+                const eps = Math.max(1e-3, pig[q] * 2e-4);
+                const pi = c + (P_P0 + q) * PLANE;
+                const pv = Math.max(0, Math.fround(f[pi] - Math.fround(tl * pig[q])));
+                f[pi] = pv <= eps ? 0 : pv;
+                const di = d + q * PLANE;
+                const dv = Math.max(0, Math.fround(f[di] - Math.fround(dl * pig[q])));
+                f[di] = dv <= eps ? 0 : dv;
+              }
+            }
+          }
           for (let q = 0; q < MASS_CHANNELS; q++) {
             f[d + q * PLANE] += f[c + (P_P0 + q) * PLANE];
             f[c + (P_P0 + q) * PLANE] = 0;
@@ -1211,6 +1404,7 @@ export class WetWorld {
       bounds = unionRect(bounds, { x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
       this.markEdited(lane, x0, y0, x1, y1);
     }
+    if (lane.ghost && !this.hasGhostTracer(lane)) lane.ghost = null;
     this.syncList();
     this.refreshHalos();
     lane.stamp++;
@@ -1223,11 +1417,15 @@ export class WetWorld {
    */
   private bakeKey(key: number, all: boolean): boolean {
     const lane = this.lanes[this.laneIndexOf(key)]!;
+    if (lane.ghost) {
+      this.fadeGhostKey(key, lane, 1);
+      if (!this.hasGhostTracer(lane)) lane.ghost = null;
+    }
     const [tx, ty] = this.tileXY(key);
     const tk = tileKey(tx, ty);
     // Light first: its dimming reads the pigment over it, which the colour bake leaves in place.
     let lightChanged = false;
-    if (lane.lit) {
+    if (lane.lit && !lane.ghost) {
       const lout = this.shadeLightSlot(key, lane.light.tiles.get(tk) ?? null, all ? 'bake-all' : 'bake');
       if (lout) {
         const tiles = new Map(lane.light.tiles);
@@ -1275,7 +1473,8 @@ export class WetWorld {
     const out = src ? new Uint8ClampedArray(src) : new Uint8ClampedArray(TILE * TILE * 4);
     const w = Math.min(WET_TILE, this.width - tx * WET_TILE);
     const h = Math.min(WET_TILE, this.height - ty * WET_TILE);
-    const lit = this.lanes[this.laneIndexOf(key)]!.lit;
+    const lane = this.lanes[this.laneIndexOf(key)]!;
+    const lit = lane.lit && !lane.ghost;
     const changed = shadeTile(
       this.f32,
       PLANE,
@@ -1304,7 +1503,38 @@ export class WetWorld {
     for (const key of this.active) {
       if (this.laneIndexOf(key) !== lane.index) continue;
       const tk = this.tileKeyOf(key);
-      const out = this.shadeSlot(key, lane.base.tiles.get(tk)?.data ?? null, 'bake-all');
+      let out: Uint8ClampedArray | null;
+      if (lane.ghost) {
+        const b = this.slotBase(this.slotOf(key));
+        const cur = b + this.parity * SET_PLANES * PLANE;
+        const savedP = this.f32.slice(cur + P_P0 * PLANE, cur + (P_P0 + MASS_CHANNELS) * PLANE);
+        const savedD = this.f32.slice(b + P_D0 * PLANE, b + (P_D0 + MASS_CHANNELS) * PLANE);
+        const pig = lane.ghost.pigment;
+        for (let y = 1; y <= WET_TILE; y++) {
+          for (let x = 1; x <= WET_TILE; x++) {
+            const c = y * S + x;
+            const tl = this.f32[cur + P_L * PLANE + c];
+            const dl = this.f32[b + P_DL * PLANE + c];
+            if (!(tl > 0 || dl > 0)) continue;
+            this.f32[cur + P_L * PLANE + c] = 0;
+            this.f32[b + P_DL * PLANE + c] = 0;
+            for (let q = 0; q < 4; q++) {
+              const eps = Math.max(1e-3, pig[q] * 2e-4);
+              const pi = cur + (P_P0 + q) * PLANE + c;
+              const pv = Math.max(0, Math.fround(this.f32[pi] - Math.fround(tl * pig[q])));
+              this.f32[pi] = pv <= eps ? 0 : pv;
+              const di = b + (P_D0 + q) * PLANE + c;
+              const dv = Math.max(0, Math.fround(this.f32[di] - Math.fround(dl * pig[q])));
+              this.f32[di] = dv <= eps ? 0 : dv;
+            }
+          }
+        }
+        out = this.shadeSlot(key, lane.base.tiles.get(tk)?.data ?? null, 'bake-all');
+        this.f32.set(savedP, cur + P_P0 * PLANE);
+        this.f32.set(savedD, b + P_D0 * PLANE);
+      } else {
+        out = this.shadeSlot(key, lane.base.tiles.get(tk)?.data ?? null, 'bake-all');
+      }
       if (!out) continue;
       const t = finishTile(out, 4, 0);
       if (t) tiles.set(tk, t);
@@ -1317,7 +1547,7 @@ export class WetWorld {
   bakedLight(id: string): TiledSurface {
     this.requireIdle();
     const lane = this.laneOf(id);
-    if (!lane.lit) return lane.light;
+    if (!lane.lit || lane.ghost) return lane.light;
     const tiles = new Map(lane.light.tiles);
     for (const key of this.active) {
       if (this.laneIndexOf(key) !== lane.index) continue;
@@ -1478,7 +1708,7 @@ export class WetWorld {
    */
   lightDisplay(id: string): TiledSurface | null {
     const lane = this.laneOf(id);
-    if (!lane.lit) return null;
+    if (!lane.lit || lane.ghost) return null;
     const keys = this.active.filter((k) => this.laneIndexOf(k) === lane.index);
     let changed = false;
     const live = new Set<number>();
@@ -1747,7 +1977,7 @@ export class WetWorld {
       slots.set(key, { planes, last: this.u32[(this.layout.last >> 2) + key] });
       bytes += planes.byteLength;
     }
-    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => ({ id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit }));
+    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => ({ id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: cloneGhost(l.ghost) }));
     return { clock: this.clock, tilt: { ...this.tilt }, lanes, slots, bytes };
   }
 
@@ -1758,8 +1988,8 @@ export class WetWorld {
     this.lanes.fill(null);
     this.tilt = { ...snap.tilt };
     for (const l of snap.lanes) {
-      const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light);
-      lane.lit = lane.lit || Boolean(l.lit);
+      const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light, l.ghost);
+      lane.lit = !lane.ghost && (lane.lit || Boolean(l.lit));
       this.lanes[l.index] = lane;
       this.pack(this.lanes[l.index]!);
     }

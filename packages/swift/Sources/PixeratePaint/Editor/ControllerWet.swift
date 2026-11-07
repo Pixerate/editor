@@ -283,7 +283,12 @@ extension PaintEditorController {
     /// Wet settings saved with the document (nil when they are all defaults).
     func wetJSON() -> JSONValue? {
         var layers = JSONObject()
-        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil { layers[id] = ["params": s.params.json, "flow": s.flow.json] }
+        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil {
+            var entry: JSONObject = ["params": s.params.json, "flow": s.flow.json]
+            let ghost = wet.world?.hasLane(id) == true ? wet.world?.getGhost(id) : s.ghost
+            if let ghost { entry["ghost"] = ghost.json }
+            layers[id] = .object(entry)
+        }
         if layers.isEmpty && wet.tilt.angle == 0 { return nil }
         return ["tilt": wet.tilt.json, "layers": .object(layers)]
     }

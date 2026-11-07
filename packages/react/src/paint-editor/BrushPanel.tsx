@@ -48,7 +48,7 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
   // The brush's suggested colours, resolved for the colour scheme: one click makes one the paint colour.
   const palette = (spec.colour?.palette ?? []).flatMap((c) => brushColourHex(c, state.colorScheme) ?? []);
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
-  const loads = ['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint');
+  const loads = (['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint')) && !brush.ghost;
 
   return (
     <div className={`${panel} ${className ?? ''}`} data-testid="brush-panel">

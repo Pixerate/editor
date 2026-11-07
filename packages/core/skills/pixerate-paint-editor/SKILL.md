@@ -142,10 +142,7 @@ Which facet sets which engine setting: [references/brush-facets.md](references/b
 
 ## Wet media
 
-Watercolour, gouache and wet oil run on a fluid simulation: lay washes light to dark, let them
-flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves for an agent
-until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and
-read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools.
+Watercolour, gouache and wet oil run on a fluid simulation: lay washes light to dark, let them flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves for an agent until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools. **Ghost paint and invisible ink** (`ghost` facet: `ghost-wash`, `ghost-gouache`, `ghost-oil`, `invisible-ink`) mix and flow while wet, then fade without leaving their own colour, leaving only a smear in the paint they touched: read [references/ghost.md](references/ghost.md).
 
 ## Oils and thick paint
 
@@ -295,7 +292,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `ghost`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -345,7 +342,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 
 | Tool | Use |
 | --- | --- |
-| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could, e.g. on one thread because the page is not cross-origin isolated (COOP / COEP)), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
+| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could, e.g. on one thread because the page is not cross-origin isolated (COOP / COEP)), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map, and `ghost: { remaining }` while ghost paint is fading). Call after wet strokes. |
 | `advance_wet_paint` | Let time pass: `steps` (120 = one second at the default speed) or `seconds`. The paint spreads, blooms, runs and dries. Not an undo step. Returns `steps`, `clock`, `stillWet`, `layers`. Call after a group of wet strokes, before `render_preview`. |
 | `dry_paint` | Dry wet paint at once where it is (one layer with `layerId` or all, optionally inside `rect`). One undo step. Returns `dried` (layer ids and rectangles) and `stillWet`. Dry before glazing over a wash. |
 | `wet_paper` | Pre-wet the paper with clear water over `rect` (default the canvas) on a layer, `amount` 0..1, for wet-in-wet. One undo step. Returns the rectangle and `wet`. Then paint into it. |
@@ -476,11 +473,7 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
 - **Wet paint keeps changing.** A preview right after a wet stroke shows it before it has
   flowed; `advance_wet_paint` first. Paint that should stay exactly where it was laid needs
   `dry_paint` (or a dry medium).
-- **Wet strokes on one layer interact**; washes that must not mix go on separate layers, or dry
-  the first before painting the second (glazing). At most 8 layers hold wet paint at once, and the simulation holds at most 328 wet tiles (256 × 256 px each) across them; water that spreads past
-  that limit is lost (`dry_paint` frees tiles). Multi-threaded wet media needs a cross-origin isolated
-  page (COOP / COEP, for `SharedArrayBuffer`) and runs on one thread otherwise, more slowly but with
-  the same result.
+- **Wet strokes on one layer interact**; washes that must not mix go on separate layers, or dry the first before painting the second (glazing). Ghost paint (`ghost-wash`, `ghost-gouache`, `ghost-oil`, `invisible-ink`) only meets and smears paint on its own layer, so a ghost stroke on a new empty layer simply vanishes; ghost paint and light paint cannot share a layer while the ghost is fading. At most 8 layers hold wet paint at once, and the simulation holds at most 328 wet tiles (256 × 256 px each) across them; water that spreads past that limit is lost (`dry_paint` frees tiles). Multi-threaded wet media needs a cross-origin isolated page (COOP / COEP, for `SharedArrayBuffer`) and runs on one thread otherwise, more slowly but with the same result.
 - **Undoing far back** past the wet undo memory (512 MB by default) leaves that paint dry as it
   looked, rather than wet.
 - **Replays repeat what was recorded**: strokes, fills, clears, flattened relief and wet events.
