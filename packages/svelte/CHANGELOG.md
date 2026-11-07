@@ -1,5 +1,20 @@
 # @pixerate/editor-svelte
 
+## 0.205.0
+
+### Minor Changes
+
+- 7b7c216: Add mutation paint (`mutation` facet with `settle`, `patience` and `fade`; presets `mutation-wash` and `mutation-ink`): wet or dry paint strokes that settle into a pending mutation request (`onMutationRequest`, React `useMutationRequests`, Svelte `createMutationRequestStore`), sink away when claimed by an agent via `read_mutation` (releasing held wet ghost fade or fading a temporary dry layer), and are answered by the agent's presence cursor via `answer_mutation` (or kept as ordinary paint on `decline_mutation` or timeout). Includes `createMutationTools` (`list_mutations`, `read_mutation`, `answer_mutation`, `decline_mutation`), the `pixerate-paint-mutation` workflow skill with evals, Settle / Patience / Fade brush panel controls and agent connection status in React, Svelte and Swift, and full Swift parity.
+- 59d0cd4: Add structural colour thin-film iridescence brush facet (`iridescence`), `ThickChannels.film` surface channel, built-in iridescent brush presets (`scarab-lacquer`, `soap-film`, `pearl-glaze`), view tilt shading (`set_view_tilt` / `get_view_tilt`), and opt-in `deviceTilt` gyroscope/orientation tracking across TypeScript core, React, Svelte, and Swift.
+- 7809354: Add UV-fluorescent and thermochromic smart inks to the paint editor (`fluorescence` and `thermochromic` brush facets, `uv-marker` and `thermo-ink` presets, virtual UV blacklight view/document settings, coarse canvas heat field with diffusion, Newtonian cooling, and wet-paint drying, plus `set_uv_light`, `get_uv_light`, `paint_heat`, `advance_heat`, `clear_heat`, and `get_heat` agent tools and UI controls across React, Svelte, and Swift).
+
+### Patch Changes
+
+- Updated dependencies [7b7c216]
+- Updated dependencies [59d0cd4]
+- Updated dependencies [7809354]
+  - @pixerate/editor@0.275.0
+
 ## 0.204.0
 
 ### Minor Changes
