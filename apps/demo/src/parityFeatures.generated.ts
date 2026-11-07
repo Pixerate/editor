@@ -2143,6 +2143,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "Linger and Smear sliders in `<BrushPanel>`'s `<BrushEditor>`",
         "svelte": "Linger and Smear sliders in `<BrushPanel>`'s `<BrushEditor>`",
         "swift": "✅ `WetWorld.fadeGhost`, `GhostSettings`, `DEFAULT_GHOST`, `normalizeGhost`; Linger and Smear sliders in `PaintBrushPanel`"
+      },
+      {
+        "feature": "Mutation Paint (wet or dry paint with a `mutation` facet (`settle`, `patience`, `fade`) where strokes group after `settle` seconds and notify an agent via `onMutationRequest`; when claimed with `read_mutation`, the stroke sinks away over `fade` seconds — wet strokes hold evaporation while waiting and release their ghost fade (`ghost.trigger: \"agent\"`) on claim leaving only their smear, and dry strokes paint on a temporary layer above the active layer that fades in the view and is removed — while the agent paints its answer through `answer_mutation` (`PaintDirector` cursor, one undo step with origin `agent:<id>`); if declined (`decline_mutation`), `patience` expires, or no agent is connected, the paint stays as ordinary paint (dry temporary layers merge down as one undo step); presets Mutation wash and Mutation ink; agent tools `list_mutations`, `read_mutation`, `answer_mutation`, `decline_mutation`; workflow skill `pixerate-paint-mutation`)",
+        "core": "`createMutationTools`, `MUTATION_SLIDERS`, `DEFAULT_MUTATION`, `normalizeMutation`, `MutationSettings` (`/paint-editor`)",
+        "react": "`useMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
+        "svelte": "`createMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
+        "swift": "✅ `PaintMutationInfo`, `MutationSettings`, `DEFAULT_MUTATION`, `normalizeMutation`, `PaintEditorController` `onMutationRequest` / `listMutations` / `readMutation` / `answerMutation` / `declineMutation`; Settle / Patience / Fade sliders and agent status in `PaintBrushPanel`, Temporary badge in `PaintLayersPanel`"
       }
     ]
   },

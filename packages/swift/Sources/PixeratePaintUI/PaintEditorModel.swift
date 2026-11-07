@@ -301,6 +301,32 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
     }
 
+    /// The mutation-paint sliders (`PaintUITables.sliders.mutation`): settle, patience and fade.
+    public var mutationSliders: [PaintUISlidersMutationItem] { tables.sliders.mutation }
+
+    /// The value of a mutation slider (`mutation.settle`, `mutation.patience` or `mutation.fade`).
+    public func mutationValue(_ path: String) -> Double {
+        track()
+        let m = controller.brush.mutation ?? DEFAULT_MUTATION
+        switch path {
+        case "mutation.settle": return m.settle
+        case "mutation.patience": return m.patience
+        case "mutation.fade": return m.fade
+        default: return 0
+        }
+    }
+
+    /// Sets a mutation slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setMutationValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// Whether an agent listener is connected for mutation requests.
+    public var hasMutationAgent: Bool { track(); return controller.hasMutationAgent }
+
+    /// The count of active mutations waiting for or being answered by an agent.
+    public var pendingMutationsCount: Int { track(); return controller.listMutations().count }
+
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
         let size = controller.brush.tip.size

@@ -134,8 +134,8 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   const brush: Brush = { id: raw.id, name, ...out, kind, ...(tool ? { tool } : {}), tip: out.tip ?? { shape: 'round' } } as Brush;
   // Keep the key order of a hand-written brush: identity, what it is, then the facets.
   const ordered = (): Brush => {
-    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ghost, motion, colour } = brush;
-    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ghost, motion, colour };
+    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ghost, mutation, motion, colour } = brush;
+    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ghost, mutation, motion, colour };
     return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as unknown as Brush;
   };
 

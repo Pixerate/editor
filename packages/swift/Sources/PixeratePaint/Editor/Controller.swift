@@ -106,6 +106,7 @@ public struct PaintLayerInfo {
     public var bounds: RasterRect?
     public var liveStrokes: Int?
     public var effects: Int?
+    public var temporary: Bool?
     public var parentId: String?
     public var depth: Int
 
@@ -113,6 +114,7 @@ public struct PaintLayerInfo {
         var o: JSONObject = ["id": .string(id), "name": .string(name), "type": .string(type), "visible": .bool(visible), "opacity": .number(opacity), "blend": .string(blend), "clipped": .bool(clipped), "locks": .object(locks), "active": .bool(active), "bounds": rectJSON(bounds)]
         if let liveStrokes { o["liveStrokes"] = .number(Double(liveStrokes)) }
         if let effects { o["effects"] = .number(Double(effects)) }
+        if temporary == true { o["temporary"] = true }
         o["parentId"] = parentId.map { .string($0) } ?? .null
         o["depth"] = .number(Double(depth))
         return .object(o)
@@ -156,7 +158,7 @@ public struct PaintStrokeInit {
 
 final class HistoryEntry {
     let label: String
-    let before: PaintDocumentState
+    var before: PaintDocumentState
     var after: PaintDocumentState
     var guides: (before: PaintGuides, after: PaintGuides)?
     /// Wet steps: the wet simulation before and after (`lost` once dropped for memory: undo then leaves the paint dry).
@@ -277,6 +279,15 @@ public final class PaintEditorController {
     let backlightCommitted = BacklightCache()
     /// Lit tiles of thick layers, per layer.
     var litCaches: [String: LitCache] = [:]
+    /// Tracked mutation exchanges (editor state, not saved in the document).
+    var mutations: [MutationEntry] = []
+    var nextMutationId = 1
+    var mutationListeners: [UUID: (PaintMutationInfo) -> Void] = [:]
+    var mutationAgentConnected = false
+    var answeringMutation = false
+    var heldEvaporation: [String: Double] = [:]
+    var tempLayerTargets: [String: String] = [:]
+    var lastMutationTick: Double?
 
     private final class LibraryCancellable {
         let c: Cancellable
@@ -363,6 +374,7 @@ public final class PaintEditorController {
             try? wet.restore(w.lost ? nil : w.before)
             if paper != doc.paper { wet.paperChanged() }
         }
+        reconcileMutationsAfterUndo()
         return e.label
     }
 
@@ -377,6 +389,7 @@ public final class PaintEditorController {
             try? wet.restore(w.lost ? nil : w.after)
             if paper != doc.paper { wet.paperChanged() }
         }
+        reconcileMutationsAfterUndo()
         return e.label
     }
 
@@ -404,6 +417,7 @@ public final class PaintEditorController {
             beginWetOp()
             wet.reset()
         }
+        resetMutations()
         commit("New canvas", next)
         return next
     }
@@ -615,7 +629,8 @@ public final class PaintEditorController {
         }
         let live = doc.liveStrokes?.get(l.id)
         let effects = l.effects.map(\.items.count) ?? 0
-        return PaintLayerInfo(id: l.id, name: l.name, type: l.type, visible: l.visible, opacity: l.opacity, blend: l.blend.rawValue, clipped: l.clipped, locks: locksJSON(l.locks), active: l.id == doc.activeLayerId, bounds: bounds, liveStrokes: live.map(\.count), effects: effects > 0 ? effects : nil, parentId: parent, depth: d)
+        let temporary = l.isPixel && l.temporary == true ? true : nil
+        return PaintLayerInfo(id: l.id, name: l.name, type: l.type, visible: l.visible, opacity: l.opacity, blend: l.blend.rawValue, clipped: l.clipped, locks: locksJSON(l.locks), active: l.id == doc.activeLayerId, bounds: bounds, liveStrokes: live.map(\.count), effects: effects > 0 ? effects : nil, temporary: temporary, parentId: parent, depth: d)
     }
 
     func requireLayer(_ id: String) throws -> PaintLayer {
@@ -634,10 +649,11 @@ public final class PaintEditorController {
     }
 
     public func setActiveLayer(_ id: String) throws {
-        _ = try requireLayer(id)
-        if doc.activeLayerId == id { return }
+        let targetId = tempLayerTargets[id] ?? id
+        _ = try requireLayer(targetId)
+        if doc.activeLayerId == targetId { return }
         // Selection of the active layer is editor state, not an undo step: keep the history's documents.
-        doc = doc.with { $0.activeLayerId = id }
+        doc = doc.with { $0.activeLayerId = targetId }
     }
 
     /// Adds a layer above the active one: `pixel` (default), `group`, or `strokes` (a live stroke layer).
@@ -937,7 +953,7 @@ public final class PaintEditorController {
         for k in unset { base[k] = nil }
         let spec = try readBrushPatch(base, patch, &problems)
         if entry != nil || patch.path("colour.default") != nil { takeBrushColour(spec) }
-        useBrush(unchanged && entry != nil ? entry!.brush : resolveBrush(spec), spec, unchanged && entry?.builtin == true)
+        try useBrush(unchanged && entry != nil ? entry!.brush : resolveBrush(spec), spec, unchanged && entry?.builtin == true)
         return (brush, brushSpec, problems)
     }
 
@@ -964,8 +980,9 @@ public final class PaintEditorController {
         do { return try normalizeBrushSpec(.object(mergeBrushPatch(base, rest)), &problems) } catch { throw PaintEditorError(error.localizedDescription) }
     }
 
-    func useBrush(_ nextIn: PaintBrush, _ spec: Brush, _ builtin: Bool) {
+    func useBrush(_ nextIn: PaintBrush, _ spec: Brush, _ builtin: Bool) throws {
         var next = renormalized(nextIn)
+        if let refusal = mutationBrushRefusal(next) { throw PaintEditorError(refusal) }
         next.builtin = builtin ? true : nil
         brush = next
         var s = spec
@@ -1129,6 +1146,7 @@ public final class PaintEditorController {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) to paint on it.") }
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
         let brush = try strokeBrush(i)
+        if let refusal = mutationBrushRefusal(brush) { throw PaintEditorError(refusal) }
         if brush.ghost != nil {
             if brush.light.amount > 0 { throw PaintEditorError("Ghost paint (\(brush.name)) shares the wet light channel and can't emit light; set light.amount to 0 or ghost to null (set_brush).") }
             if (i.paint.map(isPaintEffectPaint) ?? false) || (i.paint == nil && i.color == nil && effectPaint != nil) {
@@ -1201,6 +1219,19 @@ public final class PaintEditorController {
             // A dry brush on wet paint: the paint dries first (in the same undo step).
             dryLayersFirst([layer.id])
             if let dried = findLayer(doc.layers, layer.id)?.layer { layer = dried }
+        }
+        if brush.mutation != nil && !isWetBrush(brush) && !answeringMutation && !previewing {
+            let targetLayer = layer
+            let existingTempId = mutations.first(where: { $0.state == "settling" && $0.medium == "dry" && $0.layerId == targetLayer.id && $0.tempLayerId != nil && (findLayer(d.layers, $0.tempLayerId!) != nil || findLayer(doc.layers, $0.tempLayerId!) != nil) })?.tempLayerId
+                ?? tempLayerTargets.first(where: { tid, lid in lid == targetLayer.id && (findLayer(d.layers, tid) != nil || findLayer(doc.layers, tid) != nil) && !mutations.contains(where: { $0.tempLayerId == tid && $0.state != "settling" }) })?.key
+            if let existingTempId, let existingLayer = findLayer(d.layers, existingTempId)?.layer ?? findLayer(doc.layers, existingTempId)?.layer {
+                layer = existingLayer
+            } else {
+                let temp = createPaintLayer("Mutation").copy(clipped: targetLayer.clipped, temporary: .some(true))
+                tempLayerTargets[temp.id] = targetLayer.id
+                setDocSilently(doc.with { $0.layers = insertAfter(doc.layers, targetLayer.id, temp) })
+                layer = temp
+            }
         }
         var color = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
         if i.color == nil, let start = i.start, let t = guides.tracing, t.visible, t.sampleColors { color = try sampleTracingColor(start.x, start.y) ?? color }
@@ -1299,8 +1330,12 @@ public final class PaintEditorController {
             let thick = session.thickChannels()
             // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
             let wetLight = wetStroke && wet.world?.hasLane(session.layerId) == true ? try? wet.world!.lightDisplay(session.layerId) : nil
+            var baseLayers = d.layers
+            if let targetId = tempLayerTargets[session.layerId], findLayer(baseLayers, session.layerId) == nil, let temp = findLayer(doc.layers, session.layerId)?.layer {
+                baseLayers = insertAfter(baseLayers, targetId, temp)
+            }
             out = d.with { o in
-                o.layers = mapLayer(d.layers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
+                o.layers = mapLayer(baseLayers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
                 o.strokes = d.strokes + [stroke]
                 o.settingLight(session.layerId, session.lightChannel ?? wetLight)
                 if let thick { var t = o.thick ?? OrderedMap(); t.set(session.layerId, thick); o.thick = t }
@@ -1333,7 +1368,14 @@ public final class PaintEditorController {
             throw error
         }
         if let load = run.result.mixerLoad { keepLoad(run.brush, load) }
-        if run.doc !== before || wetOp != nil { commit("\(run.brush.name) stroke", withWetEvents(run.doc), before: before) } else { emit() }
+        if run.doc !== before || wetOp != nil {
+            commit("\(run.brush.name) stroke", withWetEvents(run.doc), before: before)
+            if let sid = run.result.strokeId, let stroke = doc.strokes.last(where: { $0.id == sid }) {
+                recordMutationStroke(stroke, run.result.bounds)
+            }
+        } else {
+            emit()
+        }
         return run.result
     }
 
@@ -1405,7 +1447,7 @@ public final class PaintEditorController {
         return out
     }
 
-    private func insertAfter(_ layers: [PaintLayer], _ id: String, _ node: PaintLayer) -> [PaintLayer] {
+    func insertAfter(_ layers: [PaintLayer], _ id: String, _ node: PaintLayer) -> [PaintLayer] {
         if let i = layers.firstIndex(where: { $0.id == id }) { var o = layers; o.insert(node, at: i + 1); return o }
         return layers.map { l in l.children.map { l.withChildren(insertAfter($0, id, node)) } ?? l }
     }
@@ -1442,7 +1484,7 @@ public final class PaintEditorController {
 
     /// The document as JSON with inline PNG data URLs (`toJSON`).
     public func toJSON(strokes withStrokes: Bool = true) -> JSONObject {
-        let d = doc
+        let d = savedDocumentState()
         var out: JSONObject = [
             "format": .string(PAINT_FORMAT), "version": .number(Double(PAINT_SCHEMA_VERSION)),
             "width": .number(Double(d.canvas.width)), "height": .number(Double(d.canvas.height)), "dpi": .number(d.canvas.dpi),

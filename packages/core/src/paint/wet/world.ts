@@ -126,6 +126,8 @@ export interface WetGhostState {
   total: number;
   /** Linger seconds configured for the current ghost fade. */
   linger: number;
+  /** When the fade starts: `immediate` (default, omitted) or `agent` (waits until `releaseGhost`). */
+  trigger?: 'immediate' | 'agent';
 }
 
 export interface WetLaneOptions {
@@ -173,7 +175,7 @@ interface Lane {
 const noLight = () => new TiledSurface(1, new Map(), 0);
 
 function cloneGhost(g: WetGhostState | null | undefined): WetGhostState | null {
-  return g ? { pigment: [...g.pigment] as [number, number, number, number], remaining: g.remaining, total: g.total, linger: g.linger } : null;
+  return g ? { pigment: [...g.pigment] as [number, number, number, number], remaining: g.remaining, total: g.total, linger: g.linger, ...(g.trigger === 'agent' ? { trigger: 'agent' } : {}) } : null;
 }
 
 function newLane(id: string, index: number, params: WetParams, flow: WetFlowField | null, flowStrength: number, base: TiledSurface, light: TiledSurface | null | undefined, ghost?: WetGhostState | null): Lane {
@@ -507,20 +509,60 @@ export class WetWorld {
 
   /**
    * Starts a ghost paint fade on `id` with `pigment` per unit tracer and `linger` seconds. If an
-   * earlier ghost of a different colour is still fading on the layer, it finishes at once first.
+   * earlier ghost of a different colour is still fading on the layer, it finishes at once first
+   * (or keeps its paint when it was an unclaimed agent-triggered ghost).
    */
-  startGhost(id: string, pigment: readonly [number, number, number, number], linger: number, stepsPerSecond = 120): void {
+  startGhost(id: string, pigment: readonly [number, number, number, number], linger: number, stepsPerSecond = 120, trigger: 'immediate' | 'agent' = 'immediate'): void {
     this.requireIdle();
     const lane = this.laneOf(id);
     const p: [number, number, number, number] = [Math.fround(pigment[0]), Math.fround(pigment[1]), Math.fround(pigment[2]), Math.fround(pigment[3])];
     if (lane.ghost) {
       const g = lane.ghost.pigment;
       const same = Math.abs(g[0] - p[0]) <= 1e-6 && Math.abs(g[1] - p[1]) <= 1e-6 && Math.abs(g[2] - p[2]) <= 1e-6 && Math.abs(g[3] - p[3]) <= 1e-6;
-      if (!same) this.fadeGhost(id, 1);
+      if (!same) {
+        if (lane.ghost.trigger === 'agent') this.keepGhost(id);
+        else this.fadeGhost(id, 1);
+      }
     }
     const total = Math.max(1, Math.round((linger * stepsPerSecond) / FREE_INTERVAL));
-    lane.ghost = { pigment: p, remaining: total, total, linger };
+    lane.ghost = { pigment: p, remaining: total, total, linger, ...(trigger === 'agent' ? { trigger: 'agent' } : {}) };
     lane.lit = false;
+  }
+
+  /**
+   * Releases a held (`trigger: 'agent'`) ghost on `id` so its fade starts counting down on the
+   * simulation clock over `linger` seconds (default: the lane's configured `linger`).
+   */
+  releaseGhost(id: string, linger?: number, stepsPerSecond = 120): void {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (!lane.ghost) return;
+    const l = linger ?? lane.ghost.linger;
+    const total = Math.max(1, Math.round((l * stepsPerSecond) / FREE_INTERVAL));
+    lane.ghost = { pigment: lane.ghost.pigment, remaining: total, total, linger: l };
+  }
+
+  /**
+   * Drops a ghost lane's tracer (`P_L`, `P_DL`) without subtracting its pigment, so an unclaimed
+   * or declined wet mutation stroke stays as ordinary wet paint.
+   */
+  keepGhost(id: string): void {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (!lane.ghost) return;
+    const f = this.f32;
+    for (const key of this.active) {
+      if (this.laneIndexOf(key) !== lane.index) continue;
+      const slot = this.slotOf(key);
+      if (slot < 0) continue;
+      const b = this.slotBase(slot);
+      const cur = b + this.parity * SET_PLANES * PLANE;
+      f.fill(0, cur + P_L * PLANE, cur + (P_L + 1) * PLANE);
+      f.fill(0, b + P_DL * PLANE, b + (P_DL + 1) * PLANE);
+      this.gpuDirtySlot(slot, 1, WET_TILE);
+    }
+    lane.ghost = null;
+    this.refreshHalos();
   }
 
   private pack(lane: Lane): void {
@@ -779,7 +821,7 @@ export class WetWorld {
     for (const key of wakeups) woke = this.activate(key) || woke;
     if (this.clock % FREE_INTERVAL === 0) {
       for (const lane of this.lanes) {
-        if (!lane?.ghost) continue;
+        if (!lane?.ghost || lane.ghost.trigger === 'agent') continue;
         const g = lane.ghost;
         const amount = g.remaining <= 1 ? 1 : 1 / g.remaining;
         g.remaining = Math.max(0, g.remaining - 1);
@@ -1368,12 +1410,16 @@ export class WetWorld {
         continue;
       }
       const f = this.f32;
-      const pig = lane.ghost?.pigment ?? null;
+      const pig = lane.ghost && lane.ghost.trigger !== 'agent' ? lane.ghost.pigment : null;
+      const clearTracer = Boolean(lane.ghost && lane.ghost.trigger === 'agent');
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
           const c = this.cell(lane, x, y);
           const d = this.single(c) + P_D0 * PLANE;
-          if (pig) {
+          if (clearTracer) {
+            f[c + P_L * PLANE] = 0;
+            f[d + 4 * PLANE] = 0;
+          } else if (pig) {
             const tl = f[c + P_L * PLANE];
             const dl = f[d + 4 * PLANE];
             if (tl > 0 || dl > 0) {
@@ -1418,7 +1464,17 @@ export class WetWorld {
   private bakeKey(key: number, all: boolean): boolean {
     const lane = this.lanes[this.laneIndexOf(key)]!;
     if (lane.ghost) {
-      this.fadeGhostKey(key, lane, 1);
+      if (lane.ghost.trigger === 'agent') {
+        const slot = this.slotOf(key);
+        if (slot >= 0) {
+          const b = this.slotBase(slot);
+          const cur = b + this.parity * SET_PLANES * PLANE;
+          this.f32.fill(0, cur + P_L * PLANE, cur + (P_L + 1) * PLANE);
+          this.f32.fill(0, b + P_DL * PLANE, b + (P_DL + 1) * PLANE);
+        }
+      } else {
+        this.fadeGhostKey(key, lane, 1);
+      }
       if (!this.hasGhostTracer(lane)) lane.ghost = null;
     }
     const [tx, ty] = this.tileXY(key);
@@ -1504,7 +1560,7 @@ export class WetWorld {
       if (this.laneIndexOf(key) !== lane.index) continue;
       const tk = this.tileKeyOf(key);
       let out: Uint8ClampedArray | null;
-      if (lane.ghost) {
+      if (lane.ghost && lane.ghost.trigger !== 'agent') {
         const b = this.slotBase(this.slotOf(key));
         const cur = b + this.parity * SET_PLANES * PLANE;
         const savedP = this.f32.slice(cur + P_P0 * PLANE, cur + (P_P0 + MASS_CHANNELS) * PLANE);

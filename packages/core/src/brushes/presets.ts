@@ -510,4 +510,18 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     behaviour: { surface: 'wet', wet: { water: 0.45, pigment: 0, rewet: 0.35 } },
     ghost: { smear: 0.65 },
   },
+  // --- Mutation paint: strokes that sink away once claimed, and an agent answers ---
+  {
+    id: 'mutation-wash', name: 'Mutation wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 28, hardness: 0.6, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.6, rewet: 0.2 } },
+    mutation: {},
+  },
+  {
+    id: 'mutation-ink', name: 'Mutation ink', kind: 'mark', medium: 'ink', variety: 'pen',
+    tip: { shape: 'round', size: 6, hardness: 0.9, spacing: 0.06 },
+    dynamics: { smoothing: 0.35, pressureSmoothing: 0.25, minSize: 0.25 },
+    mutation: {},
+  },
 ];

@@ -68,9 +68,13 @@ public struct WetGhostState: Equatable, Sendable {
     public var remaining: Int
     public var total: Int
     public var linger: Double
+    /// When `'agent'`, the fade waits for `releaseGhost` instead of counting down automatically.
+    public var trigger: String? = nil
 
     public var json: JSONValue {
-        ["pigment": .array(pigment.map { .number($0) }), "remaining": .number(Double(remaining)), "total": .number(Double(total)), "linger": .number(linger)]
+        var o: JSONObject = ["pigment": .array(pigment.map { .number($0) }), "remaining": .number(Double(remaining)), "total": .number(Double(total)), "linger": .number(linger)]
+        if trigger == "agent" { o["trigger"] = "agent" }
+        return .object(o)
     }
 }
 
@@ -414,17 +418,46 @@ public final class WetWorld {
     }
 
     /// Starts a ghost paint fade on `id` with `pigment` per unit tracer and `linger` seconds.
-    /// If an earlier ghost of a different colour is still fading on the layer, it finishes at once first.
-    public func startGhost(_ id: String, pigment: [Double], linger: Double, stepsPerSecond: Double = 120) throws {
+    /// If an earlier ghost of a different colour is still fading on the layer, it finishes at once first
+    /// (or keeps its paint when it was an unclaimed agent-triggered ghost).
+    public func startGhost(_ id: String, pigment: [Double], linger: Double, stepsPerSecond: Double = 120, trigger: String = "immediate") throws {
         let lane = try laneOf(id)
         let p = [Double(Float(pigment[0])), Double(Float(pigment[1])), Double(Float(pigment[2])), Double(Float(pigment[3]))]
         if let g = lane.ghost?.pigment {
             let same = abs(g[0] - p[0]) <= 1e-6 && abs(g[1] - p[1]) <= 1e-6 && abs(g[2] - p[2]) <= 1e-6 && abs(g[3] - p[3]) <= 1e-6
-            if !same { try fadeGhost(id, amount: 1) }
+            if !same {
+                if lane.ghost?.trigger == "agent" { try keepGhost(id) }
+                else { try fadeGhost(id, amount: 1) }
+            }
         }
         let total = Swift.max(1, Int(JS.round((linger * stepsPerSecond) / Double(FREE_INTERVAL))))
-        lane.ghost = WetGhostState(pigment: p, remaining: total, total: total, linger: linger)
+        lane.ghost = WetGhostState(pigment: p, remaining: total, total: total, linger: linger, trigger: trigger == "agent" ? "agent" : nil)
         lane.lit = false
+    }
+
+    /// Releases a held (`trigger: "agent"`) ghost on `id` so its fade starts counting down on the simulation clock over `linger` seconds.
+    public func releaseGhost(_ id: String, linger: Double? = nil, stepsPerSecond: Double = 120) throws {
+        let lane = try laneOf(id)
+        guard let g = lane.ghost else { return }
+        let l = linger ?? g.linger
+        let total = Swift.max(1, Int(JS.round((l * stepsPerSecond) / Double(FREE_INTERVAL))))
+        lane.ghost = WetGhostState(pigment: g.pigment, remaining: total, total: total, linger: l, trigger: nil)
+    }
+
+    /// Drops a ghost lane's tracer (`P_L`, `P_DL`) without subtracting its pigment, so an unclaimed or declined wet mutation stroke stays as ordinary wet paint.
+    public func keepGhost(_ id: String) throws {
+        let lane = try laneOf(id)
+        guard lane.ghost != nil else { return }
+        for key in active where laneIndexOf(key) == lane.index {
+            let slot = slotOf(key)
+            if slot < 0 { continue }
+            let b = slotPtr(slot)
+            let cur = b + parity * SET_PLANES * PL
+            (cur + P_L * PL).update(repeating: 0, count: PL)
+            (b + P_DL * PL).update(repeating: 0, count: PL)
+        }
+        lane.ghost = nil
+        refreshHalos()
     }
 
     private func pack(_ lane: WetLane) {
@@ -651,7 +684,7 @@ public final class WetWorld {
         for key in wakeups { woke = activate(key) || woke }
         if clock % FREE_INTERVAL == 0 {
             for lane in lanes {
-                guard let lane, var g = lane.ghost else { continue }
+                guard let lane, var g = lane.ghost, g.trigger != "agent" else { continue }
                 let amount = g.remaining <= 1 ? 1.0 : 1.0 / Double(g.remaining)
                 g.remaining = Swift.max(0, g.remaining - 1)
                 lane.ghost = g
@@ -1098,12 +1131,16 @@ public final class WetWorld {
                 free(key)
                 continue
             }
-            let pig = lane.ghost?.pigment
+            let pig = lane.ghost?.trigger != "agent" ? lane.ghost?.pigment : nil
+            let clearTracer = lane.ghost?.trigger == "agent"
             for y in y0..<y1 {
                 for x in x0..<x1 {
                     guard let c = cell(lane, x, y) else { continue }
                     let d = single(c) + P_D0 * PL
-                    if let pig {
+                    if clearTracer {
+                        c[P_L * PL] = 0
+                        d[4 * PL] = 0
+                    } else if let pig {
                         let tl = Double(c[P_L * PL])
                         let dl = Double(d[4 * PL])
                         if tl > 0 || dl > 0 {
@@ -1145,8 +1182,18 @@ public final class WetWorld {
     @discardableResult
     private func bakeKey(_ key: Int, _ all: Bool) -> Bool {
         guard let lane = lanes[laneIndexOf(key)] else { return false }
-        if lane.ghost != nil {
-            fadeGhostKey(key, lane, 1)
+        if let g = lane.ghost {
+            if g.trigger == "agent" {
+                let slot = slotOf(key)
+                if slot >= 0 {
+                    let b = slotPtr(slot)
+                    let cur = b + parity * SET_PLANES * PL
+                    (cur + P_L * PL).update(repeating: 0, count: PL)
+                    (b + P_DL * PL).update(repeating: 0, count: PL)
+                }
+            } else {
+                fadeGhostKey(key, lane, 1)
+            }
             if !hasGhostTracer(lane) { lane.ghost = nil }
         }
         let tk = tileKeyOf(key)
@@ -1204,7 +1251,7 @@ public final class WetWorld {
         for key in active where laneIndexOf(key) == lane.index {
             let tk = tileKeyOf(key)
             let out: [UInt8]?
-            if let g = lane.ghost {
+            if let g = lane.ghost, g.trigger != "agent" {
                 let b = slotPtr(slotOf(key))
                 let cur = b + parity * SET_PLANES * PL
                 let count = MASS_CHANNELS * PL

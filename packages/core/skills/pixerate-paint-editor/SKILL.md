@@ -68,6 +68,7 @@ the pitfalls, and uses the tools below.
 - `pixerate-paint-watercolour`: paper, light to dark, wet-in-wet and wet-on-dry, drying and glazing.
 - `pixerate-paint-oil-impasto`: toned ground, thin to thick, pigment mixing, impasto and its light.
 - `pixerate-paint-sketch-to-finish`: sketch, ink, flats, clipped shading and light, one layer per pass.
+- `pixerate-paint-mutation`: claim a user's mutation stroke (`read_mutation`), let it fade, and paint an answer (`answer_mutation`).
 
 ## Working method
 
@@ -210,21 +211,7 @@ for the controls and presets.
 
 ## Effect paint
 
-`set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every
-stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image).
-Its transparency paints nothing.
-
-1. `search_effects` (`use` generator, overlay or title) and `describe_effect` for the controls.
-2. `set_effect_paint` with `effect`, `values`, `time` (ms, default 0). Wait for it to return.
-3. Paint: dab, particle and bristle brushes take the colour per pixel; the Mixer Brush and pick-up
-   dab brushes take it per dab at its centre. Wet and impasto brushes take it per pixel, shifted by
-   paint they pick up (in watercolour and gouache it flows with the water; impasto keeps its relief).
-   Sprayed stickers each take the colour at their centre (they stay recolourable).
-4. `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour;
-   `update_effect` (target and effect `paint`, `values`) renders new values.
-5. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
-
-When to use which:
+`set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image); transparency paints nothing. Call `search_effects` (`use` generator, overlay or title) and `describe_effect`, then `set_effect_paint` with `effect`, `values`, `time` (ms, default 0) and wait for it to return before painting. `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour; `update_effect` (target and effect `paint`, `values`) renders new values. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
 
 | Want | Use |
 | --- | --- |
@@ -236,8 +223,7 @@ When to use which:
 
 ## Canvas-hosted layer
 
-When `get_canvas_info` has `bounds`, the painting is a layer of a larger canvas and every position
-is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hosted.md).
+When `get_canvas_info` has `bounds`, the painting is a layer of a larger canvas and every position is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hosted.md).
 
 ## Tool reference
 
@@ -253,9 +239,9 @@ is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hos
 | `get_paper` | Read every setting of the current paper (pattern, seed, scale, tiling, depth, shading, dry and wet tuning, and `metallic`, `backlight`, `backlightColor` when set). |
 | `set_paper` | Change the paper: `preset`, then any of `color`, `depth` (0..1), `scale` (0.25..8), `seed` (another sheet), `pattern`, `tiling`, `shading`, `dry` / `wet` tuning (`contrast` 0..3, `invert`), `metallic`, `backlight` (0..1, light from behind: glazes glow, opaque paint blocks; preset `stained-glass`) and `backlightColor`. Affects new strokes' grain and how the paper shows; strokes already painted keep their pixels. Returns the paper. |
 
-### Suggesting paint
+### Suggesting and answering paint
 
-Contributing while the user paints: suggest, don't paint. Read [references/painting-alongside.md](references/painting-alongside.md).
+Contributing while the user paints: suggest with proposals ([references/painting-alongside.md](references/painting-alongside.md)), or answer `mutation` strokes ([references/mutation.md](references/mutation.md), `pixerate-paint-mutation`).
 
 | Tool | Use |
 | --- | --- |
@@ -263,6 +249,10 @@ Contributing while the user paints: suggest, don't paint. Read [references/paint
 | `list_paint_proposals` | Read the pending paint proposals: id, title, rationale, who proposed it, op kinds, placement, bounds, the strokes it echoes and any since removed (`missing`), and whether accepting is allowed. Call before accepting or rejecting. |
 | `accept_paint_proposal` | Paint a pending proposal on a new layer as one undo step recorded as the proposer's (`proposalId`). Only when the user said yes. Returns the layer id, stroke ids and undo step name. Refuses when a stroke it echoes is gone. |
 | `reject_paint_proposal` | Dismiss a pending proposal (`proposalId`); nothing changes. Use it to withdraw a suggestion that no longer fits. Returns the id and title. |
+| `list_mutations` | List pending mutations (`id`, `layerId`, `medium`, `bounds`, `age`, `state`, `strokes`) raised after the user paints with a `mutation` brush (`mutation-wash`, `mutation-ink`) and pauses (`includeAll: true` includes claimed, answered and declined). Call before `read_mutation`. |
+| `read_mutation` | Claim a pending mutation (`id`) and start its fade so the user's paint sinks away (`padding` px around bounds, `maxSide` for the canvas preview). Returns `strokes` (points, colour, brush), `cropPng` and `canvasPng` (as images and structured data). Refused if already claimed. |
+| `answer_mutation` | Paint your answer to a claimed mutation (`id`, `strokes` with `brush`, `color`, `points`, optional `layerId`, `note`). Runs through the paint director when present and commits as one undo step (`agent:<id>`). Returns `strokeIds` and `bounds`. Refused if not claimed or already answered. |
+| `decline_mutation` | Give up on a mutation (`id`, optional `reason`) without answering so the user's paint stays on the canvas as ordinary paint. |
 
 ### Layers
 
@@ -292,7 +282,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `ghost`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `ghost`, `mutation`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 

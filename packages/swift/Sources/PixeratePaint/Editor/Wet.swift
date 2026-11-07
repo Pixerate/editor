@@ -130,7 +130,7 @@ final class WetStrokeDriver {
         ))
         if wet.tool == "paint", let ghost = brush.ghost, wet.pigment > 0 {
             let one = pigmentOf(i.color, body)
-            try? i.world.startGhost(i.laneId, pigment: one, linger: ghost.linger, stepsPerSecond: i.speed ?? 120)
+            try? i.world.startGhost(i.laneId, pigment: one, linger: ghost.linger, stepsPerSecond: i.speed ?? 120, trigger: ghost.trigger ?? "immediate")
         }
         lightBase = wet.tool == "paint" ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0
         let rates = exchangeRates(brush.behavior.pickup, brush.behavior.mix, wet.load, brush.behavior.mixing)
@@ -596,6 +596,35 @@ public final class PaintWetLayers {
         tilt = normalizeTilt(angle: angle, direction: direction, tilt)
         _ = world?.setTilt(tilt)
         return tilt
+    }
+
+    /// Releases a held (`trigger: "agent"`) ghost on a layer so its fade starts counting down on the simulation clock over `linger` seconds.
+    func releaseGhost(_ layerId: String, linger: Double? = nil) {
+        if let w = world, w.hasLane(layerId) {
+            try? w.releaseGhost(layerId, linger: linger, stepsPerSecond: speed)
+            if var s = settings.get(layerId) {
+                s.ghost = w.getGhost(layerId)
+                settings.set(layerId, s)
+            }
+        } else if var s = settings.get(layerId), var g = s.ghost {
+            let l = linger ?? g.linger
+            let total = Swift.max(1, Int(JS.round((l * speed) / Double(FREE_INTERVAL))))
+            g.remaining = total
+            g.total = total
+            g.linger = l
+            g.trigger = nil
+            s.ghost = g
+            settings.set(layerId, s)
+        }
+    }
+
+    /// Drops a ghost lane's tracer without subtracting its pigment, so an unclaimed or declined wet mutation stroke stays as ordinary wet paint.
+    func keepGhost(_ layerId: String) {
+        if let w = world, w.hasLane(layerId) { try? w.keepGhost(layerId) }
+        if var s = settings.get(layerId), s.ghost != nil {
+            s.ghost = nil
+            settings.set(layerId, s)
+        }
     }
 
     /// The paper changed.

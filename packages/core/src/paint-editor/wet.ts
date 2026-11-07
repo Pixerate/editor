@@ -141,7 +141,7 @@ export class WetStrokeDriver {
     });
     if (wet.tool === 'paint' && brush.ghost && wet.pigment > 0) {
       const one = pigmentOf(init.color, body);
-      init.world.startGhost(init.laneId, [one[0], one[1], one[2], one[3]], brush.ghost.linger, init.speed ?? 120);
+      init.world.startGhost(init.laneId, [one[0], one[1], one[2], one[3]], brush.ghost.linger, init.speed ?? 120, brush.ghost.trigger ?? 'immediate');
     }
     // Light paint: wet paint brushes lay light with their pigment (thinned with it); it then flows with the paint.
     this.lightBase = wet.tool === 'paint' ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0;
@@ -374,7 +374,7 @@ export interface WetEvent {
   clock: number;
   /** How many strokes were recorded before it (where it falls between strokes in a replay). */
   at?: number;
-  kind: 'dry' | 'tilt' | 'params' | 'flow' | 'wet-paper';
+  kind: 'dry' | 'tilt' | 'params' | 'flow' | 'wet-paper' | 'ghost-release' | 'ghost-keep';
   layerId?: string;
   data?: unknown;
 }
@@ -871,6 +871,26 @@ export class PaintWetLayers {
     this.syncDisplays();
     this.retireDry();
     return out;
+  }
+
+  /** Starts the fade countdown of an agent-triggered ghost on `layerId`. */
+  releaseGhost(layerId: string, linger?: number): void {
+    const w = this.world;
+    if (w?.hasLane(layerId)) w.releaseGhost(layerId, linger, this.speed);
+    const s = this.settings.get(layerId);
+    if (s?.ghost?.trigger === 'agent') {
+      const sec = linger !== undefined ? Math.max(0.5, Math.min(60, linger)) : s.ghost.linger;
+      const total = Math.max(1, Math.round((sec * this.speed) / FREE_INTERVAL));
+      s.ghost = { ...s.ghost, linger: sec, total, remaining: total, trigger: undefined };
+    }
+  }
+
+  /** Keeps an unclaimed agent-triggered ghost on `layerId` as ordinary wet paint. */
+  keepGhost(layerId: string): void {
+    const w = this.world;
+    if (w?.hasLane(layerId)) w.keepGhost(layerId);
+    const s = this.settings.get(layerId);
+    if (s?.ghost) delete s.ghost;
   }
 
   /** The layer's light paint with all its wet paint dried (`null` without a wet layer or light), without changing anything. */

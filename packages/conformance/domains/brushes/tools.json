@@ -1148,6 +1148,39 @@
                 "minimum": 0,
                 "maximum": 1,
                 "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "agent"
+                ],
+                "description": "When the fade starts: immediate (default) counts down as soon as the paint is laid; agent holds the fade until read_mutation claims the stroke."
+              }
+            },
+            "additionalProperties": false
+          },
+          "mutation": {
+            "type": "object",
+            "description": "Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).",
+            "properties": {
+              "settle": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 10,
+                "description": "Seconds after the last stroke before it counts as finished and raises a mutation request (default 1.5)."
+              },
+              "patience": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 300,
+                "description": "Seconds to wait for an agent before giving up and keeping the paint as ordinary paint (default 45)."
+              },
+              "fade": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 10,
+                "description": "Seconds the paint takes to sink away once claimed by read_mutation (default 2)."
               }
             },
             "additionalProperties": false
@@ -2561,6 +2594,39 @@
                 "minimum": 0,
                 "maximum": 1,
                 "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "immediate",
+                  "agent"
+                ],
+                "description": "When the fade starts: immediate (default) counts down as soon as the paint is laid; agent holds the fade until read_mutation claims the stroke."
+              }
+            },
+            "additionalProperties": false
+          },
+          "mutation": {
+            "type": "object",
+            "description": "Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).",
+            "properties": {
+              "settle": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 10,
+                "description": "Seconds after the last stroke before it counts as finished and raises a mutation request (default 1.5)."
+              },
+              "patience": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 300,
+                "description": "Seconds to wait for an agent before giving up and keeping the paint as ordinary paint (default 45)."
+              },
+              "fade": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 10,
+                "description": "Seconds the paint takes to sink away once claimed by read_mutation (default 2)."
               }
             },
             "additionalProperties": false
@@ -3092,6 +3158,7 @@
                 "behaviour",
                 "light",
                 "ghost",
+                "mutation",
                 "motion",
                 "colour"
               ],

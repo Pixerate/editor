@@ -2892,5 +2892,85 @@
         ]
       }
     }
+  },
+  {
+    "id": "mutation-wash",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "mutation-ink",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      }
+    }
   }
 ]

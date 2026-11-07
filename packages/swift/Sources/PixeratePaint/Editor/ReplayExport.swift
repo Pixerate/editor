@@ -201,6 +201,11 @@ extension PaintEditorController {
                 case "wet-paper":
                     let d = e.data?.objectValue ?? [:]
                     if let id = e.layerId, target.getLayer(id) != nil { _ = try? target.wetPaper(layerId: id, rect: sr(d["rect"]), amount: d["amount"]?.numberValue) }
+                case "ghost-release":
+                    let d = e.data?.objectValue ?? [:]
+                    if let id = e.layerId, target.getLayer(id) != nil { target.wet.releaseGhost(id, linger: d["linger"]?.numberValue) }
+                case "ghost-keep":
+                    if let id = e.layerId, target.getLayer(id) != nil { target.wet.keepGhost(id) }
                 default:
                     break
                 }
