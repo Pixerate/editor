@@ -49,6 +49,15 @@ import {
   type RasterRect,
   type Tile,
 } from '../raster/surface';
+import {
+  fillRegionMask,
+  findUnfilledRegionsMask,
+  type FillRegionPoint,
+  type FillRegionSummary,
+  type UnfilledRegion,
+} from '../raster/fill';
+import { PIGMENT_UNIT } from '../paint/wet/film';
+import { WetMedium } from '../paint/wet/medium';
 import { brushToJSON, DEFAULT_BRUSH_ID, normalizePaintBrush, type PaintBrushInput, BRUSH_ID, type PaintBrush } from './brushes';
 import { BrushLibraryError, closest, createBrushLibrary, type BrushLibrary, type BrushLibraryFile } from '../brushes/library';
 import { migrateBrushV1 } from '../brushes/migrate';
@@ -143,6 +152,18 @@ import {
 } from './mutation';
 import type { PaintDirector, PaintStrokesResult } from './presence';
 import type { PresenceActorInfo } from '../animation/presence';
+import { createPaintProposals, type PaintProposals } from './collaboration';
+import {
+  crossoverGenomes,
+  describeGenomeDiff,
+  mutateGenome,
+  normalizeMutationRates,
+  proposalGenomeStrokes,
+  type BreedStrokesResult,
+  type BredProposalSummary,
+  type ProposalGenomeResult,
+  type StrokeMutationRates,
+} from './evolution';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -419,6 +440,79 @@ export interface FillLayerOptions {
   /** With grain: pressure 0..1, how far the fill reaches into the valleys (default 0.5). */
   pressure?: number;
   blend?: BlendMode;
+}
+
+export type FillReference = 'layer' | 'all' | 'composite' | (string & {});
+
+export interface FillRegionOptions {
+  /** Seed x in document pixels (pass `x` and `y`, or `points`). */
+  x?: number;
+  /** Seed y in document pixels (pass `x` and `y`, or `points`). */
+  y?: number;
+  /** Multiple seed points in document pixels (filled together as one undo step). */
+  points?: ReadonlyArray<FillRegionPoint>;
+  /** Target layer id from `listLayers` (default the active layer). */
+  layerId?: string;
+  /**
+   * Which pixels define the region boundaries:
+   * - `'layer'` (default): the target layer itself.
+   * - `'all'` or `'composite'`: all visible layers composited (without paper).
+   * - a layer id from `listLayers`: that layer (e.g. an ink line-art layer above a flats layer).
+   */
+  reference?: FillReference;
+  /** Fill colour #rrggbb (default the editor's paint colour). */
+  color?: string;
+  /** Opacity 0..1 (default 1). */
+  opacity?: number;
+  /** Blend mode (default `'normal'`). */
+  blend?: BlendMode;
+  /** Alias for `blend`. */
+  blendMode?: BlendMode;
+  /** Colour/alpha similarity tolerance 0..255 (default 32). */
+  tolerance?: number;
+  /** Close small gaps in line art up to this width in pixels, 0..32 (default 0). */
+  closeGap?: number;
+  /** Expand (> 0, bleed under lines) or contract (< 0) the filled region in pixels, -16..16 (default 0). */
+  expand?: number;
+  /** Soften boundary edges (default true). */
+  antialias?: boolean;
+  /** Paper grain response 0..1 (default 0: flat fill). */
+  grain?: number;
+  /** With grain: pressure 0..1, how far the fill reaches into the valleys (default 0.5). */
+  pressure?: number;
+  /** Pour a wet watercolour wash into the region on the layer's wet layer (default false). */
+  wet?: boolean;
+}
+
+export interface FillRegionResult {
+  layerId: string;
+  bounds: RasterRect | null;
+  pixelCount: number;
+  leaked: boolean;
+  regions: FillRegionSummary[];
+  wet?: boolean;
+}
+
+export interface FindUnfilledRegionsOptions {
+  /** Target layer id from `listLayers` (when given, regions already painted on it are excluded). */
+  layerId?: string;
+  /**
+   * Which pixels define the line-art barriers:
+   * - `'all'` or `'composite'` (default): all visible layers composited (without paper).
+   * - `'layer'`: the target (or active) layer itself.
+   * - a layer id from `listLayers`: that layer (e.g. an ink line-art layer).
+   */
+  reference?: FillReference;
+  /** Alpha/colour threshold 0..255 above which a reference pixel is treated as line art (default 32). */
+  tolerance?: number;
+  /** Close small gaps in line art up to this width in pixels, 0..32 (default 0). */
+  closeGap?: number;
+  /** Ignore regions smaller than this many pixels (default 16). */
+  minArea?: number;
+  /** Include regions that touch the canvas border (default false: only enclosed shapes). */
+  includeEdge?: boolean;
+  /** Maximum number of regions to return, sorted largest first (default 100). */
+  maxRegions?: number;
 }
 
 /** Pixels to add on each side of the canvas (whole numbers, 0 or more; missing = 0). */
@@ -1699,6 +1793,275 @@ export class PaintEditorController {
     const light = lit ? withLayerLight(this.doc.light, l.id, scaleLight(lit, 1 - opacity)) : undefined;
     this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), ...(light ? { light } : {}) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
     return { layerId: l.id, bounds: rect };
+  }
+
+  /**
+   * Flood-fills one or more contiguous regions on a pixel layer (one undo step), sampling boundaries
+   * from the layer itself (`reference: 'layer'`), all visible layers (`'all'` / `'composite'`), or a
+   * specific reference layer id (e.g. an ink line-art layer above a flats layer). Closes line-art gaps
+   * up to `closeGap` px and expands (`> 0`, bleeding under lines) or contracts (`< 0`) by `expand` px.
+   * With `wet: true`, pours a watercolour wash into the region on the layer's wet layer.
+   */
+  fillRegion(options: FillRegionOptions): FillRegionResult {
+    this.requireIdle('filling');
+    const fillTarget = this.paintTarget(options.layerId, 'fill');
+    if (this.doc.stickers?.[fillTarget.id]?.length) throw new PaintEditorError(`Layer "${fillTarget.name}" is a sticker layer; fill another layer (add_layer).`);
+    if (this.doc.liveStrokes?.[fillTarget.id]) throw new PaintEditorError(`Layer "${fillTarget.name}" is a stroke layer (its pixels are drawn from its strokes); fill another layer (add_layer), or rasterize it first (rasterize_stroke_layer).`);
+
+    const { width, height } = this.doc.canvas;
+    const pts: FillRegionPoint[] = [];
+    if (options.points !== undefined) {
+      if (!Array.isArray(options.points) || !options.points.length) {
+        throw new PaintEditorError('points is empty; give at least one {x, y} in document pixels.');
+      }
+      for (let i = 0; i < options.points.length; i++) {
+        const p = options.points[i];
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+          throw new PaintEditorError(`points[${i}] needs finite x and y in document pixels.`);
+        }
+        pts.push({ x: p.x, y: p.y });
+      }
+    }
+    if (options.x !== undefined || options.y !== undefined) {
+      if (!Number.isFinite(options.x) || !Number.isFinite(options.y)) {
+        throw new PaintEditorError('x and y must be finite numbers in document pixels.');
+      }
+      if (!options.points) pts.push({ x: options.x!, y: options.y! });
+    }
+    if (!pts.length) {
+      throw new PaintEditorError('Pass x and y (or points) in document pixels to fill a region.');
+    }
+    for (const p of pts) {
+      const px = Math.floor(p.x);
+      const py = Math.floor(p.y);
+      if (px < 0 || py < 0 || px >= width || py >= height) {
+        throw new PaintEditorError(`(${p.x}, ${p.y}) is outside the ${width}×${height} canvas.`);
+      }
+    }
+
+    const refSpec = options.reference ?? 'layer';
+    if (refSpec !== 'layer' && refSpec !== 'all' && refSpec !== 'composite') {
+      this.requireLayer(refSpec);
+    }
+
+    const color = options.color === undefined ? this.color : parseColor(options.color);
+    const opacity = options.opacity ?? 1;
+    if (!(Number.isFinite(opacity) && opacity >= 0 && opacity <= 1)) throw new PaintEditorError(`opacity ${opacity} is out of range; use 0..1.`);
+    const blend = options.blend ?? options.blendMode ?? 'normal';
+    if (!isBlendMode(blend)) throw new PaintEditorError(`Unknown blend mode "${blend}".`);
+    const tolerance = options.tolerance ?? 32;
+    if (!(Number.isFinite(tolerance) && tolerance >= 0 && tolerance <= 255)) throw new PaintEditorError(`tolerance ${tolerance} is out of range; use 0..255.`);
+    const closeGap = options.closeGap ?? 0;
+    if (!(Number.isFinite(closeGap) && closeGap >= 0 && closeGap <= 32)) throw new PaintEditorError(`closeGap ${closeGap} is out of range; use 0..32 px.`);
+    const expand = options.expand ?? 0;
+    if (!(Number.isFinite(expand) && expand >= -16 && expand <= 16)) throw new PaintEditorError(`expand ${expand} is out of range; use -16..16 px.`);
+    const antialias = options.antialias ?? true;
+    if (typeof antialias !== 'boolean') throw new PaintEditorError('antialias must be true or false.');
+    const grainAmount = options.grain ?? 0;
+    if (!(Number.isFinite(grainAmount) && grainAmount >= 0 && grainAmount <= 1)) throw new PaintEditorError(`grain ${grainAmount} is out of range; use 0..1.`);
+    const pressure = options.pressure ?? 0.5;
+    if (!(Number.isFinite(pressure) && pressure >= 0 && pressure <= 1)) throw new PaintEditorError(`pressure ${pressure} is out of range; use 0..1.`);
+    const wet = options.wet === true;
+    if (wet && this.previewing) throw new PaintEditorError("Wet paint can't be previewed; suggest a dry fill instead.");
+    if (wet && !this.wet.wetLayerIds().includes(fillTarget.id) && this.wet.wetLayerIds().length >= MAX_WET_LANES) {
+      throw new PaintEditorError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one first (dry_paint).`);
+    }
+
+    const refPixels =
+      refSpec === 'layer'
+        ? this.compositePixels({ layerIds: [fillTarget.id], paper: false, wet: 'display' }).data
+        : refSpec === 'all' || refSpec === 'composite'
+          ? this.compositePixels({ paper: false, wet: 'display' }).data
+          : this.compositePixels({ layerIds: [refSpec], paper: false, wet: 'display' }).data;
+
+    const filled = fillRegionMask(refPixels, width, height, {
+      points: pts,
+      tolerance,
+      closeGap,
+      expand,
+      antialias,
+    });
+
+    const eventData: Record<string, unknown> = {
+      points: pts.map((p) => ({ x: p.x, y: p.y })),
+      reference: refSpec,
+      color,
+      opacity,
+      blend,
+      tolerance,
+      closeGap,
+      expand,
+      antialias,
+      grain: grainAmount,
+      pressure,
+      ...(wet ? { wet: true } : {}),
+    };
+
+    if (!filled.bounds || filled.pixelCount === 0) {
+      return {
+        layerId: fillTarget.id,
+        bounds: null,
+        pixelCount: 0,
+        leaked: false,
+        regions: filled.regions,
+        ...(wet ? { wet: this.wet.isWet(fillTarget.id) } : {}),
+      };
+    }
+
+    const rect = filled.bounds;
+    const depth = grainAmount * this.doc.paper.depth;
+    const grain = depth > 0 ? paperGrain(this.doc.paper) : null;
+
+    if (wet) {
+      this.requireWetIdle('filling');
+      const before = this.doc;
+      let l = fillTarget;
+      if (l.offset.x || l.offset.y) {
+        const moved: PaintPixelLayer = { ...l, surface: translateSurface(l.surface, l.offset.x, l.offset.y), offset: { x: 0, y: 0 } };
+        this.doc = { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => moved) };
+        l = moved;
+      }
+      this.beginWetOp();
+      const world = this.wet.ensureLane(l.id);
+      const [r, g, b] = hexToRgb8(color);
+      const medium = new WetMedium(world, l.id, {
+        water: 0.9 * Math.max(0.25, opacity),
+        mass: PIGMENT_UNIT * 2.5 * opacity,
+        body: 0,
+        light: 0,
+      });
+      const subCov = new Float32Array(rect.width * rect.height);
+      for (let yy = 0, k = 0; yy < rect.height; yy++) {
+        const py = rect.y + yy;
+        const row = py * width;
+        for (let xx = 0; xx < rect.width; xx++, k++) {
+          const px = rect.x + xx;
+          let v = filled.mask[row + px]!;
+          if (v > 0 && grain) v *= grainCatch(grain.at(px + 0.5, py + 0.5), depth, pressure);
+          subCov[k] = Math.round(v * 4096) / 4096;
+        }
+      }
+      medium.deposit(rect, subCov, 1, [r / 255, g / 255, b / 255], null);
+      if (this.wet.instantDry) {
+        this.wet.dry(l.id);
+        this.logWet({ kind: 'dry', layerId: l.id });
+      } else {
+        this.wet.syncDisplays();
+      }
+      const afterLayer = this.getLayer(l.id) as PaintPixelLayer;
+      this.commit(
+        'Fill region',
+        this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...afterLayer })) }), {
+          kind: 'fill-region',
+          layerId: l.id,
+          data: eventData,
+        }),
+        before
+      );
+      return {
+        layerId: l.id,
+        bounds: rect,
+        pixelCount: filled.pixelCount,
+        leaked: filled.leaked,
+        regions: filled.regions,
+        wet: this.wet.isWet(l.id),
+      };
+    }
+
+    this.dryLayersFirst([fillTarget.id]);
+    const l = this.paintTarget(options.layerId, 'fill');
+    const coverage = new CoverageMap();
+    const vals = new Float32Array(rect.width * rect.height);
+    for (let yy = 0, k = 0; yy < rect.height; yy++) {
+      const py = rect.y + yy;
+      const row = py * width;
+      for (let xx = 0; xx < rect.width; xx++, k++) {
+        const px = rect.x + xx;
+        let v = filled.mask[row + px]!;
+        if (v > 0 && grain) v *= grainCatch(grain.at(px + 0.5, py + 0.5), depth, pressure);
+        vals[k] = v;
+      }
+    }
+    coverage.accumulate(rect, vals, 1);
+    const apply: StrokeApply = {
+      mode: 'paint',
+      color: rgbaOf(color),
+      background: rgbaOf(this.doc.paper.color),
+      opacity,
+      blend,
+      lockTransparency: isLayerLocked(l, 'transparency'),
+      selection: null,
+      offset: l.offset,
+    };
+    const surface = this.applyCoverage(l, coverage, rect, apply);
+    this.commit(
+      'Fill region',
+      this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })) }), {
+        kind: 'fill-region',
+        layerId: l.id,
+        data: eventData,
+      })
+    );
+    return {
+      layerId: l.id,
+      bounds: rect,
+      pixelCount: filled.pixelCount,
+      leaked: filled.leaked,
+      regions: filled.regions,
+    };
+  }
+
+  /**
+   * Finds enclosed unfilled regions from a reference layer or the visible composite (without paper),
+   * closing line-art gaps up to `closeGap` px and returning each region's interior seed `point`,
+   * `centroid`, `bounds`, `pixelCount`, and `touchesEdge` flag.
+   */
+  findUnfilledRegions(options: FindUnfilledRegionsOptions = {}): { regions: UnfilledRegion[] } {
+    if (options.layerId !== undefined) {
+      const l = this.requireLayer(options.layerId);
+      if (!isPixelLayer(l)) throw new PaintEditorError(`Layer "${l.name}" is a group; pass a pixel layer inside it.`);
+    }
+    const refSpec = options.reference ?? 'all';
+    if (refSpec !== 'layer' && refSpec !== 'all' && refSpec !== 'composite') {
+      this.requireLayer(refSpec);
+    }
+    const tolerance = options.tolerance ?? 32;
+    if (!(Number.isFinite(tolerance) && tolerance >= 0 && tolerance <= 255)) throw new PaintEditorError(`tolerance ${tolerance} is out of range; use 0..255.`);
+    const closeGap = options.closeGap ?? 0;
+    if (!(Number.isFinite(closeGap) && closeGap >= 0 && closeGap <= 32)) throw new PaintEditorError(`closeGap ${closeGap} is out of range; use 0..32 px.`);
+    const minArea = options.minArea ?? 16;
+    if (!(Number.isInteger(minArea) && minArea >= 1 && minArea <= 10000000)) throw new PaintEditorError(`minArea ${minArea} is out of range; use a whole number of pixels, 1 or more.`);
+    const maxRegions = options.maxRegions ?? 100;
+    if (!(Number.isInteger(maxRegions) && maxRegions >= 1 && maxRegions <= 1000)) throw new PaintEditorError(`maxRegions ${maxRegions} is out of range; use 1..1000.`);
+    const includeEdge = options.includeEdge ?? false;
+    if (typeof includeEdge !== 'boolean') throw new PaintEditorError('includeEdge must be true or false.');
+
+    const { width, height } = this.doc.canvas;
+    let refPixels: Uint8ClampedArray;
+    if (refSpec === 'all' || refSpec === 'composite') {
+      refPixels = this.compositePixels({ paper: false, wet: 'display' }).data;
+    } else if (refSpec === 'layer') {
+      const targetId = options.layerId ?? this.doc.activeLayerId;
+      if (!targetId) throw new PaintEditorError('There is no active layer; pass layerId or reference.');
+      refPixels = this.compositePixels({ layerIds: [targetId], paper: false, wet: 'display' }).data;
+    } else {
+      refPixels = this.compositePixels({ layerIds: [refSpec], paper: false, wet: 'display' }).data;
+    }
+
+    const targetPixels =
+      options.layerId !== undefined && options.layerId !== refSpec && refSpec !== 'layer'
+        ? this.compositePixels({ layerIds: [options.layerId], paper: false, wet: 'display' }).data
+        : undefined;
+
+    const regions = findUnfilledRegionsMask(refPixels, width, height, {
+      target: targetPixels,
+      tolerance,
+      closeGap,
+      minArea,
+      includeEdge,
+      maxRegions,
+    });
+    return { regions };
   }
 
   private applyCoverage(l: PaintPixelLayer, coverage: CoverageMap, rect: RasterRect, apply: StrokeApply): TiledSurface {
@@ -5932,6 +6295,169 @@ export class PaintEditorController {
     const l = findLayer(this.currentLayers(), id)?.layer;
     return isPixelLayer(l) ? l.surface : null;
   }
+
+  // --- Proposals and evolutionary strokes ------------------------------------------
+
+  private proposalsStore: PaintProposals | null = null;
+
+  /** The pending paint proposals store attached to this editor (created on demand). */
+  get proposals(): PaintProposals {
+    return (this.proposalsStore ??= createPaintProposals({ controller: this }));
+  }
+
+  /** Attaches an external `PaintProposals` store so tools and panels share it. */
+  attachProposals(store: PaintProposals): void {
+    this.proposalsStore = store;
+  }
+
+  /**
+   * Breeds `count` (`2..12`, default `4`) mutated variants from `1..16` recorded strokes as
+   * pending paint proposals, generated one after another through `previewPaint`.
+   */
+  breedStrokes(options: {
+    strokeIds: readonly string[];
+    count?: number;
+    mutation?: StrokeMutationRates;
+    seed?: number;
+    origin?: string;
+  }): BreedStrokesResult {
+    const { strokeIds } = options;
+    if (!Array.isArray(strokeIds) || strokeIds.length < 1 || strokeIds.length > 16) {
+      throw new PaintEditorError(`strokeIds must have 1..16 stroke ids (got ${strokeIds?.length ?? 0}); call list_strokes for the ids.`);
+    }
+    const count = options.count ?? 4;
+    if (!Number.isInteger(count) || count < 2 || count > 12) {
+      throw new PaintEditorError(`count ${count} is out of range; use a whole number in 2..12.`);
+    }
+    const seed = options.seed ?? 1;
+    if (!Number.isInteger(seed) || seed < 0) {
+      throw new PaintEditorError(`seed ${seed} must be a whole number of 0 or more.`);
+    }
+    let rates;
+    try {
+      rates = normalizeMutationRates(options.mutation);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const liveAll = Object.values(this.doc.liveStrokes ?? {}).flat();
+    const byId = new Map<string, RecordedStroke>();
+    for (const s of this.doc.strokes) byId.set(s.id, s);
+    for (const s of liveAll) byId.set(s.id, s);
+    const parents = strokeIds.map((id) => {
+      const s = byId.get(id);
+      if (!s) throw new PaintEditorError(`Unknown stroke "${id}". Call list_strokes for the ids.`);
+      const refusal = liveStrokeRefusal(s.brush);
+      if (refusal) throw new PaintEditorError(refusal);
+      return s;
+    });
+    const proposals: BredProposalSummary[] = [];
+    for (let i = 0; i < count; i++) {
+      const variantSeed = (seed + i * 7919) | 0;
+      const children = mutateGenome(parents, rates, variantSeed);
+      const { diff, changes } = describeGenomeDiff(parents, children);
+      const prop = this.proposals.propose({
+        title: `Variant ${i + 1}`,
+        rationale: diff,
+        ...(options.origin ? { origin: options.origin } : {}),
+        ops: [{ kind: 'strokes', strokes: children }],
+      });
+      proposals.push({
+        proposalId: prop.id,
+        title: prop.title,
+        seed: variantSeed,
+        bounds: prop.bounds,
+        diff,
+        changes,
+      });
+    }
+    return { proposalIds: proposals.map((p) => p.proposalId), proposals };
+  }
+
+  /**
+   * Breeds `count` (`2..12`, default `4`) variants from `1` pending proposal (mutation) or `2`
+   * pending proposals (crossover + mutation), generated one after another through `previewPaint`.
+   */
+  breedProposal(options: {
+    proposalIds: readonly string[];
+    count?: number;
+    mutation?: StrokeMutationRates;
+    seed?: number;
+    origin?: string;
+  }): BreedStrokesResult {
+    const { proposalIds } = options;
+    if (!Array.isArray(proposalIds) || proposalIds.length < 1 || proposalIds.length > 2) {
+      throw new PaintEditorError(`proposalIds must have 1 or 2 proposal ids (1 to mutate, 2 to cross over; got ${proposalIds?.length ?? 0}); call list_paint_proposals for the ids.`);
+    }
+    const count = options.count ?? 4;
+    if (!Number.isInteger(count) || count < 2 || count > 12) {
+      throw new PaintEditorError(`count ${count} is out of range; use a whole number in 2..12.`);
+    }
+    const seed = options.seed ?? 1;
+    if (!Number.isInteger(seed) || seed < 0) {
+      throw new PaintEditorError(`seed ${seed} must be a whole number of 0 or more.`);
+    }
+    let rates;
+    try {
+      rates = normalizeMutationRates(options.mutation);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const parentProps = proposalIds.map((id) => {
+      const p = this.proposals.get(id);
+      if (!p) throw new PaintEditorError(`No pending paint proposal "${id}". Call list_paint_proposals for the ids.`);
+      return p;
+    });
+    const parentGenomes = parentProps.map((p) => {
+      const strokes = proposalGenomeStrokes(this, p);
+      if (!strokes.length) throw new PaintEditorError(`Proposal "${p.id}" has no stroke genome to breed from.`);
+      for (const s of strokes) {
+        const refusal = liveStrokeRefusal(s.brush);
+        if (refusal) throw new PaintEditorError(refusal);
+      }
+      return strokes;
+    });
+    const isCrossover = parentGenomes.length === 2;
+    const proposals: BredProposalSummary[] = [];
+    for (let i = 0; i < count; i++) {
+      const variantSeed = (seed + i * 7919) | 0;
+      const children = isCrossover
+        ? crossoverGenomes(parentGenomes[0]!, parentGenomes[1]!, rates, variantSeed)
+        : mutateGenome(parentGenomes[0]!, rates, variantSeed);
+      const { diff, changes } = describeGenomeDiff(parentGenomes[0]!, children, { crossover: isCrossover });
+      const title = isCrossover
+        ? `Crossover ${i + 1} (${parentProps[0]!.id} × ${parentProps[1]!.id})`
+        : `Variant ${i + 1} of ${parentProps[0]!.id}`;
+      const prop = this.proposals.propose({
+        title,
+        rationale: diff,
+        ...(options.origin ? { origin: options.origin } : {}),
+        ops: [{ kind: 'strokes', strokes: children }],
+      });
+      proposals.push({
+        proposalId: prop.id,
+        title: prop.title,
+        seed: variantSeed,
+        bounds: prop.bounds,
+        diff,
+        changes,
+      });
+    }
+    return { proposalIds: proposals.map((p) => p.proposalId), proposals };
+  }
+
+  /** Returns the full stroke genome records (`RecordedStrokeJSON[]`) of a pending paint proposal. */
+  getProposalGenome(proposalId: string): ProposalGenomeResult {
+    const p = this.proposals.get(proposalId);
+    if (!p) throw new PaintEditorError(`No pending paint proposal "${proposalId}". Call list_paint_proposals for the ids.`);
+    const strokes = proposalGenomeStrokes(this, p);
+    if (!strokes.length) throw new PaintEditorError(`Proposal "${proposalId}" has no stroke genome.`);
+    return {
+      proposalId: p.id,
+      title: p.title,
+      bounds: p.bounds,
+      strokes: strokes.map(strokeToJSON),
+    };
+  }
 }
 
 export type { Tile };
@@ -6037,7 +6563,19 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
       const list = e.kind === 'stickers' ? (e.data as { stickers?: Sticker[] } | undefined)?.stickers : undefined;
       if (list) return { ...e, data: { ...e.data, stickers: moveStickers(list) } };
       const strokes = e.kind === 'live-strokes' ? (e.data as { strokes?: RecordedStroke[] } | undefined)?.strokes : undefined;
-      return strokes ? { ...e, data: { ...e.data, strokes: strokes.map(moveStroke) } } : e;
+      if (strokes) return { ...e, data: { ...e.data, strokes: strokes.map(moveStroke) } };
+      if (e.kind === 'fill-region' && e.data) {
+        const d = e.data as { x?: number; y?: number; points?: Array<{ x: number; y: number }> };
+        return {
+          ...e,
+          data: {
+            ...e.data,
+            ...(typeof d.x === 'number' && typeof d.y === 'number' ? { x: d.x + dx, y: d.y + dy } : {}),
+            ...(Array.isArray(d.points) ? { points: d.points.map((p) => movePoint(p, dx, dy)) } : {}),
+          },
+        };
+      }
+      return e;
     });
   }
   if (doc.wetEvents) {

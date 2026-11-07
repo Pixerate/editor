@@ -75,7 +75,7 @@ export interface PaintDocumentState {
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
 export interface PaintEvent {
   at: number;
-  kind: 'fill' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
+  kind: 'fill' | 'fill-region' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
   layerId: string;
   /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers or live strokes after an edit. */
   data?: Record<string, unknown>;

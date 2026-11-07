@@ -6,6 +6,11 @@
       "key": "b"
     },
     {
+      "id": "fill",
+      "label": "Fill",
+      "key": "g"
+    },
+    {
       "id": "eyedropper",
       "label": "Eyedropper",
       "key": "i"

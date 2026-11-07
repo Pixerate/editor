@@ -8,12 +8,13 @@ import { BrushPanel } from './BrushPanel';
 import { ColorPanel } from './ColorPanel';
 import { PaintCanvas } from './PaintCanvas';
 import { PaintLayersPanel } from './PaintLayersPanel';
-import { PaintToolbar } from './PaintToolbar';
+import { PaintToolbar, type PaintFillToolbarOptions } from './PaintToolbar';
 import { PaperPanel } from './PaperPanel';
 import { WetPanel } from './WetPanel';
 import { StickerPanel } from './StickerPanel';
 import { StrokePanel } from './StrokePanel';
 import { PathStrokePanel } from './PathStrokePanel';
+import { EvolutionPanel } from './EvolutionPanel';
 import { PaintEffectsPanel, usePaintEffectsProvider } from './PaintEffectsPanel';
 import { chip } from './shared';
 
@@ -58,6 +59,7 @@ type SideTab = 'color' | 'wet' | 'paper' | 'layers' | 'effects';
  */
 export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, proposals, agentStrokes, className, playback, playbackId = 'paint', onPlaybackReveal }) => {
   const [tool, setTool] = useState<PaintTool>('brush');
+  const [fillOptions, setFillOptions] = useState<PaintFillToolbarOptions>({ reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true });
   const [tab, setTab] = useState<SideTab>('color');
   const tabRef = useRef(tab);
   tabRef.current = tab;
@@ -129,12 +131,12 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
   return (
     <div ref={rootRef} className={`relative flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900 p-2 ${className ?? ''}`} style={{ height }} data-testid="paint-editor">
       {playing && <PresenceLayer presence={agentPresence} viewport={docToRoot} />}
-      <PaintToolbar controller={controller} tool={tool} onToolChange={setTool} fileName={fileName} />
+      <PaintToolbar controller={controller} tool={tool} onToolChange={setTool} fillOptions={fillOptions} onFillOptionsChange={setFillOptions} fileName={fileName} />
       <div className="flex min-h-0 flex-1 gap-2">
         <BrushPanel controller={controller} className="w-60 shrink-0 overflow-y-auto pr-1" />
         <div className="flex min-w-0 flex-1 flex-col">
           {/* With playback the editor draws the cursor (over the panels too), so the canvas doesn't. */}
-          <PaintCanvas controller={controller} tool={tool} onError={setError} presence={playing ? undefined : presence} proposals={proposals} agentStrokes={agentStrokes} className="flex-1 rounded-lg" />
+          <PaintCanvas controller={controller} tool={tool} fillOptions={fillOptions} onError={setError} presence={playing ? undefined : presence} proposals={proposals} agentStrokes={agentStrokes} className="flex-1 rounded-lg" />
           {error && (
             <p role="alert" className="mt-1 text-[11px] text-rose-400">
               {error}
@@ -156,6 +158,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
             {tab === 'layers' && <PaintLayersPanel controller={controller} />}
             {tab === 'layers' && <StrokePanel controller={controller} />}
             {tab === 'layers' && <PathStrokePanel controller={controller} />}
+            {tab === 'layers' && <EvolutionPanel controller={controller} proposals={proposals} />}
             {tab === 'layers' && <StickerPanel controller={controller} />}
             {tab === 'effects' && effects && <PaintEffectsPanel controller={controller} />}
           </div>

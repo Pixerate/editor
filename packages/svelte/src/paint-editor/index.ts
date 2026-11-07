@@ -13,6 +13,7 @@ import type StickerPanelComponent from './StickerPanel.svelte';
 import type StickerPickerComponent from './StickerPicker.svelte';
 import type StrokePanelComponent from './StrokePanel.svelte';
 import type PathStrokePanelComponent from './PathStrokePanel.svelte';
+import type EvolutionPanelComponent from './EvolutionPanel.svelte';
 import type PaintEffectsPanelComponent from './PaintEffectsPanel.svelte';
 import type PaintGradientEditorComponent from './PaintGradientEditor.svelte';
 
@@ -32,6 +33,7 @@ export { default as StickerPanel } from './StickerPanel.svelte';
 export { default as StickerPicker } from './StickerPicker.svelte';
 export { default as StrokePanel } from './StrokePanel.svelte';
 export { default as PathStrokePanel } from './PathStrokePanel.svelte';
+export { default as EvolutionPanel } from './EvolutionPanel.svelte';
 export { default as PaintEffectsPanel } from './PaintEffectsPanel.svelte';
 export { default as PaintGradientEditor } from './PaintGradientEditor.svelte';
 export { default as PaintSlider } from './PaintSlider.svelte';
@@ -61,6 +63,7 @@ export type StickerPanelProps = ComponentProps<typeof StickerPanelComponent>;
 export type StickerPickerProps = ComponentProps<typeof StickerPickerComponent>;
 export type StrokePanelProps = ComponentProps<typeof StrokePanelComponent>;
 export type PathStrokePanelProps = ComponentProps<typeof PathStrokePanelComponent>;
+export type EvolutionPanelProps = ComponentProps<typeof EvolutionPanelComponent>;
 export type PaintEffectsPanelProps = ComponentProps<typeof PaintEffectsPanelComponent>;
 
 export type PaintGradientEditorProps = ComponentProps<typeof PaintGradientEditorComponent>;

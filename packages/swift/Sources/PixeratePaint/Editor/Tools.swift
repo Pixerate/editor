@@ -114,6 +114,43 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
     h["fill_layer"] = { a in
         .object(try c.fillLayer(layerId: a["layerId"]?.stringValue, color: a["color"]?.stringValue, opacity: a["opacity"]?.numberValue, grain: a["grain"]?.numberValue, pressure: a["pressure"]?.numberValue, blend: a["blend"]?.stringValue))
     }
+    h["fill_region"] = { a in
+        let pts: [FillRegionPoint]? = a["points"]?.arrayValue.map { arr in
+            arr.compactMap { v -> FillRegionPoint? in
+                guard let o = v.objectValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue else { return nil }
+                return FillRegionPoint(x: x, y: y)
+            }
+        }
+        return .object(try c.fillRegion(
+            x: a["x"]?.numberValue,
+            y: a["y"]?.numberValue,
+            points: pts,
+            layerId: a["layerId"]?.stringValue,
+            reference: a["reference"]?.stringValue,
+            color: a["color"]?.stringValue,
+            opacity: a["opacity"]?.numberValue,
+            blend: a["blend"]?.stringValue,
+            blendMode: a["blendMode"]?.stringValue,
+            tolerance: a["tolerance"]?.numberValue,
+            closeGap: a["closeGap"]?.numberValue,
+            expand: a["expand"]?.numberValue,
+            antialias: a["antialias"]?.boolValue,
+            grain: a["grain"]?.numberValue,
+            pressure: a["pressure"]?.numberValue,
+            wet: a["wet"]?.boolValue
+        ))
+    }
+    h["find_unfilled_regions"] = { a in
+        .object(try c.findUnfilledRegions(
+            layerId: a["layerId"]?.stringValue,
+            reference: a["reference"]?.stringValue,
+            tolerance: a["tolerance"]?.numberValue,
+            closeGap: a["closeGap"]?.numberValue,
+            minArea: a["minArea"]?.numberValue.map { Int($0) },
+            includeEdge: a["includeEdge"]?.boolValue,
+            maxRegions: a["maxRegions"]?.numberValue.map { Int($0) }
+        ))
+    }
     h["clear_layer"] = { a in .object(try c.clearLayer(a["layerId"]?.stringValue)) }
 
     // --- Brushes
@@ -220,7 +257,7 @@ func contractProvider(_ id: String, _ handlers: [String: PaintToolHandler], cont
 
 /// The paint editor's tools (`createPaintEditorToolProvider`): the ones this port implements.
 public func createPaintEditorToolProvider(_ controller: PaintEditorController) throws -> AgentToolProvider {
-    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }.merging(paintReplayExportHandlers(controller)) { a, _ in a }.merging(paintStickerHandlers(controller)) { a, _ in a }.merging(paintWetHandlers(controller)) { a, _ in a }.merging(paintMutationHandlers(controller)) { a, _ in a }
+    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEvolutionHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }.merging(paintReplayExportHandlers(controller)) { a, _ in a }.merging(paintStickerHandlers(controller)) { a, _ in a }.merging(paintWetHandlers(controller)) { a, _ in a }.merging(paintMutationHandlers(controller)) { a, _ in a }
     return try contractProvider("paint-editor", handlers, content: paintContentHandlers(controller).merging(paintReplayExportContentHandlers(controller)) { a, _ in a })
 }
 

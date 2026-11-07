@@ -13,6 +13,7 @@ import {
   paintAgentStrokePoints,
   paintProposalGhost,
   type PaintAgentStrokes,
+  type FillRegionOptions,
   type PaintPresence,
   type PaintProposal,
   type PaintProposals,
@@ -25,6 +26,8 @@ export interface PaintCanvasProps {
   controller: PaintEditorController;
   /** The active tool (default brush). */
   tool?: PaintTool;
+  /** Options for the Fill tool (`tool === 'fill'`). */
+  fillOptions?: Omit<FillRegionOptions, 'x' | 'y' | 'points'>;
   /** Draw the symmetry axes and perspective lines (default true). */
   showGuides?: boolean;
   /** Fit the canvas in the viewport on mount (default true). */
@@ -47,7 +50,7 @@ export interface PaintCanvasProps {
  * tail drawn as a thin preview, palm rejection, middle-button pan, wheel zoom and Shift+wheel
  * rotation. Guides and floating reference images are drawn on top.
  */
-export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, className }) => {
+export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', fillOptions, showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, className }) => {
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -68,6 +71,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
     [controller]
   );
   gesture.tool = tool;
+  if (fillOptions) gesture.fillOptions = fillOptions;
   const { canvas: doc } = state.document;
 
   useEffect(() => {

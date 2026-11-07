@@ -20,8 +20,7 @@
 	"solution": [
 		{ "tool": "add_layer", "args": { "name": "Flats" } },
 		{ "tool": "move_layer", "args": { "layerId": { "$read": "list_layers", "path": "layers.0.id" }, "index": 0 } },
-		{ "tool": "set_brush", "args": { "id": "marker" } },
-		{ "tool": "set_color", "args": { "color": "#f2c14e" } },
-		{ "tool": "paint_stroke", "args": { "points": [{ "x": 14, "y": 16 }, { "x": 50, "y": 16 }, { "x": 50, "y": 24 }, { "x": 14, "y": 24 }, { "x": 14, "y": 32 }, { "x": 50, "y": 32 }, { "x": 50, "y": 40 }, { "x": 14, "y": 40 }, { "x": 14, "y": 48 }, { "x": 50, "y": 48 }] } }
+		{ "tool": "find_unfilled_regions", "args": { "reference": "all", "closeGap": 4 } },
+		{ "tool": "fill_region", "args": { "x": 32, "y": 32, "color": "#f2c14e", "reference": "all", "closeGap": 4, "expand": 1 } }
 	]
 }

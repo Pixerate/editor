@@ -1,5 +1,27 @@
 # @pixerate/editor-react
 
+## 0.187.0
+
+### Minor Changes
+
+- 0646d72: Add ghost paint and invisible ink (`ghost` facet with `linger` and `smear`): wet paint that flows and mixes visibly with the colours it meets while wet, then fades away completely without leaving a trace of its own colour, leaving only the smear where it lifted and dragged the paint already on the layer. Includes presets `ghost-wash`, `ghost-gouache`, `ghost-oil` and `invisible-ink`, `ghost.remaining` per layer in `get_wet_paint`, Linger and Smear sliders in React, Svelte and Swift brush panels, and full Swift parity.
+
+### Patch Changes
+
+- Updated dependencies [0646d72]
+  - @pixerate/editor@0.272.0
+
+## 0.186.0
+
+### Minor Changes
+
+- a2b66e5: Add path-native effect paint (`map: { by: 'path' }`) for effects with a `format: 'svg-path'` control, passing each stroke's centreline in canvas pixels (simplified to at most 256 points) to the effect's path control, with UI placement ("Along the stroke (native)") in React and Svelte and full Swift parity. A stroke painted by hand shows the effect along the path drawn so far while it is drawn (Swift: `needsPathPreview` / `renderPreview()`, which `PaintGesture` runs) and is painted along its whole path when it ends: `strokeRendering` (TS) and `needsPathRender` / `renderPath()` (Swift) cover providers that render asynchronously. `EffectRenderer` gains an optional `renderSync`.
+
+### Patch Changes
+
+- Updated dependencies [a2b66e5]
+  - @pixerate/editor@0.271.0
+
 ## 0.185.0
 
 ### Minor Changes
