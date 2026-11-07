@@ -14,6 +14,7 @@ export * from './StickerPanel';
 export * from './StickerPicker';
 export * from './StrokePanel';
 export * from './PathStrokePanel';
+export * from './EvolutionPanel';
 export * from './PaintEditor';
 export { PaintSlider } from './shared';
 export * from './PaintGradientEditor';

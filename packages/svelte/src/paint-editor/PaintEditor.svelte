@@ -13,6 +13,7 @@
   import StickerPanel from './StickerPanel.svelte';
   import StrokePanel from './StrokePanel.svelte';
   import PathStrokePanel from './PathStrokePanel.svelte';
+  import EvolutionPanel from './EvolutionPanel.svelte';
   import PaintEffectsPanel from './PaintEffectsPanel.svelte';
   import { chip, paintEffectsProvider } from './paintEditorRune.svelte.js';
 
@@ -134,7 +135,7 @@
         {#if tab === 'color'}<ColorPanel {controller} />{/if}
         {#if tab === 'wet'}<WetPanel {controller} />{/if}
         {#if tab === 'paper'}<PaperPanel {controller} />{/if}
-        {#if tab === 'layers'}<PaintLayersPanel {controller} /><StrokePanel {controller} /><PathStrokePanel {controller} /><StickerPanel {controller} />{/if}
+        {#if tab === 'layers'}<PaintLayersPanel {controller} /><StrokePanel {controller} /><PathStrokePanel {controller} /><EvolutionPanel {controller} {proposals} /><StickerPanel {controller} />{/if}
         {#if tab === 'effects' && effects.current}<PaintEffectsPanel {controller} />{/if}
       </div>
     </div>

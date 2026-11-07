@@ -738,6 +738,14 @@ export const STICKER_SLIDERS: readonly SliderControl[] = [
   { path: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01 },
 ];
 
+/** The evolution panel's mutation sliders (`0..1`). */
+export const EVOLUTION_SLIDERS: readonly SliderControl[] = [
+  { path: 'geometry', label: 'Geometry', min: 0, max: 1, step: 0.05 },
+  { path: 'color', label: 'Colour', min: 0, max: 1, step: 0.05 },
+  { path: 'brush', label: 'Brush', min: 0, max: 1, step: 0.05 },
+  { path: 'seed', label: 'Seed', min: 0, max: 1, step: 0.05 },
+];
+
 /** Stencils a toolbar can lay with one click, centred on the canvas. */
 export function quickStencil(kind: 'ruler' | 'circle' | 'ellipse-mask' | 'edge-mask', canvas: { width: number; height: number }): StencilInput {
   const { width: w, height: h } = canvas;
