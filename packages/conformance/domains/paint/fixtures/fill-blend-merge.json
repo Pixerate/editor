@@ -368,6 +368,139 @@
         },
         "isError": true
       }
+    },
+    {
+      "tool": "stroke_path",
+      "arguments": {
+        "layerId": "@1",
+        "brushId": "ink-pen",
+        "color": "#111111",
+        "path": "M 8 6 L 40 6 L 40 26 L 8 26 Z",
+        "pressure": 0.8
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Expected array, got number.",
+                "path": "/pressure"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__stroke_path\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Flats"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@3",
+          "locks": {},
+          "name": "Flats",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "move_layer",
+      "arguments": {
+        "layerId": "@3",
+        "index": 0
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@3",
+          "locks": {},
+          "name": "Flats",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "find_unfilled_regions",
+      "arguments": {
+        "layerId": "@3",
+        "reference": "@1",
+        "closeGap": 4
+      },
+      "expect": {
+        "result": {
+          "regions": []
+        }
+      }
+    },
+    {
+      "tool": "fill_region",
+      "arguments": {
+        "x": 24,
+        "y": 16,
+        "layerId": "@3",
+        "reference": "@1",
+        "color": "#f3d23a",
+        "closeGap": 4,
+        "expand": 1
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@3",
+          "leaked": true,
+          "pixelCount": 1536,
+          "regions": [
+            {
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "leaked": true,
+              "pixelCount": 1536,
+              "point": {
+                "x": 24,
+                "y": 16
+              }
+            }
+          ]
+        },
+        "pixels": {
+          "file": "png/fill-blend-merge.13.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "16bd71bad2c43ac827c5f31f68fdf41b0bda53fb1e713e8fbbed370919f26861",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

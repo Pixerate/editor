@@ -39,3 +39,4 @@ export {
 export { encodePng, decodePng, isPng, bytesToBase64, base64ToBytes, parseDataUrl, pngDataUrl, type DecodedPng } from './png';
 export { inflate, inflateRaw, deflate, deflateRaw, adler32, ZlibError } from './zlib';
 export * from './viewport';
+export * from './fill';

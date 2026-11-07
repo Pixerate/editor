@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint-editor] A Live-Adjust Gesture Must Only Undo Its Own Commit
+
+- **Issue / Symptom**: Dragging the Fill tool to adjust tolerance (or cancelling the drag) undid the user's previous edit, e.g. a stroke, when the fill itself had painted nothing.
+- **Root Cause**: The gesture called `undo()` before each refill on the assumption that the last fill made an undo step. `fillRegion` returns early without committing when its mask is empty (a negative `expand` can erase the whole region) or throws, so the blind `undo()` took back an unrelated step.
+- **Solution / Workaround**: Track whether the gesture's last call committed (`committed: result.bounds !== null` in `PaintGesture`, TS and Swift) and only undo when it did. Any gesture that re-applies an operation by undo-and-redo needs the same guard.
+
 ### [svelte/canvas] `FloatingHorizontalScrollbar` Kept a Stale Position When Its Target Resized Quietly
 
 - **Issue / Symptom**: The bar stayed at its old `left` and `width` after the target changed size. In one host app it stayed 1022px wide while the board it tracks was 1313px wide.

@@ -77,36 +77,14 @@ the pitfalls, and uses the tools below.
    `new_canvas` with `paper`): cold pressed or rough for broken, sparkling texture, sanded pastel
    paper for pastel, charcoal paper for charcoal, cotton canvas or gesso for painterly work,
    smooth bristol for ink. Set `depth` for how much texture you want.
-3. **Block in big shapes first.** Put each pass on its own layer (`add_layer` with a name).
-   `fill_layer` gives a ground colour (flat) or a tonal layer that catches the grain
-   (`grain` 0.6..1, `pressure` 0.2..0.6). Paint large masses with a big soft pastel or airbrush
-   in a few long `paint_stroke`s rather than many small ones.
-4. **Plan and mix colours before painting.** `color_harmony` gives a palette around a key colour
-   (on the painter's red-yellow-blue wheel by default). `mix_colors` predicts what paints mixed
-   in given parts look like (Kubelka-Munk: blue and yellow make green, white tints rather than
-   greys); the mixing pad (`mixing_pad_stroke`, `pick_mixing_pad_color`) mixes by hand with a
-   palette knife. Keep chosen colours as swatches (`add_swatch`). Use the result as the stroke
-   `color`; `set_color` makes it the default.
-5. **Refine** with smaller brushes on new layers: pencil and ink for line, charcoal for value.
-   **Blend** on the layer that holds the paint: `blender` to melt neighbouring colours together
-   (pigment mixing, so blue next to yellow goes green), `smudge` / `wet-smudge` to drag paint
-   into soft edges and streaks, `mixer-brush` to paint wet into wet, `dirty-round` to paint with
-   a brush that picks up and carries colour, `multicolor-flat` for strokes loaded with several
-   colours. Glaze with a `watercolor` layer, warm or cool with `tint`, light with `highlight`,
-   shade with `shadow`.
-6. **Let the guides multiply your marks.** `set_symmetry` (mirror for faces and vases,
-   kaleidoscope for mandalas and ornaments) paints every copy from one stroke;
-   `set_perspective_guide` plus `paint_stroke` with `snapToPerspective` lays converging lines for
-   buildings and roads. To copy an image's composition and colours, `set_tracing_image` with
-   `sampleColors` and paint over it.
-7. **Repeat and vary instead of drawing every mark.** Paint one good stroke, then
-   `replay_strokes` it with `dx` / `dy`, `rotate`, `scale`, `flipX`, `color`, `brushId` and
-   `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
-8. **Check** with `render_preview` after each block of work, not after each stroke.
-   `pick_color` reads exact values. Undo what made it worse.
+3. **Block in big shapes first.** Put each pass on its own layer (`add_layer` with a name). `fill_layer` gives a ground colour (flat) or a tonal layer that catches the grain (`grain` 0.6..1, `pressure` 0.2..0.6). For line art, call `find_unfilled_regions` against the ink layer (`reference: inkLayerId`, `closeGap: 4..8`) to list enclosed shapes and their interior seed points, then `fill_region` on a flats layer below the ink (`reference: inkLayerId`, `closeGap: 4..8`, `expand: 1..2` so no halo shows at anti-aliased line edges, or `wet: true` to pour a watercolour wash into the region). For unoutlined masses, paint with a big soft pastel or airbrush in a few long `paint_stroke`s rather than many small ones.
+4. **Plan and mix colours before painting.** `color_harmony` gives a palette around a key colour (on the painter's red-yellow-blue wheel by default). `mix_colors` predicts what paints mixed in given parts look like (Kubelka-Munk: blue and yellow make green, white tints rather than greys); the mixing pad (`mixing_pad_stroke`, `pick_mixing_pad_color`) mixes by hand with a palette knife. Keep chosen colours as swatches (`add_swatch`). Use the result as the stroke `color`; `set_color` makes it the default.
+5. **Refine** with smaller brushes on new layers: pencil and ink for line, charcoal for value. **Blend** on the layer that holds the paint: `blender` to melt neighbouring colours together (pigment mixing, so blue next to yellow goes green), `smudge` / `wet-smudge` to drag paint into soft edges and streaks, `mixer-brush` to paint wet into wet, `dirty-round` to paint with a brush that picks up and carries colour, `multicolor-flat` for strokes loaded with several colours. Glaze with a `watercolor` layer, warm or cool with `tint`, light with `highlight`, shade with `shadow`.
+6. **Let the guides multiply your marks.** `set_symmetry` (mirror for faces and vases, kaleidoscope for mandalas and ornaments) paints every copy from one stroke; `set_perspective_guide` plus `paint_stroke` with `snapToPerspective` lays converging lines for buildings and roads. To copy an image's composition and colours, `set_tracing_image` with `sampleColors` and paint over it.
+7. **Repeat and vary instead of drawing every mark.** Paint one good stroke, then `replay_strokes` it with `dx` / `dy`, `rotate`, `scale`, `flipX`, `color`, `brushId` and `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
+8. **Check** with `render_preview` after each block of work, not after each stroke. `pick_color` reads exact values. Undo what made it worse.
 9. **Watercolour** is its own way of working: see "Wet media" below.
-10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
-   `save_paint_document` to keep the painting with its strokes (when the host has storage).
+10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop, `save_paint_document` to keep the painting with its strokes (when the host has storage).
 
 ## Best practices
 
@@ -286,6 +264,8 @@ Contributing while the user paints: suggest, don't paint. Read [references/paint
 | `move_layer` | Reorder: `index` among siblings (0 = bottom), optionally into `parentId` (or `null` for the top level). |
 | `merge_layer_down` | Merge a pixel layer into the pixel layer directly below (which keeps its settings). |
 | `fill_layer` | Fill a pixel layer with `color` at `opacity`: flat, or with `grain` 0..1 following the paper grain (`pressure` 0..1 decides how far into the valleys, default 0.5). The fastest way to lay a ground or a textured tone. Returns the bounds. |
+| `fill_region` | Flood-fill one or more enclosed regions on a pixel layer (`x`, `y` or `points: [{x, y}]`). Set `reference` to an ink layer id (or `"all"` / `"composite"`, or `"layer"`), `closeGap` (0..32 px) to bridge small gaps in line art without leaking, `expand` (-16..16 px, e.g. 1..2 px) to bleed under anti-aliased lines so no halo shows, `grain` (0..1) for paper texture, or `wet: true` to pour a watercolour wash into the region on the wet layer. One undo step. Returns `layerId`, `bounds`, `pixelCount`, `regions`, and `leaked` (`true` when the fill touched the canvas border). |
+| `find_unfilled_regions` | Find enclosed unfilled regions from a reference line-art layer (`reference: inkLayerId`) or `"all"` / `"composite"`, closing gaps up to `closeGap` px and excluding areas already painted on `layerId`. Changes nothing. Returns `regions` sorted largest first with an interior seed `point` (`{x, y}`) ready for `fill_region`, `centroid`, `bounds`, `pixelCount`, and `touchesEdge`. |
 | `clear_layer` | Remove every pixel of a layer. Returns the bounds that were cleared. |
 
 ### Brushes
