@@ -14,7 +14,7 @@ final class BridgeConnection {
     var connected: Bool { client != nil }
 
     /// Connects `registry` to the bridge at `url` (with `token` when the bridge was started with one).
-    func connect(_ registry: ToolRegistry, url: String, token: String) {
+    func connect(_ registry: ToolRegistry, name: String = "Paint — Swift demo", kind: String = "paint", url: String, token: String) {
         disconnect()
         guard let u = URL(string: url) else {
             detail = "\(url) is not a URL."
@@ -22,7 +22,7 @@ final class BridgeConnection {
         }
         status = .connecting
         detail = nil
-        client = ToolBridgeClient(registry: registry, options: ToolBridgeOptions(name: "Paint — Swift demo", kind: "paint", url: u, token: token.isEmpty ? nil : token, onStatus: { [weak self] status, detail in
+        client = ToolBridgeClient(registry: registry, options: ToolBridgeOptions(name: name, kind: kind, url: u, token: token.isEmpty ? nil : token, onStatus: { [weak self] status, detail in
             guard let self else { return }
             self.status = status
             self.detail = detail
@@ -45,6 +45,8 @@ final class BridgeConnection {
  */
 struct AgentPanel: View {
     let registry: ToolRegistry
+    var name: String = "Paint — Swift demo"
+    var kind: String = "paint"
     @State private var bridge = BridgeConnection()
     @State private var url = "ws://127.0.0.1:\(toolBridgeDefaultPort)"
     @State private var token = ""
@@ -54,7 +56,7 @@ struct AgentPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Agent").font(.headline)
             Toggle("Connect to pixerate-mcp-bridge", isOn: Binding(get: { bridge.connected }, set: { on in
-                if on { bridge.connect(registry, url: url, token: token) } else { bridge.disconnect() }
+                if on { bridge.connect(registry, name: name, kind: kind, url: url, token: token) } else { bridge.disconnect() }
             }))
             .toggleStyle(.switch)
             TextField("Bridge URL", text: $url).textFieldStyle(.roundedBorder).disabled(bridge.connected)

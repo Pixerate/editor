@@ -1,3 +1,5 @@
+import PixerateChart
+import PixerateChartUI
 import PixerateCore
 import PixeratePaint
 import PixeratePaintUI
@@ -61,16 +63,28 @@ struct DemoRoot: View {
         }
     }()
 
+    @State private var chartModel: ChartEditorModel? = try? ChartEditorModel()
+
     var body: some View {
         if let model {
             TabView {
                 HStack(spacing: 0) {
                     PaintEditorView(model: model)
                     Divider()
-                    AgentPanel(registry: model.registry)
+                    AgentPanel(registry: model.registry, name: "Paint — Swift demo", kind: "paint")
                         .frame(width: 280)
                 }
                 .tabItem { Label("Paint", systemImage: "paintbrush") }
+
+                if let chartModel {
+                    HStack(spacing: 0) {
+                        ChartEditorView(model: chartModel)
+                        Divider()
+                        AgentPanel(registry: chartModel.registry, name: "Chart — Swift demo", kind: "chart")
+                            .frame(width: 280)
+                    }
+                    .tabItem { Label("Chart", systemImage: "chart.bar.xaxis") }
+                }
             }
         } else {
             Text("The paint editor could not start.").padding()

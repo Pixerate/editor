@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "PixerateGeometry", targets: ["PixerateGeometry"]),
         .library(name: "PixerateVector", targets: ["PixerateVector"]),
         .library(name: "PixerateChart", targets: ["PixerateChart"]),
+        .library(name: "PixerateChartUI", targets: ["PixerateChartUI"]),
     ],
     targets: [
         // Foundation only: no SwiftUI, AppKit or UIKit (the UI targets are the only ones that import them).
@@ -65,6 +66,9 @@ let package = Package(
         // scales, statistics, trendlines, error bars, presets, recommendations, summaries, trees,
         // Sankey links and maps. Foundation only.
         .target(name: "PixerateChart", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance"], path: "packages/swift/Sources/PixerateChart", swiftSettings: settings),
+        // The chart editor's SwiftUI views (`ChartEditorView`, `ChartView` and `ChartInspectorView`),
+        // CoreGraphics PNG rasterizer, CoreText text measurement, and `ChartEditorModel`.
+        .target(name: "PixerateChartUI", dependencies: ["PixerateChart", "PixerateCore", "PixerateRaster"], path: "packages/swift/Sources/PixerateChartUI", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
@@ -119,6 +123,12 @@ let package = Package(
             dependencies: ["PixerateChart", "PixerateCore", "PixerateRaster", "PixerateContracts", "PixerateConformance"],
             path: "packages/swift/Tests/PixerateChartTests",
             resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateChartUITests",
+            dependencies: ["PixerateChartUI", "PixerateChart", "PixerateCore", "PixerateRaster", "PixerateContracts"],
+            path: "packages/swift/Tests/PixerateChartUITests",
             swiftSettings: settings
         ),
     ]
