@@ -332,7 +332,7 @@ public struct PaintPaperPanel: View {
     }
 }
 
-/// The light for thick paint and metallic paper (`PaintUITables.sliders.light`; not an undo step), and Flatten relief for the active layer.
+/// The light for thick paint, thin-film iridescence and metallic paper (`PaintUITables.sliders.light`, `sliders.viewTilt`; not an undo step), and Flatten relief for the active layer.
 public struct PaintLightPanel: View {
     let model: PaintEditorModel
     public init(model: PaintEditorModel) { self.model = model }
@@ -343,6 +343,10 @@ public struct PaintLightPanel: View {
             ForEach(model.lightSliders, id: \.path) { c in
                 PaintSliderRow(label: c.label, value: model.lightingValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setLighting(c.path, $0) })
             }
+            ForEach(model.viewTiltSliders, id: \.path) { c in
+                PaintSliderRow(label: c.label, value: model.viewTiltValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setViewTilt(c.path, $0) })
+            }
+            Toggle("Device tilt", isOn: Binding(get: { model.deviceTiltEnabled }, set: { model.deviceTiltEnabled = $0 }))
             Button("Flatten relief") { model.flattenRelief() }
         }
     }

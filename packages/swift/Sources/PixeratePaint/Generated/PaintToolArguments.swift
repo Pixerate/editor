@@ -448,6 +448,7 @@ public struct SetBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case iridescence
         case motion
         case colour
     }
@@ -478,6 +479,8 @@ public struct SetBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
+    public var iridescence: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -500,6 +503,7 @@ public struct SetBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        iridescence = args.argument("iridescence")
         motion = args.argument("motion")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
@@ -1730,6 +1734,27 @@ public struct SetLightingArguments: Sendable {
     }
 }
 
+/// Arguments of `set_view_tilt`.
+public struct SetViewTiltArguments: Sendable {
+    /// Horizontal view tilt, -1 (left) ..
+    public var x: Double?
+    /// Vertical view tilt, -1 (top) ..
+    public var y: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        x = try args.number("x")
+        y = try args.number("y")
+    }
+}
+
+/// Arguments of `get_view_tilt`.
+public struct GetViewTiltArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
 /// Arguments of `get_relief`.
 public struct GetReliefArguments: Sendable {
     /// Pixel layer id from list_layers (default the active layer).
@@ -2603,6 +2628,8 @@ public struct CreateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
+    public var iridescence: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -2624,6 +2651,7 @@ public struct CreateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        iridescence = args.argument("iridescence")
         motion = args.argument("motion")
         colour = args.argument("colour")
     }
@@ -2668,6 +2696,7 @@ public struct UpdateBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case iridescence
         case motion
         case colour
     }
@@ -2698,6 +2727,8 @@ public struct UpdateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
+    public var iridescence: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -2720,6 +2751,7 @@ public struct UpdateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        iridescence = args.argument("iridescence")
         motion = args.argument("motion")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
@@ -2992,6 +3024,8 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .setLightSpill: try SetLightSpillArguments(args)
     case .clearLight: try ClearLightArguments(args)
     case .setLighting: try SetLightingArguments(args)
+    case .setViewTilt: try SetViewTiltArguments(args)
+    case .getViewTilt: try GetViewTiltArguments(args)
     case .getRelief: try GetReliefArguments(args)
     case .flattenRelief: try FlattenReliefArguments(args)
     case .setInstantDry: try SetInstantDryArguments(args)

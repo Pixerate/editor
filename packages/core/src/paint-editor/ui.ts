@@ -452,7 +452,7 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
   return out;
 }
 
-export { BRUSH_SLIDERS, brushEngineControls, multiColorSliders, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
+export { BRUSH_SLIDERS, IRIDESCENCE_SLIDERS, brushEngineControls, multiColorSliders, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
 import type { SliderControl } from './brush-controls';
 
 export const PAPER_SLIDERS: readonly SliderControl[] = [
@@ -673,6 +673,78 @@ export const LIGHT_SLIDERS: readonly SliderControl[] = [
   { path: 'elevation', label: 'Light height', min: 5, max: 90, step: 1 },
   { path: 'relief', label: 'Relief', min: 0, max: 1, step: 0.01 },
 ];
+
+/** The view tilt sliders (thin-film iridescence and specular highlights). */
+export const VIEW_TILT_SLIDERS: readonly SliderControl[] = [
+  { path: 'x', label: 'View tilt X', min: -1, max: 1, step: 0.01 },
+  { path: 'y', label: 'View tilt Y', min: -1, max: 1, step: 0.01 },
+];
+
+/**
+ * Maps `DeviceOrientationEvent` angles (`beta` front-to-back in degrees, `gamma` left-to-right in
+ * degrees) relative to `rest` (default `{ beta: 45, gamma: 0 }`, a tablet held in hand) into a
+ * `viewTilt` in `-1..1` (35° reaches full tilt), rounded to 0.01.
+ */
+export function deviceOrientationToViewTilt(
+  betaOrEvent: number | { beta?: number | null; gamma?: number | null } | null | undefined,
+  gammaOrRest?: number | { beta: number; gamma: number } | null | undefined,
+  rest: { beta: number; gamma: number } = { beta: 45, gamma: 0 }
+): { x: number; y: number } {
+  const isObj = typeof betaOrEvent === 'object' && betaOrEvent !== null;
+  const r = isObj && typeof gammaOrRest === 'object' && gammaOrRest !== null ? gammaOrRest : rest;
+  const rawBeta = isObj ? betaOrEvent.beta : betaOrEvent;
+  const rawGamma = isObj ? betaOrEvent.gamma : typeof gammaOrRest === 'number' ? gammaOrRest : undefined;
+  const b = typeof rawBeta === 'number' && Number.isFinite(rawBeta) ? rawBeta : r.beta;
+  const g = typeof rawGamma === 'number' && Number.isFinite(rawGamma) ? rawGamma : r.gamma;
+  const clamp = (v: number) => Math.round(Math.max(-1, Math.min(1, v)) * 100) / 100;
+  return { x: clamp((g - r.gamma) / 35), y: clamp((b - r.beta) / 35) };
+}
+
+/**
+ * Asks iOS Safari for `DeviceOrientationEvent` permission when `requestPermission` is present
+ * (must be called from a user gesture on iOS 13+). Resolves to `'granted'` on browsers that do not
+ * gate `deviceorientation` behind a permission prompt, or `'unsupported'` without `DeviceOrientationEvent`.
+ */
+export async function requestDeviceTiltPermission(): Promise<'granted' | 'denied' | 'unsupported'> {
+  const g = globalThis as {
+    DeviceOrientationEvent?: {
+      requestPermission?: () => Promise<'granted' | 'denied'>;
+    };
+  };
+  if (!g.DeviceOrientationEvent) return 'unsupported';
+  if (typeof g.DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      return (await g.DeviceOrientationEvent.requestPermission()) === 'granted' ? 'granted' : 'denied';
+    } catch {
+      return 'denied';
+    }
+  }
+  return 'granted';
+}
+
+/**
+ * Listens to `deviceorientation` events on `globalThis` and updates `controller.setViewTilt` relative
+ * to the first reading's orientation. Returns a cleanup function.
+ */
+export function startDeviceTilt(controller: PaintEditorController): () => void {
+  const g = globalThis as {
+    addEventListener?: (type: string, listener: (e: { beta?: number | null; gamma?: number | null }) => void) => void;
+    removeEventListener?: (type: string, listener: (e: { beta?: number | null; gamma?: number | null }) => void) => void;
+  };
+  if (typeof g.addEventListener !== 'function') return () => {};
+  let rest: { beta: number; gamma: number } | null = null;
+  const onOrientation = (e: { beta?: number | null; gamma?: number | null }) => {
+    if (typeof e.beta !== 'number' || typeof e.gamma !== 'number') return;
+    if (!rest) rest = { beta: e.beta, gamma: e.gamma };
+    const next = deviceOrientationToViewTilt(e.beta, e.gamma, rest);
+    const cur = controller.getViewTilt();
+    if (next.x !== cur.x || next.y !== cur.y) controller.setViewTilt(next);
+  };
+  g.addEventListener('deviceorientation', onOrientation);
+  return () => {
+    g.removeEventListener?.('deviceorientation', onOrientation);
+  };
+}
 
 /** Labels of the particle kinds and renders. */
 export const PARTICLE_KIND_LABELS: Readonly<Record<ParticleKind, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow', elastic: 'Elastic', fuzzy: 'Fuzzy' };

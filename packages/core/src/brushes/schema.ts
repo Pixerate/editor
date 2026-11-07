@@ -226,6 +226,12 @@ const LIGHT = object('Light the brush gives off with its colour (glow and spill)
   glow: bool('Suggest a glow layer effect for the layer (glow stays a layer effect).'),
 });
 
+const IRIDESCENCE = object('Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt. Missing fields take their defaults.', {
+  thickness: num(100, 1000, 'Film thickness in nanometres, 100..1000 (default 400).'),
+  pressureToThickness: unit('How much pen pressure shifts the film thickness per dab, 0..1 (default 0: uniform thickness).'),
+  ior: num(1.2, 2.0, 'Refractive index of the film, 1.2..2.0 (default 1.5; water/soap ~1.33, pearl ~1.55, beetle lacquer ~1.65).'),
+});
+
 const MOTION = object('Animation after painting.', {
   live: bool('Effect paint keeps playing on stroke layers (default false).'),
   fps: int(1, 60, 'Suggested playback rate in frames per second.'),
@@ -296,6 +302,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
+    iridescence: IRIDESCENCE,
     motion: MOTION,
     colour: COLOUR,
   },
@@ -310,6 +317,7 @@ export const BRUSH_FACET_SCHEMAS = {
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
+  iridescence: IRIDESCENCE,
   motion: MOTION,
   colour: COLOUR,
   paint: PAINT,

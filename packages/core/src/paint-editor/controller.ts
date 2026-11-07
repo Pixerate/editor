@@ -129,7 +129,7 @@ import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/hel
 import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } from '../effects/types.js';
 import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, withStrokePath, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
-import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
+import { DEFAULT_LIGHTING, DEFAULT_VIEW_TILT, emptyThickChannels, FilmBuffer, hasThickChannels, LitCache, normalizeLighting, normalizeViewTilt, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type PaintViewTilt, type ThickChannels } from './thick';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -245,6 +245,8 @@ export interface PaintEditorState {
   /** What the Mixer Brush carries between strokes. */
   mixerLoad: MixerLoad;
   view: PaintView;
+  /** View tilt for thin-film iridescence and specular highlights (-1..1, default {x: 0, y: 0}; editor state, not saved with the document). */
+  viewTilt: PaintViewTilt;
   hand: Hand;
   /** Live effect paint: whether strokes on stroke layers play their effect, the frame rate cap and the time (ms) the view shows. Editor state. */
   effectPlayback: { playing: boolean; fps: number; time: number };
@@ -600,6 +602,8 @@ export class PaintEditorController {
   private readonly wetOptions: PaintWetOptions | undefined;
   /** Where the light comes from for thick paint (saved with the document, not undo steps). */
   private lighting: PaintLighting = { ...DEFAULT_LIGHTING };
+  /** Where the viewer looks from for thin-film iridescence and specular highlights (editor state, not saved with the document). */
+  private viewTilt: PaintViewTilt = { ...DEFAULT_VIEW_TILT };
   private readonly litCaches = new Map<string, LitCache>();
   /** The live impasto stroke's channels. */
   private liveThick: { layerId: string; channels: ThickChannels } | null = null;
@@ -897,6 +901,7 @@ export class PaintEditorController {
       effectPaintRendering: Boolean(this.effectPaintPending || this.pathStroke),
       mixerLoad: this.mixerLoad,
       view: this.view,
+      viewTilt: { ...this.viewTilt },
       hand: this.hand,
       effectPlayback: { ...this.effectPlaybackState, time: this.effectTime },
       selectedStroke: this.selectedStroke,
@@ -1214,7 +1219,25 @@ export class PaintEditorController {
     let next: PaintDocumentState = { ...shiftDocument(this.withWetEvents(this.doc), left, top), canvas: { ...was, width, height } };
     for (const id of keptWet) {
       const l = findLayer(next.layers, id)?.layer;
-      if (isPixelLayer(l)) next = { ...next, layers: mapLayer(next.layers, id, () => ({ ...l, surface: translateSurface(l.surface, l.offset.x, l.offset.y), offset: { x: 0, y: 0 } })) };
+      if (isPixelLayer(l)) {
+        const ox = l.offset.x;
+        const oy = l.offset.y;
+        next = { ...next, layers: mapLayer(next.layers, id, () => ({ ...l, surface: translateSurface(l.surface, ox, oy), offset: { x: 0, y: 0 } })) };
+        const tc = next.thick?.[id];
+        if (tc && (ox || oy)) {
+          next = {
+            ...next,
+            thick: {
+              ...next.thick,
+              [id]: {
+                height: translateSurface(tc.height, ox, oy),
+                material: translateSurface(tc.material, ox, oy),
+                film: translateSurface(tc.film, ox, oy),
+              },
+            },
+          };
+        }
+      }
     }
     if (this.wet.world) {
       if (keptWet.length) this.wet.extend(width, height, left, top, next.paper);
@@ -2665,9 +2688,16 @@ export class PaintEditorController {
       this.requireWetIdle('painting');
       if (layer.offset.x || layer.offset.y) {
         // The wet simulation works in canvas space: move the pixels into it (same picture, not an undo step).
-        const moved: PaintPixelLayer = { ...layer, surface: translateSurface(layer.surface, layer.offset.x, layer.offset.y), offset: { x: 0, y: 0 } };
-        this.doc = { ...this.doc, layers: mapLayer(this.doc.layers, layer.id, () => moved) };
-        if (doc !== this.doc) doc = { ...doc, layers: mapLayer(doc.layers, layer.id, () => moved) };
+        const ox = layer.offset.x;
+        const oy = layer.offset.y;
+        const moved: PaintPixelLayer = { ...layer, surface: translateSurface(layer.surface, ox, oy), offset: { x: 0, y: 0 } };
+        const moveThick = (t: PaintDocumentState['thick']) => {
+          const tc = t?.[layer.id];
+          if (!tc) return t;
+          return { ...t, [layer.id]: { height: translateSurface(tc.height, ox, oy), material: translateSurface(tc.material, ox, oy), film: translateSurface(tc.film, ox, oy) } };
+        };
+        this.doc = { ...this.doc, layers: mapLayer(this.doc.layers, layer.id, () => moved), ...(this.doc.thick?.[layer.id] ? { thick: moveThick(this.doc.thick) } : {}) };
+        if (doc !== this.doc) doc = { ...doc, layers: mapLayer(doc.layers, layer.id, () => moved), ...(doc.thick?.[layer.id] ? { thick: moveThick(doc.thick) } : {}) };
         layer = moved;
       }
       if (!this.wet.wetLayerIds().includes(layer.id) && this.wet.wetLayerIds().length >= MAX_WET_LANES) {
@@ -2682,6 +2712,9 @@ export class PaintEditorController {
       const load = init.load ?? brushLoadForStroke(brush, this.mixerLoad, [r / 255, g / 255, b / 255]);
       const seedW = init.seed ?? mix32((this.seedCounter * 0x9e3779b1) >>> 0) & 0x7fffffff;
       const copiesW = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
+      const wetMask = init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null;
+      const needWetFilm = Boolean((brush.wet.tool === 'paint' && brush.iridescence) || (brush.wet.tool === 'blot' && doc.thick?.[id]?.film.tiles.size));
+      const wetFilm = needWetFilm ? new FilmBuffer((doc.thick?.[id] ?? emptyThickChannels()).film, layer.offset, wetMask) : null;
       const driver = new WetStrokeDriver({
         world,
         laneId: id,
@@ -2693,9 +2726,10 @@ export class PaintEditorController {
         paperColor: hexToRgb8(doc.paper.color),
         seed: seedW,
         copies: [IDENTITY_AFFINE, ...copiesW].map(affineCopy),
-        mask: init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null,
+        mask: wetMask,
         paint: effect ? null : wetGradient,
         effect: effect?.pixels ?? null,
+        film: wetFilm,
       });
       init = { ...init, seed: seedW, load };
       wet = { driver, surface: () => world.display(id).surface };
@@ -2723,6 +2757,8 @@ export class PaintEditorController {
     const rgba = rgbaOf(color);
     const seed = init.seed ?? mix32((this.seedCounter++ * 0x9e3779b1) >>> 0) & 0x7fffffff;
     const copies = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
+    const hasThick = Boolean(doc.thick?.[layer.id]);
+    const needThick = brush.engine === 'impasto' || Boolean(brush.iridescence) || (brush.engine === 'eraser' && hasThick) || Boolean(wet?.driver.init.film);
     const session = new PaintStrokeSession(host, {
       layerId: layer.id,
       surface: layer.surface,
@@ -2742,7 +2778,7 @@ export class PaintEditorController {
       mixerLoad: init.load ?? brushLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]),
       secondary: rgbaOf(this.secondaryColor),
       wet,
-      thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
+      thick: needThick ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get, variant: (ref) => this.stickerArt.variantFor(ref, this.colorScheme === 'dark') } : undefined,
@@ -2786,7 +2822,9 @@ export class PaintEditorController {
     const before = this.doc;
     const host: StrokeSessionHost = {
       update: (layerId, surface, rects) => {
-        if (this.session?.init.wet) {
+        if ( this.session?.init.wet) {
+          const ch = this.session.thickChannels();
+          this.liveThick = ch ? { layerId, channels: ch } : null;
           // The wet layer's display is the layer's pixels: show it (not an undo step).
           this.wet.syncDisplays();
           return;
@@ -2841,8 +2879,7 @@ export class PaintEditorController {
           s.result!.wet = this.wet.isWet(s.layerId);
         }
         const l = this.getLayer(s.layerId) as PaintPixelLayer;
-        const ch = s.thickChannels();
-        const thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
+        const thick = withLayerThick(this.doc.thick, l.id, s.thickChannels());
         const sprayed = s.stickers();
         const stickers = sprayed ? { ...(this.doc.stickers ?? {}), [l.id]: [...(this.doc.stickers?.[l.id] ?? []), ...sprayed] } : this.doc.stickers;
         // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
@@ -2974,14 +3011,14 @@ export class PaintEditorController {
         this.paintedBounds.set(stroke, s.result?.bounds ?? null);
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
         const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
-        const ch = s.thickChannels();
+        const thick = withLayerThick(out.thick, l.id, s.thickChannels());
         const sprayed = s.stickers();
         const lit = s.lightChannel() ?? (s.init.wet && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null);
         out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
           strokes: [...out.strokes, stroke],
-          ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}),
+          ...(thick ? { thick } : {}),
           ...(sprayed ? { stickers: { ...(out.stickers ?? {}), [l.id]: [...(out.stickers?.[l.id] ?? []), ...sprayed] } } : {}),
           ...(lit ? { light: withLayerLight(out.light, l.id, lit) } : {}),
         }, stroke);
@@ -3221,13 +3258,31 @@ export class PaintEditorController {
     return { ...this.lighting };
   }
 
+  /** Where the viewer looks from for thin-film iridescence and specular highlights (-1..1; editor state, not saved with the document). */
+  getViewTilt(): PaintViewTilt {
+    return { ...this.viewTilt };
+  }
+
+  /** Tilts the view vector for thin-film iridescence and specular highlights (-1..1; editor state, not saved with the document, not an undo step). */
+  setViewTilt(update: Partial<PaintViewTilt>): PaintViewTilt {
+    if (update.x !== undefined && !(Number.isFinite(update.x) && update.x >= -1 && update.x <= 1)) {
+      throw new PaintEditorError(`x ${update.x} is out of range; use -1..1.`);
+    }
+    if (update.y !== undefined && !(Number.isFinite(update.y) && update.y >= -1 && update.y <= 1)) {
+      throw new PaintEditorError(`y ${update.y} is out of range; use -1..1.`);
+    }
+    this.viewTilt = normalizeViewTilt(update, this.viewTilt);
+    this.emit('all');
+    return { ...this.viewTilt };
+  }
+
   /** A layer's relief: where it is, its highest point (0..255) and its tiles; `null` when it has none. */
   reliefOf(layerId?: string): { layerId: string; bounds: RasterRect | null; maxHeight: number } | null {
     const id = layerId ?? this.doc.activeLayerId;
     if (!id) return null;
     this.requireLayer(id);
     const ch = this.doc.thick?.[id];
-    if (!ch) return null;
+    if (!ch || !hasThickChannels(ch)) return null;
     const r = reliefInfo(ch);
     return { layerId: id, bounds: r.bounds, maxHeight: r.maxHeight };
   }
@@ -3584,7 +3639,7 @@ export class PaintEditorController {
       if (!ch || !isPixelLayer(l)) continue;
       let cache = this.litCaches.get(id);
       if (!cache) this.litCaches.set(id, (cache = new LitCache()));
-      const lit = cache.lit(l.surface, ch, this.lighting);
+      const lit = cache.lit(l.surface, ch, this.lighting, this.viewTilt);
       if (lit !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: lit }));
     }
     return out;
@@ -4718,8 +4773,24 @@ export class PaintEditorController {
   private withLiveStrokes(doc: PaintDocumentState, layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): PaintDocumentState {
     if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it (update_layer locks) first.`);
     const current = findLayer(doc.layers, layer.id)?.layer as PaintPixelLayer | undefined;
-    const surface = this.drawLiveStrokes(current ?? layer, list, dirty);
-    const next = { ...doc, layers: mapLayer(doc.layers, layer.id, (l) => ({ ...(l as PaintPixelLayer), surface, offset: { x: 0, y: 0 } })), liveStrokes: { ...(doc.liveStrokes ?? {}), [layer.id]: [...list] } };
+    const hasFilm = list.some((s) => Boolean(s.brush.iridescence)) || Boolean(doc.thick?.[layer.id]);
+    const surface = this.drawLiveStrokes(current ?? layer, list, hasFilm ? null : dirty);
+    let thick = doc.thick;
+    if (hasFilm) {
+      const plain: PaintPixelLayer = { ...(current ?? layer), visible: true, locks: undefined, offset: { x: 0, y: 0 } };
+      const plainDoc: PaintDocumentState = { ...doc, liveStrokes: undefined, stickers: undefined };
+      let s = emptySurface(4);
+      let ch: ThickChannels | null = list.some((st) => Boolean(st.brush.iridescence)) ? emptyThickChannels() : null;
+      if (ch) {
+        for (const st of list) {
+          const step = this.drawLiveStroke(plainDoc, plain, s, st, ch);
+          s = step.surface;
+          ch = step.thick ?? ch;
+        }
+      }
+      thick = withLayerThick(doc.thick, layer.id, ch);
+    }
+    const next = { ...doc, layers: mapLayer(doc.layers, layer.id, (l) => ({ ...(l as PaintPixelLayer), surface, offset: { x: 0, y: 0 } })), liveStrokes: { ...(doc.liveStrokes ?? {}), [layer.id]: [...list] }, ...(thick ? { thick } : {}) };
     return this.withPaintEvent(next, { kind: 'live-strokes', layerId: layer.id, data: { strokes: list.map((x) => JSON.parse(JSON.stringify(x))) } });
   }
 
@@ -4740,23 +4811,27 @@ export class PaintEditorController {
   }
 
   /** Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area it painted. */
-  private drawLiveStroke(doc: PaintDocumentState, plain: PaintPixelLayer, surface: TiledSurface, st: RecordedStroke): { surface: TiledSurface; bounds: RasterRect | null } {
+  private drawLiveStroke(doc: PaintDocumentState, plain: PaintPixelLayer, surface: TiledSurface, st: RecordedStroke, thick?: ThickChannels): { surface: TiledSurface; bounds: RasterRect | null; thick?: ThickChannels } {
     let out = surface;
+    let outThick = thick;
     const host: StrokeSessionHost = {
       update: () => {},
-      commit: (_s, drawn, cancelled) => {
-        if (!cancelled && drawn) out = drawn;
+      commit: (s, drawn, cancelled) => {
+        if (!cancelled && drawn) {
+          out = drawn;
+          outThick = s.thickChannels() ?? outThick;
+        }
       },
     };
     const paint = st.paint && this.liveEffectAt !== null && isLiveEffect(st) ? framePaint(st.paint as PaintEffectPaint, this.liveEffectAt) : st.paint;
     const init: PaintStrokeInit = { layerId: plain.id, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(paint ? { paint } : {}), snapToPerspective: false, stencils: false, maskStencils: st.stencils ?? [] };
-    const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })) }, init, host);
+    const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })), ...(outThick ? { thick: { ...(doc.thick ?? {}), [plain.id]: outThick } } : {}) }, init, host);
     session.push(st.points);
     const result = session.end();
     // Only ever grown: a live effect's frames can paint more or less of a stroke (its alpha moves).
     const had = this.paintedBounds.get(st);
     this.paintedBounds.set(st, had && result.bounds ? unionRect(had, result.bounds) : (result.bounds ?? had ?? null));
-    return { surface: out, bounds: result.bounds };
+    return { surface: out, bounds: result.bounds, thick: outThick };
   }
 
   /**
@@ -5209,6 +5284,15 @@ function withLayerLight(light: PaintDocumentState['light'], layerId: string, nex
   if (!next) return light ? { ...light } : undefined;
   const out = { ...(light ?? {}) };
   if (next.tiles.size) out[layerId] = next;
+  else delete out[layerId];
+  return out;
+}
+
+/** The document's thick channels with one layer's set (removed when it is empty), or the same map when `next` is `null`. */
+function withLayerThick(thick: PaintDocumentState['thick'], layerId: string, next: ThickChannels | null): Record<string, ThickChannels> | undefined {
+  if (!next) return thick ? { ...thick } : undefined;
+  const out = { ...(thick ?? {}) };
+  if (hasThickChannels(next)) out[layerId] = next;
   else delete out[layerId];
   return out;
 }

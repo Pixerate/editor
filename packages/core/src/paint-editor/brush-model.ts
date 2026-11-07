@@ -128,6 +128,32 @@ export function normalizeLight(raw: Partial<LightSettings> = {}, base: LightSett
   return { amount: unit(raw.amount, base.amount), pressure: typeof raw.pressure === 'boolean' ? raw.pressure : base.pressure };
 }
 
+/** Thin-film iridescence: structural colour whose hue shifts with the light and view angle (see `doc.thick`). */
+export interface IridescenceSettings {
+  /** Film thickness in nanometres (100..1000, default 400). */
+  thickness: number;
+  /** How much pen pressure shifts the film thickness (0..1, default 0). */
+  pressureToThickness: number;
+  /** Film refractive index (1.2..2.0, default 1.5). */
+  ior: number;
+}
+
+export const DEFAULT_IRIDESCENCE: Readonly<IridescenceSettings> = { thickness: 400, pressureToThickness: 0, ior: 1.5 };
+
+const withIridescence = (ir: IridescenceSettings | null): { iridescence?: IridescenceSettings } => (ir ? { iridescence: ir } : {});
+
+function readIridescence(raw: unknown, base: IridescenceSettings | null): IridescenceSettings | null {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Partial<IridescenceSettings>;
+  const b = base ?? DEFAULT_IRIDESCENCE;
+  return {
+    thickness: range(r.thickness, 100, 1000, b.thickness),
+    pressureToThickness: unit(r.pressureToThickness, b.pressureToThickness),
+    ior: range(r.ior, 1.2, 2.0, b.ior),
+  };
+}
+
 export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
   return {
     tool: IMPASTO_TOOLS.includes(raw.tool as ImpastoTool) ? (raw.tool as ImpastoTool) : base.tool,
@@ -291,6 +317,8 @@ export interface PaintBrush {
   sticker: StickerSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
+  /** Thin-film iridescence: structural colour film laid over the paint (missing: none). */
+  iridescence?: IridescenceSettings;
   /**
    * Dab engine: a stamp tip. Each dab (and each spray droplet) is this sticker's shape, an editor
    * stamp (`editor:star`) or any sticker ref from the sticker library, laid in the paint colour;
@@ -413,11 +441,13 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'spray' | 'tipGrain'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'iridescence' | 'spray' | 'tipGrain'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
   light?: Partial<LightSettings>;
+  /** Thin-film iridescence (`null` removes it). */
+  iridescence?: Partial<IridescenceSettings> | null;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
@@ -564,6 +594,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     light: normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
+    ...withIridescence(readIridescence(raw.iridescence, b.iridescence ?? null)),
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
     ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),

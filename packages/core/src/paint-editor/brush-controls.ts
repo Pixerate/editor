@@ -58,10 +58,19 @@ export interface BrushEngineControls {
   stickerStamps?: boolean;
   /** Light paint: the "light follows pressure" toggle (`light.pressure`); the Light slider is in `sliders`. */
   light?: boolean;
+  /** Thin-film iridescence: whether the brush can lay a thin-film iridescent coat (`iridescence`; `IRIDESCENCE_SLIDERS` are in `sliders` when enabled). */
+  iridescence?: boolean;
 }
 
 /** The light paint slider (every engine that lays colour but sticker brushes; wet brushes when they paint). */
 const LIGHT_SLIDER: SliderControl = { path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 };
+
+/** The thin-film iridescence sliders (appended when `brush.iridescence` is set). */
+export const IRIDESCENCE_SLIDERS: readonly SliderControl[] = [
+  { path: 'iridescence.thickness', label: 'Film thickness (nm)', min: 100, max: 1000, step: 5 },
+  { path: 'iridescence.pressureToThickness', label: 'Pressure → thickness', min: 0, max: 1, step: 0.01 },
+  { path: 'iridescence.ior', label: 'Refractive index', min: 1.2, max: 2, step: 0.01 },
+];
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
   { path: 'behavior.pickup', label: 'Pick-up', min: 0, max: 1, step: 0.01 },
@@ -75,13 +84,14 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  * pigment choice; dab and mixer brushes also have the dirty and multi-colour controls. Pick-up
  * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
  */
-export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
+export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; iridescence?: PaintBrush['iridescence'] }): BrushEngineControls | null {
   const c = engineControls(brush);
   const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint';
   if (!c || !(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine))) return c;
   // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
   const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
-  return { ...c, sliders: [...c.sliders, LIGHT_SLIDER, ...extra], light: true };
+  const film: readonly SliderControl[] = brush.iridescence ? IRIDESCENCE_SLIDERS : [];
+  return { ...c, sliders: [...c.sliders, LIGHT_SLIDER, ...extra, ...film], light: true, iridescence: true };
 }
 
 function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {

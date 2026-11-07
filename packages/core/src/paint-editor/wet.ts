@@ -36,6 +36,7 @@ import { TILE, TiledSurface, translateSurface, type RasterRect } from '../raster
 import type { PaintBrush, WetMediumKind } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { grainCatch, hexToRgb8, PaperGrain, type PaperGrain as PaperGrainType, type PaperSettings } from './paper';
+import type { FilmBuffer } from './thick';
 
 /** Water depth a stroke lays at the tip's centre at `water` 1 (the sum over its dabs). */
 const STROKE_WATER = 0.9;
@@ -88,6 +89,8 @@ export interface WetStrokeInit {
    * the water like any pigment.
    */
   effect?: EffectPaintPixels | null;
+  /** Thin-film iridescence channel for wet brushes with `iridescence`. */
+  film?: FilmBuffer | null;
 }
 
 interface CopyState {
@@ -280,8 +283,11 @@ export class WetStrokeDriver {
           const field = new Float32Array(ec.length * 3);
           effectDabField(effect, rect, ec, this.centre, this.paint, field, COVERAGE_STEPS, d);
           this.medium.deposit(rect, ec, Math.min(1, total) * k, this.paint, null, field);
-        } else if (total > 0 && flow > 0) this.medium.deposit(rect, cov, Math.min(1, total) * k * flow, this.paint, null);
-        else world.paint(laneId, rect, cov, this.medium.options.water * k, null);
+          if (brush.iridescence && this.init.film) this.init.film.deposit(rect, ec, Math.min(1, total) * k, brush.iridescence, d.pressure);
+        } else if (total > 0 && flow > 0) {
+          this.medium.deposit(rect, cov, Math.min(1, total) * k * flow, this.paint, null);
+          if (brush.iridescence && this.init.film) this.init.film.deposit(rect, cov, Math.min(1, total) * k * flow, brush.iridescence, d.pressure);
+        } else world.paint(laneId, rect, cov, this.medium.options.water * k, null);
         ex.drain();
         if (wet.rewet > 0) world.rewet(laneId, rect, cov, wet.rewet * k * 0.15, this.init.paperColor);
         break;
@@ -309,6 +315,7 @@ export class WetStrokeDriver {
       }
       case 'blot':
         world.remove(laneId, rect, cov, wet.strength * 0.8 * k, wet.strength * 0.6 * k, wet.strength * 0.15 * k, wet.strength * 0.5 * k);
+        this.init.film?.erase(rect, cov, wet.strength * 0.6 * k);
         break;
     }
     st.last = d;

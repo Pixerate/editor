@@ -15,5 +15,12 @@
   long stroke (dry-brush ends); `thinner` makes paint flatter and more transparent.
 - **Light** is a view of the relief, not paint: move it (`set_lighting`) to read the texture
   (a low elevation, 15..30°, shows brushwork best) and pick the final light before exporting.
-  `get_relief` reads a layer's relief; `flatten_relief` removes it but keeps the colour.
+  `get_relief` reads a layer's relief; `flatten_relief` removes it (and any thin film) but keeps the colour.
+- **Structural colour (thin-film iridescence)**: `iridescence: { thickness: 100..1000, pressureToThickness: 0..1, ior: 1.2..2.0 }`
+  lays a dielectric thin film (`ThickChannels.film`) over thick or flat paint. Its interference
+  colour comes from the optical path difference $2 \cdot n \cdot d \cdot \cos(\theta_t)$ between the surface normal,
+  light direction (`set_lighting`) and view vector (`set_view_tilt` / `get_view_tilt`, or device
+  gyroscope tilt on iPhone and iPad). Presets: `scarab-lacquer` (thick metallic beetle shell),
+  `soap-film` (sheer rainbow wash whose hue follows pen pressure via `pressureToThickness`) and
+  `pearl-glaze` (soft nacreous lustre on flat or raised paint).
 - **Metallic paper**: `set_paper` `metallic` 0..1 makes the grain sparkle under the light.

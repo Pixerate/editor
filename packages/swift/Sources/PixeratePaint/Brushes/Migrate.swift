@@ -61,6 +61,7 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
         }
         if b.engine == "dab" && b.spray != nil { brush["marks"] = ["kind": "scatter"] }
     }
+    if b.iridescence != nil { brush["iridescence"] = [:] }
     return brush
 }
 

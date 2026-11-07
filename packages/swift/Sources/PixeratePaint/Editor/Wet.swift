@@ -79,6 +79,7 @@ struct WetStrokeInit {
     var mask: PaintSelection?
     var paint: PaintGradientSource?
     var effect: EffectPaintPixels?
+    var film: FilmBuffer? = nil
 }
 
 private final class WetCopyState {
@@ -266,6 +267,9 @@ final class WetStrokeDriver {
                 try world.paint(laneId, rect, cov, water: medium.options.water * k, pigment: nil)
             }
             ex.drain()
+            if let film = initValues.film, let ir = brush.iridescence, total > 0 && flow > 0 {
+                film.deposit(rect, cov, Swift.min(1, total) * k * flow, d.pressure, ir)
+            }
             if wet.rewet > 0 { try world.rewet(laneId, rect, cov, amount: wet.rewet * k * 0.15, paper: initValues.paperColor) }
         case "water":
             try world.paint(laneId, rect, cov, water: medium.options.water * k * (wet.water > 0 ? 1 : 0), pigment: nil)

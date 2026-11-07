@@ -149,9 +149,7 @@ read [references/wet-media.md](references/wet-media.md) for the engine and the w
 
 ## Oils and thick paint
 
-Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`: load
-`pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint**
-(neon, glowing glass and watercolour: `light.amount`, the Light category; backlit paper): [references/light-paint.md](references/light-paint.md).
+Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`, and `iridescence` (`scarab-lacquer`, `soap-film`, `pearl-glaze`) adds thin-film structural colour that shifts hue with light and `set_view_tilt`: load `pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint** (neon, glowing glass and watercolour: `light.amount`, the Light category; backlit paper): [references/light-paint.md](references/light-paint.md).
 
 ## Gradient paint
 
@@ -295,7 +293,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -361,9 +359,11 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 
 | Tool | Use |
 | --- | --- |
-| `set_lighting` | Move the light for thick paint and metallic paper: `azimuth` (degrees clockwise from the top), `elevation` (5..90), `relief` (0..1). Nothing is repainted; not an undo step. Returns the lighting. Use a low elevation to show brushwork. |
+| `set_lighting` | Move the light for thick paint, thin-film iridescence and metallic paper: `azimuth` (degrees clockwise from the top), `elevation` (5..90), `relief` (0..1). Nothing is repainted; not an undo step. Returns the lighting. Use a low elevation to show brushwork. |
+| `set_view_tilt` | Tilt the view angle (`x` -1..1 left to right, `y` -1..1 top to bottom) to shift thin-film iridescent hue and specular glints without moving the light. View state only, not saved, not an undo step. Returns `viewTilt`. |
+| `get_view_tilt` | Read the current `viewTilt` (`{ x, y }`). Changes nothing. |
 | `get_relief` | Read a layer's relief (`bounds`, `maxHeight` 0..255, null when flat) and the lighting. Changes nothing. |
-| `flatten_relief` | Remove a layer's relief and material (rim and clarity too), keeping its colour and light. One undo step. Returns whether anything was flattened. |
+| `flatten_relief` | Remove a layer's relief, material and thin-film iridescence (rim and clarity too), keeping its colour and light. One undo step. Returns whether anything was flattened. |
 | `get_light` | Read a layer's light paint: `hasLight`, `bounds`, `peak` 0..255 and its `spill`. Changes nothing. |
 | `set_light_spill` | How far a layer's light spills (`radius` px, 0 off) and how strongly (`strength` 0..2). Not an undo step; nothing is repainted. |
 | `clear_light` | Take a layer's light away, keeping its colour. One undo step. |

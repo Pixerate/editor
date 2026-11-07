@@ -481,4 +481,30 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
     colour: { palette: ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#a855f7', '#111827', '#f8fafc'] },
   },
+  // --- Structural colour (thin-film iridescence) ---------------------------------------
+  // Scarab lacquer: thick metallic impasto under a high-index chitin-like thin film.
+  {
+    id: 'scarab-lacquer', name: 'Scarab lacquer', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'round', size: 22, hardness: 0.75, spacing: 0.06 },
+    dynamics: { smoothing: 0.25, minSize: 0.3 },
+    behaviour: { surface: 'thick', thick: { thickness: 0.7, gloss: 0.85, metallic: 0.5 } },
+    iridescence: { thickness: 480, pressureToThickness: 0.35, ior: 1.65 },
+    colour: { default: '#065f46', palette: ['#065f46', '#1e3a8a', '#581c87', '#7c2d12', '#111827'] },
+  },
+  // Soap film: a soft glaze whose thin watery film shifts across the spectrum with pressure.
+  {
+    id: 'soap-film', name: 'Soap film', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'round', size: 32, hardness: 0.4, spacing: 0.06, opacity: 0.85, flow: 0.75 },
+    dynamics: { smoothing: 0.35, pressureOpacity: true, minSize: 0.35 },
+    iridescence: { thickness: 340, pressureToThickness: 0.8, ior: 1.33 },
+    colour: { default: { light: '#0284c7', dark: '#bae6fd' }, palette: [{ light: '#0284c7', dark: '#bae6fd' }, '#f472b6', '#a78bfa', '#34d399'] },
+  },
+  // Pearl glaze: a flat nacre glaze with gentle interference colour shifts.
+  {
+    id: 'pearl-glaze', name: 'Pearl glaze', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'flat', size: 28, hardness: 0.5, spacing: 0.06, angle: 25, roundness: 0.4, opacity: 0.9, flow: 0.85 },
+    dynamics: { smoothing: 0.3, rotation: 'stroke', minSize: 0.4 },
+    iridescence: { thickness: 560, pressureToThickness: 0.25, ior: 1.55 },
+    colour: { default: { light: '#475569', dark: '#f1f5f9' }, palette: [{ light: '#475569', dark: '#f1f5f9' }, '#fbcfe8', '#ddd6fe', '#bae6fd', '#fef3c7'] },
+  },
 ];

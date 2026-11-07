@@ -28,6 +28,7 @@ import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
+import type { FilmBuffer } from './thick';
 import { TipGrain } from './tip-grain';
 import { rasterizeStampDab, sprayDroplets, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
 import type { StickerArtLookup } from './sticker-art';
@@ -51,6 +52,8 @@ export interface PaintDabStrokeOptions {
   effect?: EffectPaintPixels | null;
   /** Loaded sticker art, for a stamp tip of a sticker from the sticker library (`brush.stamp`). */
   stampArt?: StickerArtLookup;
+  /** Thin-film iridescence channel for dab / mixer brushes with `iridescence`. */
+  film?: FilmBuffer | null;
 }
 
 /** Entries in a multi-colour gradient table. */
@@ -277,11 +280,10 @@ export class PaintDabStroke {
       if (this.gradientAlpha) laid = this.tipAlpha(d, rect, cov);
     } else total = ex.paint(this.paint);
     if (total > 0 && flow > 0) {
+      const dep = Math.min(1, total) * d.alpha * brush.tip.opacity * d.opacity * flow;
       if (this.coverage) this.depositWithCeiling(d, rect, laid, field, ex, flow);
-      else {
-        const dep = Math.min(1, total) * d.alpha * brush.tip.opacity * d.opacity * flow;
-        if (dep > 0) this.medium.deposit(rect, laid, dep, this.paint, ex.paintPigment, field);
-      }
+      else if (dep > 0) this.medium.deposit(rect, laid, dep, this.paint, ex.paintPigment, field);
+      if (brush.iridescence && this.options.film && dep > 0) this.options.film.deposit(rect, laid, dep, brush.iridescence, d.pressure);
     }
     // 3. Drain.
     ex.drain();

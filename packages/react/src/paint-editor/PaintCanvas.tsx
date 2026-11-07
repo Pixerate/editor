@@ -4,6 +4,7 @@ import {
   PaintGesture,
   documentToScreen,
   drawWaterOverlay,
+  startDeviceTilt,
   startWetClock,
   fitZoom,
   guideOverlay,
@@ -37,6 +38,8 @@ export interface PaintCanvasProps {
   proposals?: PaintProposals;
   /** Strokes an agent is painting live alongside the user's, drawn as soft lines (see `createPaintAgentStrokes`). */
   agentStrokes?: PaintAgentStrokes;
+  /** Follow device orientation (gyroscope tilt on iPhone and iPad) for thin-film iridescence view tilt. */
+  deviceTilt?: boolean;
   className?: string;
 }
 
@@ -47,7 +50,7 @@ export interface PaintCanvasProps {
  * tail drawn as a thin preview, palm rejection, middle-button pan, wheel zoom and Shift+wheel
  * rotation. Guides and floating reference images are drawn on top.
  */
-export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, className }) => {
+export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, deviceTilt = false, className }) => {
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -101,6 +104,9 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
 
   // Wet paint flows with the display.
   useEffect(() => startWetClock(controller), [controller]);
+
+  // Device orientation shifts viewTilt when opted in.
+  useEffect(() => (deviceTilt ? startDeviceTilt(controller) : undefined), [controller, deviceTilt]);
 
   // The water overlay.
   useEffect(() => {

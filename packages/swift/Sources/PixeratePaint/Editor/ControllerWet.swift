@@ -328,7 +328,18 @@ extension PaintEditorController {
         return lighting
     }
 
-    /// A layer's relief: where it is, its highest point (0..255); nil when it has none.
+    /// The current viewer tilt for thin-film iridescence and specular highlights.
+    public func getViewTilt() -> PaintViewTilt { viewTilt }
+
+    /// Tilts the viewer angle (`-1..1` on each axis). View state only (not saved with the document or an undo step).
+    public func setViewTilt(x: Double?, y: Double?) throws -> PaintViewTilt {
+        if let x, !(x.isFinite && x >= -1 && x <= 1) { throw PaintEditorError("x \(jsText(x)) is out of range; use -1..1.") }
+        if let y, !(y.isFinite && y >= -1 && y <= 1) { throw PaintEditorError("y \(jsText(y)) is out of range; use -1..1.") }
+        viewTilt = normalizeViewTilt(x: x, y: y, viewTilt)
+        return viewTilt
+    }
+
+    /// A layer's relief: where it is and its highest point (0..255); nil when it has none.
     public func reliefOf(_ layerId: String? = nil) throws -> (layerId: String, bounds: RasterRect?, maxHeight: Int)? {
         guard let id = layerId ?? doc.activeLayerId else { return nil }
         _ = try requireLayer(id)
@@ -357,7 +368,7 @@ extension PaintEditorController {
             guard let ch = liveThick?.layerId == id ? liveThick!.channels : thick?.get(id), let l = findLayer(out, id)?.layer, l.isPixel else { continue }
             let cache = litCaches[id] ?? LitCache()
             litCaches[id] = cache
-            let lit = cache.lit(l.pixelSurface, ch, lighting)
+            let lit = cache.lit(l.pixelSurface, ch, lighting, viewTilt)
             if lit !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(lit) } }
         }
         return out
@@ -444,9 +455,17 @@ func paintWetHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] 
         let x = try SetLightingArguments(a)
         return try c.setLighting(azimuth: x.azimuth, elevation: x.elevation, relief: x.relief).json
     }
+    h["get_view_tilt"] = { _ in c.getViewTilt().json }
+    h["set_view_tilt"] = { a in
+        let x = try SetViewTiltArguments(a)
+        return try c.setViewTilt(x: x.x, y: x.y).json
+    }
     h["get_relief"] = { a in
         let r = try c.reliefOf(try GetReliefArguments(a).layerId)
-        return ["relief": r.map { ["layerId": .string($0.layerId), "bounds": rectJSON($0.bounds), "maxHeight": .number(Double($0.maxHeight))] } ?? .null, "lighting": c.lighting.json]
+        return [
+            "relief": r.map { info in ["layerId": .string(info.layerId), "bounds": rectJSON(info.bounds), "maxHeight": .number(Double(info.maxHeight))] } ?? .null,
+            "lighting": c.lighting.json,
+        ]
     }
     h["flatten_relief"] = { a in .object(try c.flattenRelief(try FlattenReliefArguments(a).layerId)) }
     h["set_instant_dry"] = { a in ["instantDry": .bool(c.setInstantDry(a["on"]?.boolValue ?? false))] }

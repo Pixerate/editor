@@ -2079,6 +2079,13 @@
           "swift": "✅ `ThickChannels`, `PaintLighting`, `PaintEditorController` `setLighting`, `reliefOf`, `flattenRelief`, `setInstantDry`; wet oils on `PaintWetLayers`; metallic paper; `PaintLightPanel` (light sliders, Flatten relief)"
         },
         {
+          "feature": "Structural Colour & Thin-Film Iridescence (an `iridescence` brush facet (`thickness` 100–1000 nm, `pressureToThickness`, `ior` 1.2–2.0) writing a dielectric thin-film surface `ThickChannels.film` on thick or flat paint; optical path difference $2 \\cdot n \\cdot d \\cdot \\cos(\\theta_t)$ from Snell's law between the surface normal, light and view vector mapped to interference RGB and blended over the diffuse paint; view tilt (`viewTilt`: `x`, `y` in -1..1) that shifts the view vector without moving the light, plus opt-in device orientation / gyroscope tilt on iPhone and iPad; presets Scarab lacquer, Soap film, Pearl glaze; film channel saved with the document; `set_view_tilt`, `get_view_tilt`, `set_brush` `iridescence` agent tools)",
+          "core": "`FilmBuffer`, `thinFilmRgb`, `setViewTilt`, `getViewTilt`, `startDeviceTilt`, `requestDeviceTiltPermission`, `deviceOrientationToViewTilt`, `VIEW_TILT_SLIDERS`, `IRIDESCENCE_SLIDERS`",
+          "react": "`<PaintEditor deviceTilt>`, `<PaintCanvas deviceTilt>`, `<PaperPanel>` view tilt sliders and Device tilt toggle, `<BrushEditor>` Thin-film iridescence controls",
+          "svelte": "`<PaintEditor deviceTilt>`, `<PaintCanvas deviceTilt>`, `<PaperPanel>` view tilt sliders and Device tilt toggle, `<BrushEditor>` Thin-film iridescence controls",
+          "swift": "✅ `FilmBuffer`, `thinFilmRgb`, `PaintViewTilt`, `PaintEditorController` `setViewTilt` / `getViewTilt`, `PaintLightPanel` view tilt sliders and CoreMotion device tilt on iOS (`PaintCanvasView`, `PaintEditorView`)"
+        },
+        {
           "feature": "Time-lapse & High-Res Replay (the painting repainted from its recorded strokes and events in a headless editor: fills, clears, flattened relief and wet events at their simulation clock, wet strokes point by point at the clock each point was painted, so wet paint flows as it did; time-lapse frames after strokes and while paint flows, as PNGs, a video project of stills and the ffmpeg command from the video editor's export path, zipped; a high-resolution export repainted at 2–8× with brush sizes, grain and wet events scaled; `export_time_lapse`, `export_high_res` agent tools)",
           "core": "`timeLapse`, `renderHighRes`, `replayPainting`, `timeLapseZip`, `timeLapseVideo`",
           "react": "`<PaintToolbar>` Time-lapse and PNG 2×",

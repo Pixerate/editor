@@ -868,6 +868,31 @@
       },
       "additionalProperties": false
     },
+    "iridescence": {
+      "type": "object",
+      "description": "Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt. Missing fields take their defaults.",
+      "properties": {
+        "thickness": {
+          "type": "number",
+          "minimum": 100,
+          "maximum": 1000,
+          "description": "Film thickness in nanometres, 100..1000 (default 400)."
+        },
+        "pressureToThickness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much pen pressure shifts the film thickness per dab, 0..1 (default 0: uniform thickness)."
+        },
+        "ior": {
+          "type": "number",
+          "minimum": 1.2,
+          "maximum": 2,
+          "description": "Refractive index of the film, 1.2..2.0 (default 1.5; water/soap ~1.33, pearl ~1.55, beetle lacquer ~1.65)."
+        }
+      },
+      "additionalProperties": false
+    },
     "motion": {
       "type": "object",
       "description": "Animation after painting.",

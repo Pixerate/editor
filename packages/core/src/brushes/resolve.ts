@@ -16,6 +16,8 @@ const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', '
 const EXCHANGE: readonly PaintBrushEngine[] = ['dab', 'wet', 'impasto'];
 /** Engines that lay dabs from the pen dab walker: tip grain, count and flip apply. */
 const DABS: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge'];
+/** Mark engines that can deposit a thin-film iridescence channel. */
+const FILM: readonly PaintBrushEngine[] = ['dab', 'mixer', 'wet', 'impasto', 'particle', 'bristle'];
 
 /** One facet field and the engine field it sets. */
 export interface BrushField {
@@ -68,6 +70,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('tip.grain', 'tipGrain', DABS),
   f('behaviour.grain', 'grain'),
   ...each('light', 'light', ['amount', 'pressure']),
+  ...each('iridescence', 'iridescence', ['thickness', 'pressureToThickness', 'ior'], FILM),
   // Paint exchange: the dab, wet and impasto engines' behaviour, or the Mixer Brush's settings.
   f('behaviour.exchange.pickup', 'behavior.pickup', EXCHANGE),
   f('behaviour.exchange.mix', 'behavior.mix', EXCHANGE),
@@ -215,6 +218,7 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   }
   // Spray marks: the dab engine with droplets (their settings come from the fields above).
   if (engine === 'dab' && brush.marks?.kind === 'scatter') input.spray = { ...((input.spray as object | undefined) ?? {}) };
+  if (brush.iridescence && FILM.includes(engine)) input.iridescence = { ...((input.iridescence as object | undefined) ?? {}) };
   if (engine === 'wet') {
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');
     const medium = resolveWetMedium(brush);

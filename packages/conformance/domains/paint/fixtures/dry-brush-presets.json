@@ -1032,10 +1032,52 @@
               "surface": "dry",
               "tip": "round",
               "variety": "spraycan"
+            },
+            {
+              "builtin": true,
+              "category": "impasto",
+              "engine": "impasto",
+              "id": "scarab-lacquer",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Scarab lacquer",
+              "size": 22,
+              "surface": "thick",
+              "tip": "round",
+              "variety": "iridescent"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "id": "soap-film",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Soap film",
+              "size": 32,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "iridescent"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "id": "pearl-glaze",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Pearl glaze",
+              "size": 28,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "iridescent"
             }
           ],
           "host": "paint",
-          "total": 73
+          "total": 76
         }
       }
     },

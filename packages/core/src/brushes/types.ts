@@ -333,6 +333,16 @@ export interface BrushLight {
   glow?: boolean;
 }
 
+/** Structural colour: a thin dielectric film over the paint whose interference hue shifts with light and view angle. */
+export interface BrushIridescence {
+  /** Film thickness in nanometres, 100..1000 (default 400). */
+  thickness?: number;
+  /** How much pen pressure shifts the film thickness per dab, 0..1 (default 0). */
+  pressureToThickness?: number;
+  /** Refractive index of the film, 1.2..2.0 (default 1.5: soap film ~1.33, pearl ~1.53, scarab chitin ~1.65). */
+  ior?: number;
+}
+
 /** Animation after painting. */
 export interface BrushMotion {
   /** Effect paint keeps playing on stroke layers. */
@@ -382,6 +392,7 @@ export interface Brush {
   dynamics?: BrushDynamics;
   behaviour?: BrushBehaviour;
   light?: BrushLight;
+  iridescence?: BrushIridescence;
   motion?: BrushMotion;
   colour?: BrushColour;
 }

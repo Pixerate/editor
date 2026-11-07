@@ -21,6 +21,7 @@ import PixerateRaster
 protocol CoverageStroke: AnyObject {
     var coverage: CoverageMap { get }
     var dabCount: Int { get }
+    var film: FilmBuffer? { get set }
     func push(_ points: [PenPoint]) -> [RasterRect]
     func finish() -> [RasterRect]
 }
@@ -111,6 +112,8 @@ class MarkStroke: CoverageStroke {
     var effect: EffectPaintPixels?
     /// The art of image sources a textured dot can lay (`source:<id>`).
     var stampArt: StampArtLookup?
+    /// Thin-film coat buffer for iridescent particle and bristle strokes.
+    var film: FilmBuffer?
     private var field: [Float] = []
 
     init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?) {
@@ -252,6 +255,9 @@ class MarkStroke: CoverageStroke {
             let color = markColor(x, y)
             if let color, color.alpha < 1 { for k in 0..<n { vals[k] = Float(Double(vals[k]) * color.alpha) } }
             coverage.accumulate(rect, vals, opacity, color: color?.rgb)
+        }
+        if let film, let ir = brush.iridescence {
+            film.deposit(rect, vals, opacity * brush.tip.opacity, pressure, ir)
         }
         rects.append(rect)
         dabCount += 1

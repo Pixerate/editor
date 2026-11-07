@@ -221,7 +221,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|iridescence)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
   const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
@@ -241,6 +241,14 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       ...(engine === 'impasto' ? [slider({ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }), slider({ path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 })] : []),
       withNote({ kind: 'slider', path: 'light.spill.radius', label: 'Spill', ariaLabel: 'Brush light spill', min: 0, max: 128, step: 1, value: brush.light?.spill?.radius ?? 24 }),
       toggle('light.glow', 'Suggest a glow'),
+      full(profile.iridescence ?? 'none') && marks !== 'objects' && withNote({ kind: 'toggle', path: 'iridescence', label: 'Thin-film iridescence', ariaLabel: 'Brush thin-film iridescence', value: Boolean(brush.iridescence) }),
+      ...(brush.iridescence && full(profile.iridescence ?? 'none')
+        ? [
+            slider({ path: 'iridescence.thickness', label: 'Film (nm)', min: 100, max: 1000, step: 5 }),
+            slider({ path: 'iridescence.pressureToThickness', label: 'Pressure → film', min: 0, max: 1, step: 0.01 }),
+            slider({ path: 'iridescence.ior', label: 'Film IOR', min: 1.2, max: 2, step: 0.01 }),
+          ]
+        : []),
     ]);
   }
 
@@ -305,6 +313,8 @@ function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
       return 'several dabs per step';
     case 'light':
       return 'light';
+    case 'iridescence':
+      return 'iridescence';
     case 'motion':
       return 'motion';
     case 'dynamics.velocity':
@@ -420,6 +430,7 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
       delete next.variety;
       delete next.marks;
       delete next.light;
+      delete next.iridescence;
       delete next.colour;
       next.tool = next.tool ?? 'eraser';
       if (next.tip.shape === 'stamp') next.tip = { shape: 'round', ...(next.tip.size !== undefined ? { size: next.tip.size } : {}) };
@@ -429,6 +440,9 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
     next.marks = value === 'continuous' ? undefined : ({ kind: value } as Brush['marks']);
     if (value !== 'continuous' && next.tip.shape === 'bristle') next.tip = { ...next.tip, shape: 'round', bristle: undefined };
     if (value === 'objects') next.tip = { ...next.tip, shape: 'stamp' };
+  } else if (path === 'iridescence') {
+    if (value) next.iridescence = next.iridescence ?? { thickness: 400 };
+    else delete next.iridescence;
   } else if (path === 'tip.grain.source' && (value === undefined || value === '')) {
     delete next.tip.grain;
   } else if (path === 'tip.shape' && value !== 'stamp') {

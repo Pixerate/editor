@@ -16,7 +16,7 @@ import { brushLoadForStroke, PaintStrokeSession } from './stroke';
 import { WetWorld } from '../paint/wet/world';
 import { pigmentOf } from '../paint/wet/film';
 import { WetStrokeDriver, wetPaperInput } from './wet';
-import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, type ThickChannels } from './thick';
+import { DEFAULT_LIGHTING, emptyThickChannels, FilmBuffer, LitCache, type ThickChannels } from './thick';
 import { computeSpill, emptyLight, LightCache } from './light';
 import type { StickerArtLookup } from './sticker-art';
 
@@ -39,6 +39,7 @@ function paintWetTestStroke(brush: PaintBrush, paper: PaperSettings, color: stri
     w.paint('thumb', { x: 0, y: 0, width, height: half }, null, 0.4, Array.from(pigmentOf([r / 255, g / 255, b / 255], 0), (v) => v * 0.05));
     w.paint('thumb', { x: 0, y: half, width, height: height - half }, null, 0.4, Array.from(pigmentOf([232 / 255, 196 / 255, 64 / 255], 0), (v) => v * 0.05));
   }
+  const film = brush.iridescence && brush.wet.tool === 'paint' ? new FilmBuffer(emptySurface(4, 0)) : null;
   const driver = new WetStrokeDriver({
     world: w,
     laneId: 'thumb',
@@ -50,12 +51,14 @@ function paintWetTestStroke(brush: PaintBrush, paper: PaperSettings, color: stri
     paperColor: hexToRgb8(paper.color),
     seed: 7,
     copies: [IDENTITY_COPY],
+    film,
   });
   driver.push(thumbnailStroke(width, height));
   driver.finish();
   // Blowing only shows once the water has moved.
   if (brush.wet.tool === 'blow') w.stepSync(4);
-  return w.display('thumb').surface;
+  const surf = w.display('thumb').surface;
+  return film ? new LitCache().lit(surf, { ...emptyThickChannels(), film: film.surface() }, DEFAULT_LIGHTING) : surf;
 }
 
 export interface BrushThumbnail {
@@ -109,7 +112,7 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       affineCopies: [],
       copies: [IDENTITY_COPY],
       mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
-      thick: brush.engine === 'impasto' ? { channels: emptyThickChannels() } : undefined,
+      thick: brush.engine === 'impasto' || brush.iridescence ? { channels: emptyThickChannels() } : undefined,
       sticker: brush.engine === 'sticker' ? { nextId: 1 } : undefined,
       light: brush.light.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' ? { surface: emptyLight() } : null,
       stampArt,

@@ -106,6 +106,54 @@ public struct LightSettings: Equatable, Sendable {
 
 public let DEFAULT_LIGHT = LightSettings(amount: 0, pressure: false)
 
+/// Thin-film iridescence: interference coat whose hue shifts with the light and view angle.
+public struct IridescenceSettings: Equatable, Sendable {
+    /// Film thickness at full pressure in nanometres (100..1000).
+    public var thickness: Double
+    /// How much lighter pressure thins the film (0: uniform thickness, 1: scales with pressure).
+    public var pressureToThickness: Double
+    /// Film refractive index (1.2..2.0; 1.33 soap film, 1.5 lacquer, 1.7 pearl / chitin).
+    public var ior: Double
+
+    public init(thickness: Double = 400, pressureToThickness: Double = 0, ior: Double = 1.5) {
+        self.thickness = thickness
+        self.pressureToThickness = pressureToThickness
+        self.ior = ior
+    }
+
+    var json: JSONValue { ["thickness": .number(thickness), "pressureToThickness": .number(pressureToThickness), "ior": .number(ior)] }
+}
+
+public let DEFAULT_IRIDESCENCE = IridescenceSettings(thickness: 400, pressureToThickness: 0, ior: 1.5)
+
+func readIridescence(_ raw: JSONValue?, _ base: IridescenceSettings?) -> IridescenceSettings? {
+    guard let raw else { return base }
+    if raw == .null || raw == .bool(false) { return nil }
+    guard let r = raw.objectValue else { return base }
+    let b = base ?? DEFAULT_IRIDESCENCE
+    return IridescenceSettings(
+        thickness: rangeValue(r["thickness"], 100, 1000, b.thickness),
+        pressureToThickness: unitValue(r["pressureToThickness"], b.pressureToThickness),
+        ior: rangeValue(r["ior"], 1.2, 2.0, b.ior)
+    )
+}
+
+public func withIridescence(_ brush: PaintBrush, _ patch: IridescenceSettings?) -> PaintBrush {
+    guard let patch else {
+        var next = brush
+        next.iridescence = nil
+        return next
+    }
+    let b = brush.iridescence ?? DEFAULT_IRIDESCENCE
+    var next = brush
+    next.iridescence = IridescenceSettings(
+        thickness: Swift.min(1000, Swift.max(100, patch.thickness.isFinite ? patch.thickness : b.thickness)),
+        pressureToThickness: Swift.min(1, Swift.max(0, patch.pressureToThickness.isFinite ? patch.pressureToThickness : b.pressureToThickness)),
+        ior: Swift.min(2.0, Swift.max(1.2, patch.ior.isFinite ? patch.ior : b.ior))
+    )
+    return next
+}
+
 /// Multi-coloured brush (the read-only view of gradient paint older readers know).
 public struct MultiColorSettings: Equatable, Sendable {
     public var mode: String
@@ -345,6 +393,8 @@ public struct PaintBrush: Equatable, Sendable {
     public var bristle: JSONObject
     public var sticker: JSONObject
     public var light: LightSettings
+    /// Thin-film iridescence coat (nil: none).
+    public var iridescence: IridescenceSettings? = nil
     public var stamp: String?
     public var spray: SpraySettings?
     /// Dab engines: texture inside the tip (nil: none).
@@ -365,9 +415,10 @@ public struct PaintBrush: Equatable, Sendable {
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
             "light": light.json,
-            "stamp": stamp.map { .string($0) } ?? .null,
-            "spray": spray?.json ?? .null,
         ]
+        if let iridescence { o["iridescence"] = iridescence.json }
+        o["stamp"] = stamp.map { .string($0) } ?? .null
+        o["spray"] = spray?.json ?? .null
         if let tipGrain { o["tipGrain"] = tipGrain.json }
         o["paint"] = paint?.json ?? .null
         if withBuiltin, builtin == true { o["builtin"] = true }
@@ -532,6 +583,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
         light: LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
+        iridescence: readIridescence(raw["iridescence"], b.iridescence),
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
         tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),
