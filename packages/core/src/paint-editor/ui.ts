@@ -13,7 +13,7 @@ import type { MixerLoad } from '../paint/exchange';
 import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
 import type { ImpastoTool, PaintBrush, PaintBrushInput, WetMediumKind, WetTool } from './brushes';
 import { TILE, type RasterRect } from '../raster/surface';
-import type { PaintEditorController } from './controller';
+import type { FillRegionOptions, PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
 import { perspectiveGuideLines, symmetryAxisSegments, type Point2 } from './guides';
 import { stencilOutline, type StencilInput } from './stencils';
@@ -40,10 +40,11 @@ export interface PaintPointerEvent extends PointerSample {
   getPredictedEvents?(): PaintPointerEvent[];
 }
 
-export type PaintTool = 'brush' | 'eyedropper' | 'pan' | 'rotate' | 'sticker' | 'stroke';
+export type PaintTool = 'brush' | 'fill' | 'eyedropper' | 'pan' | 'rotate' | 'sticker' | 'stroke';
 
 export const PAINT_TOOLS: ReadonlyArray<{ id: PaintTool; label: string; key: string }> = [
   { id: 'brush', label: 'Brush', key: 'b' },
+  { id: 'fill', label: 'Fill', key: 'g' },
   { id: 'eyedropper', label: 'Eyedropper', key: 'i' },
   { id: 'sticker', label: 'Stickers', key: 's' },
   { id: 'stroke', label: 'Select stroke', key: 'v' },
@@ -61,6 +62,8 @@ export interface ViewportBox {
 
 type Mode =
   | { kind: 'stroke'; pointerId: number }
+  /** Filling a region: dragging horizontally adjusts the tolerance live (one undo step). */
+  | { kind: 'fill'; pointerId: number; startX: number; p: Point2; baseTolerance: number; lastTolerance: number }
   /** Dragging a stroke of a stroke layer: where the pointer went down and where it is now. */
   | { kind: 'move-stroke'; pointerId: number; id: string; from: Point2; to: Point2 }
   /** Dragging a sticker: (dx, dy) from the pointer to its centre, and where it was last shown. */
@@ -69,6 +72,8 @@ type Mode =
 
 export class PaintGesture {
   tool: PaintTool = 'brush';
+  /** Options the Fill tool (`tool === 'fill'`) passes to `fillRegion` (click to fill; drag horizontally to adjust tolerance). */
+  fillOptions: Omit<FillRegionOptions, 'x' | 'y' | 'points'> = { reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true };
   /** The last refusal (a hidden or locked layer), for the editor to show. */
   error: string | null = null;
   /** The predicted tail of the current stroke in document pixels (draw it as a thin preview). */
@@ -119,6 +124,7 @@ export class PaintGesture {
       this.pick(e);
       return false;
     }
+    if (tool === 'fill') return this.fillDown(e);
     if (tool === 'sticker') return this.stickerDown(e);
     try {
       const p = this.pen(e);
@@ -193,6 +199,19 @@ export class PaintGesture {
     this.controller.setColor(this.controller.pickColor(p.x, p.y).color);
   }
 
+  private fillDown(e: PaintPointerEvent): boolean {
+    const p = this.doc(e);
+    const baseTolerance = this.fillOptions.tolerance ?? 32;
+    try {
+      this.controller.fillRegion({ ...this.fillOptions, tolerance: baseTolerance, x: p.x, y: p.y });
+      this.mode = { kind: 'fill', pointerId: e.pointerId, startX: e.clientX, p, baseTolerance, lastTolerance: baseTolerance };
+      return true;
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
   move(e: PaintPointerEvent): void {
     if (e.pointerType === 'pen') this.penAt = { x: e.clientX, y: e.clientY };
     const m = this.mode;
@@ -211,6 +230,20 @@ export class PaintGesture {
     }
     if (m.kind === 'move-stroke') {
       m.to = this.doc(e);
+      return;
+    }
+    if (m.kind === 'fill') {
+      const dx = e.clientX - m.startX;
+      if (Math.abs(dx) < 4) return;
+      const nextTol = Math.max(0, Math.min(255, Math.round(m.baseTolerance + dx * 0.5)));
+      if (nextTol === m.lastTolerance) return;
+      m.lastTolerance = nextTol;
+      try {
+        this.controller.undo();
+        this.controller.fillRegion({ ...this.fillOptions, tolerance: nextTol, x: m.p.x, y: m.p.y });
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : String(err);
+      }
       return;
     }
     if (m.kind === 'sticker') {
@@ -277,6 +310,7 @@ export class PaintGesture {
     this.penDown = false;
     this.predicted = [];
     if (this.mode?.kind === 'stroke') this.controller.activeStroke?.cancel();
+    if (this.mode?.kind === 'fill') this.controller.undo();
     if (this.mode?.kind === 'sticker') this.controller.cancelStickerPreview();
     this.mode = null;
   }

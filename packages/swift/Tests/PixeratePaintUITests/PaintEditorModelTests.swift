@@ -39,6 +39,8 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(model.tool, "brush")
         XCTAssertTrue(model.handleKey("i"))
         XCTAssertEqual(model.tool, "eyedropper")
+        XCTAssertTrue(model.handleKey("g"))
+        XCTAssertEqual(model.tool, "fill")
         XCTAssertTrue(model.handleKey("H"))
         XCTAssertEqual(model.tool, "pan")
         XCTAssertTrue(model.handleKey("r"))
@@ -348,7 +350,7 @@ final class PaintEditorModelTests: XCTestCase {
         let model = try makeModel()
         let t = model.tables
         XCTAssertEqual(model.toolRows.map(\.id), t.tools.map(\.id).filter { $0 != "sticker" })
-        XCTAssertEqual(model.toolRows.map(\.label), ["Brush", "Eyedropper", "Select stroke", "Pan", "Rotate view"])
+        XCTAssertEqual(model.toolRows.map(\.label), ["Brush", "Fill", "Eyedropper", "Select stroke", "Pan", "Rotate view"])
         // Every brush option row maps to a facet and reads the engine brush.
         XCTAssertEqual(t.brushOptions.map(\.id), ["size", "hardness", "opacity", "flow", "smoothing"])
         for item in t.brushOptions { XCTAssertNotNil(PAINT_BRUSH_OPTION_PATHS[item.id], item.id) }

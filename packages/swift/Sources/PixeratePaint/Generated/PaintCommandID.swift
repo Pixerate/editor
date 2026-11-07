@@ -6,6 +6,7 @@ public enum PaintCommandID: String, CaseIterable, Sendable {
     case undo
     case redo
     case toolBrush = "tool.brush"
+    case toolFill = "tool.fill"
     case toolEyedropper = "tool.eyedropper"
     case toolSticker = "tool.sticker"
     case toolStroke = "tool.stroke"

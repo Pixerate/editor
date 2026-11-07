@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PaintPresence, documentToScreen, screenToDocument, type PaintEditorController, type PaintProposals, type PaintAgentStrokes, type PaintTool } from '@pixerate/editor/paint-editor';
+  import { PaintPresence, documentToScreen, screenToDocument, type FillRegionOptions, type PaintEditorController, type PaintProposals, type PaintAgentStrokes, type PaintTool } from '@pixerate/editor/paint-editor';
   import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
   import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
   import PresenceLayer from '../playback/PresenceLayer.svelte';
@@ -105,6 +105,7 @@
     return c && box ? { x: c.x - box.left, y: c.y - box.top } : p;
   };
   let tool = $state<PaintTool>('brush');
+  let fillOptions = $state<Omit<FillRegionOptions, 'x' | 'y' | 'points'>>({ reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true });
   let tab = $state<'color' | 'wet' | 'paper' | 'layers' | 'effects'>('color');
   const effects = paintEffectsProvider(() => controller);
   const tabs = $derived(effects.current ? (['color', 'wet', 'paper', 'layers', 'effects'] as const) : (['color', 'wet', 'paper', 'layers'] as const));
@@ -116,12 +117,12 @@
   {#if playing}
     <PresenceLayer presence={agentPresence} viewport={docToRoot} />
   {/if}
-  <PaintToolbar {controller} {tool} ontoolchange={(t) => (tool = t)} {fileName} />
+  <PaintToolbar {controller} {tool} ontoolchange={(t) => (tool = t)} {fillOptions} onfilloptionschange={(f) => (fillOptions = f)} {fileName} />
   <div class="flex min-h-0 flex-1 gap-2">
     <BrushPanel {controller} class="w-60 shrink-0 overflow-y-auto pr-1" />
     <div class="flex min-w-0 flex-1 flex-col">
       <!-- With playback the editor draws the cursor (over the panels too), so the canvas doesn't. -->
-      <PaintCanvas {controller} {tool} presence={playing ? undefined : presence} {proposals} {agentStrokes} onerror={(e) => (error = e)} class="flex-1 rounded-lg" />
+      <PaintCanvas {controller} {tool} {fillOptions} presence={playing ? undefined : presence} {proposals} {agentStrokes} onerror={(e) => (error = e)} class="flex-1 rounded-lg" />
       {#if error}<p role="alert" class="mt-1 text-[11px] text-rose-400">{error}</p>{/if}
     </div>
     <div class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
