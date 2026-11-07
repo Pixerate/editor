@@ -1133,6 +1133,25 @@
             },
             "additionalProperties": false
           },
+          "ghost": {
+            "type": "object",
+            "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+            "properties": {
+              "linger": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 60,
+                "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+              },
+              "smear": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
+              }
+            },
+            "additionalProperties": false
+          },
           "motion": {
             "type": "object",
             "description": "Animation after painting.",
@@ -2527,6 +2546,25 @@
             },
             "additionalProperties": false
           },
+          "ghost": {
+            "type": "object",
+            "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+            "properties": {
+              "linger": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 60,
+                "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+              },
+              "smear": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
+              }
+            },
+            "additionalProperties": false
+          },
           "motion": {
             "type": "object",
             "description": "Animation after painting.",
@@ -3053,6 +3091,7 @@
                 "dynamics",
                 "behaviour",
                 "light",
+                "ghost",
                 "motion",
                 "colour"
               ],

@@ -128,6 +128,23 @@ export function normalizeLight(raw: Partial<LightSettings> = {}, base: LightSett
   return { amount: unit(raw.amount, base.amount), pressure: typeof raw.pressure === 'boolean' ? raw.pressure : base.pressure };
 }
 
+/** Ghost paint: wet paint whose colour vanishes after `linger` seconds, leaving only what it smeared. */
+export interface GhostSettings {
+  /** Seconds of simulated time before the ghost paint has fully faded, 0.5..60 (default 4). */
+  linger: number;
+  /** How much the ghost paint drags and lifts the paint it passes through, 0..1 (default 0.3). */
+  smear: number;
+}
+
+export const DEFAULT_GHOST: Readonly<GhostSettings> = { linger: 4, smear: 0.3 };
+
+export function normalizeGhost(raw: Partial<GhostSettings> = {}, base: GhostSettings = DEFAULT_GHOST): GhostSettings {
+  return {
+    linger: range(raw.linger, 0.5, 60, base.linger),
+    smear: unit(raw.smear, base.smear),
+  };
+}
+
 export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
   return {
     tool: IMPASTO_TOOLS.includes(raw.tool as ImpastoTool) ? (raw.tool as ImpastoTool) : base.tool,
@@ -291,6 +308,8 @@ export interface PaintBrush {
   sticker: StickerSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
+  /** Wet engine: ghost paint settings (missing when not a ghost brush). */
+  ghost?: GhostSettings;
   /**
    * Dab engine: a stamp tip. Each dab (and each spray droplet) is this sticker's shape, an editor
    * stamp (`editor:star`) or any sticker ref from the sticker library, laid in the paint colour;
@@ -413,10 +432,12 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'spray' | 'tipGrain'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'ghost' | 'spray' | 'tipGrain'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
+  /** Ghost paint (`null` removes it). */
+  ghost?: Partial<GhostSettings> | null;
   light?: Partial<LightSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
@@ -543,6 +564,13 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
   }
   // `behavior.multicolor` is a read-only view of the gradient, for older readers.
   behavior = { ...behavior, multicolor: paintToMultiColor(paint) ?? { ...DEFAULT_MULTI_COLOR, colors: [] } };
+  const wet = normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH);
+  const wantsLight = typeof raw.light?.amount === 'number' && raw.light.amount > 0;
+  const ghost =
+    engine === 'wet' && wet.tool === 'paint' && (raw.ghost !== undefined ? raw.ghost !== null : !wantsLight && Boolean(b.ghost))
+      ? normalizeGhost(raw.ghost ?? {}, b.ghost ?? DEFAULT_GHOST)
+      : undefined;
+  if (ghost) behavior = { ...behavior, pickup: 0, dirty: false };
   return {
     id,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : b.name,
@@ -558,12 +586,13 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     behavior,
     blender: normalizeBlender(raw.blender ?? {}, b.blender),
     smudge: normalizeSmudge(raw.smudge ?? {}, b.smudge),
-    wet: normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH),
+    wet,
     impasto: normalizeImpasto(raw.impasto ?? {}, b.impasto ?? DEFAULT_IMPASTO),
     particle: normalizeParticle(raw.particle ?? {}, b.particle ?? DEFAULT_PARTICLE),
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
-    light: normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
+    light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
+    ...(ghost ? { ghost } : {}),
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
     ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),

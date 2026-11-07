@@ -226,6 +226,11 @@ const LIGHT = object('Light the brush gives off with its colour (glow and spill)
   glow: bool('Suggest a glow layer effect for the layer (glow stays a layer effect).'),
 });
 
+const GHOST = object('Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").', {
+  linger: num(0.5, 60, 'Seconds of simulated time before the ghost paint has fully faded (default 4).'),
+  smear: unit('How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3).'),
+});
+
 const MOTION = object('Animation after painting.', {
   live: bool('Effect paint keeps playing on stroke layers (default false).'),
   fps: int(1, 60, 'Suggested playback rate in frames per second.'),
@@ -296,6 +301,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
+    ghost: GHOST,
     motion: MOTION,
     colour: COLOUR,
   },
@@ -310,6 +316,7 @@ export const BRUSH_FACET_SCHEMAS = {
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
+  ghost: GHOST,
   motion: MOTION,
   colour: COLOUR,
   paint: PAINT,

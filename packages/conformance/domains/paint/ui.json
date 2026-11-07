@@ -2733,6 +2733,22 @@
         "step": 0.01
       }
     ],
+    "ghost": [
+      {
+        "path": "ghost.linger",
+        "label": "Linger",
+        "min": 0.5,
+        "max": 60,
+        "step": 0.5
+      },
+      {
+        "path": "ghost.smear",
+        "label": "Smear",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
     "stroke": [
       {
         "path": "tip.size",

@@ -286,6 +286,21 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], facet, .number(value))) }
     }
 
+    /// The ghost-paint sliders (`PaintUITables.sliders.ghost`): linger and smear.
+    public var ghostSliders: [PaintUISlidersGhostItem] { tables.sliders.ghost }
+
+    /// The value of a ghost slider (`ghost.linger` or `ghost.smear`).
+    public func ghostValue(_ path: String) -> Double {
+        track()
+        guard let ghost = controller.brush.ghost else { return path == "ghost.smear" ? DEFAULT_GHOST.smear : DEFAULT_GHOST.linger }
+        return path == "ghost.smear" ? ghost.smear : ghost.linger
+    }
+
+    /// Sets a ghost slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setGhostValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
         let size = controller.brush.tip.size

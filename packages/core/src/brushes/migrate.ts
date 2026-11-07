@@ -43,7 +43,7 @@ function skeleton(b: ResolvedBrush): Brush {
   }
   switch (b.engine) {
     case 'wet':
-      return { ...brush, medium: 'paint', variety: b.wet.medium, behaviour: { surface: 'wet' } };
+      return { ...brush, medium: 'paint', variety: b.wet.medium, behaviour: { surface: 'wet' }, ...(b.ghost ? { ghost: {} } : {}) };
     case 'impasto':
       return { ...brush, medium: 'paint', behaviour: { surface: 'thick' } };
     case 'mixer':
@@ -62,7 +62,7 @@ function skeleton(b: ResolvedBrush): Brush {
 }
 
 /** Key order of a hand-written brush. */
-const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'motion', 'colour'];
+const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'ghost', 'motion', 'colour'];
 
 /**
  * The facet brush a v1 brush (any `PaintBrush`, or the JSON of one) amounts to: its engine's
