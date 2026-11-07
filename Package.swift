@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "PixerateMarkdown", targets: ["PixerateMarkdown"]),
         .library(name: "PixerateGeometry", targets: ["PixerateGeometry"]),
         .library(name: "PixerateVector", targets: ["PixerateVector"]),
+        .library(name: "PixerateChart", targets: ["PixerateChart"]),
     ],
     targets: [
         // Foundation only: no SwiftUI, AppKit or UIKit (the UI targets are the only ones that import them).
@@ -60,6 +61,10 @@ let package = Package(
         // edits, shape builders), the controller, its commands (metadata from the contracts) and the
         // conformance host. Foundation only.
         .target(name: "PixerateVector", dependencies: ["PixerateCore", "PixerateContracts", "PixerateGeometry", "PixerateRaster", "PixerateConformance", "PixeratePaint"], path: "packages/swift/Sources/PixerateVector", swiftSettings: settings),
+        // The chart editor (`chart/` and `chart-maps/` in the TS core): the chart spec, number formats,
+        // scales, statistics, trendlines, error bars, presets, recommendations, summaries, trees,
+        // Sankey links and maps. Foundation only.
+        .target(name: "PixerateChart", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance"], path: "packages/swift/Sources/PixerateChart", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
@@ -106,6 +111,13 @@ let package = Package(
             name: "PixerateGeometryTests",
             dependencies: ["PixerateGeometry", "PixerateCore"],
             path: "packages/swift/Tests/PixerateGeometryTests",
+            resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateChartTests",
+            dependencies: ["PixerateChart", "PixerateCore", "PixerateRaster", "PixerateContracts", "PixerateConformance"],
+            path: "packages/swift/Tests/PixerateChartTests",
             resources: [.copy("Fixtures")],
             swiftSettings: settings
         ),

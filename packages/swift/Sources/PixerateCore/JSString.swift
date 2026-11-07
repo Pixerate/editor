@@ -163,3 +163,141 @@ public func jsToFixed(_ v: Double, _ digits: Int) -> String {
     }
     return v < 0 ? "-" + s : s
 }
+
+/// Exact decimal significant digits (without leading or trailing zeros, except `"0"` for 0)
+/// and base-10 scientific exponent (`abs(value) == d0.d1d2... * 10^exp10`) of an IEEE-754 `Double`.
+public func jsExactDecimal(_ value: Double) -> (digits: String, exp10: Int) {
+    let a = abs(value)
+    if a == 0 || !a.isFinite { return ("0", 0) }
+    let bits = a.bitPattern
+    let rawExp = Int((bits >> 52) & 0x7ff)
+    let frac = bits & 0x000f_ffff_ffff_ffff
+    let mant = rawExp == 0 ? frac : ((1 as UInt64) << 52) | frac
+    let exp2 = (rawExp == 0 ? 1 : rawExp) - 1023 - 52
+
+    let base: UInt64 = 1_000_000_000
+    var limbs: [UInt32] = []
+    var m = mant
+    while m > 0 {
+        limbs.append(UInt32(m % base))
+        m /= base
+    }
+    func mul(_ factor: UInt64) {
+        var carry: UInt64 = 0
+        for i in 0..<limbs.count {
+            let prod = UInt64(limbs[i]) * factor + carry
+            limbs[i] = UInt32(prod % base)
+            carry = prod / base
+        }
+        while carry > 0 {
+            limbs.append(UInt32(carry % base))
+            carry /= base
+        }
+    }
+    let decimalShift: Int
+    if exp2 >= 0 {
+        var rem = exp2
+        while rem > 0 {
+            let step = min(rem, 29)
+            mul(1 << step)
+            rem -= step
+        }
+        decimalShift = 0
+    } else {
+        var rem = -exp2
+        let pow5: [UInt64] = [
+            1, 5, 25, 125, 625, 3125, 15625, 78125,
+            390625, 1_953_125, 9_765_625, 48_828_125, 244_140_625
+        ]
+        while rem > 0 {
+            let step = min(rem, 12)
+            mul(pow5[step])
+            rem -= step
+        }
+        decimalShift = exp2
+    }
+    var raw = String(limbs[limbs.count - 1])
+    if limbs.count > 1 {
+        for i in stride(from: limbs.count - 2, through: 0, by: -1) {
+            let part = String(limbs[i])
+            if part.count < 9 {
+                raw += String(repeating: "0", count: 9 - part.count)
+            }
+            raw += part
+        }
+    }
+    let exp10 = raw.count - 1 + decimalShift
+    var trimmed = raw
+    while trimmed.count > 1 && trimmed.last == "0" {
+        trimmed.removeLast()
+    }
+    return (trimmed, exp10)
+}
+
+private func jsRoundSignificant(_ value: Double, precision: Int) -> (digits: String, exp10: Int) {
+    let p = max(1, precision)
+    let (digits, exp10) = jsExactDecimal(value)
+    let bytes = Array(digits.utf8)
+    if bytes.count <= p {
+        return (digits + String(repeating: "0", count: p - bytes.count), exp10)
+    }
+    var prefix = Array(bytes[0..<p])
+    if bytes[p] >= UInt8(ascii: "5") {
+        var k = p - 1
+        var carry = true
+        while carry && k >= 0 {
+            if prefix[k] == UInt8(ascii: "9") {
+                prefix[k] = UInt8(ascii: "0")
+                k -= 1
+            } else {
+                prefix[k] += 1
+                carry = false
+            }
+        }
+        if carry {
+            return ("1" + String(repeating: "0", count: p - 1), exp10 + 1)
+        }
+    }
+    return (String(decoding: prefix, as: UTF8.self), exp10)
+}
+
+/// JS `Number.prototype.toExponential(fractionDigits)` (0 ≤ fractionDigits ≤ 100).
+public func jsToExponential(_ value: Double, _ fractionDigits: Int) -> String {
+    if value.isNaN { return "NaN" }
+    if !value.isFinite { return value < 0 ? "-Infinity" : "Infinity" }
+    let f = max(0, min(100, fractionDigits))
+    let sign = value < 0 ? "-" : ""
+    if value == 0 {
+        let frac = f > 0 ? "." + String(repeating: "0", count: f) : ""
+        return "\(sign)0\(frac)e+0"
+    }
+    let (digits, exp10) = jsRoundSignificant(abs(value), precision: f + 1)
+    let mantissa = f == 0 ? digits : "\(digits.prefix(1)).\(digits.dropFirst())"
+    let expSign = exp10 >= 0 ? "+" : "-"
+    return "\(sign)\(mantissa)e\(expSign)\(abs(exp10))"
+}
+
+/// JS `Number.prototype.toPrecision(precision)` (1 ≤ precision ≤ 100).
+public func jsToPrecision(_ value: Double, _ precision: Int) -> String {
+    if value.isNaN { return "NaN" }
+    if !value.isFinite { return value < 0 ? "-Infinity" : "Infinity" }
+    let p = max(1, min(100, precision))
+    let sign = value < 0 ? "-" : ""
+    if value == 0 {
+        return sign + (p > 1 ? "0." + String(repeating: "0", count: p - 1) : "0")
+    }
+    let (digits, e) = jsRoundSignificant(abs(value), precision: p)
+    if e < -6 || e >= p {
+        let mantissa = p == 1 ? digits : "\(digits.prefix(1)).\(digits.dropFirst())"
+        let expSign = e >= 0 ? "+" : "-"
+        return "\(sign)\(mantissa)e\(expSign)\(abs(e))"
+    }
+    if e == p - 1 {
+        return sign + digits
+    }
+    if e >= 0 {
+        let split = digits.index(digits.startIndex, offsetBy: e + 1)
+        return "\(sign)\(digits[..<split]).\(digits[split...])"
+    }
+    return "\(sign)0.\(String(repeating: "0", count: -(e + 1)))\(digits)"
+}
