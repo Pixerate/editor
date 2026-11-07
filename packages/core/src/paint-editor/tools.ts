@@ -30,6 +30,7 @@ import { createLayerEffectTools } from '../image-editor/effect-tools';
 import { createPaintWetTools } from './wet-tools';
 import { createPaintThickTools } from './thick-tools';
 import { createPaintReplayTools } from './replay-tools';
+import { createPaintEvolutionTools } from './evolution-tools';
 import { samplePath } from './path-samples';
 import type { PaintAgentCommand, PaintDirector } from './presence';
 import type { PresenceActorInfo } from '../animation/presence';
@@ -1042,6 +1043,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   tools.push(...createPaintWetTools(c));
   tools.push(...createPaintThickTools(c));
   tools.push(...createPaintReplayTools(c));
+  tools.push(...createPaintEvolutionTools(c));
   tools.push(...createPaintStickerTools(c));
   tools.push(...createPigmentTools());
   // The sticker library (the editor's own stamps unless the host set one): refs for sticker brushes and add_stickers.

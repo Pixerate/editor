@@ -1,0 +1,157 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "evolution",
+  "description": "Breed and mutate stroke variants as paint proposals, inspect proposal genomes, cross over proposals, and accept a variant.",
+  "setup": {
+    "width": 64,
+    "height": 48
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "pencil-hb",
+        "color": "#2a4b8d",
+        "seed": 11,
+        "points": [
+          {
+            "x": 10,
+            "y": 14,
+            "pressure": 0.4
+          },
+          {
+            "x": 28,
+            "y": 22,
+            "pressure": 0.8
+          },
+          {
+            "x": 50,
+            "y": 32,
+            "pressure": 0.6
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 26,
+            "width": 48,
+            "x": 6,
+            "y": 10
+          },
+          "dabs": 88,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "breed_strokes",
+      "arguments": {
+        "strokeIds": [
+          "stroke-1"
+        ],
+        "count": 2,
+        "seed": 42,
+        "mutation": {
+          "geometry": 0.3,
+          "color": 0.3,
+          "brush": 0.3,
+          "seed": 0.5
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown stroke \"stroke-1\". Call list_strokes for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "get_proposal_genome",
+      "arguments": {
+        "proposalId": "paint-proposal-1"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No pending paint proposal \"paint-proposal-1\". Call list_paint_proposals for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "breed_proposal",
+      "arguments": {
+        "proposalIds": [
+          "paint-proposal-1",
+          "paint-proposal-2"
+        ],
+        "count": 2,
+        "seed": 99,
+        "mutation": {
+          "geometry": 0.2,
+          "color": 0.25,
+          "brush": 0.2,
+          "seed": 0.5
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No pending paint proposal \"paint-proposal-1\". Call list_paint_proposals for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "accept_paint_proposal",
+      "arguments": {
+        "proposalId": "paint-proposal-3"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No pending paint proposal \"paint-proposal-3\". Call list_paint_proposals for the ids."
+          }
+        },
+        "isError": true,
+        "pixels": {
+          "file": "png/evolution.5.png",
+          "width": 64,
+          "height": 48,
+          "sha256": "af8d28fb1254655fe72317cdf81c6458504b6831ab2eaf22590d78047ba6b3e5",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "breed_strokes",
+      "arguments": {
+        "strokeIds": [
+          "stroke-999"
+        ],
+        "count": 2
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown stroke \"stroke-999\". Call list_strokes for the ids."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

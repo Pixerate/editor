@@ -130,6 +130,18 @@ import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } fro
 import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, withStrokePath, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
+import { createPaintProposals, type PaintProposals } from './collaboration';
+import {
+  crossoverGenomes,
+  describeGenomeDiff,
+  mutateGenome,
+  normalizeMutationRates,
+  proposalGenomeStrokes,
+  type BreedStrokesResult,
+  type BredProposalSummary,
+  type ProposalGenomeResult,
+  type StrokeMutationRates,
+} from './evolution';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -5211,6 +5223,169 @@ export class PaintEditorController {
   layerSurface(id: string): TiledSurface | null {
     const l = findLayer(this.currentLayers(), id)?.layer;
     return isPixelLayer(l) ? l.surface : null;
+  }
+
+  // --- Proposals and evolutionary strokes ------------------------------------------
+
+  private proposalsStore: PaintProposals | null = null;
+
+  /** The pending paint proposals store attached to this editor (created on demand). */
+  get proposals(): PaintProposals {
+    return (this.proposalsStore ??= createPaintProposals({ controller: this }));
+  }
+
+  /** Attaches an external `PaintProposals` store so tools and panels share it. */
+  attachProposals(store: PaintProposals): void {
+    this.proposalsStore = store;
+  }
+
+  /**
+   * Breeds `count` (`2..12`, default `4`) mutated variants from `1..16` recorded strokes as
+   * pending paint proposals, generated one after another through `previewPaint`.
+   */
+  breedStrokes(options: {
+    strokeIds: readonly string[];
+    count?: number;
+    mutation?: StrokeMutationRates;
+    seed?: number;
+    origin?: string;
+  }): BreedStrokesResult {
+    const { strokeIds } = options;
+    if (!Array.isArray(strokeIds) || strokeIds.length < 1 || strokeIds.length > 16) {
+      throw new PaintEditorError(`strokeIds must have 1..16 stroke ids (got ${strokeIds?.length ?? 0}); call list_strokes for the ids.`);
+    }
+    const count = options.count ?? 4;
+    if (!Number.isInteger(count) || count < 2 || count > 12) {
+      throw new PaintEditorError(`count ${count} is out of range; use a whole number in 2..12.`);
+    }
+    const seed = options.seed ?? 1;
+    if (!Number.isInteger(seed) || seed < 0) {
+      throw new PaintEditorError(`seed ${seed} must be a whole number of 0 or more.`);
+    }
+    let rates;
+    try {
+      rates = normalizeMutationRates(options.mutation);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const liveAll = Object.values(this.doc.liveStrokes ?? {}).flat();
+    const byId = new Map<string, RecordedStroke>();
+    for (const s of this.doc.strokes) byId.set(s.id, s);
+    for (const s of liveAll) byId.set(s.id, s);
+    const parents = strokeIds.map((id) => {
+      const s = byId.get(id);
+      if (!s) throw new PaintEditorError(`Unknown stroke "${id}". Call list_strokes for the ids.`);
+      const refusal = liveStrokeRefusal(s.brush);
+      if (refusal) throw new PaintEditorError(refusal);
+      return s;
+    });
+    const proposals: BredProposalSummary[] = [];
+    for (let i = 0; i < count; i++) {
+      const variantSeed = (seed + i * 7919) | 0;
+      const children = mutateGenome(parents, rates, variantSeed);
+      const { diff, changes } = describeGenomeDiff(parents, children);
+      const prop = this.proposals.propose({
+        title: `Variant ${i + 1}`,
+        rationale: diff,
+        ...(options.origin ? { origin: options.origin } : {}),
+        ops: [{ kind: 'strokes', strokes: children }],
+      });
+      proposals.push({
+        proposalId: prop.id,
+        title: prop.title,
+        seed: variantSeed,
+        bounds: prop.bounds,
+        diff,
+        changes,
+      });
+    }
+    return { proposalIds: proposals.map((p) => p.proposalId), proposals };
+  }
+
+  /**
+   * Breeds `count` (`2..12`, default `4`) variants from `1` pending proposal (mutation) or `2`
+   * pending proposals (crossover + mutation), generated one after another through `previewPaint`.
+   */
+  breedProposal(options: {
+    proposalIds: readonly string[];
+    count?: number;
+    mutation?: StrokeMutationRates;
+    seed?: number;
+    origin?: string;
+  }): BreedStrokesResult {
+    const { proposalIds } = options;
+    if (!Array.isArray(proposalIds) || proposalIds.length < 1 || proposalIds.length > 2) {
+      throw new PaintEditorError(`proposalIds must have 1 or 2 proposal ids (1 to mutate, 2 to cross over; got ${proposalIds?.length ?? 0}); call list_paint_proposals for the ids.`);
+    }
+    const count = options.count ?? 4;
+    if (!Number.isInteger(count) || count < 2 || count > 12) {
+      throw new PaintEditorError(`count ${count} is out of range; use a whole number in 2..12.`);
+    }
+    const seed = options.seed ?? 1;
+    if (!Number.isInteger(seed) || seed < 0) {
+      throw new PaintEditorError(`seed ${seed} must be a whole number of 0 or more.`);
+    }
+    let rates;
+    try {
+      rates = normalizeMutationRates(options.mutation);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const parentProps = proposalIds.map((id) => {
+      const p = this.proposals.get(id);
+      if (!p) throw new PaintEditorError(`No pending paint proposal "${id}". Call list_paint_proposals for the ids.`);
+      return p;
+    });
+    const parentGenomes = parentProps.map((p) => {
+      const strokes = proposalGenomeStrokes(this, p);
+      if (!strokes.length) throw new PaintEditorError(`Proposal "${p.id}" has no stroke genome to breed from.`);
+      for (const s of strokes) {
+        const refusal = liveStrokeRefusal(s.brush);
+        if (refusal) throw new PaintEditorError(refusal);
+      }
+      return strokes;
+    });
+    const isCrossover = parentGenomes.length === 2;
+    const proposals: BredProposalSummary[] = [];
+    for (let i = 0; i < count; i++) {
+      const variantSeed = (seed + i * 7919) | 0;
+      const children = isCrossover
+        ? crossoverGenomes(parentGenomes[0]!, parentGenomes[1]!, rates, variantSeed)
+        : mutateGenome(parentGenomes[0]!, rates, variantSeed);
+      const { diff, changes } = describeGenomeDiff(parentGenomes[0]!, children, { crossover: isCrossover });
+      const title = isCrossover
+        ? `Crossover ${i + 1} (${parentProps[0]!.id} × ${parentProps[1]!.id})`
+        : `Variant ${i + 1} of ${parentProps[0]!.id}`;
+      const prop = this.proposals.propose({
+        title,
+        rationale: diff,
+        ...(options.origin ? { origin: options.origin } : {}),
+        ops: [{ kind: 'strokes', strokes: children }],
+      });
+      proposals.push({
+        proposalId: prop.id,
+        title: prop.title,
+        seed: variantSeed,
+        bounds: prop.bounds,
+        diff,
+        changes,
+      });
+    }
+    return { proposalIds: proposals.map((p) => p.proposalId), proposals };
+  }
+
+  /** Returns the full stroke genome records (`RecordedStrokeJSON[]`) of a pending paint proposal. */
+  getProposalGenome(proposalId: string): ProposalGenomeResult {
+    const p = this.proposals.get(proposalId);
+    if (!p) throw new PaintEditorError(`No pending paint proposal "${proposalId}". Call list_paint_proposals for the ids.`);
+    const strokes = proposalGenomeStrokes(this, p);
+    if (!strokes.length) throw new PaintEditorError(`Proposal "${proposalId}" has no stroke genome.`);
+    return {
+      proposalId: p.id,
+      title: p.title,
+      bounds: p.bounds,
+      strokes: strokes.map(strokeToJSON),
+    };
   }
 }
 

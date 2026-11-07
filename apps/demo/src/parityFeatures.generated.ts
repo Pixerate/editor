@@ -2026,6 +2026,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`PaintEditorController.strokePath`"
       },
       {
+        "feature": "Evolutionary Strokes (breed and mutate `RecordedStroke` genomes into a grid of paint proposals (`kind: 'strokes'`, previewed one after another through `previewPaint`): geometry mutation with `varyStroke` and smoothed point jitter, perceptual colour drift in OKLCH, brush facet drift within schema bounds, deterministic seed reroll, and two-parent crossover that resamples paths and mixes facets; contact-sheet grid export; accepting paints on a new layer as one undo step; `breed_strokes`, `breed_proposal`, `get_proposal_genome` agent tools)",
+        "core": "`breedStrokes`, `breedProposal`, `getProposalGenome`, `mutateGenome`, `crossoverGenomes`, `EVOLUTION_SLIDERS`, `createPaintEvolutionToolProvider`",
+        "react": "`<EvolutionPanel>` (in `<PaintEditor>`'s Layers tab)",
+        "svelte": "`<EvolutionPanel>` (in `<PaintEditor>`'s Layers tab)",
+        "swift": "`PaintEditorController.breedStrokes`, `PaintEditorController.breedProposal`, `PaintEditorController.getProposalGenome`"
+      },
+      {
         "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `clear_layer`, `pick_color` agent tools)",
         "core": "`addLayer`, `updateLayer`, `fillLayer`, `mergeDown`, `pickColor`",
         "react": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
