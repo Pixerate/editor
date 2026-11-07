@@ -498,8 +498,8 @@ private func chartCommandRunsTail() -> [String: ChartCommandRun] {
         ]
     }
 
-    runs["exportOoxml"] = { _, _ in
-        throw fail("not ported yet (#702)")
+    runs["exportOoxml"] = { controller, _ in
+        chartToOoxml(controller.toJSON()).toJSON()
     }
 
     runs["exportSvg"] = { controller, params in

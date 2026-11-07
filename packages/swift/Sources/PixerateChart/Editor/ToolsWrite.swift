@@ -190,8 +190,20 @@ extension ChartToolProviderImpl {
             ]
         }
 
-        add("import_chart_ooxml") { _ in
-            throw ToolExecutionError("not ported yet (#702)")
+        add("import_chart_ooxml") { args in
+            let xml = args["xml"]?.stringValue ?? ""
+            let read = chartFromOoxml(xml)
+            if read.issues.contains(where: { $0.path.isEmpty || $0.path == "plotArea" }) {
+                throw ToolExecutionError(read.issues.map { $0.message }.joined(separator: " "))
+            }
+            let patch = read.spec.toJSON().objectValue ?? JSONObject()
+            try self.check(self.controller.update(patch, options: ChartEditOptions(label: "Import Office chart")))
+            return [
+                "spec": self.controller.toJSON().toJSON(),
+                "issues": .array(read.issues.map { .string($0.message) }),
+                "unsupported": .array(read.unsupported.map(JSONValue.string)),
+                "lossless": .bool(read.lossless)
+            ]
         }
 
         add("add_chart_trendline") { args in

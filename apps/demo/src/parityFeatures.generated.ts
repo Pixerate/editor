@@ -408,7 +408,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`readZip`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`readZip`, `ZipReadOptions`, `inflateRaw`"
       }
     ]
   },
@@ -1537,182 +1537,182 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`ChartSpec`, `normalizeChartSpec` & `createChartSpec` (`/chart`)",
         "react": "`<ChartCanvas>`",
         "svelte": "`<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartSpec`, `normalizeChartSpec` & `createChartSpec` (views: Planned (#703))"
       },
       {
         "feature": "DOM-free Chart Layout (nice ticks, rotated / thinned category labels, wrapped legends on any side, axis titles, gaps for blank values, monotone smooth curves, selection outlines, pluggable text measuring and themes)",
         "core": "`layoutChart` → `ChartScene` of rects, paths, circles, lines and text with click targets",
         "react": "`<ChartCanvas>` (follows its container's width)",
         "svelte": "`<ChartCanvas>` (follows its container's width)",
-        "swift": "Planned (#533)"
+        "swift": "`layoutChart` → `ChartScene` (views: Planned (#703))"
       },
       {
         "feature": "Chart Controller (stable `getState`, `subscribe`, all-or-nothing `update`, selection, `toJSON` / `load`, shared or own `HistoryManager`)",
         "core": "`ChartController`",
         "react": "`useChartEditor`, `useChartController` & `useChartState`",
         "svelte": "`createChartEditor`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartController`"
       },
       {
         "feature": "Chart Interaction (click to select title, axes, legend, series, points and categories; drag bars and points to new values as one undo step, stacked bars too; ← → ↑ ↓, Delete, Escape)",
         "core": "`startChartPointDrag`, `handleChartKey`, `chartValueAtPoint` & `describeChartSelection`",
         "react": "`<ChartCanvas>`",
         "svelte": "`<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`startChartPointDrag`, `handleChartKey`, `chartValueAtPoint`, `describeChartSelection`, `chartHitTest`); views: Planned (#703)"
       },
       {
         "feature": "Chart Tooltips (hover a bar, point or slice, or anywhere in a category's band for every series there; values written with the series or axis format, shares on 100% stacked and pie charts; custom content; hidden while dragging; `get_chart_tooltip` agent tool)",
         "core": "`chartTooltipAt`, `chartTooltipFor`, `chartCategoryAtPoint` & `sameChartTooltip`",
         "react": "`<ChartCanvas tooltip renderTooltip>`",
         "svelte": "`<ChartCanvas tooltip tooltipContent>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`chartTooltipAt`, `chartTooltipFor`, `chartCategoryAtPoint`, `sameChartTooltip`, `get_chart_tooltip`); views: Planned (#703)"
       },
       {
         "feature": "Chart Data Grid (rename, recolour, hide, add and delete series and categories; numbers as typed — `1,200`, `12%`, `(3)`, blank for a gap; TSV / CSV paste grows the grid)",
         "core": "`setValue`, `pasteCells`, `addSeries`, `addCategory`, `parseChartValue`",
         "react": "`<ChartDataGrid>`",
         "svelte": "`<ChartDataGrid>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartController`: `setValue`, `pasteCells`, `addSeries`, `addCategory`, `parseChartValue`); views: Planned (#703)"
       },
       {
         "feature": "Chart Inspector (type, titles, stacking, orientation, curve, points, data labels, legend, axes with fixed bounds, grid lines and number formats, selected series colour / type / order)",
         "core": "`update`, `setAxis`, `setLegend`, `updateSeries`, `moveSeries`",
         "react": "`<ChartInspector>` & `<ChartEditor>`",
         "svelte": "`<ChartInspector>` & `<ChartEditor>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartController`: `update`, `setAxis`, `setLegend`, `updateSeries`, `moveSeries`); views: Planned (#703)"
       },
       {
         "feature": "Chart Data Import / Export (tables with series in columns or rows, CSV / TSV, colours kept by series name) and SVG Export",
         "core": "`chartDataFromTable`, `chartDataToTable`, `importCsv`, `chartToSvg` & `chartSceneToSvg`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`chartDataFromTable`, `chartDataToTable`, `importCsv`, `chartToSvg` & `chartSceneToSvg`"
       },
       {
         "feature": "Chart Commands (`chart.describe`, `update`, `setData`, `setValues` by series and category name, `addSeries`, `addTrendline`, `applyPreset`, `transpose`, `importCsv`, `importMermaid`, `exportSvg`, `exportMermaid`, `exportOoxml`, `recommend`, `checkColors`, …)",
         "core": "`createChartCommands`",
         "react": "`useChartCommands`",
         "svelte": "`useChartCommands`",
-        "swift": "Planned (#533)"
+        "swift": "`createChartCommands`"
       },
       {
         "feature": "Chart Agent Tools (51 tools, one per operation: read, render, check colours, recommend, trendline fits, tooltips, reference lines and bands, callouts, highlight, grouped data, flows, bar race moments and playback, map regions, presets, Mermaid / Office import and export, data and series edits, pointer drags and keys through the real interaction code; write tools hidden while read-only)",
         "core": "`createChartToolProvider`",
         "react": "`useChartToolProvider`",
         "svelte": "`useChartToolProvider`",
-        "swift": "Planned (#533)"
+        "swift": "`createChartToolProvider`"
       },
       {
         "feature": "Chart PNG Previews & Download (CSS-variable paints resolved before drawing, 2× with the longest side ≤ 1024 px; `render_chart { format: \"png\" }` returns the image with the layout warnings; Download PNG in the editor toolbar)",
         "core": "`rasterizeChartSvg`, `resolveChartSvgPaints`, `createChartRasterizer` & `downloadChartPng`",
         "react": "`useChartToolProvider` (rasterizes by default) & `<ChartEditor>`",
         "svelte": "`useChartToolProvider` (rasterizes by default) & `<ChartEditor>`",
-        "swift": "Planned (#533)"
+        "swift": "`resolveChartSvgPaints`, `chartRasterSize` & `chartPngFileName` (rasterizer and views: Planned (#703))"
       },
       {
         "feature": "More Chart Types (bubble, radar, waterfall with totals and connectors, histogram with √n bins, box & whisker with Tukey fences, funnel, squarified treemap)",
         "core": "`layoutChart` families, `chartHistogram`, `chartBoxStats`, `chartSquarify`",
         "react": "`<ChartCanvas>`",
         "svelte": "`<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`layoutChart` families, `chartHistogram`, `chartBoxStats`, `chartSquarify`); views: Planned (#703)"
       },
       {
         "feature": "Chart Annotations (reference lines and target bands on value or numeric x axes, callouts pinned to points, highlight that mutes the rest, a source note, colour by category on one-series charts; Ursula chart-document parity)",
         "core": "`referenceLines`, `referenceBands`, `series.callouts`, `highlight`, `note`, `varyColors`, `addReferenceLine`, `setCallout`, `setHighlight`",
         "react": "`<ChartInspector>` Annotations section & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` Annotations section & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartController`: `addReferenceLine`, `addReferenceBand`, `setCallout`, `setHighlight`); views: Planned (#703)"
       },
       {
         "feature": "Slope, Likert & Parliament Charts (before → after slopes with dodged end labels, diverging survey bars with a split or separate neutral and agreement sorting, hemicycle seats with the majority line; Ursula chart-document parity)",
         "core": "`layoutChart` families, `chartLikertColor`, `likertNeutral` / `likertSort`, `parliamentArc` / `parliamentMajority` / `parliamentLabel`",
         "react": "`<ChartInspector>` & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`layoutChart` families, `chartLikertColor`); views: Planned (#703)"
       },
       {
         "feature": "Grouped Data: Nested Treemaps & Sunbursts (`spec.tree` of groups and items up to six levels, path-addressed edits, spreadsheet-style CSV import, a Group / Level / Item / Value grid, Office chartex hierarchy import; Ursula chart-document parity)",
         "core": "`setTree`, `addTreeNode`, `updateTreeNode`, `removeTreeNode`, `importTreeTable`, `chartTreeFromTable`, `chartTreeToRows`",
         "react": "`<ChartTreeGrid>` (inside `<ChartDataGrid>`)",
         "svelte": "`<ChartTreeGrid>` (inside `<ChartDataGrid>`)",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartController`: `setTree`, `addTreeNode`, `updateTreeNode`, `removeTreeNode`, `importTreeTable`; `chartTreeFromTable`, `chartTreeToRows`); views: Planned (#703)"
       },
       {
         "feature": "Sankey Diagrams (`spec.links` flows between named nodes with loop and repeat checks, columns from the flow chains, one scale for nodes and flows, colour by source / target / grey, node order to untangle crossings, a Source / Target / Value grid; Ursula chart-document parity)",
         "core": "`setLinks`, `addLink`, `updateLink`, `removeLink`, `importLinksTable`, `normalizeChartLinks`, `chartSankeyNodes`",
         "react": "`<ChartLinksGrid>` (inside `<ChartDataGrid>`)",
         "svelte": "`<ChartLinksGrid>` (inside `<ChartDataGrid>`)",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartController`: `setLinks`, `addLink`, `updateLink`, `removeLink`, `importLinksTable`; `normalizeChartLinks`, `chartSankeyNodes`); views: Planned (#703)"
       },
       {
         "feature": "Bar Chart Races (categories as time points and series as names, ranked bars that ease and swap between time points, play / pause / scrub as view state, any moment drawn or rendered; Ursula chart-document parity)",
         "core": "`raceTopN`, `setRaceFrame`, `playRace`, `pauseRace`, `chartRaceRanking`, `layoutChart({ raceFrame })`",
         "react": "`<ChartInspector>` race controls & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` race controls & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartController`: `setRaceFrame`, `playRace`, `pauseRace`; `chartRaceRanking`, `layoutChart`); views: Planned (#703)"
       },
       {
         "feature": "Choropleth Maps (regions of a registered map shaded in equal or given classes, categories matched by ISO code or name, microstate markers, class legend; Europe from Natural Earth 1:50m in the separate `@pixerate/editor/chart-maps` entry; Ursula chart-document parity)",
         "core": "`registerChartMap`, `EUROPE_CHART_MAP`, `matchChartMapRegions`, `chartMapBreaks`, `mapSteps` / `mapThresholds`",
         "react": "`<ChartInspector>` map options & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` map options & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`registerChartMap`, `EUROPE_CHART_MAP`, `matchChartMapRegions`, `chartMapBreaks`); views: Planned (#703)"
       },
       {
         "feature": "Secondary Axis, Numeric-X Scatter, Date Axes & Bar Spacing (`yAxis2`, `series.axis`, `series.x` / `sizes`, `xAxis.kind: \"date\"` with calendar label steps, `gapWidth` / `overlap`, fixed tick `step`)",
         "core": "`ChartSpec`, `chartDateLabels`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartSpec`, `chartDateLabels`); views: Planned (#703)"
       },
       {
         "feature": "Trendlines (linear, exponential, logarithmic, power, polynomial 2–6, moving average; forecast, fixed intercept, equation and R² labels)",
         "core": "`fitChartTrendline`, `addTrendline`, `trendlineFit`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`fitChartTrendline`, `ChartController`: `addTrendline`, `trendlineFit`); views: Planned (#703)"
       },
       {
         "feature": "Error Bars & Axis Scales (per-series fixed / percent / standard deviation / standard error / custom error bars, x error bars on scatter; logarithmic value and scatter-x axes with power ticks; reversed value and category axes; Office `c:errBars`, `c:logBase`, `maxMin`; agent tools via `update_chart` / `update_chart_series`)",
         "core": "`series.errorBars`, `axis.scale` / `logBase` / `reverse`, `chartErrorAmounts`, `niceLogScale`, `chartScaleToPixel`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`chartErrorAmounts`, `niceLogScale`, `chartScaleToPixel`); views: Planned (#703)"
       },
       {
         "feature": "Chart Formats, Markers, Labels & Colours (spreadsheet format codes, marker shapes, per-point colours, label position with fit checks and contrast, quick layouts and colour schemes, shaded palette cycling, colour-blind check)",
         "core": "`formatChartNumber`, `CHART_LAYOUT_PRESETS`, `CHART_COLOR_SCHEMES`, `checkChartColors`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "`formatChartNumber`, `CHART_LAYOUT_PRESETS`, `CHART_COLOR_SCHEMES` & `checkChartColors` (views: Planned (#703))"
       },
       {
         "feature": "Chart Text Formats (Mermaid `xychart-beta` / `pie` / `radar-beta` / `sankey-beta` / `treemap-beta` round trip with a `%% @pixerate` comment; Office `c:chartSpace` and chartex read / write; charts in DOCX imports, as `chart` nodes in documents, and in DOCX exports as native Word charts)",
         "core": "`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml`, `chartToOoxml`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml` & `chartToOoxml`"
       },
       {
         "feature": "Charts in Office Files (every chart in an `.xlsx` with sheet and anchor cell, `.pptx` with slide number, or `.docx`; DrawingML and chartex; `list_open_files`, `list_file_charts`, `get_file_chart`, `load_file_chart` agent tools)",
         "core": "`extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `createOfficeChartToolProvider`",
         "react": "`useOfficeChartToolProvider`",
         "svelte": "`useOfficeChartToolProvider`",
-        "swift": "Planned (#533)"
+        "swift": "`extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `extractDocxCharts` & `createOfficeChartToolProvider`"
       },
       {
         "feature": "Chart Streaming, Presence & Sparklines (lenient partial Mermaid / JSON, steady axes, tweened scenes; agent cursors that act out edits as one undo step; word-sized line / column / win-loss charts)",
         "core": "`ChartStream`, `blendChartScenes`, `ChartDirector`, `ChartPresence`, `layoutSparkline`",
         "react": "`<ChartStreamingView>`, `useChartDirector`, `<ChartSparkline>`",
         "svelte": "`<ChartStreamingView>`, `createChartDirector`, `<ChartSparkline>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ headless (`ChartStream`, `blendChartScenes`, `planChartCommand`, `chartPointAnchor`, `layoutSparkline`); views: Planned (#703)"
       },
       {
         "feature": "Chart Summaries & Accessibility (per-series min / max / mean / trend, layout warnings, plain-language description, SVG `<title>` and `<desc>`, recommendations from table shape)",
         "core": "`summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`summarizeChart`, `describeChart`, `recommendChartTypes` & `chartFromTable`"
       }
     ]
   },

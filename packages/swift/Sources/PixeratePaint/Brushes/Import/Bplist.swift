@@ -1,4 +1,5 @@
 import Foundation
+import PixerateCore
 
 /**
  * A defensive reader for binary property lists (`bplist00`, `brushes/import/bplist.ts`), enough

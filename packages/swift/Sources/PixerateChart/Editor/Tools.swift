@@ -491,7 +491,7 @@ extension ChartToolProviderImpl {
         }
 
         add("export_chart_ooxml") { _ in
-            throw ToolExecutionError("not ported yet (#702)")
+            chartToOoxml(self.controller.toJSON()).toJSON()
         }
 
         return list
@@ -511,38 +511,137 @@ extension ChartToolProviderImpl {
     }
 }
 
+public struct OfficeChartFile: Sendable, Equatable {
+    public var name: String
+    public var data: [UInt8]
+
+    public init(name: String, data: [UInt8]) {
+        self.name = name
+        self.data = data
+    }
+}
+
 public struct OfficeChartToolProviderOptions {
     public var id: String
     public var namespace: String
     public var hasFiles: Bool
+    public var files: (() -> [OfficeChartFile])?
     public var controller: ChartController?
+    public var readOnly: (() -> Any)?
 
     public init(
         id: String = "office-charts",
         namespace: String = "",
         hasFiles: Bool = true,
-        controller: ChartController? = nil
+        files: (() -> [OfficeChartFile])? = nil,
+        controller: ChartController? = nil,
+        readOnly: (() -> Any)? = nil
     ) {
         self.id = id
         self.namespace = namespace
         self.hasFiles = hasFiles
+        self.files = files
         self.controller = controller
+        self.readOnly = readOnly
     }
+}
+
+private func decodeOfficeBase64(_ input: String) throws -> [UInt8] {
+    var clean = input
+    if let range = clean.range(of: #"^data:[^,]*,"#, options: [.regularExpression]) {
+        clean.removeSubrange(range)
+    }
+    clean = clean.replacingOccurrences(of: #"\s+"#, with: "", options: .regularExpression)
+    guard let data = Data(base64Encoded: clean) else {
+        throw ToolExecutionError("\"data\" is not valid base64. Pass the whole .xlsx, .pptx or .docx file encoded as base64 (a data: URL prefix is fine).")
+    }
+    return [UInt8](data)
 }
 
 public func createOfficeChartToolProvider(
     _ options: OfficeChartToolProviderOptions = OfficeChartToolProviderOptions()
 ) -> AgentToolProvider {
-    var defsByName: [String: McpToolDefinition] = [:]
-    for def in (try? ChartContracts.tools()) ?? [] {
-        defsByName[def.name] = def
+    OfficeChartToolProviderImpl(options: options).asProvider()
+}
+
+private final class OfficeChartToolProviderImpl: @unchecked Sendable {
+    let options: OfficeChartToolProviderOptions
+    let defsByName: [String: McpToolDefinition]
+
+    init(options: OfficeChartToolProviderOptions) {
+        self.options = options
+        var map: [String: McpToolDefinition] = [:]
+        for def in (try? ChartContracts.tools()) ?? [] {
+            map[def.name] = def
+        }
+        self.defsByName = map
     }
-    var names: [String] = []
-    if options.hasFiles { names.append("list_open_files") }
-    names.append("list_file_charts")
-    names.append("get_file_chart")
-    if options.controller != nil { names.append("load_file_chart") }
-    let tools: [AgentTool] = names.compactMap { name in
+
+    func readOnlyReason() -> String? {
+        guard let ro = options.readOnly?() else { return nil }
+        if let b = ro as? Bool { return b ? "This chart is read-only." : nil }
+        if let s = ro as? String { return s.isEmpty ? nil : s }
+        return nil
+    }
+
+    func read(_ args: JSONObject) throws -> OfficeChartsResult {
+        do {
+            if !options.hasFiles && options.files == nil {
+                let raw = args["data"]?.stringValue ?? "undefined"
+                let bytes = try decodeOfficeBase64(raw)
+                return try extractOfficeCharts(bytes)
+            }
+            let files = options.files?() ?? []
+            let fileName = args["file"]?.stringValue ?? "undefined"
+            guard let file = files.first(where: { $0.name == fileName }) else {
+                let listDesc = files.isEmpty
+                    ? "(none; ask the user to open an .xlsx, .pptx or .docx file)"
+                    : files.map { "\"\($0.name)\"" }.joined(separator: ", ")
+                throw ToolExecutionError("There is no open file \"\(fileName)\"; expected one of \(listDesc).")
+            }
+            return try extractOfficeCharts(file.data)
+        } catch let err as ToolExecutionError {
+            throw err
+        } catch {
+            throw ToolExecutionError("\(error)")
+        }
+    }
+
+    func chartById(_ args: JSONObject) throws -> OfficeFileChart {
+        let charts = try read(args).charts
+        let chartId = args["chartId"]?.stringValue ?? "undefined"
+        guard let chart = charts.first(where: { $0.id == chartId }) else {
+            let listDesc = charts.isEmpty
+                ? "(none: the file has no charts)"
+                : charts.map { "\"\($0.id)\" (\(describeOfficeChartPlace($0)))" }.joined(separator: ", ")
+            throw ToolExecutionError("There is no chart \"\(chartId)\" in this file; expected one of \(listDesc).")
+        }
+        return chart
+    }
+
+    func chartSummary(_ chart: OfficeFileChart) -> JSONObject {
+        var out = JSONObject([
+            ("id", .string(chart.id)),
+            ("place", .string(describeOfficeChartPlace(chart)))
+        ])
+        if let sheet = chart.sheet { out["sheet"] = .string(sheet) }
+        if let slide = chart.slide { out["slide"] = .number(Double(slide)) }
+        if let anchor = chart.anchor, !anchor.isEmpty { out["anchor"] = .string(anchor) }
+        if let range = chart.range, !range.isEmpty { out["range"] = .string(range) }
+        if let name = chart.name, !name.isEmpty { out["name"] = .string(name) }
+        out["path"] = .string(chart.path)
+        out["partKind"] = .string(chart.partKind.rawValue)
+        out["title"] = .string(chart.title)
+        out["type"] = .string(chart.spec.type.rawValue)
+        out["series"] = .array(chart.spec.series.map { .string($0.name) })
+        out["categories"] = .number(Double(chart.spec.categories.count))
+        out["issues"] = .array(chart.issues.map(JSONValue.string))
+        out["unsupported"] = .array(chart.unsupported.map(JSONValue.string))
+        out["lossless"] = .bool(chart.lossless)
+        return out
+    }
+
+    func makeTool(_ name: String, _ fn: @escaping @Sendable (JSONObject) throws -> JSONValue) -> AgentTool? {
         guard let def = defsByName[name] else { return nil }
         return AgentTool(
             name: def.name,
@@ -551,14 +650,79 @@ public func createOfficeChartToolProvider(
             inputSchema: def.inputSchema,
             outputSchema: def.outputSchema,
             annotations: def.annotations,
-            handler: { _, _ in
-                throw ToolExecutionError("not ported yet (#702)")
+            handler: { args, _ in
+                .value(try fn(args))
             }
         )
     }
-    return AgentToolProvider(
-        id: options.id,
-        namespace: options.namespace,
-        tools: tools
-    )
+
+    func asProvider() -> AgentToolProvider {
+        var tools: [AgentTool] = []
+        if options.hasFiles || options.files != nil {
+            if let t = makeTool("list_open_files", { _ in
+                let list = self.options.files?() ?? []
+                let filesOut: [JSONValue] = list.map { f in
+                    .object(JSONObject([
+                        ("name", .string(f.name)),
+                        ("bytes", .number(Double(f.data.count)))
+                    ]))
+                }
+                return .object(JSONObject([("files", .array(filesOut))]))
+            }) {
+                tools.append(t)
+            }
+        }
+
+        if let t = makeTool("list_file_charts", { args in
+            let result = try self.read(args)
+            return .object(JSONObject([
+                ("format", .string(result.format.rawValue)),
+                ("charts", .array(result.charts.map { .object(self.chartSummary($0)) }))
+            ]))
+        }) {
+            tools.append(t)
+        }
+
+        if let t = makeTool("get_file_chart", { args in
+            let chart = try self.chartById(args)
+            var out = self.chartSummary(chart)
+            out["spec"] = chart.spec.toJSON()
+            return .object(out)
+        }) {
+            tools.append(t)
+        }
+
+        if let controller = options.controller, readOnlyReason() == nil {
+            if let t = makeTool("load_file_chart", { args in
+                if let reason = self.readOnlyReason() {
+                    throw ToolExecutionError(reason)
+                }
+                let chart = try self.chartById(args)
+                let patch = chart.spec.toJSON().objectValue ?? JSONObject()
+                let result = controller.update(patch, options: ChartEditOptions(label: "Load chart from file"))
+                if !result.ok {
+                    throw ToolExecutionError(result.message ?? "The chart could not be loaded.")
+                }
+                return .object(JSONObject([
+                    ("id", .string(chart.id)),
+                    ("place", .string(describeOfficeChartPlace(chart))),
+                    ("spec", controller.toJSON().toJSON()),
+                    ("issues", .array(chart.issues.map(JSONValue.string))),
+                    ("unsupported", .array(chart.unsupported.map(JSONValue.string))),
+                    ("lossless", .bool(chart.lossless))
+                ]))
+            }) {
+                tools.append(t)
+            }
+        }
+
+        return AgentToolProvider(
+            id: options.id,
+            namespace: options.namespace,
+            title: "Office charts",
+            description: "Charts inside Word, Excel and PowerPoint files: list and read them, and load one into the chart editor.",
+            skill: "pixerate-chart",
+            tools: tools
+        )
+    }
 }
