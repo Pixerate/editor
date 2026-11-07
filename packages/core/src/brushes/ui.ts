@@ -305,6 +305,8 @@ function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
       return 'several dabs per step';
     case 'light':
       return 'light';
+    case 'ghost':
+      return 'ghost paint';
     case 'motion':
       return 'motion';
     case 'dynamics.velocity':
@@ -420,6 +422,7 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
       delete next.variety;
       delete next.marks;
       delete next.light;
+      delete next.ghost;
       delete next.colour;
       next.tool = next.tool ?? 'eraser';
       if (next.tip.shape === 'stamp') next.tip = { shape: 'round', ...(next.tip.size !== undefined ? { size: next.tip.size } : {}) };

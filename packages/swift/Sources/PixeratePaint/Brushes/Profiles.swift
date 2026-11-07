@@ -104,6 +104,7 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
     feature(profile.exchange, ex?["reservoir"] == nil && (nonZero(ex?["pickup"]) || ex?["dirty"] == .bool(true)), "behaviour.exchange", "picking paint up", "Remove behaviour.exchange.")
     feature(profile.grain, nonZero(brush.path("behaviour.grain")), "behaviour.grain", "paper grain", "Set behaviour.grain to 0.")
     feature(profile.light, nonZero(brush.path("light.amount")), "light", "light paint (glow and spill)", "Remove light (or set light.amount to 0).")
+    feature(profile.surfaces.contains("wet") && profile.light == "full" ? "full" : "none", brush["ghost"] != nil, "ghost", "ghost paint (fading wet colour)", "Remove ghost.")
     if let m = brush["motion"]?.objectValue {
         feature(profile.motion, m["live"] == .bool(true) || nonZero(m["waveSpeed"]) || m["fps"] != nil, "motion", "animation", "Remove motion.")
     }
@@ -147,7 +148,9 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "marks":
             b["marks"] = nil
             if b.path("tip.shape") == "stamp" { edit("tip") { t in t["shape"] = "round"; t["stamps"] = nil } }
-        case "behaviour.surface": edit("behaviour") { o in o["surface"] = nil; o["wet"] = nil; o["thick"] = nil }
+        case "behaviour.surface":
+            edit("behaviour") { o in o["surface"] = nil; o["wet"] = nil; o["thick"] = nil }
+            b["ghost"] = nil
         case "behaviour.exchange.reservoir":
             edit("behaviour") { o in
                 var e = o["exchange"]?.objectValue ?? [:]
@@ -158,6 +161,7 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "behaviour.grain": edit("behaviour") { $0["grain"] = nil }
         case "tip.grain": edit("tip") { $0["grain"] = nil }
         case "dynamics.count": edit("dynamics") { $0["count"] = nil }
+        case "ghost": b["ghost"] = nil
         case "light": b["light"] = nil
         case "motion": b["motion"] = nil
         case "dynamics.velocity": edit("dynamics") { o in o["velocitySize"] = nil; o["velocityOpacity"] = nil }

@@ -1129,12 +1129,29 @@ public final class PaintEditorController {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) to paint on it.") }
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
         let brush = try strokeBrush(i)
+        if brush.ghost != nil {
+            if brush.light.amount > 0 { throw PaintEditorError("Ghost paint (\(brush.name)) shares the wet light channel and can't emit light; set light.amount to 0 or ghost to null (set_brush).") }
+            if (i.paint.map(isPaintEffectPaint) ?? false) || (i.paint == nil && i.color == nil && effectPaint != nil) {
+                throw PaintEditorError("Ghost paint (\(brush.name)) needs a single colour to subtract as it fades, so it can't paint with an effect; set a solid colour (set_color) or pass color to paint_stroke.")
+            }
+            if brush.behavior.multicolor.mode != "off" { throw PaintEditorError("Ghost paint (\(brush.name)) needs a single colour to subtract as it fades, so it can't use multi-colour paint; set behavior.multicolor.mode to \"off\" (set_brush).") }
+            let gCol = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
+            if try strokeGradient(i, brush, gCol) != nil { throw PaintEditorError("Ghost paint (\(brush.name)) needs a single colour to subtract as it fades, so it can't paint a gradient; set a solid colour (set_color) or pass color to paint_stroke.") }
+            if d.light?.get(layer.id)?.tiles.isEmpty == false || (wet.world?.hasLane(layer.id) == true && wet.world?.isLit(layer.id) == true) {
+                throw PaintEditorError("Layer \"\(layer.name)\" holds light paint, and ghost paint shares the wet light channel; paint on another layer (add_layer) or clear the light first (clear_light).")
+            }
+        }
         let effect = try strokeEffect(i, brush)
         // A hand-painted path stroke is painted again from its path at the end, and the wet simulation can't be.
         if i.points == nil, i.paint == nil, effect?.source.map?.by == "path", isWetBrush(brush) {
             throw PaintEditorError("The \(brush.name) brush paints wet media, which can't follow a path that isn't known until the stroke ends; paint with a dry brush, set_effect_paint with by: \"stroke\", or give the points to paint_stroke.")
         }
-        if brush.light.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).") }
+        if brush.light.amount > 0 {
+            if brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).") }
+            if (wet.world?.hasLane(layer.id) == true && wet.world?.getGhost(layer.id) != nil) || wet.settings.get(layer.id)?.ghost != nil {
+                throw PaintEditorError("Layer \"\(layer.name)\" has ghost paint fading on it, which uses the wet light channel; paint light on another layer (add_layer), or finish the ghost first (dry_paint).")
+            }
+        }
         if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         if d.liveStrokes?.get(layer.id) != nil, let e = effect?.source, e.live {
             // Each live source needs a renderer every frame.
@@ -1175,7 +1192,7 @@ public final class PaintEditorController {
             let driver = WetStrokeDriver(WetStrokeInit(
                 world: world, laneId: id, brush: brush, color: rgb, load: load, grain: paperGrain(d.paper), paperDepth: d.paper.depth, paperColor: hexToRgb8(d.paper.color),
                 seed: seedW, copies: ([IDENTITY_AFFINE] + copiesW).map(affineCopy), mask: i.maskStencils.map { stencilSelection($0) } ?? (i.stencils != false ? stencilSelection() : nil),
-                paint: wetGradient, effect: effect?.pixels
+                paint: wetGradient, effect: effect?.pixels, speed: wet.speed
             ))
             i.seed = seedW
             i.load = load

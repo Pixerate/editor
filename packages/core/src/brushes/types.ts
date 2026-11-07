@@ -333,6 +333,14 @@ export interface BrushLight {
   glow?: boolean;
 }
 
+/** Ghost paint: wet paint whose colour fades away after `linger` seconds, leaving only what it smeared. */
+export interface BrushGhost {
+  /** Seconds of simulated time before the ghost paint has fully faded, 0.5..60 (default 4). */
+  linger?: number;
+  /** How much the ghost paint drags and lifts the paint it passes through, 0..1 (default 0.3). */
+  smear?: number;
+}
+
 /** Animation after painting. */
 export interface BrushMotion {
   /** Effect paint keeps playing on stroke layers. */
@@ -382,6 +390,7 @@ export interface Brush {
   dynamics?: BrushDynamics;
   behaviour?: BrushBehaviour;
   light?: BrushLight;
+  ghost?: BrushGhost;
   motion?: BrushMotion;
   colour?: BrushColour;
 }

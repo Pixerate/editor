@@ -106,6 +106,22 @@ public struct LightSettings: Equatable, Sendable {
 
 public let DEFAULT_LIGHT = LightSettings(amount: 0, pressure: false)
 
+/// Ghost paint: wet paint whose colour vanishes after `linger` seconds, leaving only what it smeared.
+public struct GhostSettings: Equatable, Sendable {
+    public var linger: Double
+    public var smear: Double
+    var json: JSONValue { ["linger": .number(linger), "smear": .number(smear)] }
+}
+
+public let DEFAULT_GHOST = GhostSettings(linger: 4, smear: 0.3)
+
+func normalizeGhost(_ raw: JSONObject, _ base: GhostSettings = DEFAULT_GHOST) -> GhostSettings {
+    GhostSettings(
+        linger: rangeValue(raw["linger"], 0.5, 60, base.linger),
+        smear: unitValue(raw["smear"], base.smear)
+    )
+}
+
 /// Multi-coloured brush (the read-only view of gradient paint older readers know).
 public struct MultiColorSettings: Equatable, Sendable {
     public var mode: String
@@ -345,6 +361,7 @@ public struct PaintBrush: Equatable, Sendable {
     public var bristle: JSONObject
     public var sticker: JSONObject
     public var light: LightSettings
+    public var ghost: GhostSettings? = nil
     public var stamp: String?
     public var spray: SpraySettings?
     /// Dab engines: texture inside the tip (nil: none).
@@ -365,9 +382,10 @@ public struct PaintBrush: Equatable, Sendable {
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
             "light": light.json,
-            "stamp": stamp.map { .string($0) } ?? .null,
-            "spray": spray?.json ?? .null,
         ]
+        if let ghost { o["ghost"] = ghost.json }
+        o["stamp"] = stamp.map { .string($0) } ?? .null
+        o["spray"] = spray?.json ?? .null
         if let tipGrain { o["tipGrain"] = tipGrain.json }
         o["paint"] = paint?.json ?? .null
         if withBuiltin, builtin == true { o["builtin"] = true }
@@ -511,6 +529,20 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
     let rbl = raw["blender"]?.objectValue ?? [:]
     let rsm = raw["smudge"]?.objectValue ?? [:]
     let rl = raw["light"]?.objectValue ?? [:]
+    let wet = normalizeWetBrush(raw["wet"]?.objectValue ?? [:], b.wet)
+    let wantsLight = (rl["amount"]?.finite ?? 0) > 0
+    let ghost: GhostSettings? = {
+        guard engine == "wet" && wet.tool == "paint" else { return nil }
+        if let rg = raw["ghost"] {
+            if rg == .null { return nil }
+            return normalizeGhost(rg.objectValue ?? [:], b.ghost ?? DEFAULT_GHOST)
+        }
+        return !wantsLight && b.ghost != nil ? normalizeGhost([:], b.ghost ?? DEFAULT_GHOST) : nil
+    }()
+    if ghost != nil {
+        behavior.pickup = 0
+        behavior.dirty = false
+    }
     return PaintBrush(
         id: id,
         name: name,
@@ -526,12 +558,13 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         behavior: behavior,
         blender: BlenderSettings(strength: unitValue(rbl["strength"], b.blender.strength), distance: unitValue(rbl["distance"], b.blender.distance), mixing: rbl["mixing"]?.stringValue.flatMap { $0 == "rgb" || $0 == "pigment" ? $0 : nil } ?? b.blender.mixing),
         smudge: SmudgeSettings(strength: unitValue(rsm["strength"], b.smudge.strength), length: unitValue(rsm["length"], b.smudge.length), mixing: rsm["mixing"]?.stringValue.flatMap { $0 == "rgb" || $0 == "pigment" ? $0 : nil } ?? b.smudge.mixing),
-        wet: normalizeWetBrush(raw["wet"]?.objectValue ?? [:], b.wet),
+        wet: wet,
         impasto: normalizeImpasto(raw["impasto"]?.objectValue ?? [:], b.impasto),
         particle: normalizeParticle(raw["particle"]?.objectValue ?? [:], b.particle),
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
-        light: LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
+        light: ghost != nil && !wantsLight ? DEFAULT_LIGHT : LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
+        ghost: ghost,
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
         tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),

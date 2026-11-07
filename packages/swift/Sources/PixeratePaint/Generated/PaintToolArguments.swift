@@ -448,6 +448,7 @@ public struct SetBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case ghost
         case motion
         case colour
     }
@@ -478,6 +479,8 @@ public struct SetBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
+    public var ghost: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -500,6 +503,7 @@ public struct SetBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        ghost = args.argument("ghost")
         motion = args.argument("motion")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
@@ -2603,6 +2607,8 @@ public struct CreateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
+    public var ghost: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -2624,6 +2630,7 @@ public struct CreateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        ghost = args.argument("ghost")
         motion = args.argument("motion")
         colour = args.argument("colour")
     }
@@ -2668,6 +2675,7 @@ public struct UpdateBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case ghost
         case motion
         case colour
     }
@@ -2698,6 +2706,8 @@ public struct UpdateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
+    public var ghost: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -2720,6 +2730,7 @@ public struct UpdateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        ghost = args.argument("ghost")
         motion = args.argument("motion")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)

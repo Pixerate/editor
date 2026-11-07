@@ -122,7 +122,7 @@ import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, t
 import { isWetBrush } from './brushes';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
-import { MAX_WET_LANES, type WetBackendInfo, type WetSnapshot } from '../paint/wet/world';
+import { MAX_WET_LANES, type WetBackendInfo, type WetGhostState, type WetSnapshot } from '../paint/wet/world';
 import { wetSupport } from '../paint/wet/wasm';
 import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
@@ -2634,6 +2634,18 @@ export class PaintEditorController {
     const brush = this.strokeBrush(init);
     // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
     if (this.previewing && isWetBrush(brush)) throw new PaintEditorError(`Wet paint can't be previewed; the ${brush.name} brush paints wet media. Suggest it with a dry brush.`);
+    if (brush.ghost) {
+      if (brush.light.amount > 0) throw new PaintEditorError(`Ghost paint (${brush.name}) shares the wet light channel and can't emit light; set light.amount to 0 or ghost to null (set_brush).`);
+      if (isPaintEffectPaint(init.paint) || (init.paint === undefined && init.color === undefined && Boolean(this.effectPaint))) {
+        throw new PaintEditorError(`Ghost paint (${brush.name}) needs a single colour to subtract as it fades, so it can't paint with an effect; set a solid colour (set_color) or pass color to paint_stroke.`);
+      }
+      if (brush.behavior.multicolor.mode !== 'off') throw new PaintEditorError(`Ghost paint (${brush.name}) needs a single colour to subtract as it fades, so it can't use multi-colour paint; set behavior.multicolor.mode to "off" (set_brush).`);
+      const gCol = init.color === undefined ? (this.ownColour(init.brushId) ?? this.color) : parseColor(init.color);
+      if (this.strokeGradient(init, brush, gCol)) throw new PaintEditorError(`Ghost paint (${brush.name}) needs a single colour to subtract as it fades, so it can't paint a gradient; set a solid colour (set_color) or pass color to paint_stroke.`);
+      if (Boolean(doc.light?.[layer.id]?.tiles.size) || Boolean(this.wet.world?.hasLane(layer.id) && this.wet.world.isLit(layer.id))) {
+        throw new PaintEditorError(`Layer "${layer.name}" holds light paint, and ghost paint shares the wet light channel; paint on another layer (add_layer) or clear the light first (clear_light).`);
+      }
+    }
     const effect = this.strokeEffect(init, brush, points);
     // A hand-painted path stroke is painted again from its path at the end, and the wet simulation can't be.
     if (!points && init.paint === undefined && effect?.source.map?.by === 'path' && isWetBrush(brush)) {
@@ -2641,6 +2653,9 @@ export class PaintEditorController {
     }
     if (brush.light.amount > 0) {
       if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).`);
+      if (Boolean(this.wet.world?.hasLane(layer.id) && this.wet.world.getGhost(layer.id)) || Boolean(this.wet.settings.get(layer.id)?.ghost)) {
+        throw new PaintEditorError(`Layer "${layer.name}" has ghost paint fading on it, which uses the wet light channel; paint light on another layer (add_layer), or finish the ghost first (dry_paint).`);
+      }
     }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
@@ -2696,6 +2711,7 @@ export class PaintEditorController {
         mask: init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null,
         paint: effect ? null : wetGradient,
         effect: effect?.pixels ?? null,
+        speed: this.wet.speed,
       });
       init = { ...init, seed: seedW, load };
       wet = { driver, surface: () => world.display(id).surface };
@@ -3701,7 +3717,11 @@ export class PaintEditorController {
   /** Wet settings saved with the document (`null` when they are all defaults). */
   private wetJSON(): unknown {
     const layers: Record<string, WetLayerSettings> = {};
-    for (const [id, set] of this.wet.settings) if (findLayer(this.doc.layers, id)) layers[id] = { params: { ...set.params }, flow: { ...set.flow } };
+    for (const [id, set] of this.wet.settings) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      const ghost = this.wet.world?.hasLane(id) ? this.wet.world.getGhost(id) : set.ghost ?? null;
+      layers[id] = { params: { ...set.params }, flow: { ...set.flow }, ...(ghost ? { ghost } : {}) };
+    }
     const flat = this.wet.tilt.angle === 0;
     if (!Object.keys(layers).length && flat) return undefined;
     return { tilt: { ...this.wet.tilt }, layers };
@@ -3718,8 +3738,9 @@ export class PaintEditorController {
           problems.push(`wet.layers["${id}"] is not wet settings; skipped.`);
           continue;
         }
-        const x = v as { params?: Partial<WetParams>; flow?: Partial<WetFlowSpec> };
-        this.wet.settings.set(id, { params: normalizeWetParams(x.params ?? {}), flow: normalizeFlow(x.flow ?? {}) });
+        const x = v as { params?: Partial<WetParams>; flow?: Partial<WetFlowSpec>; ghost?: unknown };
+        const ghost = readWetGhost(x.ghost);
+        this.wet.settings.set(id, { params: normalizeWetParams(x.params ?? {}), flow: normalizeFlow(x.flow ?? {}), ...(ghost ? { ghost } : {}) });
       }
     }
   }
@@ -5376,4 +5397,15 @@ function clipToCanvas(rect: RasterRect, canvas: { width: number; height: number 
 /** Rendered effect pixels as effect paint (a copy; with its strip map when bent along the stroke). */
 function toEffectPaintPixels(p: PaintEffectPaint, pixels: EffectPixels): EffectPaintPixels {
   return { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>), ...(p.map?.by === 'stroke' ? { map: p.map } : {}) };
+}
+
+function readWetGhost(raw: unknown): WetGhostState | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const g = raw as { pigment?: unknown; remaining?: unknown; total?: unknown; linger?: unknown };
+  if (!Array.isArray(g.pigment) || g.pigment.length !== 4 || !g.pigment.every((x) => typeof x === 'number' && Number.isFinite(x))) return null;
+  const remaining = typeof g.remaining === 'number' && Number.isFinite(g.remaining) ? Math.max(0, Math.round(g.remaining)) : 0;
+  if (remaining <= 0) return null;
+  const total = typeof g.total === 'number' && Number.isFinite(g.total) ? Math.max(1, Math.round(g.total)) : remaining;
+  const linger = typeof g.linger === 'number' && Number.isFinite(g.linger) ? Math.max(0.5, Math.min(60, g.linger)) : 4;
+  return { pigment: [g.pigment[0], g.pigment[1], g.pigment[2], g.pigment[3]], remaining, total, linger };
 }
