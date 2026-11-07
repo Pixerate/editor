@@ -482,11 +482,11 @@ public struct PaintBrush: Equatable, Sendable {
             "light": light.json,
             "fluorescence": fluorescence.json,
             "thermochromic": thermochromic.json,
-            "ferro": ferro.json,
         ]
         if let iridescence { o["iridescence"] = iridescence.json }
         if let ghost { o["ghost"] = ghost.json }
         if let mutation { o["mutation"] = mutation.json }
+        o["ferro"] = ferro.json
         o["stamp"] = stamp.map { .string($0) } ?? .null
         o["spray"] = spray?.json ?? .null
         if let tipGrain { o["tipGrain"] = tipGrain.json }
