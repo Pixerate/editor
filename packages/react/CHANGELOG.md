@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.188.0
+
+### Minor Changes
+
+- f8806de: Add reference-layer region fill (`fillRegion` / `fill_region`) with morphological gap closing (`closeGap` 0..32 px), boundary expansion under anti-aliased line art (`expand` -16..16 px), soft boundary antialiasing, paper grain modulation, and optional watercolour wash fill (`wet: true`), plus enclosed region detection (`findUnfilledRegions` / `find_unfilled_regions`) and an interactive Fill tool (`G`, drag to adjust tolerance) across TypeScript, React, Svelte, and Swift.
+
+### Patch Changes
+
+- Updated dependencies [f8806de]
+  - @pixerate/editor@0.273.0
+
 ## 0.187.0
 
 ### Minor Changes
