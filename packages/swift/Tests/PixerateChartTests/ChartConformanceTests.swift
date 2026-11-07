@@ -42,9 +42,23 @@ final class ChartConformanceTests: XCTestCase {
             }
         }
         for failure in failures { XCTFail(failure.description) }
-        XCTAssertEqual(passed.count, 15)
-        XCTAssertEqual(skipped.count, 1)
+        for (id, reason) in skipped { XCTFail("The chart domain is fully ported, but \(id) is skipped for Swift: \(reason)") }
+        XCTAssertEqual(passed.count, 16)
+        XCTAssertEqual(skipped.count, 0)
         ChartConformanceReport.write(passed: passed, skipped: skipped, failed: Set(failures.map(\.scenario)).count)
+    }
+
+    /// Every chart scenario runs on Swift: none carries a skip, and the 16 known ones are there.
+    func testNoChartScenarioIsSkipped() throws {
+        let scenarios = try ConformanceScenario.load(domain: "chart")
+        for scenario in scenarios { XCTAssertNil(scenario.skip["swift"], "\(scenario.id) is skipped for Swift; the chart domain is fully ported (#694).") }
+        for id in [
+            "bar-basics", "bar-race", "errors", "interaction", "line-dates", "map-choropleth",
+            "mermaid-round-trip", "number-formats", "office", "pie-donut", "presets-style",
+            "render-svg", "sankey-links", "scatter-trend", "stacked-area-streamgraph", "tree-treemap"
+        ] {
+            XCTAssertNotNil(scenarios.first { $0.id == id }, id)
+        }
     }
 
     func testEveryContractCommandIsRegistered() throws {
@@ -80,17 +94,61 @@ final class ChartConformanceTests: XCTestCase {
         XCTAssertNil(host.controller.getState().selection)
     }
 
-    func testUnportedToolsAndCommandsReportClearError() async throws {
-        let host = try ChartConformanceHost(setup: [:])
-        let cases702: [(String, JSONObject)] = [
-            ("import_chart_ooxml", JSONObject([("xml", .string("<c:chartSpace/>"))])),
-            ("export_chart_ooxml", JSONObject())
-        ]
-        for (tool, args) in cases702 {
-            let res = await host.callTool(tool, args)
-            XCTAssertTrue(res.isError)
-            XCTAssertTrue(res.structuredContent?["error"]?["message"]?.stringValue?.contains("#702") == true)
-        }
+    func testOoxmlAndZipHelpers() throws {
+        XCTAssertEqual(zipCrc32(Array("123456789".utf8)), 0xCBF4_3926)
+        XCTAssertTrue(isUnsafeZipPath("../secret.xml"))
+        XCTAssertTrue(isUnsafeZipPath("/etc/passwd"))
+        XCTAssertTrue(isUnsafeZipPath("C:\\Windows\\win.ini"))
+        XCTAssertFalse(isUnsafeZipPath("xl/charts/chart1.xml"))
+
+        let spec = createChartSpec([
+            "type": "bar",
+            "title": "Quarterly Revenue",
+            "categories": ["Q1", "Q2"],
+            "series": [
+                [
+                    "id": "s1",
+                    "name": "North",
+                    "values": [120, 150],
+                    "color": "#4269d0",
+                    "errorBars": ["type": "percent", "value": 5],
+                    "trendlines": [["type": "linear", "showR2": true]]
+                ]
+            ],
+            "yAxis": ["format": ["style": "currency", "currency": "$", "decimals": 0]]
+        ])
+        let written = chartToOoxml(spec)
+        XCTAssertTrue(written.issues.isEmpty)
+        let roundTrip = chartFromOoxml(written.xml)
+        XCTAssertTrue(roundTrip.lossless)
+        XCTAssertEqual(roundTrip.spec.title, "Quarterly Revenue")
+        XCTAssertEqual(roundTrip.spec.categories, ["Q1", "Q2"])
+        XCTAssertEqual(roundTrip.spec.series.first?.values, [120, 150])
+        XCTAssertEqual(roundTrip.spec.series.first?.errorBars?.type, .percent)
+        XCTAssertEqual(roundTrip.spec.series.first?.trendlines?.first?.type, .linear)
+
+        let chartexXml = """
+        <cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <cx:chartData>
+            <cx:data id="0">
+              <cx:strDim type="cat">
+                <cx:lvl ptCount="2"><cx:pt idx="0">France</cx:pt><cx:pt idx="1">Japan</cx:pt></cx:lvl>
+                <cx:lvl ptCount="2"><cx:pt idx="0">Europe</cx:pt><cx:pt idx="1">Asia</cx:pt></cx:lvl>
+              </cx:strDim>
+              <cx:numDim type="val"><cx:lvl ptCount="2"><cx:pt idx="0">40</cx:pt><cx:pt idx="1">60</cx:pt></cx:lvl></cx:numDim>
+            </cx:data>
+          </cx:chartData>
+          <cx:chart>
+            <cx:title><cx:tx><cx:rich><a:p><a:r><a:t>Regions</a:t></a:r></a:p></cx:rich></cx:tx></cx:title>
+            <cx:plotArea><cx:plotAreaRegion><cx:series layoutId="treemap"><cx:dataId val="0"/><cx:dataLabels pos="inEnd"/></cx:series></cx:plotAreaRegion></cx:plotArea>
+          </cx:chart>
+        </cx:chartSpace>
+        """
+        let cxRead = chartFromOoxml(chartexXml)
+        XCTAssertTrue(cxRead.lossless)
+        XCTAssertEqual(cxRead.spec.type, .treemap)
+        XCTAssertEqual(cxRead.spec.title, "Regions")
+        XCTAssertEqual(cxRead.spec.tree.count, 2)
     }
 }
 

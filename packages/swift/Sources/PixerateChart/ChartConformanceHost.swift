@@ -107,6 +107,29 @@ public final class ChartConformanceHost: ConformanceHost {
             }
         }
 
+        var openFiles: [OfficeChartFile] = []
+        if let rawFiles = setup["files"] {
+            switch rawFiles {
+            case .array(let arr):
+                for item in arr {
+                    guard let obj = item.objectValue,
+                          let name = obj["name"]?.stringValue,
+                          let b64 = obj["data"]?.stringValue,
+                          let data = Data(base64Encoded: b64) else { continue }
+                    openFiles.append(OfficeChartFile(name: name, data: [UInt8](data)))
+                }
+            case .object(let obj):
+                for (name, val) in obj {
+                    guard let b64 = val.stringValue,
+                          let data = Data(base64Encoded: b64) else { continue }
+                    openFiles.append(OfficeChartFile(name: name, data: [UInt8](data)))
+                }
+            default:
+                break
+            }
+        }
+        let openFilesCopy = openFiles
+
         _ = try registry.register(createChartToolProvider(
             controller,
             ChartToolProviderOptions(namespace: "", readOnly: readOnlyFn, width: width, height: height)
@@ -117,7 +140,13 @@ public final class ChartConformanceHost: ConformanceHost {
             ChartStyleToolProviderOptions(namespace: "")
         ))
         _ = try registry.register(createOfficeChartToolProvider(
-            OfficeChartToolProviderOptions(namespace: "", hasFiles: true, controller: controller)
+            OfficeChartToolProviderOptions(
+                namespace: "",
+                hasFiles: true,
+                files: { openFilesCopy },
+                controller: controller,
+                readOnly: readOnlyFn
+            )
         ))
         _ = try registry.register(createCommandToolProvider(commands, CommandToolProviderOptions(id: "chart-commands", namespace: "")))
     }

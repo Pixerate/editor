@@ -398,7 +398,7 @@
           "core": "`readZip`",
           "react": "Via core",
           "svelte": "Via core",
-          "swift": "Planned (#533)"
+          "swift": "`readZip`, `ZipReadOptions`, `inflateRaw`"
         }
       ]
     },
@@ -1576,7 +1576,7 @@
           "core": "`chartDataFromTable`, `chartDataToTable`, `importCsv`, `chartToSvg` & `chartSceneToSvg`",
           "react": "Via core",
           "svelte": "Via core",
-          "swift": "`chartDataFromTable`, `chartDataToTable`, `chartToSvg` & `chartSceneToSvg`"
+          "swift": "`chartDataFromTable`, `chartDataToTable`, `importCsv`, `chartToSvg` & `chartSceneToSvg`"
         },
         {
           "feature": "Chart Commands (`chart.describe`, `update`, `setData`, `setValues` by series and category name, `addSeries`, `addTrendline`, `applyPreset`, `transpose`, `importCsv`, `importMermaid`, `exportSvg`, `exportMermaid`, `exportOoxml`, `recommend`, `checkColors`, …)",
@@ -1681,14 +1681,14 @@
           "core": "`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml`, `chartToOoxml`",
           "react": "Via core",
           "svelte": "Via core",
-          "swift": "`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`; Office OOXML: Planned (#702)"
+          "swift": "`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml` & `chartToOoxml`"
         },
         {
           "feature": "Charts in Office Files (every chart in an `.xlsx` with sheet and anchor cell, `.pptx` with slide number, or `.docx`; DrawingML and chartex; `list_open_files`, `list_file_charts`, `get_file_chart`, `load_file_chart` agent tools)",
           "core": "`extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `createOfficeChartToolProvider`",
           "react": "`useOfficeChartToolProvider`",
           "svelte": "`useOfficeChartToolProvider`",
-          "swift": "`createOfficeChartToolProvider` (schema registration; Office extraction: Planned (#702))"
+          "swift": "`extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `extractDocxCharts` & `createOfficeChartToolProvider`"
         },
         {
           "feature": "Chart Streaming, Presence & Sparklines (lenient partial Mermaid / JSON, steady axes, tweened scenes; agent cursors that act out edits as one undo step; word-sized line / column / win-loss charts)",
@@ -1702,7 +1702,7 @@
           "core": "`summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable`",
           "react": "Via core",
           "svelte": "Via core",
-          "swift": "`summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable`"
+          "swift": "`summarizeChart`, `describeChart`, `recommendChartTypes` & `chartFromTable`"
         }
       ]
     },
