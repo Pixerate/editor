@@ -128,6 +128,42 @@ export function normalizeLight(raw: Partial<LightSettings> = {}, base: LightSett
   return { amount: unit(raw.amount, base.amount), pressure: typeof raw.pressure === 'boolean' ? raw.pressure : base.pressure };
 }
 
+/** UV-fluorescent ink: paint that glows in its colour under the UV blacklight (`doc.fluor`). */
+export interface FluorescenceSettings {
+  /** Fluorescence intensity under UV blacklight (0..1, default 0: none). */
+  amount: number;
+  /** Invisible ink in normal light: lays no daylight pigment and glows only under UV (default false). */
+  invisible: boolean;
+}
+
+export const DEFAULT_FLUORESCENCE: Readonly<FluorescenceSettings> = { amount: 0, invisible: false };
+
+export function normalizeFluorescence(raw: Partial<FluorescenceSettings> | number = {}, base: FluorescenceSettings = DEFAULT_FLUORESCENCE): FluorescenceSettings {
+  if (typeof raw === 'number') return { amount: unit(raw, base.amount), invisible: base.invisible };
+  return {
+    amount: unit(raw.amount, base.amount),
+    invisible: typeof raw.invisible === 'boolean' ? raw.invisible : base.invisible,
+  };
+}
+
+/** Thermochromic ink: paint that shifts toward `hotColor` where the canvas is heated above `threshold` (`doc.thermo`). */
+export interface ThermochromicSettings {
+  /** Colour (#rrggbb) the ink turns when heated above `threshold` (`null`: off). */
+  hotColor: string | null;
+  /** Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5). */
+  threshold: number;
+}
+
+export const DEFAULT_THERMOCHROMIC: Readonly<ThermochromicSettings> = { hotColor: null, threshold: 0.5 };
+
+export function normalizeThermochromic(raw: Partial<ThermochromicSettings> = {}, base: ThermochromicSettings = DEFAULT_THERMOCHROMIC): ThermochromicSettings {
+  const hotColor = raw.hotColor === null ? null : typeof raw.hotColor === 'string' && HEX.test(raw.hotColor.trim()) ? raw.hotColor.trim().toLowerCase() : base.hotColor;
+  return {
+    hotColor,
+    threshold: range(raw.threshold, 0.05, 0.95, base.threshold),
+  };
+}
+
 export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
   return {
     tool: IMPASTO_TOOLS.includes(raw.tool as ImpastoTool) ? (raw.tool as ImpastoTool) : base.tool,
@@ -291,6 +327,10 @@ export interface PaintBrush {
   sticker: StickerSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
+  /** UV-fluorescent ink: glows under the virtual UV blacklight (amount 0: none). */
+  fluorescence: FluorescenceSettings;
+  /** Thermochromic ink: shifts toward `hotColor` where the canvas is heated (`hotColor: null`: off). */
+  thermochromic: ThermochromicSettings;
   /**
    * Dab engine: a stamp tip. Each dab (and each spray droplet) is this sticker's shape, an editor
    * stamp (`editor:star`) or any sticker ref from the sticker library, laid in the paint colour;
@@ -413,11 +453,13 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'spray' | 'tipGrain'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'spray' | 'tipGrain'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
   light?: Partial<LightSettings>;
+  fluorescence?: Partial<FluorescenceSettings> | number;
+  thermochromic?: Partial<ThermochromicSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
@@ -564,6 +606,8 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     light: normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
+    fluorescence: normalizeFluorescence(raw.fluorescence ?? {}, b.fluorescence ?? DEFAULT_FLUORESCENCE),
+    thermochromic: normalizeThermochromic(raw.thermochromic ?? {}, b.thermochromic ?? DEFAULT_THERMOCHROMIC),
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
     ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),
@@ -593,6 +637,8 @@ const BASE_BRUSH: PaintBrush = {
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
   light: { ...DEFAULT_LIGHT },
+  fluorescence: { ...DEFAULT_FLUORESCENCE },
+  thermochromic: { ...DEFAULT_THERMOCHROMIC },
   stamp: null,
   spray: null,
   paint: null,

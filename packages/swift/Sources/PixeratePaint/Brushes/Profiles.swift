@@ -104,6 +104,9 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
     feature(profile.exchange, ex?["reservoir"] == nil && (nonZero(ex?["pickup"]) || ex?["dirty"] == .bool(true)), "behaviour.exchange", "picking paint up", "Remove behaviour.exchange.")
     feature(profile.grain, nonZero(brush.path("behaviour.grain")), "behaviour.grain", "paper grain", "Set behaviour.grain to 0.")
     feature(profile.light, nonZero(brush.path("light.amount")), "light", "light paint (glow and spill)", "Remove light (or set light.amount to 0).")
+    let smartInks = profile.id == "paint" ? "full" : "none"
+    feature(smartInks, nonZero(brush.path("fluorescence.amount")), "fluorescence", "UV-fluorescent ink", "Remove fluorescence (or set fluorescence.amount to 0).")
+    feature(smartInks, brush.path("thermochromic.hotColor")?.stringValue != nil, "thermochromic", "thermochromic ink", "Remove thermochromic.")
     if let m = brush["motion"]?.objectValue {
         feature(profile.motion, m["live"] == .bool(true) || nonZero(m["waveSpeed"]) || m["fps"] != nil, "motion", "animation", "Remove motion.")
     }
@@ -159,6 +162,8 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "tip.grain": edit("tip") { $0["grain"] = nil }
         case "dynamics.count": edit("dynamics") { $0["count"] = nil }
         case "light": b["light"] = nil
+        case "fluorescence": b["fluorescence"] = nil
+        case "thermochromic": b["thermochromic"] = nil
         case "motion": b["motion"] = nil
         case "dynamics.velocity": edit("dynamics") { o in o["velocitySize"] = nil; o["velocityOpacity"] = nil }
         case "dynamics.tilt": edit("dynamics") { o in o["tiltSize"] = nil; o["tiltRoundness"] = nil; o["tiltOpacity"] = nil }

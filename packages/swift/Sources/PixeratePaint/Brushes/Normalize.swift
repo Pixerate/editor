@@ -161,7 +161,7 @@ private func readPaint(_ value: JSONValue, _ path: String, _ problems: inout [St
 }
 
 /// The facet order of a hand-written brush.
-let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "light", "motion", "colour"]
+let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "light", "fluorescence", "thermochromic", "motion", "colour"]
 
 func orderedBrush(_ brush: JSONObject) -> Brush {
     var out = Brush()
@@ -190,8 +190,13 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 
     let rawColour = raw["colour"]
     let rawMarks = raw["marks"]
-    let rest = raw.without("colour", "marks", "kind", "id", "name", "tool")
-    let out = readObject(.object(rest), BrushSchema.schema, "brush", &problems) ?? [:]
+    var rest = raw.without("colour", "marks", "kind", "id", "name", "tool")
+    if let fl = rest["fluorescence"]?.finite { rest["fluorescence"] = ["amount": .number(fl)] }
+    var out = readObject(.object(rest), BrushSchema.schema, "brush", &problems) ?? [:]
+    if var th = out["thermochromic"]?.objectValue, let hc = th["hotColor"]?.stringValue {
+        th["hotColor"] = .string(hc.lowercased())
+        out["thermochromic"] = .object(th)
+    }
     var brush: JSONObject = ["id": .string(id), "name": .string(name)]
     for (k, v) in out { brush[k] = v }
     brush["kind"] = .string(kind)
@@ -352,7 +357,7 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 // MARK: - Patches (`brushes/patch.ts`)
 
 /// The facets a patch can remove (`unset`), back to the engine's defaults.
-public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "light", "motion", "colour"]
+public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "light", "fluorescence", "thermochromic", "motion", "colour"]
 
 /// `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks.
 public func mergeBrushPatch(_ base: JSONObject, _ patch: JSONObject, _ path: String = "") -> JSONObject {

@@ -123,20 +123,16 @@ the pitfalls, and uses the tools below.
   - Mixer Brush: blend with flow 0.3..0.6; at full flow it paints only its own colour.
 - **Pick-up and mix ratios**: `pickup` 0.3..0.7 with `mix` 0.4..0.7 gives a brush that drags the colours it crosses into its own; `dirty: true` keeps them for the next stroke (wipe with
   `clean_mixer_brush`). Keep `pickup` 0 for clean, predictable colour.
-- **Multi-colour**: give 2..8 `colors` (or none for the paint and secondary colours). `tip` mode with a flat tip and `rotation: "stroke"` paints ribbons; `softness` 0.3..0.7 keeps the stripes readable. `dab` mode with `order: "sequence"` and `length` 5..20 walks through a palette;
-  `random` for foliage and confetti.
+- **Multi-colour**: give 2..8 `colors` (or none for the paint and secondary colours). `tip` mode with a flat tip and `rotation: "stroke"` paints ribbons (`softness` 0.3..0.7); `dab` mode with `order: "sequence"` and `length` 5..20 walks through a palette (`random` for foliage and confetti).
 - **Pigment for paint, multiply for markers**: tip `blend: "pigment"` mixes subtractively on the canvas; `multiply` darkens where marker strokes overlap. Pigment layers are written as Normal to PSD (the export warns).
 - **Painterly layer modes do the glazing for you** (`update_layer` `blend`, or a brush tip):
-  - `watercolor`: the layer is a transparent wash. Washes multiply wavelength by wavelength, so each glaze darkens and blue over yellow makes green. White is clear: paint glazes on a layer over the underpainting, at opacity 0.4..0.8.
-  - `tint`: recolours what is below (its hue and chroma) and keeps its lightness, gently near white and black. Use it to warm or cool a whole passage.
-  - `highlight`: adds coloured light that rolls off towards white instead of clipping. Use it for glints and glow; black does nothing.
-  - `shadow`: shades as if light were blocked, coloured by the layer (paint shadows in a cool blue-violet), never crushing to black. White does nothing.
-
-  PSD has none of them: `export_psd` writes the nearest standard mode (watercolor and shadow as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
-- **Grow the canvas instead of starting big** with `extend_canvas` (pixels per side; nothing painted moves relative to anything else). Adding `left` or `top` shifts every coordinate you hold by (+left, +top): re-read `list_layers` or use the returned `rect`. Dry wet paint first.
-  `set_canvas` only crops or grows at the bottom-right.
-- **Save brushes you build** in the brush library: `create_brush` with `basedOn` and the facets you changed (or `get_brush` then `create_brush` with its `brush`), and share them with
-  `export_brushes` / `import_brushes`. A saved brush shows in every editor that shares the library; `set_brush` its id to paint with it.
+  - `watercolor`: transparent wash; washes multiply wavelength by wavelength (blue over yellow makes green, white is clear; opacity 0.4..0.8).
+  - `tint`: recolours what is below (hue and chroma) and keeps its lightness.
+  - `highlight`: adds coloured light that rolls off towards white without clipping (black does nothing).
+  - `shadow`: shades as if light were blocked, coloured by the layer, never crushing to black (white does nothing).
+  PSD has none of them: `export_psd` writes the nearest standard mode and warns; the merged image stays exact.
+- **Grow the canvas instead of starting big** with `extend_canvas` (pixels per side; nothing painted moves relative to anything else). Adding `left` or `top` shifts every coordinate you hold by (+left, +top): re-read `list_layers` or use the returned `rect`. Dry wet paint first. `set_canvas` only crops or grows at the bottom-right.
+- **Save brushes you build** in the brush library: `create_brush` with `basedOn` and the facets you changed, and share them with `export_brushes` / `import_brushes`. A saved brush shows in every editor that shares the library; `set_brush` its id to paint with it.
 
 Which facet sets which engine setting: [references/brush-facets.md](references/brush-facets.md).
 
@@ -147,11 +143,12 @@ flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves
 until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and
 read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools.
 
-## Oils and thick paint
+## Oils, thick paint and smart inks
 
 Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`: load
 `pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint**
-(neon, glowing glass and watercolour: `light.amount`, the Light category; backlit paper): [references/light-paint.md](references/light-paint.md).
+(neon, glowing glass: `light.amount`, backlit paper): [references/light-paint.md](references/light-paint.md).
+**Smart inks** (`fluorescence` for UV/invisible ink under `set_uv_light`, `thermochromic` for heat-reactive ink with `paint_heat` / `advance_heat`; presets `uv-marker`, `thermo-ink`): [references/smart-inks.md](references/smart-inks.md).
 
 ## Gradient paint
 
@@ -195,20 +192,10 @@ it work with the painting. Search first: `search_effects` with `use` `generator`
 fills), `overlay` / `title` (layers, fills) or `filter` (light on paint), then `describe_effect`
 for the controls and presets.
 
-- **Effect paper**: `set_paper_effect` draws a generator over the sheet, under every layer.
-  `multiply` (the default) keeps the paper's colour and grain showing through, which is what
-  makes it look like printed or dyed paper; `normal` covers it. It saves and exports with the
-  painting, and brush grain still follows the real paper.
-- **Effect layers** (`add_effect_layer`): a pixel layer drawn by a generator, overlay or title
-  effect. Use them for backgrounds you want to change later, and for overlays (grain, light
-  leaks, captions) above the paint with a blend mode (`screen` / `linear-dodge` for light,
-  `multiply` for textures). `update_effect` draws the layer again and replaces its pixels, paint
-  on it included, so paint on a layer above it.
-- **Effect fills** (`fill_layer_with_effect`): the effect composited onto a layer's pixels with
-  no link kept; `lockTransparency` colours only what is painted (an effect inside a shape).
-- **Light on dried paint** (`apply_effect`): a filter (light, glow, grade) run on a layer's paint
-  and baked in, at `opacity` strength. Transparent areas stay transparent, and thick paint keeps
-  its relief and stays lit by the editor's light. Dry wet paint first (`dry_paint`).
+- **Effect paper**: `set_paper_effect` draws a generator over the sheet, under every layer (`multiply` keeps the paper's colour and grain showing through; `normal` covers it).
+- **Effect layers** (`add_effect_layer`): a pixel layer drawn by a generator, overlay or title effect (`update_effect` redraws and replaces its pixels, so paint on a layer above it).
+- **Effect fills** (`fill_layer_with_effect`): the effect composited onto a layer's pixels (`lockTransparency` colours only what is painted).
+- **Light on dried paint** (`apply_effect`): a filter run on a layer's dried paint and baked in at `opacity` strength, keeping thick relief.
 - **Effect paint** (`set_effect_paint`): brushes paint with the effect itself; see below.
 
 ## Effect paint
@@ -357,7 +344,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `set_wet_engine` | Let Engine B (WebGPU in browsers, Metal in the Swift editors) shade large washes (`gpu` "auto", the default) or force the CPU (`gpu` "off"); `minTiles` sets the wet area at which the GPU takes over. Never changes the result, only how it is drawn; editor setting, not saved, not an undo step. Returns `engine` (`state`: off, not-started, starting, unavailable, standby, active, failed; `reason`, `adapter`). |
 | `set_instant_dry` | `on`: every wet stroke dries as it ends (same undo step); off (default) wet paint keeps moving. Returns `instantDry`. |
 
-### Thick paint and light
+### Thick paint, light and smart inks
 
 | Tool | Use |
 | --- | --- |
@@ -367,6 +354,12 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `get_light` | Read a layer's light paint: `hasLight`, `bounds`, `peak` 0..255 and its `spill`. Changes nothing. |
 | `set_light_spill` | How far a layer's light spills (`radius` px, 0 off) and how strongly (`strength` 0..2). Not an undo step; nothing is repainted. |
 | `clear_light` | Take a layer's light away, keeping its colour. One undo step. |
+| `set_uv_light` | Switch the virtual UV blacklight (`on`) and set its glow `strength` (0..2, default 1) and `ambient` daylight level (0..1, default 0.15) to reveal `fluorescence` strokes (`uv-marker`). Saved with the document, not an undo step. Returns the UV settings and `fluorescentLayerIds`. |
+| `get_uv_light` | Read the UV blacklight settings (`on`, `strength`, `ambient`) and `fluorescentLayerIds`. Changes nothing. |
+| `paint_heat` | Warm or cool the canvas heat field along `points` (`radius` px default 24, `temperature` 0..1 default 1): shifts `thermochromic` strokes (`thermo-ink`) toward their `hotColor` above `threshold` and dries wet paint under hot cells. One undo step. Returns heat stats and `dried`. |
+| `advance_heat` | Step thermal diffusion and Newtonian cooling by `steps` (1..200, default 10) so warm patches spread and fade. Not an undo step. Returns `steps`, heat stats and `dried`. |
+| `clear_heat` | Cool the entire canvas heat field back to 0 at once so thermochromic paint returns to its cold colour. One undo step when warm. Returns `{ cleared }`. |
+| `get_heat` | Read the canvas heat stats (`max`, `mean`, `hotCells`, `bounds`), optional temperature `samples` at `points`, and `thermochromicLayerIds`. Changes nothing. |
 
 ### Stickers
 

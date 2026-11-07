@@ -18,6 +18,7 @@ import { pigmentOf } from '../paint/wet/film';
 import { WetStrokeDriver, wetPaperInput } from './wet';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, type ThickChannels } from './thick';
 import { computeSpill, emptyLight, LightCache } from './light';
+import { computeUvSpill, emptyFluor, UvCache } from './heat';
 import type { StickerArtLookup } from './sticker-art';
 
 /** One small wet world reused for wet brush thumbnails (by size). */
@@ -80,11 +81,12 @@ export function thumbnailStroke(width: number, height: number): PenPoint[] {
 }
 
 /** Paints the test stroke with `brush` onto `surface`; returns the new pixels. */
-function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number, stampArt?: StickerArtLookup): { surface: TiledSurface; light: TiledSurface | null } {
+function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number, stampArt?: StickerArtLookup): { surface: TiledSurface; light: TiledSurface | null; fluor: TiledSurface | null } {
   const [r, g, b] = hexToRgb8(color);
   let result = surface;
   let thick: ThickChannels | null = null;
   let light: TiledSurface | null = null;
+  let fluor: TiledSurface | null = null;
   const session = new PaintStrokeSession(
     {
       update: () => {},
@@ -92,6 +94,7 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
         result = s ?? result;
         thick = sess.thickChannels();
         light = sess.lightChannel();
+        fluor = sess.fluorChannel();
       },
     },
     {
@@ -112,14 +115,17 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       thick: brush.engine === 'impasto' ? { channels: emptyThickChannels() } : undefined,
       sticker: brush.engine === 'sticker' ? { nextId: 1 } : undefined,
       light: brush.light.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' ? { surface: emptyLight() } : null,
+      fluor: brush.fluorescence.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' ? { surface: emptyFluor() } : null,
       stampArt,
     }
   );
   session.push(thumbnailStroke(width, height));
   session.end();
-  // Thick paint is shown lit, and light paint glowing, as on the canvas.
+  // Thick paint is shown lit, light paint glowing, and fluorescent paint under UV, as on the canvas.
   const lit = thick ? new LitCache().lit(result, thick, DEFAULT_LIGHTING) : result;
-  return { surface: light || thick ? new LightCache().glow(lit, light ?? undefined, thick ?? undefined) : lit, light };
+  const glowed = light || thick ? new LightCache().glow(lit, light ?? undefined, thick ?? undefined) : lit;
+  const uvLit = fluor ? new UvCache().render(glowed, fluor, { on: true, strength: 1, ambient: 0.15 }) : glowed;
+  return { surface: uvLit, light, fluor };
 }
 
 /**
@@ -146,12 +152,13 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
     surface = fillRect(surface, { x: 0, y: half, width, height: height - half }, [232, 196, 64, 255]);
   }
   let light: TiledSurface | null = null;
+  let fluor: TiledSurface | null = null;
   if (b.engine === 'wet') surface = paintWetTestStroke(b, options.paper, options.color, width, height);
-  else ({ surface, light } = paintTestStroke(surface, b, options.paper, options.color, width, height, options.stampArt));
+  else ({ surface, light, fluor } = paintTestStroke(surface, b, options.paper, options.color, width, height, options.stampArt));
   const layer: ViewLayer = { type: 'pixel', id: 'thumbnail', name: 'thumbnail', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 } };
-  // Light paint reads on dark paper, with its spill; a multiply light brush (a highlighter) is a tint on paper.
-  const paper = light && brushPreviewsOnDark(b) ? { ...options.paper, color: BRUSH_PREVIEW_DARK_PAPER } : options.paper;
-  const spill = light ? computeSpill(surface, light, { radius: Math.max(4, height / 6), strength: 1 }) : null;
+  // Light paint and UV-fluorescent paint read on dark paper, with their spill; a multiply light brush (a highlighter) is a tint on paper.
+  const paper = (light || fluor) && brushPreviewsOnDark(b) ? { ...options.paper, color: BRUSH_PREVIEW_DARK_PAPER } : options.paper;
+  const spill = light ? computeSpill(surface, light, { radius: Math.max(4, height / 6), strength: 1 }) : fluor ? computeUvSpill(fluor, 1) : null;
   const layers: ViewLayer[] = [paperNode(paper), layer];
   if (spill) layers.push({ type: 'pixel', id: 'thumbnail-light', name: 'light', visible: true, opacity: 1, blend: 'linear-dodge', surface: spill, offset: { x: 0, y: 0 } } as ViewLayer);
   const data = createPaintCompositor().composite(layers, { x: 0, y: 0, width, height }, { width, height });

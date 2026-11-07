@@ -1032,10 +1032,38 @@
               "surface": "dry",
               "tip": "round",
               "variety": "spraycan"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "uv-marker",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "UV marker",
+              "size": 18,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "uv-ink"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "thermo-ink",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Thermochromic ink",
+              "size": 12,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "thermochromic"
             }
           ],
           "host": "paint",
-          "total": 73
+          "total": 75
         }
       }
     },

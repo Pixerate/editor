@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
+import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, UV_LIGHT_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, panel, useAttempt } from './shared';
 
@@ -70,6 +70,24 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
         <button type="button" className="self-start px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.flattenRelief())}>
           Flatten relief
         </button>
+      </div>
+      <div className="flex flex-col gap-1.5" data-testid="uv-heat-panel">
+        <span className="font-medium text-slate-300">UV blacklight &amp; heat</span>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={state.uvLight.on} onChange={(e) => attempt(() => controller.setUvLight({ on: e.target.checked }))} /> UV blacklight
+        </label>
+        {UV_LIGHT_SLIDERS.map((c) => (
+          <PaintSlider key={c.path} control={c} value={readPath(state.uvLight, c.path)} onChange={(v) => attempt(() => controller.setUvLight({ [c.path]: v }))} />
+        ))}
+        <div className="flex items-center gap-1.5">
+          <button type="button" className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.advanceHeat(10))}>
+            Step heat
+          </button>
+          <button type="button" className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.clearHeat())}>
+            Cool canvas
+          </button>
+          {state.heat.hotCells > 0 && <span className="text-[11px] text-amber-400">{Math.round(state.heat.max * 100)}% warm</span>}
+        </div>
       </div>
       <ErrorLine error={error} />
     </div>

@@ -481,4 +481,21 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
     colour: { palette: ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#a855f7', '#111827', '#f8fafc'] },
   },
+  // --- Smart inks: UV-fluorescent and thermochromic ------------------------------------
+  // Invisible UV marker: invisible in normal light, glows brightly under the UV blacklight.
+  {
+    id: 'uv-marker', name: 'UV marker', kind: 'mark', medium: 'ink', variety: 'uv-ink',
+    tip: { shape: 'round', size: 18, hardness: 0.75, spacing: 0.06, opacity: 0.9 },
+    dynamics: { smoothing: 0.3, minSize: 0.5 },
+    fluorescence: { amount: 0.9, invisible: true },
+    colour: { default: '#22d3ee', palette: ['#22d3ee', '#a855f7', '#4ade80', '#f472b6'] },
+  },
+  // Thermochromic ink: shifts smoothly toward its hot colour where the canvas heat field warms it.
+  {
+    id: 'thermo-ink', name: 'Thermochromic ink', kind: 'mark', medium: 'ink', variety: 'thermochromic',
+    tip: { shape: 'round', size: 12, hardness: 0.85, spacing: 0.05 },
+    dynamics: { smoothing: 0.3, minSize: 0.4 },
+    thermochromic: { hotColor: '#ff7a18', threshold: 0.45 },
+    colour: { default: '#1e3a8a', palette: ['#1e3a8a', '#312e81', '#065f46', '#7f1d1d'] },
+  },
 ];

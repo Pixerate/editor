@@ -674,6 +674,12 @@ export const LIGHT_SLIDERS: readonly SliderControl[] = [
   { path: 'relief', label: 'Relief', min: 0, max: 1, step: 0.01 },
 ];
 
+/** The UV blacklight sliders. */
+export const UV_LIGHT_SLIDERS: readonly SliderControl[] = [
+  { path: 'strength', label: 'UV strength', min: 0, max: 2, step: 0.05 },
+  { path: 'ambient', label: 'Ambient light', min: 0, max: 1, step: 0.01 },
+];
+
 /** Labels of the particle kinds and renders. */
 export const PARTICLE_KIND_LABELS: Readonly<Record<ParticleKind, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow', elastic: 'Elastic', fuzzy: 'Fuzzy' };
 export const PARTICLE_RENDER_LABELS: Readonly<Record<ParticleRender, string>> = { dot: 'Dots', line: 'Lines', sequence: 'Beads', ribbon: 'Ribbon' };

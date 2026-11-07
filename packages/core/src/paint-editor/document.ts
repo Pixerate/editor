@@ -16,6 +16,7 @@ import type { WetEvent } from './wet';
 import type { ThickChannels } from './thick';
 import type { Sticker } from './stickers';
 import type { PaintEffectSource, PaintPaperEffect } from './effects';
+import type { HeatField } from './heat';
 
 export type PaintPixelLayer = RasterPixelLayer;
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
@@ -56,6 +57,12 @@ export interface PaintDocumentState {
   liveStrokes?: Readonly<Record<string, RecordedStroke[]>>;
   /** Light paint: each layer's light channel, 0..255 per pixel in layer space (layers without light are missing). See `light.ts`. */
   light?: Readonly<Record<string, TiledSurface>>;
+  /** UV-fluorescent ink: each layer's 4-channel RGBA fluorescence surface in layer space (layers without fluorescence are missing). See `heat.ts`. */
+  fluor?: Readonly<Record<string, TiledSurface>>;
+  /** Thermochromic ink: each layer's 4-channel RGBA thermochromic surface (`[hotR, hotG, hotB, thresholdByte]`) in layer space. See `heat.ts`. */
+  thermo?: Readonly<Record<string, TiledSurface>>;
+  /** Coarse document-level heat field (1/4 resolution) for thermochromic ink and wet-paint drying. See `heat.ts`. */
+  heat?: HeatField;
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
   /** Effect layers: the provider effect each one is drawn from (layers that are gone are ignored). */

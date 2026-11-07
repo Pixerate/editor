@@ -226,6 +226,16 @@ const LIGHT = object('Light the brush gives off with its colour (glow and spill)
   glow: bool('Suggest a glow layer effect for the layer (glow stays a layer effect).'),
 });
 
+const FLUORESCENCE = object('UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.', {
+  amount: unit('Fluorescence intensity under UV blacklight, 0 (none) .. 1.'),
+  invisible: bool('Invisible ink in normal light: lays no daylight paint and glows only under UV (default false).'),
+});
+
+const THERMOCHROMIC = object('Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.', {
+  hotColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Colour (#rrggbb) the ink turns when heated.' },
+  threshold: num(0.05, 0.95, 'Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5).'),
+});
+
 const MOTION = object('Animation after painting.', {
   live: bool('Effect paint keeps playing on stroke layers (default false).'),
   fps: int(1, 60, 'Suggested playback rate in frames per second.'),
@@ -296,6 +306,8 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
+    fluorescence: FLUORESCENCE,
+    thermochromic: THERMOCHROMIC,
     motion: MOTION,
     colour: COLOUR,
   },
@@ -310,6 +322,8 @@ export const BRUSH_FACET_SCHEMAS = {
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
+  fluorescence: FLUORESCENCE,
+  thermochromic: THERMOCHROMIC,
   motion: MOTION,
   colour: COLOUR,
   paint: PAINT,

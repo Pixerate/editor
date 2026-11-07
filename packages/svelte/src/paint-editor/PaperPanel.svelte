@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
+  import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, UV_LIGHT_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
   import { attempt, button, paintEditorState, panel } from './paintEditorRune.svelte.js';
@@ -64,6 +64,20 @@
       <PaintSlider control={c} value={readPath(lighting, c.path)} onchange={(v) => run(() => controller.setLighting({ [c.path]: v }))} />
     {/each}
     <button type="button" class={`self-start ${button}`} onclick={() => run(() => controller.flattenRelief())}>Flatten relief</button>
+  </div>
+  <div class="flex flex-col gap-1.5" data-testid="uv-heat-panel">
+    <span class="font-medium text-slate-300">UV blacklight &amp; heat</span>
+    <label class="flex items-center gap-2">
+      <input type="checkbox" checked={editor.current.uvLight.on} onchange={(e) => run(() => controller.setUvLight({ on: e.currentTarget.checked }))} /> UV blacklight
+    </label>
+    {#each UV_LIGHT_SLIDERS as c (c.path)}
+      <PaintSlider control={c} value={readPath(editor.current.uvLight, c.path)} onchange={(v) => run(() => controller.setUvLight({ [c.path]: v }))} />
+    {/each}
+    <div class="flex items-center gap-1.5">
+      <button type="button" class={button} onclick={() => run(() => controller.advanceHeat(10))}>Step heat</button>
+      <button type="button" class={button} onclick={() => run(() => controller.clearHeat())}>Cool canvas</button>
+      {#if editor.current.heat.hotCells > 0}<span class="text-[11px] text-amber-400">{Math.round(editor.current.heat.max * 100)}% warm</span>{/if}
+    </div>
   </div>
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
 </div>

@@ -20,6 +20,8 @@ more; this is where each one went.
 | Bristles | `tip.shape` `bristle` and `tip.bristle` |
 | A brush's own gradient (paint) | `colour.default` (a gradient); `unset: ['colour']` drops it |
 | Light | `light` (`amount`, `pressure`) |
+| UV-fluorescent ink (glows under `set_uv_light`, optional invisible ink) | `fluorescence` (`amount` 0..1, `invisible`); `unset: ['fluorescence']` drops it |
+| Thermochromic ink (shifts toward `hotColor` where `paint_heat` warms the canvas) | `thermochromic` (`hotColor` `#rrggbb`, `threshold` 0.05..0.95); `unset: ['thermochromic']` drops it |
 
 ## Examples
 

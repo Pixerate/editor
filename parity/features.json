@@ -2100,6 +2100,13 @@
           "swift": "✅ `PaintEditorController` `lightOf`, `setLightSpill`, `clearLight`; glow with rim and clarity, spill, wet light, backlit paper; `PaintLightSpillPanel`; no Light, Rim or Clarity sliders in `PaintBrushPanel` yet"
         },
         {
+          "feature": "UV-Fluorescent & Thermochromic Smart Inks (a `fluorescence` brush facet (`amount` 0..1, `invisible` true for invisible ink that leaves no daylight pigment) writing a per-layer `doc.fluor` channel that glows and spills in Linear Dodge (`::uv`) when the virtual UV blacklight (`uvLight: { on, strength, ambient }`) dims the room; a `thermochromic` brush facet (`hotColor`, `threshold` 0.05..0.95) writing a per-layer `doc.thermo` channel that shifts smoothly toward `hotColor` where a coarse 1/4-resolution document heat field (`doc.heat`) warms the canvas, spreading by Laplacian diffusion and fading by Newtonian cooling (`advanceHeat`) while drying wet paint under hot tiles; presets `uv-marker` and `thermo-ink`; saved, undone, duplicated, merged, shifted on `extendCanvas` and replayed; `set_uv_light`, `get_uv_light`, `paint_heat`, `advance_heat`, `clear_heat`, `get_heat` agent tools)",
+          "core": "`UvCache`, `ThermoCache`, `HeatField`, `setUvLight`, `getUvLight`, `paintHeat`, `advanceHeat`, `clearHeat`, `getHeat`, `UV_LIGHT_SLIDERS` (`/paint-editor`)",
+          "react": "UV blacklight & heat controls in `<PaperPanel>`, `fluorescence` & `thermochromic` controls in `<BrushEditor>`",
+          "svelte": "UV blacklight & heat controls in `<PaperPanel>`, `fluorescence` & `thermochromic` controls in `<BrushEditor>`",
+          "swift": "✅ `UvLightSettings`, `HeatField`, `UvCache`, `ThermoCache`, `PaintEditorController` `setUvLight`, `getUvLight`, `paintHeat`, `advanceHeat`, `clearHeat`, `getHeat`, `PaintPaperPanel`"
+        },
+        {
           "feature": "Live stroke layers (a layer drawn from its strokes, so each stroke's brush, settings, colour, paint, seed and points stay editable; redraws exactly and only where an edit changes; reorder, delete, rasterize; select and drag on the canvas; saved, undone and replayed; `stroke_at`, `update_stroke`, `edit_stroke_points`, `reorder_stroke`, `remove_strokes`, `convert_to_stroke_layer`, `rasterize_stroke_layer`, `list_strokes {live}`, `add_layer {type: strokes}` agent tools)",
           "core": "`addLayer({ type: 'strokes' })`, `updateStroke`, `editStrokePoints`, `removeStrokes`, `reorderStroke`, `rasterizeLiveStrokes`, `liveStrokeAt`, `liveStrokeRefusal`",
           "react": "`<StrokePanel>`, New stroke layer in `<PaintLayersPanel>`, the Select stroke tool in `<PaintToolbar>` / `<PaintCanvas>`",

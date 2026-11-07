@@ -19,11 +19,12 @@ import type { PaintGradientSource } from '../paint/gradient-paint';
 import { PaintDabStroke } from './dab-stroke';
 import type { EffectPaintPixels, PaintEffectPaint } from './effect-paint';
 import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
-import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
 import { ThickStrokeDriver, type ThickChannels } from './thick';
 import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
+import { emptyThermo, finalizeThermoStroke, fluorTwinBrush, thermoTwinBrush } from './heat';
+import { hexToRgb8, type PaperGrain } from './paper';
 import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
 import { StickerSpray, type Sticker } from './stickers';
 import type { StickerArtLookup } from './sticker-art';
@@ -87,6 +88,16 @@ export interface StrokeSessionInit {
    * the light channel as grey (see `light.ts`); `lightChannel()` returns the result.
    */
   light?: { surface: TiledSurface } | null;
+  /**
+   * UV-fluorescent ink: the layer's fluorescence channel before the stroke. With it, a twin of the
+   * stroke paints the 4-channel fluorescence surface; `fluorChannel()` returns the result.
+   */
+  fluor?: { surface: TiledSurface } | null;
+  /**
+   * Thermochromic ink: the layer's thermochromic channel before the stroke. With it, a twin of the
+   * stroke paints the 4-channel thermochromic surface; `thermoChannel()` returns the result.
+   */
+  thermo?: { surface: TiledSurface } | null;
 }
 
 export interface PaintStrokeResult {
@@ -141,6 +152,13 @@ export class PaintStrokeSession {
   /** Light paint: the stroke's twin over the light channel, and what it left there. */
   private readonly lightTwin: PaintStrokeSession | null = null;
   private lightResult: TiledSurface | null = null;
+  /** UV-fluorescent ink: the stroke's twin over the fluorescence channel, and what it left there. */
+  private readonly fluorTwin: PaintStrokeSession | null = null;
+  private fluorResult: TiledSurface | null = null;
+  /** Thermochromic ink: the stroke's twin over the thermochromic channel, and what it left there. */
+  private readonly thermoTwin: PaintStrokeSession | null = null;
+  private thermoResult: TiledSurface | null = null;
+  private readonly invisibleDaylight: boolean;
   /** A wet stroke that ended while the simulation was mid-batch: it commits when the driver catches up. */
   private wetEndPending = false;
   private readonly apply: StrokeApply;
@@ -158,8 +176,11 @@ export class PaintStrokeSession {
     this.live = new Map(this.base.tiles);
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
     const brush = init.brush;
+    this.invisibleDaylight = brush.fluorescence.amount > 0 && brush.fluorescence.invisible && brush.engine !== 'eraser' && brush.engine !== 'blender' && brush.engine !== 'smudge';
     if (init.wet) this.wetDriver = init.wet.driver;
     if (init.light && !init.wet && !init.sticker) this.lightTwin = this.makeLightTwin(init.light.surface);
+    if (init.fluor && !init.wet && !init.sticker) this.fluorTwin = this.makeFluorTwin(init.fluor.surface);
+    if (init.thermo && !init.wet && !init.sticker) this.thermoTwin = this.makeThermoTwin(init.thermo.surface);
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -250,12 +271,83 @@ export class PaintStrokeSession {
       paint,
       effect,
       light: null,
+      fluor: null,
+      thermo: null,
+    });
+  }
+
+  /** The stroke's twin over the 4-channel fluorescence surface (see `heat.ts`). */
+  private makeFluorTwin(fluor: TiledSurface): PaintStrokeSession {
+    const init = this.init;
+    const host: StrokeSessionHost = {
+      update: (_id, surface) => {
+        this.fluorResult = surface;
+      },
+      commit: (_s, surface) => {
+        this.fluorResult = surface;
+      },
+    };
+    return new PaintStrokeSession(host, {
+      ...init,
+      surface: fluor,
+      lockTransparency: false,
+      brush: fluorTwinBrush(init.brush),
+      inputFilter: undefined,
+      light: null,
+      fluor: null,
+      thermo: null,
+    });
+  }
+
+  /** The stroke's twin over the 4-channel thermochromic surface (see `heat.ts`). */
+  private makeThermoTwin(thermo: TiledSurface): PaintStrokeSession {
+    const init = this.init;
+    const hotHex = init.brush.thermochromic.hotColor;
+    const hotRgb: [number, number, number] = hotHex ? hexToRgb8(hotHex) : [0, 0, 0];
+    const threshold = init.brush.thermochromic.threshold;
+    const host: StrokeSessionHost = {
+      update: (_id, surface) => {
+        this.thermoResult = hotHex ? finalizeThermoStroke(surface, thermo, hotRgb, threshold) : surface;
+      },
+      commit: (_s, surface) => {
+        if (!surface) {
+          this.thermoResult = null;
+          return;
+        }
+        this.thermoResult = hotHex ? finalizeThermoStroke(surface, thermo, hotRgb, threshold) : surface;
+      },
+    };
+    return new PaintStrokeSession(host, {
+      ...init,
+      surface: hotHex ? emptyThermo() : thermo,
+      lockTransparency: false,
+      brush: thermoTwinBrush(init.brush),
+      color: [hotRgb[0], hotRgb[1], hotRgb[2], 255],
+      colorHex: hotHex ?? '#000000',
+      secondary: [hotRgb[0], hotRgb[1], hotRgb[2], 255],
+      inputFilter: undefined,
+      mixerLoad: hotHex ? { reservoir: [hotRgb[0] / 255, hotRgb[1] / 255, hotRgb[2] / 255], amount: 1, pickup: null } : init.mixerLoad,
+      paint: null,
+      effect: null,
+      light: null,
+      fluor: null,
+      thermo: null,
     });
   }
 
   /** Light paint: the layer's light channel after the stroke, or `null` when the stroke has no twin or left it unchanged. */
   lightChannel(): TiledSurface | null {
     return this.lightResult;
+  }
+
+  /** UV-fluorescent ink: the layer's fluorescence channel after the stroke, or `null` when unchanged. */
+  fluorChannel(): TiledSurface | null {
+    return this.fluorResult;
+  }
+
+  /** Thermochromic ink: the layer's thermochromic channel after the stroke, or `null` when unchanged. */
+  thermoChannel(): TiledSurface | null {
+    return this.thermoResult;
   }
 
   private tileTarget(): PaintTileTarget {
@@ -290,6 +382,8 @@ export class PaintStrokeSession {
     this.lastRaw = points[points.length - 1];
     this.host.sampled?.(this, points);
     this.lightTwin?.push(points);
+    this.fluorTwin?.push(points);
+    this.thermoTwin?.push(points);
     if (this.wetDriver) {
       this.wetUpdate(this.wetDriver.push(points));
       return;
@@ -327,6 +421,8 @@ export class PaintStrokeSession {
   }
 
   private finishWet(): void {
+    if (this.fluorTwin?.open) this.fluorTwin.end();
+    if (this.thermoTwin?.open) this.thermoTwin.end();
     const d = this.wetDriver!;
     const changed = d.dabCount > 0;
     this.result = { layerId: this.layerId, bounds: changed ? d.bounds : null, dabs: d.dabCount, strokeId: null, wet: true };
@@ -338,6 +434,10 @@ export class PaintStrokeSession {
   private update(rects: RasterRect[]): void {
     if (!rects.length) return;
     for (const r of rects) this.bounds = union(this.bounds, r);
+    if (this.invisibleDaylight) {
+      this.host.update(this.layerId, this.base, rects);
+      return;
+    }
     const ch = this.base.channels;
     if (!this.dry) {
       for (const key of this.fresh) this.live.set(key, { data: this.live.get(key)!.data, uniform: null });
@@ -380,19 +480,25 @@ export class PaintStrokeSession {
     this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.stickerSpray ? this.stickerSpray.finish() : this.wet!.finish());
     this.closed = true;
     if (this.lightTwin?.open) this.lightTwin.end();
+    if (this.fluorTwin?.open) this.fluorTwin.end();
+    if (this.thermoTwin?.open) this.thermoTwin.end();
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
     let changed = false;
-    for (const key of this.touched) {
-      const tile = finishTile(this.live.get(key)!.data, ch, this.base.defaultValue);
-      const prev = this.base.tiles.get(key);
-      if (tile) tiles.set(key, tile);
-      else tiles.delete(key);
-      if (!sameTile(prev, tile)) changed = true;
+    if (this.invisibleDaylight) {
+      changed = this.fluorResult !== null || this.thermoResult !== null || this.lightResult !== null;
+    } else {
+      for (const key of this.touched) {
+        const tile = finishTile(this.live.get(key)!.data, ch, this.base.defaultValue);
+        const prev = this.base.tiles.get(key);
+        if (tile) tiles.set(key, tile);
+        else tiles.delete(key);
+        if (!sameTile(prev, tile)) changed = true;
+      }
     }
     // An impasto stroke can change only the relief (a knife on dry colour).
     if (this.thickDriver && this.thickDriver.dabCount > 0) changed = true;
-    const surface = changed ? new TiledSurface(ch, tiles, this.base.defaultValue) : null;
+    const surface = changed ? (this.invisibleDaylight ? this.base : new TiledSurface(ch, tiles, this.base.defaultValue)) : null;
     const dabs = this.dry ? this.dry.dabCount : this.thickDriver ? this.thickDriver.dabCount : this.stickerSpray ? this.stickerSpray.dabCount : this.wet!.dabCount;
     this.result = { layerId: this.layerId, bounds: changed ? this.bounds : null, dabs, strokeId: null };
     if (this.stickerSpray?.skipped.size) this.result.skippedStickers = [...this.stickerSpray.skipped];
@@ -407,7 +513,11 @@ export class PaintStrokeSession {
     if (this.closed) return;
     this.closed = true;
     if (this.lightTwin?.open) this.lightTwin.cancel();
+    if (this.fluorTwin?.open) this.fluorTwin.cancel();
+    if (this.thermoTwin?.open) this.thermoTwin.cancel();
     this.lightResult = null;
+    this.fluorResult = null;
+    this.thermoResult = null;
     this.host.commit(this, null, true);
   }
 }

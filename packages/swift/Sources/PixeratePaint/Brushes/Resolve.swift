@@ -81,6 +81,8 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("tip.grain", "tipGrain", DABS))
     out.append(f("behaviour.grain", "grain"))
     out += each("light", "light", ["amount", "pressure"])
+    out += each("fluorescence", "fluorescence", ["amount", "invisible"])
+    out += each("thermochromic", "thermochromic", ["hotColor", "threshold"])
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))
     out.append(f("behaviour.exchange.mix", "behavior.mix", EXCHANGE))
     out.append(f("behaviour.exchange.dirty", "behavior.dirty", EXCHANGE))

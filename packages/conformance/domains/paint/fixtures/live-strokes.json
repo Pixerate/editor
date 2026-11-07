@@ -463,6 +463,10 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {
@@ -531,6 +535,10 @@
                           "stamps": [
                             "editor:star"
                           ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
                         },
                         "tip": {
                           "angle": 0,
@@ -622,6 +630,10 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
                         "grain": 0,
                         "id": "ink-pen",
                         "impasto": {
@@ -690,6 +702,10 @@
                           "stamps": [
                             "editor:star"
                           ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
                         },
                         "tip": {
                           "angle": 0,
@@ -793,6 +809,10 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {
@@ -861,6 +881,10 @@
                           "stamps": [
                             "editor:star"
                           ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
                         },
                         "tip": {
                           "angle": 0,
@@ -952,6 +976,10 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
                         "grain": 0,
                         "id": "ink-pen",
                         "impasto": {
@@ -1020,6 +1048,10 @@
                           "stamps": [
                             "editor:star"
                           ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
                         },
                         "tip": {
                           "angle": 0,
@@ -1123,6 +1155,10 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
                         "grain": 0,
                         "id": "ink-pen",
                         "impasto": {
@@ -1191,6 +1227,10 @@
                           "stamps": [
                             "editor:star"
                           ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
                         },
                         "tip": {
                           "angle": 0,
@@ -1285,6 +1325,10 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {
@@ -1353,6 +1397,10 @@
                           "stamps": [
                             "editor:star"
                           ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
                         },
                         "tip": {
                           "angle": 0,
@@ -1453,6 +1501,10 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {
@@ -1521,6 +1573,10 @@
                           "stamps": [
                             "editor:star"
                           ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
                         },
                         "tip": {
                           "angle": 0,

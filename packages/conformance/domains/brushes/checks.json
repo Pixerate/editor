@@ -2716,5 +2716,77 @@
         ]
       }
     }
+  },
+  {
+    "id": "uv-marker",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "fluorescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "fluorescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "fluorescence",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "thermo-ink",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "thermochromic",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "thermochromic",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "thermochromic",
+            "severity": "error"
+          }
+        ]
+      }
+    }
   }
 ]

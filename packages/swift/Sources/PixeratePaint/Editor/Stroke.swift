@@ -40,6 +40,10 @@ struct StrokeSessionInit {
     var paint: PaintGradientSource?
     /// Light paint: the layer's light channel before the stroke; a grey twin of the stroke paints it.
     var light: TiledSurface? = nil
+    /// UV-fluorescent ink: the layer's 4-channel fluorescence surface before the stroke.
+    var fluor: TiledSurface? = nil
+    /// Thermochromic ink: the layer's 4-channel thermochromic surface before the stroke.
+    var thermo: TiledSurface? = nil
     /// Effect paint: the effect (recorded with the stroke) and its rendered pixels.
     var effect: (source: PaintEffectPaint, pixels: EffectPaintPixels)? = nil
     /// Sticker brushes: the number of the first sticker id (`st<n>`) the spray makes.
@@ -108,6 +112,12 @@ final class PaintStrokeSession: PaintTileTarget {
 
     /// Light paint: the stroke's twin over the light channel.
     private var lightTwin: PaintStrokeSession?
+    /// UV-fluorescent ink: the stroke's twin over the 4-channel fluorescence surface.
+    private var fluorTwin: PaintStrokeSession?
+    /// Thermochromic ink: the stroke's twin over the 4-channel thermochromic surface.
+    private var thermoTwin: PaintStrokeSession?
+    private let thermoBefore: TiledSurface?
+    private let invisibleDaylight: Bool
     /// The tiles shown while the stroke is painted (`currentSurface`), and the keys changed since.
     private var shown: OrderedMap<TileKey, Tile>?
     private var stale: [TileKey] = []
@@ -119,11 +129,29 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Light paint: the layer's light channel after the stroke, or nil when the stroke has no twin.
     var lightChannel: TiledSurface? { lightTwin?.surfaceAfter.map(shadowToLight) }
 
+    /// UV-fluorescent ink: the layer's fluorescence surface after the stroke, or nil.
+    var fluorChannel: TiledSurface? {
+        guard let twin = fluorTwin else { return nil }
+        return twin.surfaceAfter ?? initValues.fluor
+    }
+
+    /// Thermochromic ink: the layer's thermochromic surface after the stroke, or nil.
+    var thermoChannel: TiledSurface? {
+        guard let twin = thermoTwin else { return nil }
+        guard let after = twin.surfaceAfter else { return thermoBefore }
+        if let hc = initValues.brush.thermochromic.hotColor {
+            return finalizeThermoStroke(after, thermoBefore ?? emptyThermo(), hexToRgb8(hc), initValues.brush.thermochromic.threshold)
+        }
+        return after
+    }
+
     init(_ i: StrokeSessionInit) throws {
         initValues = i
         layerId = i.layerId
         base = i.surface
         let brush = i.brush
+        thermoBefore = i.thermo
+        invisibleDaylight = brush.fluorescence.amount > 0 && brush.fluorescence.invisible && i.wet == nil && brush.engine != "sticker" && brush.engine != "eraser" && brush.engine != "blender" && brush.engine != "smudge"
         if let light = i.light, i.wet == nil, i.brush.engine != "sticker" {
             // The twin paints the light as grey at the brush's light amount (see `light.ts`).
             let grey = Int(JS.round(brush.light.amount * 255))
@@ -141,9 +169,55 @@ final class PaintStrokeSession: PaintTileTarget {
             t.paint = i.paint.map { p in var q = p; q.stops = p.stops.map { var st = $0; st.color = hex; return st }; return q }
             t.effect = i.effect.map { ($0.source, greyPixels($0.pixels, grey)) }
             t.light = nil
+            t.fluor = nil
+            t.thermo = nil
+            t.thick = nil
+            t.stickerNextId = nil
             lightTwin = try PaintStrokeSession(t)
         }
+        if let fluor = i.fluor, i.wet == nil, i.brush.engine != "sticker" {
+            var t = i
+            t.surface = fluor
+            t.lockTransparency = false
+            t.brush = fluorTwinBrush(brush)
+            t.inputFilter = nil
+            t.light = nil
+            t.fluor = nil
+            t.thermo = nil
+            t.thick = nil
+            t.stickerNextId = nil
+            fluorTwin = try PaintStrokeSession(t)
+        }
+        if let thermo = i.thermo, i.wet == nil, i.brush.engine != "sticker" {
+            let hotHex = brush.thermochromic.hotColor ?? i.colorHex
+            let hotRgb = hexToRgb8(hotHex)
+            var t = i
+            t.surface = thermo
+            t.lockTransparency = false
+            t.brush = thermoTwinBrush(brush)
+            t.color = [hotRgb[0], hotRgb[1], hotRgb[2], 255]
+            t.colorHex = hotHex
+            t.secondary = [hotRgb[0], hotRgb[2].self == hotRgb[2] ? hotRgb[1] : hotRgb[1], hotRgb[2], 255]
+            t.inputFilter = nil
+            t.mixerLoad = MixerLoad(
+                reservoir: i.mixerLoad.reservoir != nil ? [Double(hotRgb[0]) / 255, Double(hotRgb[1]) / 255, Double(hotRgb[2]) / 255] : nil,
+                amount: i.mixerLoad.amount,
+                pickup: nil
+            )
+            t.paint = nil
+            t.effect = nil
+            t.light = nil
+            t.fluor = nil
+            t.thermo = nil
+            t.thick = nil
+            t.stickerNextId = nil
+            thermoTwin = try PaintStrokeSession(t)
+        }
         apply = StrokeApply(mode: brush.engine == "eraser" ? .erase : .paint, color: i.color, background: i.background, opacity: brush.tip.opacity, blend: brush.tip.blend, lockTransparency: i.lockTransparency, selection: i.selection, offset: i.offset)
+        if invisibleDaylight {
+            dry = nil
+            return
+        }
         let copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
         if let w = i.wet {
             dry = nil
@@ -226,6 +300,12 @@ final class PaintStrokeSession: PaintTileTarget {
             return rects
         }
         try lightTwin?.push(filtered)
+        let fRects = try fluorTwin?.push(filtered) ?? []
+        _ = try thermoTwin?.push(filtered)
+        if invisibleDaylight {
+            for r in fRects { bounds = unionRect(bounds, r) }
+            return fRects
+        }
         let rects = dry != nil ? dry!.push(filtered) : thickDriver != nil ? thickDriver!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
         update(rects)
         markStale(rects)
@@ -302,9 +382,23 @@ final class PaintStrokeSession: PaintTileTarget {
             result = r
             return r
         }
-        update(dry != nil ? dry!.finish() : thickDriver != nil ? thickDriver!.finish() : spray != nil ? spray!.finish() : wet!.finish())
+        if !invisibleDaylight {
+            update(dry != nil ? dry!.finish() : thickDriver != nil ? thickDriver!.finish() : spray != nil ? spray!.finish() : wet!.finish())
+        }
         closed = true
         if let twin = lightTwin, twin.open { _ = try twin.end() }
+        let fEnd = try fluorTwin.flatMap { $0.open ? try $0.end() : $0.result }
+        let tEnd = try thermoTwin.flatMap { $0.open ? try $0.end() : $0.result }
+        if invisibleDaylight {
+            if let fb = fEnd?.bounds { bounds = unionRect(bounds, fb) }
+            let changed = fluorTwin?.surfaceAfter != nil
+            surfaceAfter = changed ? base : nil
+            let r = PaintStrokeResult(layerId: layerId, bounds: changed ? bounds : nil, dabs: fEnd?.dabs ?? 0, strokeId: nil)
+            result = r
+            return r
+        }
+        if let fb = fEnd?.bounds { bounds = unionRect(bounds, fb) }
+        if let tb = tEnd?.bounds { bounds = unionRect(bounds, tb) }
         let ch = base.channels
         var tiles = base.tiles
         var changed = false
@@ -316,6 +410,7 @@ final class PaintStrokeSession: PaintTileTarget {
         }
         // An impasto stroke can change only the relief (a knife on dry colour).
         if let t = thickDriver, t.dabCount > 0 { changed = true }
+        if fluorTwin?.surfaceAfter != nil || thermoTwin?.surfaceAfter != nil { changed = true }
         surfaceAfter = changed ? TiledSurface(channels: ch, tiles: tiles, defaultValue: base.defaultValue) : nil
         let dabs = dry?.dabCount ?? thickDriver?.dabCount ?? spray?.dabCount ?? wet!.dabCount
         var r = PaintStrokeResult(layerId: layerId, bounds: changed ? bounds : nil, dabs: dabs, strokeId: nil)
