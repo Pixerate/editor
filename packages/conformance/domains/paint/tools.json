@@ -1868,6 +1868,25 @@
                 },
                 "additionalProperties": false
               },
+              "ghost": {
+                "type": "object",
+                "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+                "properties": {
+                  "linger": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 60,
+                    "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+                  },
+                  "smear": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
+                  }
+                },
+                "additionalProperties": false
+              },
               "motion": {
                 "type": "object",
                 "description": "Animation after painting.",
@@ -2394,6 +2413,7 @@
                     "dynamics",
                     "behaviour",
                     "light",
+                    "ghost",
                     "motion",
                     "colour"
                   ],
@@ -3650,6 +3670,25 @@
                       "glow": {
                         "type": "boolean",
                         "description": "Suggest a glow layer effect for the layer (glow stays a layer effect)."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "ghost": {
+                    "type": "object",
+                    "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+                    "properties": {
+                      "linger": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 60,
+                        "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+                      },
+                      "smear": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
                       }
                     },
                     "additionalProperties": false
@@ -5249,6 +5288,25 @@
                       "glow": {
                         "type": "boolean",
                         "description": "Suggest a glow layer effect for the layer (glow stays a layer effect)."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "ghost": {
+                    "type": "object",
+                    "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+                    "properties": {
+                      "linger": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 60,
+                        "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+                      },
+                      "smear": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
                       }
                     },
                     "additionalProperties": false
@@ -6913,6 +6971,25 @@
                       "glow": {
                         "type": "boolean",
                         "description": "Suggest a glow layer effect for the layer (glow stays a layer effect)."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "ghost": {
+                    "type": "object",
+                    "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+                    "properties": {
+                      "linger": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 60,
+                        "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+                      },
+                      "smear": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
                       }
                     },
                     "additionalProperties": false
@@ -9651,7 +9728,7 @@
         {
           "name": "get_wet_paint",
           "title": "Get the wet paint",
-          "description": "Reads the wet media: whether any paint is still wet, the simulation clock (steps), whether time is paused, its speed (steps per second), the canvas tilt, the kernel running it (typescript, wasm, wasm-threads with the thread count, and a message when it runs slower than it could, e.g. without cross-origin isolation), and each wet layer: wet cells, where the water is (wetBounds), live tiles, its settings and flow map. Also engine: Engine B, the GPU accelerator: WebGPU in browsers, Metal in the Swift editors (mode auto/off, state, reason, adapter, minTiles, activeTiles). Call it after wet strokes to see what is still wet.",
+          "description": "Reads the wet media: whether any paint is still wet, the simulation clock (steps), whether time is paused, its speed (steps per second), the canvas tilt, the kernel running it (typescript, wasm, wasm-threads with the thread count, and a message when it runs slower than it could, e.g. without cross-origin isolation), and each wet layer: wet cells, where the water is (wetBounds), live tiles, its settings, flow map, and ghost: { remaining } (seconds of simulated time left when ghost paint is fading on the layer). Also engine: Engine B, the GPU accelerator: WebGPU in browsers, Metal in the Swift editors (mode auto/off, state, reason, adapter, minTiles, activeTiles). Call it after wet strokes to see what is still wet.",
           "inputSchema": {
             "type": "object",
             "properties": {},
@@ -14027,6 +14104,25 @@
                 },
                 "additionalProperties": false
               },
+              "ghost": {
+                "type": "object",
+                "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+                "properties": {
+                  "linger": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 60,
+                    "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+                  },
+                  "smear": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
+                  }
+                },
+                "additionalProperties": false
+              },
               "motion": {
                 "type": "object",
                 "description": "Animation after painting.",
@@ -15421,6 +15517,25 @@
                 },
                 "additionalProperties": false
               },
+              "ghost": {
+                "type": "object",
+                "description": "Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface \"wet\").",
+                "properties": {
+                  "linger": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 60,
+                    "description": "Seconds of simulated time before the ghost paint has fully faded (default 4)."
+                  },
+                  "smear": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3)."
+                  }
+                },
+                "additionalProperties": false
+              },
               "motion": {
                 "type": "object",
                 "description": "Animation after painting.",
@@ -15947,6 +16062,7 @@
                     "dynamics",
                     "behaviour",
                     "light",
+                    "ghost",
                     "motion",
                     "colour"
                   ],

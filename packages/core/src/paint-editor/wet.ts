@@ -29,9 +29,9 @@ import { DEFAULT_FLOW, flowField, normalizeFlow, type WetFlowSpec } from '../pai
 import { WetMedium } from '../paint/wet/medium';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import { effectDabField, sampleEffectAt, type EffectPaintPixels } from './effect-paint';
-import { DEFAULT_WET_PARAMS, FLAT, WET_TILE, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
+import { DEFAULT_WET_PARAMS, FLAT, FREE_INTERVAL, WET_TILE, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 import { createWetGpuEngine, findWebGpu, type WetGpuEngine, type WetGpuProvider, type WetGpuSupport } from '../paint/wet/gpu';
-import { moveWetSnapshot, WetWorld, type WetBackendInfo, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
+import { moveWetSnapshot, WetWorld, type WetBackendInfo, type WetGhostState, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
 import { TILE, TiledSurface, translateSurface, type RasterRect } from '../raster/surface';
 import type { PaintBrush, WetMediumKind } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
@@ -88,6 +88,8 @@ export interface WetStrokeInit {
    * the water like any pigment.
    */
   effect?: EffectPaintPixels | null;
+  /** Simulation steps per second (for ghost fade countdown). */
+  speed?: number;
 }
 
 interface CopyState {
@@ -130,12 +132,17 @@ export class WetStrokeDriver {
     const perDab = Math.min(1, spacing * 1.2);
     // Thinner: more water, less pigment and body.
     const thin = wet.thinner;
+    const body = wet.body * (1 - thin);
     this.medium = new WetMedium(init.world, init.laneId, {
       water: STROKE_WATER * Math.min(1, wet.water * (1 + thin)) * perDab,
       mass: STROKE_MASS * wet.pigment * (1 - 0.6 * thin) * perDab,
-      body: wet.body * (1 - thin),
+      body,
       light: 0,
     });
+    if (wet.tool === 'paint' && brush.ghost && wet.pigment > 0) {
+      const one = pigmentOf(init.color, body);
+      init.world.startGhost(init.laneId, [one[0], one[1], one[2], one[3]], brush.ghost.linger, init.speed ?? 120);
+    }
     // Light paint: wet paint brushes lay light with their pigment (thinned with it); it then flows with the paint.
     this.lightBase = wet.tool === 'paint' ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0;
     // Loading: below 1 the reservoir drains along the stroke, so the paint runs out.
@@ -259,6 +266,22 @@ export class WetStrokeDriver {
     if (!(k > 0)) return;
     switch (wet.tool) {
       case 'paint': {
+        if (brush.ghost) {
+          const smear = brush.ghost.smear;
+          if (wet.pigment > 0) {
+            this.medium.options.light = this.medium.options.mass;
+            this.medium.deposit(rect, cov, k, this.init.color, null);
+          } else {
+            this.medium.options.light = 0;
+            world.paint(laneId, rect, cov, this.medium.options.water * k * (wet.water > 0 ? 1 : 0), null);
+          }
+          if (smear > 0) {
+            const rw = Math.max(wet.rewet, 0.6) * smear;
+            if (rw > 0) world.rewet(laneId, rect, cov, rw * k * 0.5, this.init.paperColor, true);
+            if (st.last) world.drag(laneId, rect, tip, d.x - st.last.x, d.y - st.last.y, smear * k);
+          }
+          break;
+        }
         const ex = st.exchange!;
         this.medium.options.light = this.lightBase * (brush.light.pressure ? d.pressure : 1);
         let flow = 1;
@@ -326,6 +349,7 @@ export const WET_MEDIUM_PARAMS: Readonly<Record<WetMediumKind, Partial<WetParams
 export interface WetLayerSettings {
   params: WetParams;
   flow: WetFlowSpec;
+  ghost?: WetGhostState | null;
 }
 
 /** One wet layer as tools describe it. */
@@ -341,6 +365,8 @@ export interface WetLayerInfo {
   activeTiles: number;
   params: WetParams;
   flow: WetFlowSpec;
+  /** Active ghost fade on the layer (`remaining` seconds of simulated time), when one is fading. */
+  ghost?: { remaining: number };
 }
 
 /** An event recorded with the clock it happened at (strokes are recorded separately), for replays. */
@@ -605,7 +631,7 @@ export class PaintWetLayers {
     if (!w.hasLane(layerId)) {
       const base = this.host.layerSurface(layerId) ?? new TiledSurface(4, new Map(), 0);
       const s = this.settingsOf(layerId, medium);
-      w.ensureLane(layerId, { params: s.params, base, light: this.host.layerLight(layerId) });
+      w.ensureLane(layerId, { params: s.params, base, light: this.host.layerLight(layerId), ghost: s.ghost });
       const { width, height } = this.host.canvas();
       if (s.flow.kind !== 'none') w.setFlow(layerId, flowField(s.flow, width, height), s.flow.strength);
     }
@@ -644,6 +670,7 @@ export class PaintWetLayers {
   info(layerId: string): WetLayerInfo {
     const s = this.settingsOf(layerId);
     const st: WetLaneStats | null = this.world?.hasLane(layerId) ? this.world.stats(layerId) : null;
+    const g = this.world?.hasLane(layerId) ? this.world.getGhost(layerId) : s.ghost ?? null;
     return {
       layerId,
       wet: Boolean(st && st.wetCells > 0),
@@ -652,6 +679,7 @@ export class PaintWetLayers {
       activeTiles: st?.activeTiles ?? 0,
       params: { ...s.params },
       flow: { ...s.flow },
+      ...(g ? { ghost: { remaining: Math.round(((g.remaining * FREE_INTERVAL) / this.speed) * 100) / 100 } } : {}),
     };
   }
 
@@ -713,6 +741,8 @@ export class PaintWetLayers {
       const base = w.getBase(id);
       const light = w.isLit(id) ? w.getLight(id) : null;
       w.removeLane(id);
+      const s = this.settings.get(id);
+      if (s?.ghost) delete s.ghost;
       if (light && this.host.layerLight(id) !== light) this.host.updateLights(new Map([[id, light]]));
       this.host.updateSurfaces(new Map([[id, base]]), []);
     }

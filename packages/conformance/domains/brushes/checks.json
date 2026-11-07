@@ -2716,5 +2716,181 @@
         ]
       }
     }
+  },
+  {
+    "id": "ghost-wash",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "ghost-gouache",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "ghost-oil",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "invisible-ink",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
   }
 ]

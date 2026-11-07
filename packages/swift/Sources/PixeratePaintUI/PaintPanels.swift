@@ -251,6 +251,11 @@ public struct PaintBrushPanel: View {
             ForEach(model.tables.brushOptions, id: \.id) { item in
                 PaintSliderRow(label: item.label, value: model.brushOption(item), range: item.min...item.max, step: item.step, displayScale: item.displayScale ?? 1, unit: item.unit) { model.setBrushOption(item, $0) }
             }
+            if brush.ghost != nil {
+                ForEach(model.ghostSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.ghostValue(item.path), range: item.min...item.max, step: item.step) { model.setGhostValue(item.path, $0) }
+                }
+            }
             if brush.engine == "mixer" || brush.behavior.dirty {
                 HStack(spacing: 6) {
                     Text("Carries").foregroundStyle(.secondary)
