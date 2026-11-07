@@ -294,6 +294,27 @@ describe('PaintEditorController: fillRegion & findUnfilledRegions', () => {
     expect(readPixel(layerOf(c, layerId).surface, 26, 16)[3]).toBe(0);
   });
 
+  it('PaintGesture fill tool never undoes an earlier edit when its fill made no undo step', () => {
+    const { c, flatsId, inkId } = makeInkedController();
+    const inkAt = () => readPixel(layerOf(c, inkId).surface, 36, 30)[3];
+    expect(inkAt()).toBeGreaterThan(0);
+    const strokes = c.getStrokes().length;
+
+    const gesture = new PaintGesture(c, () => ({ left: 0, top: 0, width: 64, height: 64 }));
+    gesture.tool = 'fill';
+    // Contracting by 16 px empties the 20 px wide box, so the fill commits nothing.
+    gesture.fillOptions = { layerId: flatsId, reference: inkId, tolerance: 32, closeGap: 0, expand: -16 };
+
+    expect(gesture.down({ pointerId: 1, clientX: 46, clientY: 30, button: 0 })).toBe(true);
+    gesture.move({ pointerId: 1, clientX: 86, clientY: 30 });
+    gesture.move({ pointerId: 1, clientX: 126, clientY: 30 });
+    gesture.cancel();
+
+    expect(c.getStrokes().length).toBe(strokes);
+    expect(inkAt()).toBeGreaterThan(0);
+    expect(readPixel(layerOf(c, flatsId).surface, 46, 30)[3]).toBe(0);
+  });
+
   it('exposes fill_region and find_unfilled_regions through ToolRegistry with validation', async () => {
     const { c, flatsId, inkId } = makeInkedController();
     const reg = new ToolRegistry();

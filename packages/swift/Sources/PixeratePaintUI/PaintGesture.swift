@@ -70,7 +70,8 @@ public final class PaintGesture {
     private enum Mode {
         case stroke(pointerId: Int)
         /// Filling a region: dragging horizontally adjusts the tolerance live (one undo step).
-        case fill(pointerId: Int, startX: Double, p: Point2, baseTolerance: Double, lastTolerance: Double)
+        /// `committed`: the last fill made an undo step (an empty or refused fill makes none, so there is nothing to undo).
+        case fill(pointerId: Int, startX: Double, p: Point2, baseTolerance: Double, lastTolerance: Double, committed: Bool)
         /// Dragging a stroke of a stroke layer: where the pointer went down and where it is now.
         case moveStroke(pointerId: Int, id: String, from: Point2, to: Point2)
         case pan(pointerId: Int, x: Double, y: Double, panX: Double, panY: Double)
@@ -78,7 +79,7 @@ public final class PaintGesture {
 
         var pointerId: Int {
             switch self {
-            case .stroke(let p), .fill(let p, _, _, _, _), .moveStroke(let p, _, _, _), .pan(let p, _, _, _, _), .rotate(let p, _, _): return p
+            case .stroke(let p), .fill(let p, _, _, _, _, _), .moveStroke(let p, _, _, _), .pan(let p, _, _, _, _), .rotate(let p, _, _): return p
             }
         }
     }
@@ -201,7 +202,7 @@ public final class PaintGesture {
         let p = doc(e)
         let baseTol = fillOptions.tolerance
         do {
-            _ = try controller.fillRegion(
+            let filled = try controller.fillRegion(
                 x: p.x,
                 y: p.y,
                 reference: fillOptions.reference,
@@ -211,7 +212,7 @@ public final class PaintGesture {
                 antialias: fillOptions.antialias,
                 wet: fillOptions.wet
             )
-            mode = .fill(pointerId: e.pointerId, startX: e.x, p: p, baseTolerance: baseTol, lastTolerance: baseTol)
+            mode = .fill(pointerId: e.pointerId, startX: e.x, p: p, baseTolerance: baseTol, lastTolerance: baseTol, committed: !(filled["bounds"] ?? .null).isNull)
             return true
         } catch {
             self.error = "\(error)"
@@ -233,15 +234,16 @@ public final class PaintGesture {
             _ = controller.setView(rotation: r)
         case let .moveStroke(p, id, from, _):
             mode = .moveStroke(pointerId: p, id: id, from: from, to: doc(e))
-        case let .fill(pointerId, startX, p, baseTolerance, lastTolerance):
+        case let .fill(pointerId, startX, p, baseTolerance, lastTolerance, committed):
             let dx = e.x - startX
             if abs(dx) < 4 { return }
             let nextTol = Swift.max(0, Swift.min(255, (baseTolerance + dx * 0.5).rounded()))
             if nextTol == lastTolerance { return }
-            mode = .fill(pointerId: pointerId, startX: startX, p: p, baseTolerance: baseTolerance, lastTolerance: nextTol)
+            // Only take back this gesture's own fill: an empty fill made no undo step.
+            if committed { _ = controller.undo() }
+            mode = .fill(pointerId: pointerId, startX: startX, p: p, baseTolerance: baseTolerance, lastTolerance: nextTol, committed: false)
             do {
-                _ = controller.undo()
-                _ = try controller.fillRegion(
+                let filled = try controller.fillRegion(
                     x: p.x,
                     y: p.y,
                     reference: fillOptions.reference,
@@ -251,6 +253,7 @@ public final class PaintGesture {
                     antialias: fillOptions.antialias,
                     wet: fillOptions.wet
                 )
+                mode = .fill(pointerId: pointerId, startX: startX, p: p, baseTolerance: baseTolerance, lastTolerance: nextTol, committed: !(filled["bounds"] ?? .null).isNull)
             } catch {
                 self.error = "\(error)"
             }
@@ -318,6 +321,7 @@ public final class PaintGesture {
         penDown = false
         predicted = []
         if case .stroke? = mode { controller.activeStroke?.cancel() }
+        if case let .fill(_, _, _, _, _, committed)? = mode, committed { _ = controller.undo() }
         mode = nil
     }
 

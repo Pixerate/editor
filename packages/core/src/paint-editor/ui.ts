@@ -63,7 +63,8 @@ export interface ViewportBox {
 type Mode =
   | { kind: 'stroke'; pointerId: number }
   /** Filling a region: dragging horizontally adjusts the tolerance live (one undo step). */
-  | { kind: 'fill'; pointerId: number; startX: number; p: Point2; baseTolerance: number; lastTolerance: number }
+  /** `committed`: the last fill made an undo step (an empty or refused fill makes none, so there is nothing to undo). */
+  | { kind: 'fill'; pointerId: number; startX: number; p: Point2; baseTolerance: number; lastTolerance: number; committed: boolean }
   /** Dragging a stroke of a stroke layer: where the pointer went down and where it is now. */
   | { kind: 'move-stroke'; pointerId: number; id: string; from: Point2; to: Point2 }
   /** Dragging a sticker: (dx, dy) from the pointer to its centre, and where it was last shown. */
@@ -203,8 +204,8 @@ export class PaintGesture {
     const p = this.doc(e);
     const baseTolerance = this.fillOptions.tolerance ?? 32;
     try {
-      this.controller.fillRegion({ ...this.fillOptions, tolerance: baseTolerance, x: p.x, y: p.y });
-      this.mode = { kind: 'fill', pointerId: e.pointerId, startX: e.clientX, p, baseTolerance, lastTolerance: baseTolerance };
+      const filled = this.controller.fillRegion({ ...this.fillOptions, tolerance: baseTolerance, x: p.x, y: p.y });
+      this.mode = { kind: 'fill', pointerId: e.pointerId, startX: e.clientX, p, baseTolerance, lastTolerance: baseTolerance, committed: filled.bounds !== null };
       return true;
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -239,8 +240,10 @@ export class PaintGesture {
       if (nextTol === m.lastTolerance) return;
       m.lastTolerance = nextTol;
       try {
-        this.controller.undo();
-        this.controller.fillRegion({ ...this.fillOptions, tolerance: nextTol, x: m.p.x, y: m.p.y });
+        // Only take back this gesture's own fill: an empty fill made no undo step.
+        if (m.committed) this.controller.undo();
+        m.committed = false;
+        m.committed = this.controller.fillRegion({ ...this.fillOptions, tolerance: nextTol, x: m.p.x, y: m.p.y }).bounds !== null;
       } catch (err) {
         this.error = err instanceof Error ? err.message : String(err);
       }
@@ -310,7 +313,7 @@ export class PaintGesture {
     this.penDown = false;
     this.predicted = [];
     if (this.mode?.kind === 'stroke') this.controller.activeStroke?.cancel();
-    if (this.mode?.kind === 'fill') this.controller.undo();
+    if (this.mode?.kind === 'fill' && this.mode.committed) this.controller.undo();
     if (this.mode?.kind === 'sticker') this.controller.cancelStickerPreview();
     this.mode = null;
   }

@@ -151,6 +151,25 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(presenter.render(), 0, "nothing changed since")
     }
 
+    func testFillDragNeverUndoesAnEarlierEditWhenItsFillMadeNoUndoStep() throws {
+        let model = try makeModel()
+        // A closed 30 px box: contracting its inside by 16 px empties the fill, so it commits nothing.
+        let corners = [PenPoint(x: 40, y: 40), PenPoint(x: 70, y: 40), PenPoint(x: 70, y: 70), PenPoint(x: 40, y: 70), PenPoint(x: 40, y: 40)]
+        let box = (0..<4).flatMap { k in (0..<10).map { i -> PenPoint in
+            let a = corners[k], b = corners[k + 1], t = Double(i) / 10
+            return PenPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+        } } + [corners[0]]
+        _ = try model.controller.paintStroke(PaintStrokeInit(seed: 3), points: box)
+        XCTAssertEqual(model.controller.strokes.count, 1)
+        model.tool = "fill"
+        model.gesture.fillOptions = PaintFillOptions(reference: "layer", tolerance: 32, closeGap: 0, expand: -16)
+        XCTAssertTrue(model.gesture.down(mouse(55, 55)))
+        model.gesture.move(mouse(95, 55))
+        model.gesture.move(mouse(135, 55))
+        model.gesture.cancel()
+        XCTAssertEqual(model.controller.strokes.count, 1, "the box stroke is still there")
+    }
+
     func testThePresenterRedrawsOnlyChangedTiles() throws {
         let model = try makeModel(width: 1024, height: 768)
         let presenter = PaintCanvasPresenter(controller: model.controller)
