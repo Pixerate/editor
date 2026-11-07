@@ -533,7 +533,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Paint editor</strong> (33)</summary>
+<summary><strong>Paint editor</strong> (34)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |

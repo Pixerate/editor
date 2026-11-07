@@ -51,7 +51,8 @@
     "tipGrain": "full",
     "dabCount": "full",
     "livePatterns": "full",
-    "iridescence": "full"
+    "iridescence": "full",
+    "ferro": "full"
   },
   {
     "id": "image",
