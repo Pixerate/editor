@@ -19,8 +19,10 @@ public final class FakeEffectProvider: VectorEffectProvider {
         "supportsWorker": false, "supportsFloat": true, "supportsMask": true, "supportsHostImages": false, "supportsVector": true, "supportsAuthoring": true, "maxSize": 8192,
     ]
     private let all: [EffectDescription]
+    public var onRender: ((String, Int, Int, EffectRenderRequest) -> Void)?
 
-    public init() {
+    public init(onRender: ((String, Int, Int, EffectRenderRequest) -> Void)? = nil) {
+        self.onRender = onRender
         all = (try! JSONValue.parse(FAKE_EFFECTS_JSON)).arrayValue!.map { EffectDescription($0.objectValue!) }
     }
 
@@ -37,7 +39,7 @@ public final class FakeEffectProvider: VectorEffectProvider {
         let d = try get(id)
         if d.kind != "shader" { throw EffectError.unsupported("\"\(id)\" is a \(d.kind) effect; use applyVectorEffect.", id) }
         if !(width > 0 && height > 0) || width > 8192 || height > 8192 { throw EffectError.unsupported("Renderer size \(width)×\(height) is outside 1–8192.", id) }
-        return FakeRenderer(d, width, height)
+        return FakeRenderer(d, width, height, onRender)
     }
 
     public func applyVectorEffect(_ id: String, target: EffectVectorTarget, values: JSONObject?) async throws -> EffectVectorMotion {
@@ -77,25 +79,32 @@ public final class FakeEffectProvider: VectorEffectProvider {
     }
 }
 
-private final class FakeRenderer: EffectRenderer {
+private final class FakeRenderer: SyncEffectRenderer {
     let d: EffectDescription
     let width: Int
     let height: Int
+    let onRender: ((String, Int, Int, EffectRenderRequest) -> Void)?
     var effectId: String { d.id }
     private var disposed = false
 
-    init(_ d: EffectDescription, _ width: Int, _ height: Int) {
+    init(_ d: EffectDescription, _ width: Int, _ height: Int, _ onRender: ((String, Int, Int, EffectRenderRequest) -> Void)? = nil) {
         self.d = d
         self.width = width
         self.height = height
+        self.onRender = onRender
     }
 
     func dispose() { disposed = true }
 
     func render(_ request: EffectRenderRequest) async throws -> EffectPixels {
+        try renderSync(request)
+    }
+
+    func renderSync(_ request: EffectRenderRequest) throws -> EffectPixels {
         if disposed { throw EffectError("disposed", "The renderer for \"\(d.id)\" was disposed. Create a new renderer.", effectId: d.id) }
         if !request.time.isFinite || request.time < 0 { throw EffectError.unsupported("time must be a finite number of ms ≥ 0, got \(jsText(request.time)).", d.id) }
         let v = try resolveEffectValues(d, request.values)
+        onRender?(d.id, width, height, request)
         var out = try renderPixels(v, request)
         if let mask = request.mask {
             if mask.width != width || mask.height != height { throw EffectError.unsupported("The mask must be EffectPixels the size of the renderer.", d.id) }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPaintEffectsToolProvider, PAPER_EFFECT_BLENDS, type PaintEditorController, type PaintEffectsToolProviderOptions, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
-import type { EffectProvider } from '@pixerate/editor/effects';
+import { pathControlsOf, type EffectProvider } from '@pixerate/editor/effects';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 import { EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
 import { usePaintEditorState } from './usePaintEditor';
@@ -81,6 +81,8 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
   const layerEffect = activeId ? controller.getEffectLayer(activeId) : undefined;
   const active = activeId ? controller.getLayer(activeId) : undefined;
   const effectPaint = state.effectPaint;
+  const { description: paintDescription } = useEffectDescription(provider, effectPaint?.effect);
+  const hasPathControl = Boolean(paintDescription && pathControlsOf(paintDescription).length > 0);
   const animation = controller.getAnimation();
   const playback = state.effectPlayback;
   /** Paints with the effect paint again with some of it changed (the other settings kept). */
@@ -186,15 +188,21 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
           </div>
           <div className="flex flex-wrap items-center gap-2" data-testid="effect-paint-placement">
             <label className="flex items-center gap-1" title="Lay the effect along each stroke instead of fixing it to the canvas">
-              <input type="checkbox" checked={Boolean(effectPaint.map)} onChange={(e) => repaint({ map: e.target.checked ? { by: 'stroke', length: 300, repeat: 'repeat' } : { by: 'canvas' } })} />
+              <input type="checkbox" checked={effectPaint.map?.by === 'stroke'} onChange={(e) => repaint({ map: e.target.checked ? { by: 'stroke', length: 300, repeat: 'repeat' } : { by: 'canvas' } })} />
               Along the stroke
             </label>
+            {hasPathControl && (
+              <label className="flex items-center gap-1" title="Pass each stroke's centreline to the effect's own path control">
+                <input type="checkbox" checked={effectPaint.map?.by === 'path'} onChange={(e) => repaint({ map: e.target.checked ? { by: 'path' } : { by: 'canvas' } })} />
+                Along the stroke (native)
+              </label>
+            )}
             <label className="flex items-center gap-1" title="Strokes on a stroke layer keep playing the effect">
               <input type="checkbox" checked={Boolean(effectPaint.live)} onChange={(e) => repaint({ live: e.target.checked })} />
               Live
             </label>
           </div>
-          {effectPaint.map && (
+          {effectPaint.map?.by === 'stroke' && (
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-1">
                 <span className="text-slate-400">Length</span>
@@ -205,7 +213,7 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
                   min={16}
                   max={4096}
                   defaultValue={effectPaint.map.length}
-                  onBlur={(e) => Number(e.target.value) !== effectPaint.map!.length && repaint({ map: { ...effectPaint.map!, length: Number(e.target.value) } })}
+                  onBlur={(e) => Number(e.target.value) !== (effectPaint.map as { length: number }).length && repaint({ map: { ...effectPaint.map!, length: Number(e.target.value) } })}
                   className="w-16 rounded bg-slate-800 px-1 py-0.5"
                 />
               </label>

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { PAPER_EFFECT_BLENDS, type PaintEditorController, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
-  import type { EffectUse } from '@pixerate/editor/effects';
+  import { pathControlsOf, type EffectUse } from '@pixerate/editor/effects';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
+  import { effectDescriptionOf } from '../effects/effects.svelte.js';
   import ImageEffectControls from '../image-editor/ImageEffectControls.svelte';
   import { attempt, button, paintEditorState, paintEffectsProvider, panel } from './paintEditorRune.svelte.js';
 
@@ -39,6 +40,8 @@
     const { effectPaint, rendering } = view;
     return effectPaint && !rendering ? untrack(() => controller.effectPaintThumbnail(48)) : null;
   });
+  const paintLoaded = effectDescriptionOf(() => provider, () => view.effectPaint?.effect ?? null);
+  const hasPathControl = $derived(Boolean(paintLoaded.description && pathControlsOf(paintLoaded.description).length > 0));
   type Browse = null | 'paper' | 'layer' | 'fill' | 'light' | 'paint';
   const BROWSERS: Record<Exclude<Browse, null>, { uses: EffectUse[]; title: string }> = {
     paper: { uses: ['generator'], title: 'Effect paper' },
@@ -142,15 +145,21 @@
       />
       <div class="flex flex-wrap items-center gap-2" data-testid="effect-paint-placement">
         <label class="flex items-center gap-1" title="Lay the effect along each stroke instead of fixing it to the canvas">
-          <input type="checkbox" checked={Boolean(fx.map)} onchange={(e) => repaint({ map: e.currentTarget.checked ? { by: 'stroke', length: 300, repeat: 'repeat' } : { by: 'canvas' } })} />
+          <input type="checkbox" checked={fx.map?.by === 'stroke'} onchange={(e) => repaint({ map: e.currentTarget.checked ? { by: 'stroke', length: 300, repeat: 'repeat' } : { by: 'canvas' } })} />
           Along the stroke
         </label>
+        {#if hasPathControl}
+          <label class="flex items-center gap-1" title="Pass each stroke's centreline to the effect's own path control">
+            <input type="checkbox" checked={fx.map?.by === 'path'} onchange={(e) => repaint({ map: e.currentTarget.checked ? { by: 'path' } : { by: 'canvas' } })} />
+            Along the stroke (native)
+          </label>
+        {/if}
         <label class="flex items-center gap-1" title="Strokes on a stroke layer keep playing the effect">
           <input type="checkbox" checked={Boolean(fx.live)} onchange={(e) => repaint({ live: e.currentTarget.checked })} />
           Live
         </label>
       </div>
-      {#if fx.map}
+      {#if fx.map?.by === 'stroke'}
         {@const map = fx.map}
         <div class="flex flex-wrap items-center gap-2">
           <label class="flex items-center gap-1">

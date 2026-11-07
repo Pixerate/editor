@@ -766,6 +766,9 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 				height,
 				depth,
 				async render(request) {
+					return this.renderSync!(request);
+				},
+				renderSync(request) {
 					if (disposed) throw new EffectDisposedError(id);
 					if (!Number.isFinite(request.time) || request.time < 0) {
 						throw new EffectUnsupportedError(`time must be a finite number of ms ≥ 0, got ${request.time}.`, id);

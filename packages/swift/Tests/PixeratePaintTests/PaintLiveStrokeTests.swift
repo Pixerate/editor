@@ -160,4 +160,179 @@ final class PaintLiveStrokeTests: XCTestCase {
         XCTAssertFalse(isPalmTouch(Point2(x: 20, y: 130), Point2(x: 100, y: 100), hand: "right"))
         XCTAssertEqual(fitZoom(canvas, viewport: 448, 300), 2)
     }
+
+    func testPathMappedEffectPaintPassesStrokeCentrelineAndRefusesEffectsWithoutPathControls() async throws {
+        var calls: [(id: String, width: Int, height: Int, values: JSONObject?)] = []
+        let provider = FakeEffectProvider { id, w, h, req in
+            calls.append((id, w, h, req.values))
+        }
+        let c = try PaintEditorController(width: 80, height: 60, brushId: "ink-pen")
+        c.setEffectsProvider(provider)
+
+        // Effects without a path control refuse by: "path".
+        do {
+            _ = try await c.setEffectPaint("fake.gradient", map: ["by": "path"])
+            XCTFail("Expected fake.gradient to refuse by: \"path\"")
+        } catch {
+            XCTAssertTrue("\(error)".contains("has no path control"))
+            XCTAssertTrue("\(error)".contains("by: \"stroke\""))
+            XCTAssertTrue("\(error)".contains("by: \"canvas\""))
+        }
+
+        // fake.trail has a format: "svg-path" control and accepts by: "path".
+        let ep = try await c.setEffectPaint("fake.trail", values: ["color": "#e11d48", "width": 14], map: ["by": "path"])
+        XCTAssertEqual(ep.map, PaintEffectStrokeMap(by: "path"))
+        XCTAssertEqual(ep.json["map"], ["by": "path"])
+
+        _ = try c.setBrushFacets(["tip": ["size": 12, "hardness": 1, "opacity": 1, "flow": 1], "behaviour": ["grain": 0]])
+        calls.removeAll()
+        let r = try c.paintStroke(PaintStrokeInit(seed: 1), points: [
+            PenPoint(x: 10, y: 20, pressure: 1),
+            PenPoint(x: 40, y: 20, pressure: 1),
+            PenPoint(x: 70, y: 20, pressure: 1),
+        ])
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls[0].id, "fake.trail")
+        XCTAssertEqual(calls[0].width, 80)
+        XCTAssertEqual(calls[0].height, 60)
+        XCTAssertEqual(calls[0].values?["path"], [10, 20, 40, 20, 70, 20])
+        XCTAssertEqual( try c.pickColor(40, 20, layerId: r.layerId)["color"], "#e11d48")
+        XCTAssertEqual( try c.pickColor(40, 50, layerId: r.layerId)["alpha"], 0)
+
+        // Replay shifts the path control points in canvas pixels.
+        calls.removeAll()
+        _ = try c.replayStrokes(ReplayOptions(strokeIds: [r.strokeId!], dy: 25))
+        XCTAssertEqual(calls.last?.values?["path"], [10, 45, 40, 45, 70, 45])
+        XCTAssertEqual(try c.pickColor(40, 45, layerId: r.layerId)["color"], "#e11d48")
+
+        // Very long strokes (> MAX_EFFECT_PATH_POINTS = 256) are simplified rather than refused.
+        calls.removeAll()
+        let manyPoints = (0..<400).map { i in PenPoint(x: 4 + (Double(i) / 399) * 72, y: 30, pressure: 1) }
+        _ = try c.paintStroke(PaintStrokeInit(seed: 2), points: manyPoints)
+        let pathArr = try XCTUnwrap(calls.last?.values?["path"]?.arrayValue)
+        XCTAssertEqual(pathArr.count, MAX_EFFECT_PATH_POINTS * 2)
+        XCTAssertEqual(pathArr[0], 4)
+        XCTAssertEqual(pathArr[1], 30)
+        XCTAssertEqual(pathArr[pathArr.count - 2], 76)
+        XCTAssertEqual(pathArr[pathArr.count - 1], 30)
+    }
+
+    func testHandPaintedPathStrokesPaintAlongTheirPathOnEitherKindOfProvider() async throws {
+        for provider: EffectProvider in [FakeEffectProvider(), AsyncOnlyProvider()] {
+            let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+            c.setEffectsProvider(provider)
+            _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+            _ = try c.setBrushFacets(["tip": ["size": 24, "hardness": 1, "opacity": 1, "flow": 1], "behaviour": ["grain": 0]])
+            let s = try c.beginStroke()
+            s.push([PenPoint(x: 20, y: 4, pressure: 1), PenPoint(x: 20, y: 60, pressure: 1)])
+            if provider is AsyncOnlyProvider {
+                XCTAssertTrue(s.needsPathRender)
+                XCTAssertThrowsError(try s.end()) { XCTAssertTrue("\($0)".contains("await renderPath()")) }
+                XCTAssertTrue(s.open)
+                try await s.renderPath()
+            }
+            XCTAssertFalse(s.needsPathRender)
+            let r = try s.end()
+            // On the path, away from the line across the middle (y = 32) that fake.trail draws with no path.
+            XCTAssertEqual(try c.pickColor(20, 10, layerId: r.layerId)["color"], "#ff0000")
+            XCTAssertEqual(try c.pickColor(30, 32, layerId: r.layerId)["alpha"], 0)
+            XCTAssertEqual(c.doc.strokes.count, 1)
+            XCTAssertEqual(c.doc.strokes[0].effect?.values["path"], [20, 4, 20, 60])
+        }
+    }
+
+    func testAHandPaintedPathStrokeShowsTheEffectAlongThePathSoFarWhileItIsDrawn() async throws {
+        var renders = 0
+        let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+        c.setEffectsProvider(AsyncOnlyProvider { renders += 1 })
+        _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+        _ = try c.setBrushFacets(["tip": ["size": 24, "hardness": 1, "opacity": 1, "flow": 1], "behaviour": ["grain": 0]])
+        let s = try c.beginStroke()
+        // The live layer's alpha at a point.
+        func shown(_ x: Int, _ y: Int) -> Int {
+            guard let l = findLayer(c.currentLayers(), s.layerId)?.layer else { return -1 }
+            return readPixel(l.pixelSurface, x, y)[3]
+        }
+        s.push([PenPoint(x: 20, y: 4, pressure: 1), PenPoint(x: 20, y: 30, pressure: 1)])
+        // Until a render along the path lands, the stroke shows the no-path picture.
+        XCTAssertEqual(shown(20, 10), 0)
+        XCTAssertTrue(s.needsPathPreview)
+        await s.renderPreview()
+        XCTAssertFalse(s.needsPathPreview)
+        XCTAssertEqual(shown(20, 10), 255)
+        XCTAssertEqual(c.doc.strokes.count, 0)
+        // New samples paint into the preview, and the next render takes the longer path.
+        s.push([PenPoint(x: 20, y: 60, pressure: 1), PenPoint(x: 70, y: 60, pressure: 1)])
+        XCTAssertTrue(s.needsPathPreview)
+        await s.renderPreview()
+        XCTAssertEqual(shown(20, 50), 255)
+        // The preview rendered the whole path: the stroke ends without another render.
+        let before = renders
+        XCTAssertFalse(s.needsPathRender)
+        let r = try s.end()
+        XCTAssertEqual(renders, before)
+        XCTAssertEqual(try c.pickColor(20, 10, layerId: r.layerId)["color"], "#ff0000")
+        XCTAssertEqual(try c.pickColor(50, 60, layerId: r.layerId)["color"], "#ff0000")
+        XCTAssertEqual(try c.pickColor(40, 32, layerId: r.layerId)["alpha"], 0)
+        XCTAssertEqual(c.doc.strokes.count, 1)
+    }
+
+    func testPathStrokesRefuseAMissingRenderAndWetBrushesByHand() async throws {
+        let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+        c.setEffectsProvider(AsyncOnlyProvider())
+        _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+        let points = [PenPoint(x: 20, y: 4, pressure: 1), PenPoint(x: 20, y: 60, pressure: 1)]
+        XCTAssertThrowsError(try c.paintStroke(PaintStrokeInit(seed: 1), points: points)) { XCTAssertTrue("\($0)".contains("prepareStrokePathEffect")) }
+        XCTAssertThrowsError(try c.beginStroke(PaintStrokeInit(brushId: "watercolor-round"))) { XCTAssertTrue("\($0)".contains("wet media")) }
+    }
+
+    func testAStrokeLayerKeepsARenderForEveryPathStroke() async throws {
+        var renders = 0
+        let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+        c.setEffectsProvider(FakeEffectProvider { _, _, _, _ in renders += 1 })
+        _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+        _ = try c.addLayer(type: "strokes")
+        var ids: [String] = []
+        for i in 0..<10 {
+            let x = Double(8 + i * 8)
+            ids.append(try c.paintStroke(PaintStrokeInit(seed: i), points: [PenPoint(x: x, y: 4, pressure: 1), PenPoint(x: x, y: 60, pressure: 1)]).strokeId!)
+        }
+        let painted = renders
+        _ = try c.updateStroke(ids[0], brushId: nil, brushChanges: nil, color: nil, paint: nil, seed: 7)
+        XCTAssertEqual(renders, painted)
+    }
+}
+
+/// Renders like a GPU provider: results only ever arrive later, and there is no `renderSync`.
+private final class AsyncOnlyProvider: EffectProvider {
+    private let fake = FakeEffectProvider()
+    private let onRender: () -> Void
+    init(onRender: @escaping () -> Void = {}) { self.onRender = onRender }
+    var id: String { fake.id }
+    var name: String { fake.name }
+    var capabilities: JSONObject { fake.capabilities }
+    func list(_ options: EffectSearchOptions) async throws -> [EffectDescription] { try await fake.list(options) }
+    func search(_ query: String, _ options: EffectSearchOptions) async throws -> [EffectDescription] { try await fake.search(query, options) }
+    func describe(_ id: String) async throws -> EffectDescription { try await fake.describe(id) }
+    func createRenderer(_ id: String, width: Int, height: Int) throws -> EffectRenderer {
+        AsyncOnlyRenderer(try fake.createRenderer(id, width: width, height: height), onRender)
+    }
+}
+
+private final class AsyncOnlyRenderer: EffectRenderer {
+    private let inner: EffectRenderer
+    private let onRender: () -> Void
+    init(_ inner: EffectRenderer, _ onRender: @escaping () -> Void) {
+        self.inner = inner
+        self.onRender = onRender
+    }
+    var effectId: String { inner.effectId }
+    var width: Int { inner.width }
+    var height: Int { inner.height }
+    func render(_ request: EffectRenderRequest) async throws -> EffectPixels {
+        await Task.yield()
+        onRender()
+        return try await inner.render(request)
+    }
+    func dispose() { inner.dispose() }
 }

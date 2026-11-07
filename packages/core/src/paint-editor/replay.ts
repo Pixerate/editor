@@ -114,8 +114,9 @@ export async function replayPainting(
   let strokes = 0;
   // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be),
   // as the scaled strokes ask for it (scaling a stroke-mapped effect scales its map length).
+  // A path-mapped stroke has a canvas-sized render of its own: those are rendered one at a time below.
   const scaled = source.strokes.slice(0, maxStrokes).map((st) => (s === 1 ? st : varyStroke(st, scaleM, { scale: s })));
-  await target.prepareEffectPaints(scaled.flatMap((st) => (st.paint?.type === 'effect' ? [st.paint] : [])));
+  await target.prepareEffectPaints(scaled.flatMap((st) => (st.paint?.type === 'effect' && st.paint.map?.by !== 'path' ? [st.paint] : [])));
   const advanceTo = async (clock: number) => {
     const now = target.getState().wet.clock;
     let left = clock - now;
@@ -188,6 +189,7 @@ export async function replayPainting(
     const st = s === 1 ? item.stroke : varyStroke(item.stroke, scaleM, { scale: s });
     strokes++;
     if (!target.getLayer(st.layerId)) continue;
+    if (st.paint?.type === 'effect' && st.paint.map?.by === 'path') await target.prepareEffectPaints([st.paint]);
     const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))) };
     if (st.brush.engine === 'wet' && st.steps?.length === st.points.length) {
       // Each point at the clock it was recorded at, the simulation stepped in between.

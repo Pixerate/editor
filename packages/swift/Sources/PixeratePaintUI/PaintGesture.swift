@@ -193,6 +193,14 @@ public final class PaintGesture {
             guard let stroke = controller.activeStroke else { return }
             stroke.push((e.coalesced.isEmpty ? [e] : e.coalesced).map(pen))
             predicted = e.predicted.map(pen)
+            if stroke.needsPathPreview { previewPath(stroke) }
+        }
+    }
+
+    /// Renders a path-mapped effect along the path drawn so far, one render at a time, until it catches up with the pen.
+    private func previewPath(_ stroke: PaintLiveStroke) {
+        Task { @MainActor in
+            while stroke.needsPathPreview { await stroke.renderPreview() }
         }
     }
 
@@ -203,13 +211,38 @@ public final class PaintGesture {
         predicted = []
         switch m {
         case .stroke:
-            do { try controller.activeStroke?.end() } catch { self.error = "\(error)" }
+            guard let stroke = controller.activeStroke else { break }
+            if stroke.needsPathRender {
+                // The stroke stays open, so the editor is busy, until its path has rendered.
+                Task { @MainActor in
+                    do {
+                        try await stroke.renderPath()
+                        try stroke.end()
+                    } catch {
+                        stroke.cancel()
+                        self.error = "\(error)"
+                    }
+                }
+            } else {
+                do { try stroke.end() } catch { self.error = "\(error)" }
+            }
         case let .moveStroke(_, id, from, _):
             let p = doc(e)
             let dx = ((p.x - from.x) * 100).rounded() / 100
             let dy = ((p.y - from.y) * 100).rounded() / 100
             if dx != 0 || dy != 0 {
-                do { _ = try controller.editStrokePoints(id, points: nil, transform: ["dx": .number(dx), "dy": .number(dy)]) } catch { self.error = "\(error)" }
+                let transform: JSONObject = ["dx": .number(dx), "dy": .number(dy)]
+                if controller.strokeEditNeedsRender(id, points: nil, transform: transform) {
+                    // A path-mapped stroke has to render its moved path first.
+                    Task { @MainActor [controller] in
+                        do {
+                            try await controller.prepareEditStrokePointsEffect(id, points: nil, transform: transform)
+                            _ = try controller.editStrokePoints(id, points: nil, transform: transform)
+                        } catch { self.error = "\(error)" }
+                    }
+                } else {
+                    do { _ = try controller.editStrokePoints(id, points: nil, transform: transform) } catch { self.error = "\(error)" }
+                }
             }
         default: break
         }

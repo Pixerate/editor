@@ -140,6 +140,8 @@ public struct PaintStrokeInit {
     public var maskStencils: [Stencil]?
     /// Where the stroke starts (a tracing image that samples colours gives a stroke without colour its colour there).
     public var start: Point2?
+    /// The stroke's points, when known ahead of time (for path-mapped effect paint).
+    public var points: [PenPoint]?
     public init(layerId: String? = nil, color: String? = nil, paint: JSONValue? = nil, brushId: String? = nil, brush: JSONObject? = nil, seed: Int? = nil, copies: [Affine]? = nil, load: MixerLoad? = nil) {
         self.layerId = layerId
         self.color = color
@@ -253,6 +255,10 @@ public final class PaintEditorController {
     var effectPaintPending: PaintEffectPaint?
     /// Rendered effect paints by key, most recently used last.
     var effectPaintPixels = OrderedMap<String, EffectPaintPixels>()
+    /// Each described effect's path control name (`format: "svg-path"`), when it has one.
+    var effectPathControls: [String: String] = [:]
+    /// How many renders the running batch needs together (`prepareEffectPaints`; a synchronous replay reads them all).
+    var effectPaintBatch = 0
     /// Bumped whenever the paint changes, so a slow `setEffectPaint` can tell it was overtaken.
     var paintEpoch = 0
     /// Live effect paint playback (`setEffectPlayback`) and the time the view shows.
@@ -1124,6 +1130,10 @@ public final class PaintEditorController {
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
         let brush = try strokeBrush(i)
         let effect = try strokeEffect(i, brush)
+        // A hand-painted path stroke is painted again from its path at the end, and the wet simulation can't be.
+        if i.points == nil, i.paint == nil, effect?.source.map?.by == "path", isWetBrush(brush) {
+            throw PaintEditorError("The \(brush.name) brush paints wet media, which can't follow a path that isn't known until the stroke ends; paint with a dry brush, set_effect_paint with by: \"stroke\", or give the points to paint_stroke.")
+        }
         if brush.light.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).") }
         if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         if d.liveStrokes?.get(layer.id) != nil, let e = effect?.source, e.live {
@@ -1238,6 +1248,8 @@ public final class PaintEditorController {
 
     /// Runs a whole stroke against `d` without touching the editor; returns the new document.
     func runStroke(_ d: PaintDocumentState, _ i: PaintStrokeInit, _ points: [PenPoint]) throws -> (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush) {
+        var i = i
+        if i.points == nil { i.points = points }
         let session = try sessionFor(d, i)
         try session.push(points)
         return try endStroke(d, session)
@@ -1337,13 +1349,13 @@ public final class PaintEditorController {
     /// The layers with the live stroke's surface in place (a wet stroke's layer already shows the simulation).
     func currentLayers() -> [PaintLayer] {
         guard let live = liveStroke, live.open, !live.isWet else { return doc.layers }
-        return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.session.currentSurface()) }
+        return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.shown.currentSurface()) }
     }
 
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
     func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display") -> [ViewLayer] {
         let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
-        let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in l.open ? l.session.thickChannels().map { (l.layerId, $0) } : nil }
+        let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in l.open ? l.shown.thickChannels().map { (l.layerId, $0) } : nil }
         var layers = lightLayers(litLayers(base, liveThick: live), liveThick: live)
         // Backlit paper shines through everything: its light goes on top.
         let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)

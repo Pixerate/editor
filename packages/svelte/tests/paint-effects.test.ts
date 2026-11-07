@@ -157,4 +157,27 @@ describe('Svelte paint effects', () => {
     await click(button('Play'));
     expect(c.getState().effectPlayback.playing).toBe(true);
   });
+
+  it('offers "Along the stroke (native)" only for path effects and sets map: { by: "path" }', async () => {
+    const c = new PaintEditorController({ width: 32, height: 16 });
+    c.setEffectsProvider(createFakeEffectProvider());
+    show(PaintEffectsPanel, { controller: c });
+    await click(button('Paint…'));
+    await pickEffect('fake.gradient');
+    await settle();
+    const placement = () => target.querySelector('[data-testid="effect-paint-placement"]')!;
+    expect(placement().textContent).not.toContain('Along the stroke (native)');
+
+    await click(button('Paint…'));
+    await pickEffect('fake.trail');
+    await settle();
+    expect(placement().textContent).toContain('Along the stroke (native)');
+    const nativeInput = Array.from(placement().querySelectorAll('label')).find((l) => l.textContent?.includes('Along the stroke (native)'))!.querySelector('input')!;
+    expect(nativeInput.checked).toBe(false);
+    await click(nativeInput);
+    await settle();
+    expect(c.getEffectPaint()?.map).toEqual({ by: 'path' });
+    expect(nativeInput.checked).toBe(true);
+    expect(target.querySelector('select[aria-label="Effect repeat"]')).toBeNull();
+  });
 });

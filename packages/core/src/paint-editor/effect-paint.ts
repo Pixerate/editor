@@ -27,11 +27,12 @@ export interface PaintEffectPaint {
   /** Which moment of an animated effect, in ms. */
   time: number;
   /**
-   * How the effect lies on the paint: fixed to the canvas (missing, the default), or along each
-   * stroke (`by: 'stroke'`): the effect is rendered as a strip `length` px long and 256 px across,
-   * and each pixel takes the colour at (distance along the stroke, position across the tip).
+   * How the effect lies on the paint: fixed to the canvas (missing, the default), bent along each
+   * stroke (`by: 'stroke'`: rendered as a strip `length` px long and 256 px across), or along the
+   * stroke via the effect's own path control (`by: 'path'`: the stroke's centreline in canvas
+   * pixels is passed to its `format: 'svg-path'` control).
    */
-  map?: PaintEffectStrokeMap;
+  map?: PaintEffectMap;
   /**
    * Live: on a stroke layer the stroke keeps playing the effect (each frame drawn at the editor's
    * effect time); elsewhere it bakes the frame at `time` like any effect paint.
@@ -39,7 +40,7 @@ export interface PaintEffectPaint {
   live?: boolean;
 }
 
-/** Effect paint laid along the stroke. */
+/** Effect paint laid along the stroke as a bent strip. */
 export interface PaintEffectStrokeMap {
   by: 'stroke';
   /** Strip length: px of stroke per repeat of the effect, 16..4096. */
@@ -48,20 +49,104 @@ export interface PaintEffectStrokeMap {
   repeat: 'repeat' | 'mirror' | 'clamp';
 }
 
+/** Effect paint whose own path control (`format: 'svg-path'`) receives each stroke's centreline in canvas pixels. */
+export interface PaintEffectPathMap {
+  by: 'path';
+}
+
+export type PaintEffectMap = PaintEffectStrokeMap | PaintEffectPathMap;
+
 /** How tall a stroke-mapped effect strip is rendered (the position across the tip maps onto it). */
 export const EFFECT_STRIP_HEIGHT = 256;
 export const EFFECT_MAP_REPEATS = ['repeat', 'mirror', 'clamp'] as const;
 
-/** The size an effect paint renders at: the canvas, or its strip. */
-export function effectPaintSize(p: PaintEffectPaint, canvas: { width: number; height: number }): { width: number; height: number } {
-  return p.map ? { width: p.map.length, height: EFFECT_STRIP_HEIGHT } : { width: canvas.width, height: canvas.height };
+/** Maximum number of centreline points passed to a path effect control; longer strokes are resampled to this count. */
+export const MAX_EFFECT_PATH_POINTS = 256;
+
+const roundPathCoord = (v: number): number => Math.round(v * 100) / 100;
+
+/**
+ * The stroke's centreline as `[x0, y0, x1, y1, …]` in canvas pixels for a path control
+ * (`format: 'svg-path'`). Consecutive duplicate points are collapsed, single-point taps are doubled
+ * so path renderers receive a valid segment, and strokes longer than `maxPoints` are evenly
+ * resampled by arc length rather than refused.
+ */
+export function strokePathPoints(points: readonly { x: number; y: number }[], maxPoints = MAX_EFFECT_PATH_POINTS): number[] {
+  if (!points.length) return [];
+  const clean: { x: number; y: number }[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i];
+    const prev = clean[clean.length - 1];
+    if (p.x !== prev.x || p.y !== prev.y) clean.push(p);
+  }
+  if (clean.length === 1) {
+    const x = roundPathCoord(clean[0].x);
+    const y = roundPathCoord(clean[0].y);
+    return [x, y, x, y];
+  }
+  if (clean.length <= maxPoints) {
+    const out: number[] = [];
+    for (const p of clean) out.push(roundPathCoord(p.x), roundPathCoord(p.y));
+    return out;
+  }
+  const lengths = [0];
+  for (let i = 1; i < clean.length; i++) {
+    lengths.push(lengths[i - 1] + Math.hypot(clean[i].x - clean[i - 1].x, clean[i].y - clean[i - 1].y));
+  }
+  const total = lengths[lengths.length - 1];
+  if (total <= 0) {
+    const x = roundPathCoord(clean[0].x);
+    const y = roundPathCoord(clean[0].y);
+    return [x, y, x, y];
+  }
+  const out: number[] = [];
+  let j = 0;
+  for (let k = 0; k < maxPoints; k++) {
+    const at = (total * k) / (maxPoints - 1);
+    while (j < clean.length - 2 && lengths[j + 1] < at) j++;
+    const span = lengths[j + 1] - lengths[j] || 1;
+    const f = Math.min(1, Math.max(0, (at - lengths[j]) / span));
+    const a = clean[j];
+    const b = clean[j + 1];
+    out.push(roundPathCoord(a.x + (b.x - a.x) * f), roundPathCoord(a.y + (b.y - a.y) * f));
+  }
+  return out;
 }
 
-/** A stroke map checked and rounded; throws a sentence naming the bad field. */
-export function readEffectStrokeMap(raw: unknown): PaintEffectStrokeMap | undefined {
-  if (raw === undefined || raw === null || (raw as { by?: unknown }).by === 'canvas') return undefined;
+/** Which control of `values` holds a path when the effect description is not at hand. */
+export function inferEffectPathControl(values: Record<string, EffectValue>): string {
+  if ('path' in values) return 'path';
+  for (const [k, v] of Object.entries(values)) {
+    if (Array.isArray(v) && v.length >= 4 && v.every((n) => typeof n === 'number')) return k;
+  }
+  for (const [k, v] of Object.entries(values)) {
+    if (typeof v === 'string') return k;
+  }
+  return 'path';
+}
+
+/** A copy of a path-mapped effect paint with the stroke's centreline written into its path control. */
+export function withStrokePath(paint: PaintEffectPaint, points: readonly { x: number; y: number }[], control?: string): PaintEffectPaint {
+  if (paint.map?.by !== 'path') return paint;
+  const key = control ?? inferEffectPathControl(paint.values);
+  return {
+    ...paint,
+    values: { ...paint.values, [key]: strokePathPoints(points) },
+  };
+}
+
+/** The size an effect paint renders at: the canvas, or its strip when bent along the stroke. */
+export function effectPaintSize(p: PaintEffectPaint, canvas: { width: number; height: number }): { width: number; height: number } {
+  return p.map?.by === 'stroke' ? { width: p.map.length, height: EFFECT_STRIP_HEIGHT } : { width: canvas.width, height: canvas.height };
+}
+
+/** A stroke or path map checked and rounded; throws a sentence naming the bad field. */
+export function readEffectStrokeMap(raw: unknown): PaintEffectMap | undefined {
+  if (raw === undefined || raw === null || raw === 'canvas' || (raw as { by?: unknown }).by === 'canvas') return undefined;
+  if (raw === 'path') return { by: 'path' };
   const r = raw as Record<string, unknown>;
-  if (r.by !== 'stroke') throw new Error(`map.by ${JSON.stringify(r.by)} is not a mapping; use "canvas" (fixed to the canvas) or "stroke" (along each stroke).`);
+  if (r.by === 'path') return { by: 'path' };
+  if (r.by !== 'stroke') throw new Error(`map.by ${JSON.stringify(r.by)} is not a mapping; use "canvas" (fixed to the canvas), "stroke" (along each stroke) or "path" (native path control).`);
   const length = r.length === undefined ? 300 : Number(r.length);
   if (!(Number.isFinite(length) && length >= 16 && length <= 4096)) throw new Error(`map.length ${JSON.stringify(r.length)} is out of range; use 16..4096 px of stroke per repeat.`);
   const repeat = r.repeat === undefined ? 'repeat' : r.repeat;
@@ -121,8 +206,8 @@ export function isPaintEffectPaint(raw: unknown): raw is PaintEffectPaint {
   return Boolean(raw) && typeof raw === 'object' && (raw as { type?: unknown }).type === 'effect';
 }
 
-/** A saved stroke map, or `undefined` when it is missing or unreadable (documents are read leniently). */
-function readMapLeniently(raw: unknown): PaintEffectStrokeMap | undefined {
+/** A saved stroke or path map, or `undefined` when it is missing or unreadable (documents are read leniently). */
+function readMapLeniently(raw: unknown): PaintEffectMap | undefined {
   try {
     return readEffectStrokeMap(raw);
   } catch {

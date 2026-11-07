@@ -124,6 +124,11 @@ public protocol EffectRenderer: AnyObject {
     func dispose()
 }
 
+/// An effect renderer that can also render synchronously on the caller's thread (`SyncEffectRenderer`).
+public protocol SyncEffectRenderer: EffectRenderer {
+    func renderSync(_ request: EffectRenderRequest) throws -> EffectPixels
+}
+
 /**
  * An effects provider (`EffectProvider`): its catalog (`list`, `search`, `describe`) and renderers.
  * Editors call it from the main actor; a provider that renders elsewhere (Metal, a worker) awaits

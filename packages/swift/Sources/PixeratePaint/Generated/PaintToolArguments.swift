@@ -2271,7 +2271,7 @@ public struct SetEffectPaintArguments: Sendable {
     public var values: JSONValue?
     /// Which moment of an animated effect to paint with, in ms (default 0).
     public var time: Double?
-    /// How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture) or by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip).
+    /// How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g.
     public var map: JSONValue?
     /// Live effect paint (default false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time.
     public var live: Bool?

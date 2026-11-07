@@ -187,9 +187,10 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
             time: { type: 'number', minimum: 0, description: 'Which moment of an animated effect to paint with, in ms (default 0).' },
             map: {
               type: 'object',
-              description: 'How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture) or by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip).',
+              description:
+                'How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g. search_effects accepts ["path"]: passes each stroke\'s centreline [x0, y0, x1, y1, …] in canvas pixels to that control so the effect draws itself along the stroke; strokes longer than 256 points are simplified rather than refused).',
               properties: {
-                by: { type: 'string', enum: ['canvas', 'stroke'], description: 'canvas (default) or stroke.' },
+                by: { type: 'string', enum: ['canvas', 'stroke', 'path'], description: 'canvas (default), stroke (bent strip along each stroke) or path (native path control for effects with format svg-path).' },
                 length: { type: 'number', minimum: 16, maximum: 4096, description: 'by stroke: px of stroke per repeat of the effect (default 300).' },
                 repeat: { type: 'string', enum: ['repeat', 'mirror', 'clamp'], description: 'by stroke: past the strip end start again (default), run back, or hold the last colour.' },
               },

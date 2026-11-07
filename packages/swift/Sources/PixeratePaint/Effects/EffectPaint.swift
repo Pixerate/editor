@@ -8,17 +8,97 @@ import PixerateRaster
  * and each pixel a mark covers takes its colour (and alpha) from it.
  */
 
-/// How effect paint lies along a stroke (`PaintEffectStrokeMap`).
+/// How effect paint lies along a stroke (`PaintEffectStrokeMap` / `PaintEffectPathMap`).
 public struct PaintEffectStrokeMap: Equatable, Sendable {
-    /// px of stroke per repeat of the effect, 16..4096.
+    /// `stroke` (bent strip) or `path` (native path control).
+    public var by: String
+    /// px of stroke per repeat of the effect, 16..4096 (used when `by == "stroke"`).
     public var length: Int
-    /// `repeat`, `mirror` or `clamp`.
+    /// `repeat`, `mirror` or `clamp` (used when `by == "stroke"`).
     public var repeatMode: String
-    public var json: JSONValue { ["by": "stroke", "length": .number(Double(length)), "repeat": .string(repeatMode)] }
+
+    public init(by: String = "stroke", length: Int = 300, repeatMode: String = "repeat") {
+        self.by = by
+        self.length = length
+        self.repeatMode = repeatMode
+    }
+
+    public var json: JSONValue {
+        by == "path"
+            ? ["by": "path"]
+            : ["by": "stroke", "length": .number(Double(length)), "repeat": .string(repeatMode)]
+    }
 }
 
 public let EFFECT_STRIP_HEIGHT = 256
 public let EFFECT_MAP_REPEATS = ["repeat", "mirror", "clamp"]
+public let MAX_EFFECT_PATH_POINTS = 256
+
+private func roundPathCoord(_ v: Double) -> Double { JS.round(v * 100) / 100 }
+
+/// The stroke's centreline as `[x0, y0, x1, y1, …]` in canvas pixels for a path control (`strokePathPoints`).
+public func strokePathPoints(_ points: [PenPoint], maxPoints: Int = MAX_EFFECT_PATH_POINTS) -> [Double] {
+    guard let first = points.first else { return [] }
+    var clean: [PenPoint] = [first]
+    for p in points.dropFirst() {
+        let prev = clean[clean.count - 1]
+        if p.x != prev.x || p.y != prev.y { clean.append(p) }
+    }
+    if clean.count == 1 {
+        let x = roundPathCoord(clean[0].x), y = roundPathCoord(clean[0].y)
+        return [x, y, x, y]
+    }
+    if clean.count <= maxPoints {
+        var out: [Double] = []
+        out.reserveCapacity(clean.count * 2)
+        for p in clean { out.append(roundPathCoord(p.x)); out.append(roundPathCoord(p.y)) }
+        return out
+    }
+    var lengths = [0.0]
+    for i in 1..<clean.count {
+        lengths.append(lengths[i - 1] + JS.hypot(clean[i].x - clean[i - 1].x, clean[i].y - clean[i - 1].y))
+    }
+    let total = lengths[lengths.count - 1]
+    if total <= 0 {
+        let x = roundPathCoord(clean[0].x), y = roundPathCoord(clean[0].y)
+        return [x, y, x, y]
+    }
+    var out: [Double] = []
+    out.reserveCapacity(maxPoints * 2)
+    var j = 0
+    for k in 0..<maxPoints {
+        let at = (total * Double(k)) / Double(maxPoints - 1)
+        while j < clean.count - 2 && lengths[j + 1] < at { j += 1 }
+        let spanRaw = lengths[j + 1] - lengths[j]
+        let span = spanRaw == 0 ? 1 : spanRaw
+        let f = Swift.min(1, Swift.max(0, (at - lengths[j]) / span))
+        let a = clean[j], b = clean[j + 1]
+        out.append(roundPathCoord(a.x + (b.x - a.x) * f))
+        out.append(roundPathCoord(a.y + (b.y - a.y) * f))
+    }
+    return out
+}
+
+/// Which control of `values` holds a path when the effect description is not at hand (`inferEffectPathControl`).
+public func inferEffectPathControl(_ values: JSONObject) -> String {
+    if values.contains("path") { return "path" }
+    for (k, v) in values {
+        if let a = v.arrayValue, a.count >= 4, a.allSatisfy({ $0.numberValue != nil }) { return k }
+    }
+    for (k, v) in values {
+        if v.stringValue != nil { return k }
+    }
+    return "path"
+}
+
+/// A copy of a path-mapped effect paint with the stroke's centreline written into its path control (`withStrokePath`).
+public func withStrokePath(_ paint: PaintEffectPaint, _ points: [PenPoint], control: String? = nil) -> PaintEffectPaint {
+    guard paint.map?.by == "path" else { return paint }
+    let key = control ?? inferEffectPathControl(paint.values)
+    var out = paint
+    out.values[key] = .array(strokePathPoints(points).map { .number($0) })
+    return out
+}
 
 /// A provider effect brushes paint with (`PaintEffectPaint`).
 public struct PaintEffectPaint: Equatable, Sendable {
@@ -56,20 +136,22 @@ public struct PaintEffectPaint: Equatable, Sendable {
     }
 
     /// The size its pixels are rendered at (`effectPaintSize`).
-    func size(_ canvas: PaintCanvas) -> (width: Int, height: Int) { map.map { ($0.length, EFFECT_STRIP_HEIGHT) } ?? (canvas.width, canvas.height) }
+    func size(_ canvas: PaintCanvas) -> (width: Int, height: Int) { map?.by == "stroke" ? (map!.length, EFFECT_STRIP_HEIGHT) : (canvas.width, canvas.height) }
 }
 
 /// Reads a `map` argument (`readEffectStrokeMap`); throws saying what is wrong.
 func readEffectStrokeMap(_ raw: JSONValue?) throws -> PaintEffectStrokeMap? {
-    guard let raw, raw != .null else { return nil }
+    guard let raw, raw != .null, raw != .string("canvas") else { return nil }
+    if raw == .string("path") { return PaintEffectStrokeMap(by: "path") }
     let r = raw.objectValue ?? [:]
     if r["by"] == .string("canvas") { return nil }
-    if r["by"] != .string("stroke") { throw PaintEditorError("map.by \((r["by"] ?? .null).stringified()) is not a mapping; use \"canvas\" (fixed to the canvas) or \"stroke\" (along each stroke).") }
+    if r["by"] == .string("path") { return PaintEffectStrokeMap(by: "path") }
+    if r["by"] != .string("stroke") { throw PaintEditorError("map.by \((r["by"] ?? .null).stringified()) is not a mapping; use \"canvas\" (fixed to the canvas), \"stroke\" (along each stroke) or \"path\" (native path control).") }
     let length = r["length"] == nil ? 300 : (r["length"]?.numberValue ?? .nan)
     if !(length.isFinite && length >= 16 && length <= 4096) { throw PaintEditorError("map.length \((r["length"] ?? .null).stringified()) is out of range; use 16..4096 px of stroke per repeat.") }
     let rep = r["repeat"] ?? .string("repeat")
     guard let s = rep.stringValue, EFFECT_MAP_REPEATS.contains(s) else { throw PaintEditorError("map.repeat \(rep.stringified()) is not a repeat mode; use \(EFFECT_MAP_REPEATS.joined(separator: ", ")).") }
-    return PaintEffectStrokeMap(length: Int(JS.round(length)), repeatMode: s)
+    return PaintEffectStrokeMap(by: "stroke", length: Int(JS.round(length)), repeatMode: s)
 }
 
 /// Whether a paint value is effect paint (`type: "effect"`).

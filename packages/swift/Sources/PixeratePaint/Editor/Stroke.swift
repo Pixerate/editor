@@ -94,7 +94,7 @@ final class PaintStrokeSession: PaintTileTarget {
     private var wetDriver: WetStrokeDriver?
     private var thickDriver: ThickStrokeDriver?
     private let apply: StrokeApply
-    private var bounds: RasterRect?
+    private(set) var bounds: RasterRect?
     private var closed = false
     var result: PaintStrokeResult?
     /// The mask stencils this stroke was painted with when they are not the editor's (replays).

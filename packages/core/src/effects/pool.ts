@@ -11,6 +11,8 @@ import type { EffectPixels, EffectProvider, EffectRenderer, EffectRenderRequest 
 
 interface PoolEntry {
 	renderer: Promise<EffectRenderer>;
+	resolved?: EffectRenderer;
+	busy: number;
 	/** The last render queued on it. */
 	queue: Promise<unknown>;
 }
@@ -33,6 +35,20 @@ export class EffectRendererPool {
 		return this.entries.size;
 	}
 
+	/**
+	 * Renders `request` on the caller's stack when this size's renderer is warm, idle and has
+	 * `renderSync`; otherwise `null`, and nothing is rendered (an asynchronous provider never pays for it).
+	 */
+	renderSync(provider: EffectProvider, id: string, size: { width: number; height: number; depth?: 8 | 16 | 32 }, request: EffectRenderRequest): EffectPixels | null {
+		const depth = size.depth ?? 8;
+		const key = `${provider.id}:${id}@${size.width}x${size.height}x${depth}`;
+		const entry = this.entries.get(key);
+		if (!entry?.resolved?.renderSync || entry.busy > 0) return null;
+		this.entries.delete(key);
+		this.entries.set(key, entry);
+		return entry.resolved.renderSync(request);
+	}
+
 	/** Renders `request` with the provider's renderer for this effect, size and depth (made on first use). */
 	render(provider: EffectProvider, id: string, size: { width: number; height: number; depth?: 8 | 16 | 32 }, request: EffectRenderRequest): Promise<EffectPixels> {
 		const depth = size.depth ?? 8;
@@ -43,15 +59,27 @@ export class EffectRendererPool {
 			this.entries.set(key, entry);
 		} else {
 			const renderer = Promise.resolve().then(() => provider.createRenderer(id, { width: size.width, height: size.height, depth }));
-			renderer.catch(() => {
-				if (this.entries.get(key)?.renderer === renderer) this.entries.delete(key);
-			});
-			entry = { renderer, queue: Promise.resolve() };
+			const created: PoolEntry = { renderer, busy: 0, queue: Promise.resolve() };
+			renderer.then(
+				(r) => {
+					created.resolved = r;
+				},
+				() => {
+					if (this.entries.get(key)?.renderer === renderer) this.entries.delete(key);
+				}
+			);
+			entry = created;
 			this.entries.set(key, entry);
 			this.evict();
 		}
 		const e = entry;
-		const next = e.queue.then(() => e.renderer).then((r) => r.render(request));
+		e.busy++;
+		const next = e.queue
+			.then(() => e.renderer)
+			.then((r) => r.render(request))
+			.finally(() => {
+				e.busy--;
+			});
 		e.queue = next.catch(() => undefined);
 		return next;
 	}

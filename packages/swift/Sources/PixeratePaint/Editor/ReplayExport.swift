@@ -153,7 +153,8 @@ extension PaintEditorController {
         let m: Affine = [s, 0, 0, s, 0, 0]
         // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be),
         // as the scaled strokes ask for it (scaling a stroke-mapped effect scales its map length).
-        try await target.prepareEffectPaints(source.strokes.map { s == 1 ? $0 : varyStroke($0, m) }.compactMap(\.effect))
+        // A path-mapped stroke has a canvas-sized render of its own: those are rendered one at a time below.
+        try await target.prepareEffectPaints(source.strokes.map { s == 1 ? $0 : varyStroke($0, m) }.compactMap(\.effect).filter { $0.map?.by != "path" })
         enum Item { case stroke(RecordedStroke), paint(PaintEvent), wet(WetEvent) }
         var items: [(item: Item, at: Double, order: Int)] = []
         var order = 0
@@ -239,6 +240,7 @@ extension PaintEditorController {
                 let st = s == 1 ? recorded : varyStroke(recorded, m)
                 strokes += 1
                 if target.getLayer(st.layerId) == nil { continue }
+                if let e = st.effect, e.map?.by == "path" { try await target.prepareEffectPaints([e]) }
                 var i = PaintStrokeInit(layerId: st.layerId, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
                 i.fixedBrush = st.brush
                 i.paint = st.effect?.json ?? st.paint?.json

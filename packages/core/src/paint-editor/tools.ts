@@ -618,6 +618,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
         if (refs.length) await c.prepareStickers(refs);
       }
       const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
+      await c.prepareStrokePathEffect(stroke, [stroke.points]);
       const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },
@@ -658,6 +659,14 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       // A hosted layer takes canvas coordinates: move the path into document pixels.
       const path = options.origin && typeof a.path === 'string' && a.path.trim() ? bezierPathToSvg(a.path, { offset: { x: -options.origin.x, y: -options.origin.y } }) : (a.path as string);
       const init = { path, spacing: a.spacing, pressure: a.pressure, speed: a.speed, layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed };
+      if (typeof path === 'string' && path.trim()) {
+        try {
+          const sampled = samplePath(path, init);
+          await c.prepareStrokePathEffect(init, sampled);
+        } catch {
+          // Invalid path will be reported by strokePath / act below.
+        }
+      }
       const r = await act(
         () => {
           if (typeof path !== 'string' || !path.trim()) throw new PaintEditorError('path is empty; give SVG path data in document pixels, e.g. "M 10 10 C 40 0 80 60 120 30".');
@@ -816,7 +825,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     },
     annotations: { title: 'Move or reshape a stroke', ...WRITE },
     coordinates: { in: ['points[]', 'transform.origin'], out: ['bounds', 'stroke.bounds', 'stroke.points[]'] },
-    handler: ({ id, points, transform }) => {
+    handler: async ({ id, points, transform }) => {
+      await c.prepareStrokeEdit(id, { points, transform });
       const r = c.editStrokePoints(id, { points, transform });
       return { stroke: strokeSummary(r.stroke, true, true), bounds: r.bounds };
     },
@@ -906,7 +916,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     handler: async (a) => {
       const replay = a as Parameters<PaintEditorController['replayStrokes']>[0];
       // Strokes painted with effect paint need it rendered first (unless recoloured).
-      if (replay.color === undefined) await c.prepareStrokeEffects(replay.strokeIds);
+      if (replay.color === undefined) await c.prepareStrokeEffects(replay.strokeIds, replay);
       return act({ kind: 'replay', replay }, () => c.replayStrokes(replay));
     },
   });

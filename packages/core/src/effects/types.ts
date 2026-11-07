@@ -221,6 +221,8 @@ export interface EffectRenderer {
 	readonly height: number;
 	readonly depth: 8 | 16 | 32;
 	render(request: EffectRenderRequest): Promise<EffectPixels>;
+	/** Optional: renders on the caller's stack, for renderers that can (a CPU one). Throws what `render` rejects with. */
+	renderSync?(request: EffectRenderRequest): EffectPixels;
 	/** Frees GPU or worker resources. Rendering afterwards rejects. */
 	dispose(): void;
 }
