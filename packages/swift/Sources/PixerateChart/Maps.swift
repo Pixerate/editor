@@ -106,9 +106,21 @@ private final class MapRegistryStorage: @unchecked Sendable {
         defer { lock.unlock() }
         return order.compactMap { maps[$0] }
     }
+
+    func clear() {
+        lock.lock()
+        defer { lock.unlock() }
+        maps.removeAll()
+        order.removeAll()
+    }
 }
 
 private let mapRegistry = MapRegistryStorage()
+
+/// Clears all registered maps.
+public func clearChartMaps() {
+    mapRegistry.clear()
+}
 
 /// Makes a map available to choropleth charts (`spec.map` = its id). Registering an id again replaces it.
 public func registerChartMap(_ map: ChartMapGeometry) {

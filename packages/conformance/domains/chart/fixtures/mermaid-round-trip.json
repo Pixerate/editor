@@ -7,7 +7,7 @@
     "height": 400
   },
   "skip": {
-    "swift": "chart not ported yet (#697)"
+    "swift": "mermaid and svg not ported yet (#698)"
   },
   "steps": [
     {

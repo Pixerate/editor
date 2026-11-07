@@ -932,6 +932,20 @@ public enum ChartSelection: Sendable, Equatable {
     case category(index: Int)
     case trendline(seriesId: String, index: Int)
 
+    public var kindName: String {
+        switch self {
+        case .chart: return "chart"
+        case .title: return "title"
+        case .subtitle: return "subtitle"
+        case .legend: return "legend"
+        case .axis: return "axis"
+        case .series: return "series"
+        case .point: return "point"
+        case .category: return "category"
+        case .trendline: return "trendline"
+        }
+    }
+
     public func toJSON() -> JSONValue {
         switch self {
         case .chart:

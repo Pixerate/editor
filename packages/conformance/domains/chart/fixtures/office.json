@@ -11,7 +11,7 @@
     }
   },
   "skip": {
-    "swift": "chart not ported yet (#697)"
+    "swift": "office charts not ported yet (#702)"
   },
   "steps": [
     {

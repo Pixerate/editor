@@ -23,6 +23,11 @@ public enum ChartContracts {
         try ToolProviderContract.providers(json: json("tools.json"))
     }
 
+    /// All tool definitions across the chart tool providers.
+    public static func tools() throws -> [McpToolDefinition] {
+        try toolProviders().flatMap(\.tools)
+    }
+
     /// The JSON Schema of a saved chart (the `pixerate.editor-document` envelope of kind `chart`).
     public static func documentSchema() throws -> JSONValue {
         try json("document.schema.json")

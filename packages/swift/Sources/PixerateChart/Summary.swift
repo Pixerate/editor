@@ -87,8 +87,12 @@ public struct ChartSummary: Sendable, Equatable {
 
 public func summarizeChart(
     _ spec: ChartSpec,
-    scene: ChartScene = ChartScene()
+    width: Double = 640,
+    height: Double = 400,
+    measureText: ChartTextMeasure? = nil,
+    scene: ChartScene? = nil
 ) -> ChartSummary {
+    let resolvedScene = scene ?? layoutChart(spec, ChartLayoutOptions(width: width, height: height, selection: nil, measureText: measureText))
     let visible = spec.series.filter { !($0.hidden ?? false) }
     let series = visible.map { summarizeChartSeries($0, spec.categories) }
     let colors: [String]
@@ -108,7 +112,7 @@ public func summarizeChart(
             return chartSeriesColor(spec, idx)
         }
     }
-    let surface = scene.theme.surface.hasPrefix("var(") ? "#ffffff" : scene.theme.surface
+    let surface = resolvedScene.theme.surface.hasPrefix("var(") ? "#ffffff" : resolvedScene.theme.surface
     let check = checkChartColors(colors, surface: surface)
     func axis(_ s: ChartValueScale?, _ a: ChartAxis) -> ChartAxisSummary? {
         guard let s else { return nil }
@@ -125,10 +129,10 @@ public func summarizeChart(
         title: spec.title,
         categories: spec.categories.count,
         series: series,
-        valueAxis: axis(scene.valueScale, spec.yAxis),
-        secondaryAxis: axis(scene.valueScale2, spec.yAxis2),
-        xAxis: axis(scene.xScale, spec.xAxis),
-        warnings: scene.warnings,
+        valueAxis: axis(resolvedScene.valueScale, spec.yAxis),
+        secondaryAxis: axis(resolvedScene.valueScale2, spec.yAxis2),
+        xAxis: axis(resolvedScene.xScale, spec.xAxis),
+        warnings: resolvedScene.warnings,
         colors: check,
         description: describeChart(spec, series)
     )

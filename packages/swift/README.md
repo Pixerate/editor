@@ -98,6 +98,7 @@ the same results; a scenario it can't pass yet is marked `"skip": { "swift": "â€
 | Brushes | `domains/brushes` | â€” | Brush model ported for painting (presets, normalization, v1 migration, host profiles; `BrushModelTests`) (#540) |
 | Paint | `domains/paint` | `domains/paint/fixtures` | 26 of 26 scenarios pass, pixel-exact (#540, #545, #646) |
 | Vector | `domains/vector` | `domains/vector/fixtures` | Fully ported: every command and agent tool; 15 of 15 scenarios pass (`shapes-and-paths`, `arrange-and-transform`, `booleans-and-pathfinder`, `path-editing`, `svg-round-trip`, `paint-and-appearance`, `strokes-and-corners`, `gradients-and-shading`, `blends-and-envelopes`, `symbols`, `constraints`, `frames-pages-connectors`, `text`, `import-export`, `effects-and-generation`), with their render data (`render: true` steps); `VectorConformanceTests` fails if a vector scenario is skipped (#622, #623, #624) |
+| Chart | `domains/chart` | `domains/chart/fixtures` | 13 of 16 scenarios pass (`bar-basics`, `line-dates`, `scatter-trend`, `pie-donut`, `stacked-area-streamgraph`, `number-formats`, `tree-treemap`, `sankey-links`, `map-choropleth`, `bar-race`, `presets-style`, `interaction`, `errors`), with their render data; 3 skipped (`mermaid-round-trip` and `render-svg` for #698, `office` for #702) (#696, #697, #699, #700, #701) |
 
 ## Generated code
 
