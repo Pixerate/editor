@@ -387,6 +387,161 @@ public struct FillLayerArguments: Sendable {
     }
 }
 
+/// Arguments of `fill_region`.
+public struct FillRegionArguments: Sendable {
+    /// Blend mode (default normal; see list_blend_modes).
+    public enum Blend: String, CaseIterable, Sendable {
+        case normal
+        case darken
+        case multiply
+        case colorBurn = "color-burn"
+        case linearBurn = "linear-burn"
+        case darkerColor = "darker-color"
+        case lighten
+        case screen
+        case colorDodge = "color-dodge"
+        case linearDodge = "linear-dodge"
+        case lighterColor = "lighter-color"
+        case overlay
+        case softLight = "soft-light"
+        case hardLight = "hard-light"
+        case vividLight = "vivid-light"
+        case linearLight = "linear-light"
+        case pinLight = "pin-light"
+        case hardMix = "hard-mix"
+        case difference
+        case exclusion
+        case subtract
+        case divide
+        case hue
+        case saturation
+        case color
+        case luminosity
+        case pigment
+        case watercolor
+        case tint
+        case highlight
+        case shadow
+    }
+
+    /// Alias for blend (default normal; see list_blend_modes).
+    public enum BlendMode: String, CaseIterable, Sendable {
+        case normal
+        case darken
+        case multiply
+        case colorBurn = "color-burn"
+        case linearBurn = "linear-burn"
+        case darkerColor = "darker-color"
+        case lighten
+        case screen
+        case colorDodge = "color-dodge"
+        case linearDodge = "linear-dodge"
+        case lighterColor = "lighter-color"
+        case overlay
+        case softLight = "soft-light"
+        case hardLight = "hard-light"
+        case vividLight = "vivid-light"
+        case linearLight = "linear-light"
+        case pinLight = "pin-light"
+        case hardMix = "hard-mix"
+        case difference
+        case exclusion
+        case subtract
+        case divide
+        case hue
+        case saturation
+        case color
+        case luminosity
+        case pigment
+        case watercolor
+        case tint
+        case highlight
+        case shadow
+    }
+
+    /// Seed point x in document pixels (pass x and y, or points).
+    public var x: Double?
+    /// Seed point y in document pixels (pass x and y, or points).
+    public var y: Double?
+    /// Multiple seed points in document pixels, filled together as one undo step.
+    public var points: [JSONValue]?
+    /// Layer id from list_layers (default the active layer).
+    public var layerId: String?
+    /// Which pixels stop the fill: "layer" (default, the target layer itself), "all" or "composite" (all visible layers without paper), or a layer id from list_layers (e.g.
+    public var reference: String?
+    /// Fill colour #rrggbb (default the paint colour).
+    public var color: String?
+    /// Opacity 0..1 (default 1).
+    public var opacity: Double?
+    /// Blend mode (default normal; see list_blend_modes).
+    public var blend: Blend?
+    /// Alias for blend (default normal; see list_blend_modes).
+    public var blendMode: BlendMode?
+    /// Colour and alpha similarity tolerance 0..255 (default 32).
+    public var tolerance: Double?
+    /// Close gaps in line art up to this width in pixels, 0..32 (default 0).
+    public var closeGap: Double?
+    /// Expand (> 0, bleed under lines to hide anti-aliased halos) or contract (< 0) the filled region in pixels, -16..16 (default 0).
+    public var expand: Double?
+    /// Soften boundary edges (default true).
+    public var antialias: Bool?
+    /// Paper grain response 0..1 (default 0: flat).
+    public var grain: Double?
+    /// With grain: how far into the valleys, 0..1 (default 0.5).
+    public var pressure: Double?
+    /// Pour a wet watercolour wash into the region on the wet layer instead of dry pixels (default false).
+    public var wet: Bool?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        x = try args.number("x")
+        y = try args.number("y")
+        points = try args.array("points")
+        layerId = try args.string("layerId")
+        reference = try args.string("reference")
+        color = try args.string("color")
+        opacity = try args.number("opacity")
+        blend = try args.enumeration("blend", as: Blend.self)
+        blendMode = try args.enumeration("blendMode", as: BlendMode.self)
+        tolerance = try args.number("tolerance")
+        closeGap = try args.number("closeGap")
+        expand = try args.number("expand")
+        antialias = try args.bool("antialias")
+        grain = try args.number("grain")
+        pressure = try args.number("pressure")
+        wet = try args.bool("wet")
+    }
+}
+
+/// Arguments of `find_unfilled_regions`.
+public struct FindUnfilledRegionsArguments: Sendable {
+    /// Target flats layer id from list_layers; regions already painted on it are excluded (optional).
+    public var layerId: String?
+    /// Which pixels define the line-art barriers: "all" or "composite" (default, all visible layers without paper), "layer" (the target or active layer), or a layer id from list_layers (e.g.
+    public var reference: String?
+    /// Alpha/colour threshold 0..255 above which a reference pixel counts as line art (default 32).
+    public var tolerance: Double?
+    /// Close small gaps in line art up to this width in pixels, 0..32 (default 0).
+    public var closeGap: Double?
+    /// Ignore regions smaller than this many pixels (default 16).
+    public var minArea: Int?
+    /// Include regions that touch the canvas border (default false: only enclosed shapes).
+    public var includeEdge: Bool?
+    /// Most regions to return, largest first (default 100).
+    public var maxRegions: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+        reference = try args.string("reference")
+        tolerance = try args.number("tolerance")
+        closeGap = try args.number("closeGap")
+        minArea = try args.integer("minArea")
+        includeEdge = try args.bool("includeEdge")
+        maxRegions = try args.integer("maxRegions")
+    }
+}
+
 /// Arguments of `clear_layer`.
 public struct ClearLayerArguments: Sendable {
     /// Layer id from list_layers (default the active layer).
@@ -2985,6 +3140,8 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .moveLayer: try MoveLayerArguments(args)
     case .mergeLayerDown: try MergeLayerDownArguments(args)
     case .fillLayer: try FillLayerArguments(args)
+    case .fillRegion: try FillRegionArguments(args)
+    case .findUnfilledRegions: try FindUnfilledRegionsArguments(args)
     case .clearLayer: try ClearLayerArguments(args)
     case .getBrush: try GetBrushArguments(args)
     case .setBrush: try SetBrushArguments(args)

@@ -1,7 +1,7 @@
 import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command, HistoryMark } from '../history/types.js';
 import { parseCsv, parseTsv } from '../spreadsheet/csv.js';
-import { sameChartSelection } from './layout.js';
+import { sameChartSelection, type ChartTextMeasure } from './layout.js';
 import { chartPresetPatch } from './presets.js';
 import { chartFamily } from './spec.js';
 import { chartMovingAverage, chartSupportsTrendlines, fitChartTrendline, type ChartTrendFit } from './trend.js';
@@ -71,6 +71,8 @@ export interface ChartControllerOptions {
 	onChange?: (spec: Readonly<ChartSpec>) => void;
 	/** Time and frames for playing a bar race (default: `performance.now` / `requestAnimationFrame`, else timers). */
 	raceTicker?: ChartRaceTicker;
+	/** Text width in pixels for layout, summaries and hit testing (default: `estimateChartTextWidth`). */
+	measureText?: ChartTextMeasure;
 }
 
 /** Drives bar race playback: the current time in ms, and a way to run `step` on the next frame (returns a cancel). */
@@ -186,6 +188,7 @@ const fail = (message: string, issues?: ChartIssue[]): ChartActionResult => ({ o
  */
 export class ChartController {
 	readonly history: HistoryManager;
+	readonly measureText?: ChartTextMeasure;
 	private spec: ChartSpec;
 	private selection: ChartSelection | null = null;
 	private issues: ChartIssue[] = [];
@@ -204,6 +207,7 @@ export class ChartController {
 
 	constructor(options: ChartControllerOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
+		this.measureText = options.measureText;
 		this.onChange = options.onChange;
 		this.raceTicker = options.raceTicker ?? defaultRaceTicker;
 		const { spec, issues } = normalizeChartSpec(options.spec ?? {});

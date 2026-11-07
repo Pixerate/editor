@@ -2033,11 +2033,11 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`PaintEditorController.breedStrokes`, `PaintEditorController.breedProposal`, `PaintEditorController.getProposalGenome`"
       },
       {
-        "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `clear_layer`, `pick_color` agent tools)",
-        "core": "`addLayer`, `updateLayer`, `fillLayer`, `mergeDown`, `pickColor`",
-        "react": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
-        "svelte": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
-        "swift": "`PaintEditorController`, `PaintLayersPanel` (eyedropper in `PaintCanvasView`)"
+        "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; reference-layer region / flats flood fill with gap closing (`closeGap`), line-edge bleed (`expand`), antialiasing, paper grain, wet wash pour (`wet: true`), leak warning and enclosed unfilled-region detection; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `fill_region`, `find_unfilled_regions`, `clear_layer`, `pick_color` agent tools)",
+        "core": "`addLayer`, `updateLayer`, `fillLayer`, `fillRegion`, `findUnfilledRegions`, `fillRegionMask`, `findUnfilledRegionsMask`, `mergeDown`, `pickColor`",
+        "react": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
+        "svelte": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
+        "swift": "`PaintEditorController` (`fillRegion`, `findUnfilledRegions`), `fillRegionMask`, `findUnfilledRegionsMask`, `PaintLayersPanel`, Fill tool (G) in `PaintToolbarView` & `PaintCanvasView` (eyedropper in `PaintCanvasView`)"
       },
       {
         "feature": "Paint View & Pen Input (zoom, pan, rotation and mirroring as view state only, pen azimuth and twist turned with the view; Pointer Events to pen samples with tilt, altitude / azimuth and twist, mouse pressure fix; palm rejection by drawing hand; `set_view`, `set_hand` agent tools)",

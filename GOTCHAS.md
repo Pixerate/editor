@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint-editor] A Live-Adjust Gesture Must Only Undo Its Own Commit
+
+- **Issue / Symptom**: Dragging the Fill tool to adjust tolerance (or cancelling the drag) undid the user's previous edit, e.g. a stroke, when the fill itself had painted nothing.
+- **Root Cause**: The gesture called `undo()` before each refill on the assumption that the last fill made an undo step. `fillRegion` returns early without committing when its mask is empty (a negative `expand` can erase the whole region) or throws, so the blind `undo()` took back an unrelated step.
+- **Solution / Workaround**: Track whether the gesture's last call committed (`committed: result.bounds !== null` in `PaintGesture`, TS and Swift) and only undo when it did. Any gesture that re-applies an operation by undo-and-redo needs the same guard.
+
 ### [core|swift/paint-editor] Evolutionary Stroke Mutation Keeps Geometry Scale Separate From Brush Size When `mutation.brush` Is 0
 
 - **Issue / Symptom**: Calling `breed_strokes` with `mutation: { geometry: 0.5, brush: 0 }` changed `brush.tip.size` on the child genome and reported a `tip.size` facet diff even though `mutation.brush` was explicitly set to `0`. Separately, when a host creates `createPaintProposals({ controller })` (`PaintProposals(controller:)` in Swift) alongside `createPaintEditorToolProvider(controller)`, `breed_strokes` and `accept_paint_proposal` would operate on different proposal stores unless linked.

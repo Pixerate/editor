@@ -453,6 +453,83 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   });
 
   add({
+    name: 'fill_region',
+    title: 'Fill a region (bucket / flats)',
+    description:
+      'Flood-fills one or more enclosed regions on a pixel layer from a seed point (x, y) or a batch of seed points (points). Set reference to a line-art layer id from list_layers (or "all" / "composite" for all visible layers, or "layer" for the target layer itself) to drop flat colours onto a flats layer under the ink without touching the line art. closeGap (0..32 px) bridges small gaps in the line art so flats do not leak; expand (-16..16 px, e.g. 1..2 px) bleeds the fill under anti-aliased line edges so no halo shows; wet pours a watercolour wash into the region on the wet layer. One undo step. Returns layerId, bounds, pixelCount, regions, and leaked (true when the fill touched the canvas border).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Seed point x in document pixels (pass x and y, or points).' },
+        y: { type: 'number', description: 'Seed point y in document pixels (pass x and y, or points).' },
+        points: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 500,
+          description: 'Multiple seed points in document pixels, filled together as one undo step.',
+          items: {
+            type: 'object',
+            properties: {
+              x: { type: 'number', description: 'Document x in pixels.' },
+              y: { type: 'number', description: 'Document y in pixels.' },
+            },
+            required: ['x', 'y'],
+            additionalProperties: false,
+          },
+        },
+        layerId: LAYER_ID,
+        reference: {
+          type: 'string',
+          description:
+            'Which pixels stop the fill: "layer" (default, the target layer itself), "all" or "composite" (all visible layers without paper), or a layer id from list_layers (e.g. an ink line-art layer above the flats layer).',
+        },
+        color: { ...COLOR, description: 'Fill colour #rrggbb (default the paint colour).' },
+        opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0..1 (default 1).' },
+        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal; see list_blend_modes).' },
+        blendMode: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Alias for blend (default normal; see list_blend_modes).' },
+        tolerance: { type: 'number', minimum: 0, maximum: 255, description: 'Colour and alpha similarity tolerance 0..255 (default 32).' },
+        closeGap: { type: 'number', minimum: 0, maximum: 32, description: 'Close gaps in line art up to this width in pixels, 0..32 (default 0).' },
+        expand: { type: 'number', minimum: -16, maximum: 16, description: 'Expand (> 0, bleed under lines to hide anti-aliased halos) or contract (< 0) the filled region in pixels, -16..16 (default 0).' },
+        antialias: { type: 'boolean', description: 'Soften boundary edges (default true).' },
+        grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response 0..1 (default 0: flat).' },
+        pressure: { type: 'number', minimum: 0, maximum: 1, description: 'With grain: how far into the valleys, 0..1 (default 0.5).' },
+        wet: { type: 'boolean', description: 'Pour a wet watercolour wash into the region on the wet layer instead of dry pixels (default false).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Fill a region (bucket / flats)', ...WRITE },
+    coordinates: { in: ['', 'points[]'], out: ['bounds', 'regions[].point', 'regions[].bounds'] },
+    handler: (a) => act({ kind: 'fill-region', fill: a }, () => c.fillRegion(a)),
+  });
+
+  add({
+    name: 'find_unfilled_regions',
+    title: 'Find enclosed unfilled regions',
+    description:
+      'Finds enclosed unfilled regions from a reference line-art layer (reference: layerId) or the visible composite ("all" / "composite", the default), closing line-art gaps up to closeGap px. When layerId is given, regions already painted on that target layer are excluded. Changes nothing. Returns regions sorted largest first, each with an interior seed point {x, y} ready for fill_region, centroid, bounds, pixelCount (area), and touchesEdge.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'Target flats layer id from list_layers; regions already painted on it are excluded (optional).' },
+        reference: {
+          type: 'string',
+          description:
+            'Which pixels define the line-art barriers: "all" or "composite" (default, all visible layers without paper), "layer" (the target or active layer), or a layer id from list_layers (e.g. an ink line-art layer).',
+        },
+        tolerance: { type: 'number', minimum: 0, maximum: 255, description: 'Alpha/colour threshold 0..255 above which a reference pixel counts as line art (default 32).' },
+        closeGap: { type: 'number', minimum: 0, maximum: 32, description: 'Close small gaps in line art up to this width in pixels, 0..32 (default 0).' },
+        minArea: { type: 'integer', minimum: 1, maximum: 10000000, description: 'Ignore regions smaller than this many pixels (default 16).' },
+        includeEdge: { type: 'boolean', description: 'Include regions that touch the canvas border (default false: only enclosed shapes).' },
+        maxRegions: { type: 'integer', minimum: 1, maximum: 1000, description: 'Most regions to return, largest first (default 100).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Find enclosed unfilled regions', ...READ },
+    coordinates: { out: ['regions[].point', 'regions[].centroid', 'regions[].bounds'] },
+    handler: (a) => c.findUnfilledRegions(a),
+  });
+
+  add({
     name: 'clear_layer',
     title: 'Clear a layer',
     description: 'Removes every pixel of a pixel layer. One undo step. Returns the layer id and the bounds that were cleared (null if it was empty).',

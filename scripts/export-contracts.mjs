@@ -7,6 +7,7 @@
 //   brushes  `brushContracts()` from `@pixerate/editor/brushes` → packages/conformance/domains/brushes/
 //   paint    `paintContracts()` from `@pixerate/editor/paint-editor` (effect tools listed with the fake effect provider) → packages/conformance/domains/paint/
 //   vector   `vectorContracts()` from `@pixerate/editor/vector` (the same fake effect provider) → packages/conformance/domains/vector/
+//   chart    `chartContracts()` from `@pixerate/editor/chart` → packages/conformance/domains/chart/
 //
 // Usage: node scripts/export-contracts.mjs [--check]   (--check writes nothing and exits 1 when a file is out of date)
 
@@ -32,12 +33,14 @@ async function core(entry) {
 const { brushContracts } = await core("brushes/index.js");
 const { paintContracts } = await core("paint-editor/index.js");
 const { vectorContracts } = await core("vector/index.js");
+const { chartContracts } = await core("chart/index.js");
 const { createFakeEffectProvider } = await core("effects/index.js");
 
 const domains = {
   brushes: brushContracts(),
   paint: paintContracts({ effects: createFakeEffectProvider() }),
   vector: vectorContracts({ effects: createFakeEffectProvider() }),
+  chart: chartContracts(),
 };
 let stale = 0;
 for (const [domain, files] of Object.entries(domains)) {

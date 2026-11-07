@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.202.0
+
+### Minor Changes
+
+- 0646d72: Add ghost paint and invisible ink (`ghost` facet with `linger` and `smear`): wet paint that flows and mixes visibly with the colours it meets while wet, then fades away completely without leaving a trace of its own colour, leaving only the smear where it lifted and dragged the paint already on the layer. Includes presets `ghost-wash`, `ghost-gouache`, `ghost-oil` and `invisible-ink`, `ghost.remaining` per layer in `get_wet_paint`, Linger and Smear sliders in React, Svelte and Swift brush panels, and full Swift parity.
+
+### Patch Changes
+
+- Updated dependencies [0646d72]
+  - @pixerate/editor@0.272.0
+
 ## 0.201.0
 
 ### Minor Changes
