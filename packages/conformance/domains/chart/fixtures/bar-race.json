@@ -1,0 +1,1843 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "bar-race",
+  "description": "Bar race moment scrubbing, ranking queries, and deterministic playback.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "2021",
+          "2022",
+          "2023",
+          "2024"
+        ],
+        "series": [
+          {
+            "name": "Alpha",
+            "values": [
+              100,
+              140,
+              190,
+              260
+            ]
+          },
+          {
+            "name": "Beta",
+            "values": [
+              130,
+              135,
+              170,
+              210
+            ]
+          },
+          {
+            "name": "Gamma",
+            "values": [
+              80,
+              120,
+              200,
+              280
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Alpha"
+            },
+            {
+              "id": "series-2",
+              "name": "Beta"
+            },
+            {
+              "id": "series-3",
+              "name": "Gamma"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Alpha",
+              "Beta",
+              "Gamma"
+            ],
+            [
+              "2021",
+              100,
+              130,
+              80
+            ],
+            [
+              "2022",
+              140,
+              135,
+              120
+            ],
+            [
+              "2023",
+              190,
+              170,
+              200
+            ],
+            [
+              "2024",
+              260,
+              210,
+              280
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "barrace",
+        "raceTopN": 3,
+        "title": "Platform Race"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "2021",
+              "2022",
+              "2023",
+              "2024"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 3,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Alpha",
+                "values": [
+                  100,
+                  140,
+                  190,
+                  260
+                ]
+              },
+              {
+                "id": "series-2",
+                "name": "Beta",
+                "values": [
+                  130,
+                  135,
+                  170,
+                  210
+                ]
+              },
+              {
+                "id": "series-3",
+                "name": "Gamma",
+                "values": [
+                  80,
+                  120,
+                  200,
+                  280
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Platform Race",
+            "tree": [],
+            "type": "barrace",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Platform Race",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 50.800000000000004,
+              "x2": 50.800000000000004,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 50.800000000000004,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 227.12275132275133,
+              "x2": 227.12275132275133,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 227.12275132275133,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 403.44550264550264,
+              "x2": 403.44550264550264,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 403.44550264550264,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 579.7682539682539,
+              "x2": 579.7682539682539,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 579.7682539682539,
+              "y": 38.25
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#64748b",
+              "key": "race-time",
+              "kind": "text",
+              "opacity": 0.55,
+              "role": "race-time",
+              "size": 45,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "2024",
+              "weight": 700,
+              "x": 584,
+              "y": 384
+            },
+            {
+              "fill": "#ff725c",
+              "height": 79.716,
+              "key": "bar-series-3",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "width": 493.70370370370364,
+              "x": 50.800000000000004,
+              "y": 71.35033333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-3"
+              },
+              "text": "Gamma",
+              "x": 44.800000000000004,
+              "y": 111.20833333333334
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-3",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "text": "280",
+              "x": 549.5037037037036,
+              "y": 111.20833333333334
+            },
+            {
+              "fill": "#4269d0",
+              "height": 79.716,
+              "key": "bar-series-1",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 458.4391534391534,
+              "x": 50.800000000000004,
+              "y": 182.067
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Alpha",
+              "x": 44.800000000000004,
+              "y": 221.925
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "260",
+              "x": 514.2391534391534,
+              "y": 221.925
+            },
+            {
+              "fill": "#efb118",
+              "height": 79.716,
+              "key": "bar-series-2",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 370.27777777777777,
+              "x": 50.800000000000004,
+              "y": 292.78366666666665
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Beta",
+              "x": 44.800000000000004,
+              "y": 332.64166666666665
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "210",
+              "x": 426.0777777777778,
+              "y": 332.64166666666665
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 332.15,
+            "width": 533.2,
+            "x": 50.800000000000004,
+            "y": 55.85
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "x",
+            "domain": [
+              0,
+              302.40000000000003
+            ],
+            "range": [
+              50.800000000000004,
+              584
+            ],
+            "ticks": [
+              0,
+              100,
+              200,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "set_chart_race_frame",
+      "arguments": {
+        "time": 1.5
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "frame": 1.5,
+          "ranking": [
+            {
+              "name": "Alpha",
+              "rank": 2,
+              "series": "series-1",
+              "value": 165
+            },
+            {
+              "name": "Gamma",
+              "rank": 1,
+              "series": "series-3",
+              "value": 160
+            },
+            {
+              "name": "Beta",
+              "rank": 3,
+              "series": "series-2",
+              "value": 152.5
+            }
+          ],
+          "time": "2023"
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Platform Race",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 50.800000000000004,
+              "x2": 50.800000000000004,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 50.800000000000004,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 200.4071829405163,
+              "x2": 200.4071829405163,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 200.4071829405163,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 350.0143658810326,
+              "x2": 350.0143658810326,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 350.0143658810326,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 499.62154882154886,
+              "x2": 499.62154882154886,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 499.62154882154886,
+              "y": 38.25
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#64748b",
+              "key": "race-time",
+              "kind": "text",
+              "opacity": 0.55,
+              "role": "race-time",
+              "size": 45,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "2023",
+              "weight": 700,
+              "x": 584,
+              "y": 384
+            },
+            {
+              "fill": "#4269d0",
+              "height": 79.716,
+              "key": "bar-series-1",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 493.70370370370364,
+              "x": 50.800000000000004,
+              "y": 126.70866666666666
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Alpha",
+              "x": 44.800000000000004,
+              "y": 166.56666666666666
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "165",
+              "x": 549.5037037037036,
+              "y": 166.56666666666666
+            },
+            {
+              "fill": "#ff725c",
+              "height": 79.716,
+              "key": "bar-series-3",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "width": 478.742985409652,
+              "x": 50.800000000000004,
+              "y": 182.067
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-3"
+              },
+              "text": "Gamma",
+              "x": 44.800000000000004,
+              "y": 221.925
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-3",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "text": "160",
+              "x": 534.542985409652,
+              "y": 221.925
+            },
+            {
+              "fill": "#efb118",
+              "height": 79.716,
+              "key": "bar-series-2",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 456.30190796857465,
+              "x": 50.800000000000004,
+              "y": 237.4253333333333
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Beta",
+              "x": 44.800000000000004,
+              "y": 277.2833333333333
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "153",
+              "x": 512.1019079685747,
+              "y": 277.2833333333333
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 332.15,
+            "width": 533.2,
+            "x": 50.800000000000004,
+            "y": 55.85
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "x",
+            "domain": [
+              0,
+              178.20000000000002
+            ],
+            "range": [
+              50.800000000000004,
+              584
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "get_chart_race_ranking",
+      "arguments": {
+        "time": 1.5
+      },
+      "expect": {
+        "result": {
+          "frame": 1.5,
+          "ranking": [
+            {
+              "name": "Alpha",
+              "rank": 2,
+              "series": "series-1",
+              "value": 165
+            },
+            {
+              "name": "Gamma",
+              "rank": 1,
+              "series": "series-3",
+              "value": 160
+            },
+            {
+              "name": "Beta",
+              "rank": 3,
+              "series": "series-2",
+              "value": 152.5
+            }
+          ],
+          "time": "2023"
+        }
+      }
+    },
+    {
+      "tool": "play_chart_race",
+      "arguments": {
+        "msPerStep": 500
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "durationMs": 750,
+          "from": 1.5,
+          "playing": true
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Platform Race",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 50.800000000000004,
+              "x2": 50.800000000000004,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 50.800000000000004,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 200.4071829405163,
+              "x2": 200.4071829405163,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 200.4071829405163,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 350.0143658810326,
+              "x2": 350.0143658810326,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 350.0143658810326,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 499.62154882154886,
+              "x2": 499.62154882154886,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 499.62154882154886,
+              "y": 38.25
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#64748b",
+              "key": "race-time",
+              "kind": "text",
+              "opacity": 0.55,
+              "role": "race-time",
+              "size": 45,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "2023",
+              "weight": 700,
+              "x": 584,
+              "y": 384
+            },
+            {
+              "fill": "#4269d0",
+              "height": 79.716,
+              "key": "bar-series-1",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 493.70370370370364,
+              "x": 50.800000000000004,
+              "y": 126.70866666666666
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Alpha",
+              "x": 44.800000000000004,
+              "y": 166.56666666666666
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "165",
+              "x": 549.5037037037036,
+              "y": 166.56666666666666
+            },
+            {
+              "fill": "#ff725c",
+              "height": 79.716,
+              "key": "bar-series-3",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "width": 478.742985409652,
+              "x": 50.800000000000004,
+              "y": 182.067
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-3"
+              },
+              "text": "Gamma",
+              "x": 44.800000000000004,
+              "y": 221.925
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-3",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "text": "160",
+              "x": 534.542985409652,
+              "y": 221.925
+            },
+            {
+              "fill": "#efb118",
+              "height": 79.716,
+              "key": "bar-series-2",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 456.30190796857465,
+              "x": 50.800000000000004,
+              "y": 237.4253333333333
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Beta",
+              "x": 44.800000000000004,
+              "y": 277.2833333333333
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "153",
+              "x": 512.1019079685747,
+              "y": 277.2833333333333
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 332.15,
+            "width": 533.2,
+            "x": 50.800000000000004,
+            "y": 55.85
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "x",
+            "domain": [
+              0,
+              178.20000000000002
+            ],
+            "range": [
+              50.800000000000004,
+              584
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.pauseRace"
+          },
+          {
+            "id": "chart.setRaceFrame",
+            "params": {
+              "time": "2023"
+            }
+          },
+          {
+            "id": "chart.raceRanking",
+            "params": {
+              "time": "2023"
+            }
+          },
+          {
+            "id": "chart.playRace",
+            "params": {
+              "msPerStep": 400
+            }
+          },
+          {
+            "id": "chart.pauseRace"
+          }
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 5,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.pauseRace",
+              "ok": true,
+              "result": {
+                "frame": 1.5
+              }
+            },
+            {
+              "id": "chart.setRaceFrame",
+              "ok": true,
+              "result": {
+                "frame": 2
+              }
+            },
+            {
+              "id": "chart.raceRanking",
+              "ok": true,
+              "result": {
+                "frame": 2,
+                "ranking": [
+                  {
+                    "name": "Gamma",
+                    "rank": 1,
+                    "series": "series-3",
+                    "value": 200
+                  },
+                  {
+                    "name": "Alpha",
+                    "rank": 2,
+                    "series": "series-1",
+                    "value": 190
+                  },
+                  {
+                    "name": "Beta",
+                    "rank": 3,
+                    "series": "series-2",
+                    "value": 170
+                  }
+                ]
+              }
+            },
+            {
+              "id": "chart.playRace",
+              "ok": true,
+              "result": {
+                "playing": true
+              }
+            },
+            {
+              "id": "chart.pauseRace",
+              "ok": true,
+              "result": {
+                "frame": 2
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Platform Race",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 50.800000000000004,
+              "x2": 50.800000000000004,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 50.800000000000004,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 174.22592592592594,
+              "x2": 174.22592592592594,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 174.22592592592594,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 297.65185185185186,
+              "x2": 297.65185185185186,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 297.65185185185186,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 421.0777777777778,
+              "x2": 421.0777777777778,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 421.0777777777778,
+              "y": 38.25
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 544.5037037037038,
+              "x2": 544.5037037037038,
+              "y1": 55.85,
+              "y2": 388
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 10,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 544.5037037037038,
+              "y": 38.25
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#64748b",
+              "key": "race-time",
+              "kind": "text",
+              "opacity": 0.55,
+              "role": "race-time",
+              "size": 45,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "2023",
+              "weight": 700,
+              "x": 584,
+              "y": 384
+            },
+            {
+              "fill": "#ff725c",
+              "height": 79.716,
+              "key": "bar-series-3",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "width": 493.70370370370375,
+              "x": 50.800000000000004,
+              "y": 71.35033333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-3"
+              },
+              "text": "Gamma",
+              "x": 44.800000000000004,
+              "y": 111.20833333333334
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-3",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-3"
+              },
+              "text": "200",
+              "x": 549.5037037037038,
+              "y": 111.20833333333334
+            },
+            {
+              "fill": "#4269d0",
+              "height": 79.716,
+              "key": "bar-series-1",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 469.01851851851853,
+              "x": 50.800000000000004,
+              "y": 182.067
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Alpha",
+              "x": 44.800000000000004,
+              "y": 221.925
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "190",
+              "x": 524.8185185185185,
+              "y": 221.925
+            },
+            {
+              "fill": "#efb118",
+              "height": 79.716,
+              "key": "bar-series-2",
+              "kind": "rect",
+              "radius": 3,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 419.6481481481482,
+              "x": 50.800000000000004,
+              "y": 292.78366666666665
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-name-series-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Beta",
+              "x": 44.800000000000004,
+              "y": 332.64166666666665
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-series-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "170",
+              "x": 475.4481481481482,
+              "y": 332.64166666666665
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 332.15,
+            "width": 533.2,
+            "x": 50.800000000000004,
+            "y": 55.85
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "x",
+            "domain": [
+              0,
+              216
+            ],
+            "range": [
+              50.800000000000004,
+              584
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}

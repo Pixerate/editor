@@ -54,6 +54,9 @@ public let PAINT_PAPER_SLIDER_PATHS: Set<String> = ["depth", "scale", "shading",
 /// Flow map kinds as the wet panel lists them (`WetPanel`'s labels).
 public let WET_FLOW_LABELS: [(kind: String, label: String)] = [("none", "None"), ("linear", "One way"), ("swirl", "Swirl"), ("radial", "Outwards"), ("turbulent", "Eddies")]
 
+/// Live pattern kinds as the wet panel lists them (`WetPanel`'s labels).
+public let WET_LIVE_PATTERN_LABELS: [(kind: String, label: String)] = [("none", "Off"), ("spots", "Spots (mitosis)"), ("stripes", "Stripes"), ("coral", "Coral"), ("maze", "Maze"), ("worms", "Worms")]
+
 /// The side panels of `PaintEditorView`.
 public enum PaintPanelTab: String, CaseIterable, Identifiable, Sendable {
     case color, paper, layers, effects, wet
@@ -464,6 +467,7 @@ public final class PaintEditorModel {
     public var wetSliders: [PaintUISlidersWetItem] { tables.sliders.wet }
     public var wetTiltSliders: [PaintUISlidersWetTiltItem] { tables.sliders.wetTilt }
     public var wetSpeedSlider: PaintUISlidersWetSpeed { tables.sliders.wetSpeed }
+    public var livePatternSliders: [PaintUISlidersLivePatternsItem] { tables.sliders.livePatterns }
     /// The engine choices (`PaintUITables.wetGpu`).
     public var wetGpuOptions: [PaintUIWetGpuItem] { tables.wetGpu }
     /// Wet media as the panel shows it (`getState().wet`).
@@ -478,6 +482,35 @@ public final class PaintEditorModel {
     public func setWetParam(_ path: String, _ value: Double) { attempt { _ = try controller.setWetParams(nil, [path: .number(value)]) } }
     public func setFlowKind(_ kind: String) { attempt { _ = try controller.setFlowMap(nil, ["kind": .string(kind)]) } }
     public func setFlowStrength(_ value: Double) { attempt { _ = try controller.setFlowMap(nil, ["strength": .number(value)]) } }
+    public var livePatterns: LivePatternsSettings? { wetLayerSettings?.livePatterns }
+    public func livePatternParam(_ path: String) -> Double {
+        let lp = livePatterns ?? DEFAULT_LIVE_PATTERNS
+        return readPath(lp.json.objectValue ?? [:], path)
+    }
+    public func setLivePatternKind(_ kind: String) {
+        if kind == "none" {
+            attempt { _ = try controller.setLivePatterns(nil, ["enabled": .bool(false)]) }
+        } else {
+            attempt { _ = try controller.setLivePatterns(nil, ["enabled": .bool(true), "pattern": .string(kind)]) }
+        }
+    }
+    public func setLivePatternParam(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setLivePatterns(nil, [path: .number(value)]) }
+    }
+    public func setLivePatternSecondColor(_ color: String?) {
+        attempt { _ = try controller.setLivePatterns(nil, ["secondColor": color.map { .string($0) } ?? .null]) }
+    }
+    public func seedLivePattern() {
+        let c = controller.doc.canvas
+        let kind = livePatterns?.pattern ?? "spots"
+        attempt {
+            _ = try controller.seedLivePatterns([
+                "points": .array([["x": .number(Double(c.width / 2)), "y": .number(Double(c.height / 2))]]),
+                "radius": .number(24),
+                "pattern": .string(kind),
+            ])
+        }
+    }
     public func tiltValue(_ path: String) -> Double { readPath(wet.tilt.json.objectValue ?? [:], path) }
     public func setTilt(_ path: String, _ value: Double) {
         attempt { _ = try controller.setCanvasTilt(angle: path == "angle" ? value : nil, direction: path == "direction" ? value : nil) }

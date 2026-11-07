@@ -51,6 +51,7 @@ export const BRUSH_PROFILE_JSON_SCHEMA: JsonSchema = {
     tilt: { ...SUPPORT, description: 'Tilt dynamics.' },
     tipGrain: { ...SUPPORT, description: 'Texture inside the tip (tip.grain); missing: none.' },
     dabCount: { ...SUPPORT, description: 'Several dabs per spacing step (dynamics.count); missing: none.' },
+    livePatterns: { ...SUPPORT, description: 'Gray-Scott reaction-diffusion patterns in wet paint (livePatterns); missing: none.' },
     iridescence: { ...SUPPORT, description: 'Thin-film iridescence (iridescence); missing: none.' },
     ferro: { ...SUPPORT, description: 'Liquid ferrofluid (ferro); missing: none.' },
   },

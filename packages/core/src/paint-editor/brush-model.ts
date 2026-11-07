@@ -9,7 +9,18 @@ import { DEFAULT_BLENDER, DEFAULT_SMUDGE, normalizeBlender, normalizeSmudge, typ
 import type { MixingModel } from '../paint/exchange';
 import { readPaintSource, type PaintGradientSource, type PaintSource } from '../paint/gradient-paint';
 import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixer';
+import {
+  DEFAULT_LIVE_PATTERNS,
+  LIVE_PATTERN_KINDS,
+  LIVE_PATTERN_PRESETS,
+  normalizeLivePatterns,
+  type LivePatternKind,
+  type LivePatternsInput,
+  type LivePatternsSettings,
+} from '../paint/live-patterns';
 import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, DEFAULT_STICKER, normalizeBristle, normalizeParticle, normalizeStickerSettings, STAMP_KINDS, type BristleSettings, type ParticleSettings, type StickerSettings } from './mark-settings';
+
+export { DEFAULT_LIVE_PATTERNS, LIVE_PATTERN_KINDS, LIVE_PATTERN_PRESETS, normalizeLivePatterns, type LivePatternKind, type LivePatternsInput, type LivePatternsSettings };
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
@@ -444,6 +455,8 @@ export interface PaintBrush {
   spray: SpraySettings | null;
   /** Dab engines: texture inside the tip (missing: none). Recorded with the stroke, source ref included, so replays match. */
   tipGrain?: TipGrainSettings;
+  /** Wet engine: Gray-Scott reaction-diffusion pattern seeded into the wet paint (missing: none). */
+  livePatterns?: LivePatternsSettings;
   /**
    * The brush's own gradient paint (`@pixerate/editor/paint` `PaintGradientSource`), used instead
    * of the editor's paint; `null` (default): the editor's paint. Stops may be `paint` / `secondary`
@@ -510,6 +523,13 @@ function countAndFlip(raw: Partial<BrushDynamics>, base: BrushDynamics): Pick<Br
 }
 
 const withTipGrain = (g: TipGrainSettings | null): { tipGrain?: TipGrainSettings } => (g ? { tipGrain: g } : {});
+const withLivePatterns = (lp: LivePatternsSettings | null): { livePatterns?: LivePatternsSettings } => (lp ? { livePatterns: lp } : {});
+
+function readLivePatterns(raw: unknown, base: LivePatternsSettings | null): LivePatternsSettings | null {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return base;
+  return normalizeLivePatterns(raw as LivePatternsInput, base ?? DEFAULT_LIVE_PATTERNS);
+}
 
 /** Tip grain settings in range, `null` to clear, or `base` when `raw` is missing or has no usable source. */
 function readTipGrain(raw: unknown, base: TipGrainSettings | null): TipGrainSettings | null {
@@ -556,7 +576,7 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -564,6 +584,8 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   ghost?: Partial<GhostSettings> | null;
   /** Mutation paint (`null` removes it). */
   mutation?: Partial<MutationSettings> | null;
+  /** Live reaction-diffusion patterns (`null` removes it). */
+  livePatterns?: LivePatternsInput | null;
   light?: Partial<LightSettings>;
   fluorescence?: Partial<FluorescenceSettings> | number;
   thermochromic?: Partial<ThermochromicSettings>;
@@ -739,6 +761,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
     ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),
+    ...withLivePatterns(readLivePatterns(raw.livePatterns, b.livePatterns ?? null)),
     paint,
     ...(raw.builtin ? { builtin: true } : {}),
   };

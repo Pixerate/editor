@@ -74,17 +74,17 @@
             },
             {
               "builtin": true,
-              "category": "procedural",
-              "engine": "particle",
-              "id": "hair-strands",
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "coral-ink",
               "kind": "mark",
-              "marks": "particles",
+              "marks": "continuous",
               "medium": "ink",
-              "name": "Hair strands",
-              "size": 40,
-              "surface": "dry",
+              "name": "Coral ink",
+              "size": 22,
+              "surface": "wet",
               "tip": "round",
-              "variety": "hair"
+              "variety": "watercolor"
             }
           ],
           "host": "paint",

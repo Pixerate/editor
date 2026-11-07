@@ -34,7 +34,7 @@
             "code": "invalid_arguments",
             "details": [
               {
-                "message": "Unknown property \"preset\". Allowed: id, name, description, tags, kind, medium, variety, tool, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, colour, unset.",
+                "message": "Unknown property \"preset\". Allowed: id, name, description, tags, kind, medium, variety, tool, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, motion, livePatterns, colour, unset.",
                 "path": "/preset"
               }
             ],
@@ -273,6 +273,7 @@
                 "remaining": 5.07
               },
               "layerId": "@1",
+              "livePatterns": null,
               "params": {
                 "bleed": 0.3,
                 "bloom": 0.4,
@@ -721,6 +722,7 @@
                 "strength": 0.5
               },
               "layerId": "@1",
+              "livePatterns": null,
               "params": {
                 "bleed": 0.3,
                 "bloom": 0.4,

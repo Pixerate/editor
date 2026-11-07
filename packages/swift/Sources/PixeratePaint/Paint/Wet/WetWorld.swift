@@ -85,6 +85,8 @@ public final class WetSnapshot {
     let lanes: [SnapLane]
     /// Per active key: the current set and the deposit planes, and its last flags.
     let slots: [(key: Int, planes: [Float], last: UInt32)]
+    /// Per-layer live-pattern snapshots (including layers whose water has already dried).
+    let patterns: OrderedMap<String, LivePatternFieldSnapshot>?
     /// Bytes held.
     public let bytes: Int
 
@@ -98,13 +100,15 @@ public final class WetSnapshot {
         var light: TiledSurface
         var lit: Bool
         var ghost: WetGhostState?
+        var livePatterns: LivePatternFieldSnapshot?
     }
 
-    init(clock: Int, tilt: WetTilt, lanes: [SnapLane], slots: [(key: Int, planes: [Float], last: UInt32)], bytes: Int) {
+    init(clock: Int, tilt: WetTilt, lanes: [SnapLane], slots: [(key: Int, planes: [Float], last: UInt32)], patterns: OrderedMap<String, LivePatternFieldSnapshot>? = nil, bytes: Int) {
         self.clock = clock
         self.tilt = tilt
         self.lanes = lanes
         self.slots = slots
+        self.patterns = patterns
         self.bytes = bytes
     }
 }
@@ -168,8 +172,9 @@ final class WetLane {
     var lightDisplay: TiledSurface?
     var lightKey = -1
     var prm: [Float] = []
+    var livePatterns: LivePatternField
 
-    init(id: String, index: Int, params: WetParams, flow: WetFlowField?, flowStrength: Double, base: TiledSurface, light: TiledSurface?, ghost: WetGhostState? = nil) {
+    init(id: String, index: Int, params: WetParams, flow: WetFlowField?, flowStrength: Double, base: TiledSurface, light: TiledSurface?, width: Int, height: Int, ghost: WetGhostState? = nil, livePatterns: LivePatternField? = nil) {
         self.id = id
         self.index = index
         self.params = params
@@ -180,6 +185,7 @@ final class WetLane {
         self.light = l
         self.ghost = ghost
         lit = ghost == nil && !l.tiles.isEmpty
+        self.livePatterns = livePatterns ?? LivePatternField(width: width, height: height)
     }
 }
 
@@ -290,31 +296,33 @@ public final class WetWorld {
     public func laneIds() -> [String] { lanes.compactMap { $0?.id } }
 
     /// Adds a wet layer (or updates it). Throws when `MAX_WET_LANES` are in use.
-    public func ensureLane(_ id: String, params: JSONObject? = nil, base: TiledSurface? = nil, flow: WetFlowField? = nil, flowStrength: Double? = nil, light: TiledSurface? = nil, ghost: WetGhostState? = nil) throws {
+    public func ensureLane(_ id: String, params: JSONObject? = nil, base: TiledSurface? = nil, flow: WetFlowField? = nil, flowStrength: Double? = nil, light: TiledSurface? = nil, ghost: WetGhostState? = nil, livePatterns: LivePatternField? = nil) throws {
         if let existing = lanes.first(where: { $0?.id == id }) ?? nil {
             if let params { _ = try setParams(id, normalizeWetParams(params, existing.params)) }
             if let base { setBase(id, base) }
             if let light { setLight(id, light) }
             if let ghost { try setGhost(id, ghost) }
+            if let livePatterns { existing.livePatterns = livePatterns }
             return
         }
         guard let index = lanes.firstIndex(where: { $0 == nil }) else { throw WetWorldError("At most \(MAX_WET_LANES) layers can hold wet paint at once; dry one (dry_paint) first.") }
-        let lane = WetLane(id: id, index: index, params: normalizeWetParams(params ?? [:], DEFAULT_WET_PARAMS), flow: flow, flowStrength: flow != nil ? (flowStrength ?? 1) : 0, base: base ?? emptySurface(4), light: light, ghost: ghost)
+        let lane = WetLane(id: id, index: index, params: normalizeWetParams(params ?? [:], DEFAULT_WET_PARAMS), flow: flow, flowStrength: flow != nil ? (flowStrength ?? 1) : 0, base: base ?? emptySurface(4), light: light, width: width, height: height, ghost: ghost, livePatterns: livePatterns)
         lanes[index] = lane
         pack(lane)
     }
 
     /// Adds a wet layer with settings (`ensureLane` with a `WetParams`).
-    func ensureLane(_ id: String, params: WetParams, base: TiledSurface, light: TiledSurface?, ghost: WetGhostState? = nil) throws {
-        if hasLane(id) {
+    func ensureLane(_ id: String, params: WetParams, base: TiledSurface, light: TiledSurface?, ghost: WetGhostState? = nil, livePatterns: LivePatternField? = nil) throws {
+        if let existing = lanes.first(where: { $0?.id == id }) ?? nil {
             _ = try setParams(id, params)
             setBase(id, base)
             if let light { setLight(id, light) }
             if let ghost { try setGhost(id, ghost) }
+            if let livePatterns { existing.livePatterns = livePatterns }
             return
         }
         guard let index = lanes.firstIndex(where: { $0 == nil }) else { throw WetWorldError("At most \(MAX_WET_LANES) layers can hold wet paint at once; dry one (dry_paint) first.") }
-        let lane = WetLane(id: id, index: index, params: params, flow: nil, flowStrength: 0, base: base, light: light, ghost: ghost)
+        let lane = WetLane(id: id, index: index, params: params, flow: nil, flowStrength: 0, base: base, light: light, width: width, height: height, ghost: ghost, livePatterns: livePatterns)
         lanes[index] = lane
         pack(lane)
     }
@@ -333,6 +341,80 @@ public final class WetWorld {
         lane.params = params
         pack(lane)
         return lane.params
+    }
+
+    public func getLivePatterns(_ id: String) throws -> LivePatternsSettings {
+        try laneOf(id).livePatterns.settings
+    }
+
+    public func hasLivePatterns(_ id: String) throws -> Bool {
+        try laneOf(id).livePatterns.enabled
+    }
+
+    public func livePatternField(_ id: String) throws -> LivePatternField {
+        try laneOf(id).livePatterns
+    }
+
+    @discardableResult
+    public func setLivePatterns(_ id: String, _ settings: JSONObject) throws -> LivePatternsSettings {
+        let lane = try laneOf(id)
+        let next = lane.livePatterns.configure(settings)
+        touchLane(lane)
+        return next
+    }
+
+    @discardableResult
+    public func setLivePatterns(_ id: String, _ settings: LivePatternsSettings) throws -> LivePatternsSettings {
+        let lane = try laneOf(id)
+        let next = lane.livePatterns.configure(settings)
+        touchLane(lane)
+        return next
+    }
+
+    @discardableResult
+    public func seedLivePatterns(_ id: String, _ cx: Double, _ cy: Double, _ radius: Double, _ seed: Int = 1, _ strength: Double = 1, _ settings: LivePatternsSettings? = nil) throws -> Int {
+        let lane = try laneOf(id)
+        if let settings { lane.livePatterns.configure(settings) }
+        let count = lane.livePatterns.seedDisc(cx: cx, cy: cy, radius: radius, seed: seed, strength: strength)
+        if count > 0 { touchLane(lane) }
+        return count
+    }
+
+    public func livePatternStats(_ id: String) throws -> LivePatternStats {
+        let lane = try laneOf(id)
+        return lane.livePatterns.stats { tx, ty, lx, ly in
+            self.isPatternCellWet(lane, tx, ty, lx, ly)
+        }
+    }
+
+    private func isPatternCellWet(_ lane: WetLane, _ tx: Int, _ ty: Int, _ lx: Int, _ ly: Int) -> Bool {
+        let tilesX = layout.tilesX, tilesY = layout.tilesY, perLane = layout.perLane
+        if tx < 0 || ty < 0 || tx >= tilesX || ty >= tilesY { return false }
+        let slot = slotOf(lane.index * perLane + ty * tilesX + tx)
+        if slot < 0 { return false }
+        let cur = slotPtr(slot) + parity * SET_PLANES * PL
+        let x0 = lx * 2 + 1
+        let y0 = ly * 2 + 1
+        let c00 = y0 * S + x0
+        let c10 = c00 + 1
+        let c01 = c00 + S
+        let c11 = c01 + 1
+        let rho = cur + P_RHO * PL
+        let sw = cur + P_SW * PL
+        return (
+            Double(rho[c00]) + Double(sw[c00]) > DRY_EPS ||
+            Double(rho[c10]) + Double(sw[c10]) > DRY_EPS ||
+            Double(rho[c01]) + Double(sw[c01]) > DRY_EPS ||
+            Double(rho[c11]) + Double(sw[c11]) > DRY_EPS
+        )
+    }
+
+    private func touchLane(_ lane: WetLane) {
+        for key in active where laneIndexOf(key) == lane.index {
+            slotStamp[key] += 1
+            lane.urgent.insert(tileKeyOf(key))
+        }
+        lane.stamp += 1
     }
 
     public func getTilt() -> WetTilt { tilt }
@@ -660,6 +742,19 @@ public final class WetWorld {
     private func afterBatch(_ n: Int) {
         clock += n
         let tilesX = layout.tilesX, tilesY = layout.tilesY, perLane = layout.perLane
+        for lane in lanes {
+            guard let lane, lane.livePatterns.enabled, !lane.livePatterns.tiles.isEmpty else { continue }
+            let changed = lane.livePatterns.step(
+                n,
+                isWetCell: { tx, ty, lx, ly in self.isPatternCellWet(lane, tx, ty, lx, ly) },
+                canWakeTile: { tx, ty in self.slotOf(lane.index * perLane + ty * tilesX + tx) >= 0 }
+            )
+            if changed {
+                for key in active where laneIndexOf(key) == lane.index {
+                    slotStamp[key] += 1
+                }
+            }
+        }
         var wakeups: [Int] = []
         for key in active {
             let fl = flags[key]
@@ -1206,7 +1301,10 @@ public final class WetWorld {
             lightChanged = true
         }
         let src = lane.base.tiles.get(tk)?.data
-        guard let out = shadeSlot(key, src, all ? .bakeAll : .bake) else { return lightChanged }
+        let (tx, ty) = tileXY(key)
+        let out = shadeSlot(key, src, all ? .bakeAll : .bake)
+        if lane.livePatterns.enabled { lane.livePatterns.markBaked(tx, ty) }
+        guard let out else { return lightChanged }
         var tiles = lane.base.tiles
         if let t = finishTile(out, 4, 0) { tiles.set(tk, t) } else { _ = tiles.delete(tk) }
         setBase(lane.id, TiledSurface(channels: 4, tiles: tiles, defaultValue: 0))
@@ -1237,10 +1335,13 @@ public final class WetWorld {
         let h = Swift.min(WET_TILE, height - ty * WET_TILE)
         let lane = lanes[laneIndexOf(key)]!
         let lit = lane.lit && lane.ghost == nil
-        let changed = shadeTile(
+        var changed = shadeTile(
             b, P_D0 * PL, mode == .bake ? -1 : cur + P_P0 * PL, mode == .display ? cur + P_RHO * PL : -1, cur + P_SW * PL, src, &out, w, h, paperBytes,
             lit ? P_DL * PL : -1, lit && mode != .bake ? cur + P_L * PL : -1
         )
+        if lane.livePatterns.enabled && !lane.livePatterns.tiles.isEmpty {
+            changed = lane.livePatterns.shadeTile(tx, ty, &out, w, h) || changed
+        }
         return changed ? out : nil
     }
 
@@ -1572,6 +1673,7 @@ public final class WetWorld {
         }
         guard let engine = gpu, gpuDecide() else { return try cpu() }
         let lane = try laneOf(id)
+        if lane.livePatterns.enabled && !lane.livePatterns.tiles.isEmpty { return try cpu() }
         let stale = active.filter {
             guard laneIndexOf($0) == lane.index else { return false }
             let tk = tileKeyOf($0)
@@ -1622,7 +1724,11 @@ public final class WetWorld {
             out.append((key, planes, last[key]))
             bytes += planes.count * 4
         }
-        let ls = lanes.compactMap { $0 }.map { l in WetSnapshot.SnapLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: l.ghost) }
+        let ls = lanes.compactMap { $0 }.map { l -> WetSnapshot.SnapLane in
+            let lp = l.livePatterns.snapshot()
+            bytes += lp.bytes
+            return WetSnapshot.SnapLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: l.ghost, livePatterns: lp)
+        }
         return WetSnapshot(clock: clock, tilt: tilt, lanes: ls, slots: out, bytes: bytes)
     }
 
@@ -1632,8 +1738,9 @@ public final class WetWorld {
         lanes = Array(repeating: nil, count: MAX_WET_LANES)
         tilt = snap.tilt
         for l in snap.lanes {
-            let lane = WetLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, ghost: l.ghost)
+            let lane = WetLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, width: width, height: height, ghost: l.ghost)
             lane.lit = lane.ghost == nil && (lane.lit || l.lit)
+            if let lp = l.livePatterns { lane.livePatterns.restore(lp) }
             lanes[l.index] = lane
             pack(lane)
         }
@@ -1672,8 +1779,21 @@ public final class WetWorld {
             if let base = m.base { out.base = base }
             if let light = m.light { out.light = light }
             if let flow = m.flow { out.flow = flow }
+            if let lp = l.livePatterns {
+                let movedLp = moveLivePatternSnapshot(lp, to: (width: to.0, height: to.1), tx0: tx0, ty0: ty0)
+                out.livePatterns = movedLp
+                bytes += movedLp.bytes
+            }
             return out
         }
-        return WetSnapshot(clock: snap.clock, tilt: snap.tilt, lanes: lanes, slots: slots, bytes: bytes)
+        var patterns: OrderedMap<String, LivePatternFieldSnapshot>? = nil
+        if let sp = snap.patterns {
+            var movedPatterns = OrderedMap<String, LivePatternFieldSnapshot>()
+            for (id, p) in sp {
+                movedPatterns.set(id, moveLivePatternSnapshot(p, to: (width: to.0, height: to.1), tx0: tx0, ty0: ty0))
+            }
+            patterns = movedPatterns
+        }
+        return WetSnapshot(clock: snap.clock, tilt: snap.tilt, lanes: lanes, slots: slots, patterns: patterns, bytes: bytes)
     }
 }

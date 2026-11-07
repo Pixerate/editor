@@ -7,7 +7,18 @@
  * `migrateBrushV1` reads the same map the other way, so the two directions cannot drift apart.
  */
 
-import { normalizePaintBrush, WET_MEDIA, type PaintBrushCategory, type PaintBrushEngine, type PaintBrushInput, type WetMediumKind, type WetTool } from '../paint-editor/brush-model';
+import {
+  DEFAULT_LIVE_PATTERNS,
+  LIVE_PATTERN_PRESETS,
+  normalizePaintBrush,
+  WET_MEDIA,
+  type LivePatternsSettings,
+  type PaintBrushCategory,
+  type PaintBrushEngine,
+  type PaintBrushInput,
+  type WetMediumKind,
+  type WetTool,
+} from '../paint-editor/brush-model';
 import { editorStampOf } from '../stickers/helpers';
 import type { Brush, BrushTool, ResolvedBrush } from './types';
 
@@ -54,6 +65,24 @@ const ONE_STAMP = {
   toEngine: (v: unknown) => (v as string[])[0] ?? null,
   toFacet: (v: unknown) => (v ? [v as string] : undefined),
 };
+/** Sparse facet form of resolved live-pattern settings. */
+const LIVE_PATTERNS_MAP = {
+  toEngine: (v: unknown) => (v !== null && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v),
+  toFacet: (v: unknown) => {
+    if (!v || typeof v !== 'object') return undefined;
+    const lp = v as LivePatternsSettings;
+    const preset = LIVE_PATTERN_PRESETS[lp.pattern] ?? LIVE_PATTERN_PRESETS.spots;
+    return {
+      pattern: lp.pattern,
+      ...(lp.feed !== preset.feed ? { feed: lp.feed } : {}),
+      ...(lp.kill !== preset.kill ? { kill: lp.kill } : {}),
+      ...(lp.scale !== DEFAULT_LIVE_PATTERNS.scale ? { scale: lp.scale } : {}),
+      ...(lp.contrast !== DEFAULT_LIVE_PATTERNS.contrast ? { contrast: lp.contrast } : {}),
+      ...(lp.secondColor !== null ? { secondColor: lp.secondColor } : {}),
+      ...(lp.relief !== DEFAULT_LIVE_PATTERNS.relief ? { relief: lp.relief } : {}),
+    };
+  },
+};
 
 const f = (facet: string, engine: string, engines: readonly PaintBrushEngine[] = ALL, extra: Partial<BrushField> = {}): BrushField => ({ facet, engine, engines, ...extra });
 const each = (facetPrefix: string, enginePrefix: string, keys: readonly string[], engines?: readonly PaintBrushEngine[]) => keys.map((k) => f(`${facetPrefix}.${k}`, `${enginePrefix}.${k}`, engines));
@@ -96,6 +125,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('behaviour.strength', 'wet.strength', ['wet']),
   // Surfaces.
   ...each('behaviour.wet', 'wet', ['medium', 'water', 'pigment', 'body', 'rewet', 'load', 'thinner'], ['wet']),
+  f('livePatterns', 'livePatterns', ['wet'], { map: LIVE_PATTERNS_MAP }),
   ...each('ghost', 'ghost', ['linger', 'smear', 'trigger'], ['wet']),
   ...each('mutation', 'mutation', ['settle', 'patience', 'fade'], ['dab', 'wet', 'impasto', 'particle', 'bristle']),
   f('behaviour.thick.applicator', 'impasto.tool', ['impasto']),
@@ -226,6 +256,7 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   if (brush.iridescence && FILM.includes(engine)) input.iridescence = { ...((input.iridescence as object | undefined) ?? {}) };
   if (engine === 'wet') {
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');
+    if (brush.kind === 'tool') delete input.livePatterns;
     const medium = resolveWetMedium(brush);
     if (medium) setPath(input, 'wet.medium', medium);
     if (brush.kind !== 'tool' && brush.ghost) input.ghost = { ...((input.ghost as object | undefined) ?? {}) };

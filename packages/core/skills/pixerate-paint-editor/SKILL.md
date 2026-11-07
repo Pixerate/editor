@@ -93,6 +93,9 @@ Which facet sets which engine setting: [references/brush-facets.md](references/b
 ## Wet media
 
 Watercolour, gouache and wet oil run on a fluid simulation: lay washes light to dark, let them flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves for an agent until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools. **Ghost paint and invisible ink** (`ghost` facet: `ghost-wash`, `ghost-gouache`, `ghost-oil`, `invisible-ink`) mix and flow while wet, then fade without leaving their own colour, leaving only a smear in the paint they touched: read [references/ghost.md](references/ghost.md).
+**Live patterns** (Gray-Scott reaction-diffusion spots, stripes, coral, maze and worms that grow
+in wet paint and freeze when it dries; presets `turing-wash`, `coral-ink`):
+[references/live-patterns.md](references/live-patterns.md).
 
 ## Oils, thick paint and smart inks
 
@@ -223,7 +226,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `ghost`, `mutation`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `ghost`, `mutation`, `motion`, `colour`, `livePatterns` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -287,6 +290,9 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `set_water_overlay` | Show where the water is (`visible`), view only. |
 | `set_wet_engine` | Let Engine B (WebGPU in browsers, Metal in the Swift editors) shade large washes (`gpu` "auto", the default) or force the CPU (`gpu` "off"); `minTiles` sets the wet area at which the GPU takes over. Never changes the result, only how it is drawn; editor setting, not saved, not an undo step. Returns `engine` (`state`: off, not-started, starting, unavailable, standby, active, failed; `reason`, `adapter`). |
 | `set_instant_dry` | `on`: every wet stroke dries as it ends (same undo step); off (default) wet paint keeps moving. Returns `instantDry`. |
+| `get_live_patterns` | Read live reaction-diffusion pattern fields on one layer (`layerId`) or every layer, plus the Pearson `presets` (`spots`, `stripes`, `coral`, `maze`, `worms`) and built-in `brushPresets` (`turing-wash`, `coral-ink`). Returns `layers` (`active`, `settings`, `activeTiles`, `patternCells`, `wetPatternCells`, `maxV`, `meanV`, `bounds`). Changes nothing. |
+| `set_live_patterns` | Configure a layer's Gray-Scott reaction-diffusion settings (`layerId`, `pattern`, `feed`, `kill`, `scale`, `contrast`, `secondColor`, `relief`). One undo step. Returns `layerId`, `settings`, `stats` and `stillWet`. |
+| `seed_live_patterns` | Seed Gray-Scott reagent V at `points` (`[{x, y}]` in document px) with `radius` and `seed` on a layer (`layerId`, default active), optionally updating pattern settings (`pattern`, `feed`, `kill`, `scale`, `contrast`, `secondColor`, `relief`). Follow with `advance_wet_paint` to grow the pattern while wet, then `dry_paint` to freeze it. One undo step. Returns `layerId`, `seeded`, `radius`, `seed`, `settings`, `stats`, `stillWet`. |
 
 ### Thick paint, light and smart inks
 

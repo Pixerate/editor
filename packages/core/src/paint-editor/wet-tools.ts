@@ -7,6 +7,7 @@
  */
 
 import { WET_FLOW_KINDS } from '../paint/wet/flow';
+import { LIVE_PATTERN_KINDS } from '../paint/live-patterns';
 import type { PaintAgentTool } from './hosted';
 import type { PaintEditorController } from './controller';
 
@@ -40,6 +41,44 @@ export const WET_PARAM_SCHEMA = {
   fixture: UNIT('How fast pigment settles into the paper while wet, i.e. staining (default 0.2).'),
   bloom: UNIT('Blooms: water running into a drying wash pushes its pigment into cauliflower edges (default 0.4).'),
   bleed: UNIT('Colour bleed between touching wet areas (default 0.3).'),
+} as const;
+
+export const LIVE_PATTERN_SCHEMA = {
+  pattern: {
+    type: 'string',
+    enum: [...LIVE_PATTERN_KINDS],
+    description: 'Pearson Gray-Scott preset: spots, stripes, coral, maze or worms (default spots). Sets feed and kill unless explicit feed/kill are also passed.',
+  },
+  feed: {
+    type: 'number',
+    minimum: 0.005,
+    maximum: 0.1,
+    description: 'Gray-Scott feed rate F, 0.005..0.1 (default: the pattern preset’s feed rate).',
+  },
+  kill: {
+    type: 'number',
+    minimum: 0.02,
+    maximum: 0.08,
+    description: 'Gray-Scott kill rate k, 0.02..0.08 (default: the pattern preset’s kill rate).',
+  },
+  scale: {
+    type: 'number',
+    minimum: 0.25,
+    maximum: 4,
+    description: 'Diffusion scale 0.25..4 (larger values grow broader pattern features; default 1).',
+  },
+  contrast: {
+    type: 'number',
+    minimum: 0,
+    maximum: 2,
+    description: 'How strongly V modulates the wet pigment or blends toward secondColor, 0..2 (default 0.85).',
+  },
+  secondColor: {
+    type: ['string', 'null'],
+    pattern: '^#[0-9a-fA-F]{6}$',
+    description: 'Optional #rrggbb colour that high-V pattern ridges blend toward, or null to modulate pigment contrast (default null).',
+  },
+  relief: UNIT('Impasto ridge height 0..1 written from V into the layer’s thick height map so light catches the pattern (default 0).'),
 } as const;
 
 export function createPaintWetTools(c: PaintEditorController): PaintAgentTool[] {
@@ -213,6 +252,76 @@ export function createPaintWetTools(c: PaintEditorController): PaintAgentTool[] 
       inputSchema: { type: 'object', properties: { visible: { type: 'boolean', description: 'Show (true) or hide (false) the overlay.' } }, required: ['visible'], additionalProperties: false },
       annotations: { title: 'Show the water', ...SET },
       handler: ({ visible }) => ({ visible: c.setWaterOverlay(visible), stillWet: stillWet() }),
+    },
+    {
+      name: 'get_live_patterns',
+      title: 'Get live patterns',
+      description:
+        'Reads the Gray-Scott reaction-diffusion live patterns on a layer (layerId, default the active layer): whether live patterns are enabled, the active settings (pattern, feed, kill, scale, contrast, secondColor, relief), activeTiles, patternCells, wetPatternCells (pattern cells still holding water where the pattern can grow), meanV, maxV, bounds, wet coverage (wet, wetCells, wetBounds), layers (every layer with wet paint or live patterns), and presets (built-in Pearson feed/kill presets: spots, stripes, coral, maze, worms). Call it before or after advance_wet_paint and dry_paint to inspect pattern growth and freezing.',
+      inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, additionalProperties: false },
+      annotations: { title: 'Get live patterns', ...READ },
+      coordinates: { out: ['wetBounds', 'bounds', 'layers[].wetBounds', 'layers[].bounds'] },
+      handler: ({ layerId }) => c.getLivePatterns(layerId),
+    },
+    {
+      name: 'set_live_patterns',
+      title: 'Set live patterns',
+      description:
+        'Configures a layer’s Gray-Scott reaction-diffusion live patterns (or clears them with enabled: false). Patterns grow inside wet paint during advance_wet_paint and freeze when the paint dries (dry_paint). Choose a Pearson preset (spots, stripes, coral, maze, worms) or explicit feed and kill rates, scale, contrast, secondColor (#rrggbb or null to modulate pigment contrast) and relief (0..1, writes ridge height into thick paint so lighting catches the pattern). One undo step. Returns the layer’s live-pattern stats and stillWet.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          layerId: LAYER_ID,
+          enabled: { type: 'boolean', description: 'true (default) configures live patterns on the layer; false clears them.' },
+          ...LIVE_PATTERN_SCHEMA,
+        },
+        additionalProperties: false,
+      },
+      annotations: { title: 'Set live patterns', ...SET },
+      coordinates: { out: ['wetBounds', 'bounds'] },
+      handler: async ({ layerId, ...update }) => {
+        await c.wetIdle();
+        return { ...c.setLivePatterns(layerId, update), stillWet: stillWet() };
+      },
+    },
+    {
+      name: 'seed_live_patterns',
+      title: 'Seed live patterns',
+      description:
+        'Seeds Gray-Scott reaction-diffusion activator (V) discs at points on a layer so reaction-diffusion patterns (spots, stripes, coral, maze, worms) grow where the layer holds wet water (advance_wet_paint) and freeze where it dries (dry_paint). Painting with a wet brush that has a livePatterns facet (such as preset "turing-wash" or "coral-ink") also seeds along the stroke automatically. One undo step. Returns seededCells, the layer’s live-pattern stats (patternCells, wetPatternCells, meanV, maxV, bounds) and stillWet.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          layerId: LAYER_ID,
+          points: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 1024,
+            description: 'Seed centres in document pixels where reaction-diffusion activator V is nucleated.',
+            items: {
+              type: 'object',
+              properties: {
+                x: { type: 'number', description: 'Document x in pixels.' },
+                y: { type: 'number', description: 'Document y in pixels.' },
+                strength: { type: 'number', exclusiveMinimum: 0, maximum: 1, description: 'Seed strength 0..1 (default 1).' },
+              },
+              required: ['x', 'y'],
+              additionalProperties: false,
+            },
+          },
+          radius: { type: 'number', minimum: 1, maximum: 512, description: 'Seed disc radius in document pixels (default 16).' },
+          seed: { type: 'integer', minimum: 0, description: 'Deterministic noise seed for the nucleated discs (default: next editor seed).' },
+          ...LIVE_PATTERN_SCHEMA,
+        },
+        required: ['points'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Seed live patterns', ...WRITE },
+      coordinates: { in: ['points'], out: ['wetBounds', 'bounds'] },
+      handler: async (args) => {
+        await c.wetIdle();
+        return { ...c.seedLivePatterns(args as Parameters<typeof c.seedLivePatterns>[0]), stillWet: stillWet() };
+      },
     },
   ];
 }

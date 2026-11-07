@@ -1,0 +1,155 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "errors",
+  "description": "Validation and error messages for unknown series, out-of-range indexes, and invalid values.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Q1",
+          "Q2"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              100,
+              120
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Revenue"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Revenue"
+            ],
+            [
+              "Q1",
+              100
+            ],
+            [
+              "Q2",
+              120
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_chart_series",
+      "arguments": {
+        "series": "Missing",
+        "name": "Nope"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no series \"Missing\"; expected one of \"series-1\" (Revenue)."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "remove_chart_category",
+      "arguments": {
+        "category": 99
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no category 99; expected an index from 0 to 1 or one of \"Q1\", \"Q2\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "set_chart_values",
+      "arguments": {
+        "cells": [
+          {
+            "series": "Revenue",
+            "category": "Q1",
+            "value": "not-a-number"
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "\"not-a-number\" is not a number; pass a number, numeric text or null for a gap. Nothing was changed."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "update_chart_reference_line",
+      "arguments": {
+        "index": 5,
+        "value": 50
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no reference line 5; the chart has none yet."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "get_chart_trendline",
+      "arguments": {
+        "series": "Revenue",
+        "index": 3
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "\"Revenue\" has no trendline 3; it has 0."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "set_chart_race_frame",
+      "arguments": {
+        "time": 10
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no time point 10; expected an index from 0 to 1 or one of \"Q1\", \"Q2\"."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}
