@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.275.1
+
+### Patch Changes
+
+- 13ef0ed: Add recorded chart conformance scenarios covering every chart tool and command, and add the TypeScript replay test (#696).
+
 ## 0.275.0
 
 ### Minor Changes
