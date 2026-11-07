@@ -20,6 +20,8 @@ built-in presets (read-only) and the user's brushes, shared by every editor that
 | Dynamics | Pen feel: pressure to size and opacity, smoothing, tilt, velocity, jitter (`sizeJitter`, `angleJitter` for rotation, `opacityJitter`, `scatter`), rotation, `count` (dabs per spacing step, each jittered) and `flip` (mirror dabs at random: `x`, `y`, `xy`). |
 | Behaviour | `surface` `dry`, `wet` (`wet` settings) or `thick` (`thick` impasto settings); paper `grain`; `exchange` (pick-up and mix; a `reservoir` makes a Mixer Brush); tool `strength`. |
 | Light | Light the brush gives off (`amount`), plus suggested layer `spill` and `glow`. |
+| Fluorescence | UV-fluorescent ink (`amount` 0..1, `invisible` true for invisible ink that only appears under the paint editor's UV blacklight; preset `uv-marker`). |
+| Thermochromic | Heat-reactive ink (`hotColor` `#rrggbb`, `threshold` 0.05..0.95) that shifts colour where the paint editor's heat brush warms the canvas (preset `thermo-ink`). |
 | Iridescence | Structural thin-film interference (`thickness` 100..1000 nm, `pressureToThickness` 0..1, `ior` 1.2..2.0) whose hue shifts with light and view tilt (`scarab-lacquer`, `soap-film`, `pearl-glaze`). |
 | Ghost | On wet paint (`behaviour.surface: "wet"`): `linger` (0.5..60 s before the brush's own colour fades away) and `smear` (0..1, how much it lifts and drags the paint it crosses). Presets `ghost-wash`, `ghost-gouache`, `ghost-oil` and `invisible-ink`. |
 | Motion | Animation after painting (live effect paint, particle `waveSpeed`). |

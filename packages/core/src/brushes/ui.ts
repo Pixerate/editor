@@ -241,6 +241,10 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       ...(engine === 'impasto' ? [slider({ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }), slider({ path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 })] : []),
       withNote({ kind: 'slider', path: 'light.spill.radius', label: 'Spill', ariaLabel: 'Brush light spill', min: 0, max: 128, step: 1, value: brush.light?.spill?.radius ?? 24 }),
       toggle('light.glow', 'Suggest a glow'),
+      withNote({ kind: 'slider', path: 'fluorescence.amount', label: 'UV fluorescence', ariaLabel: 'Brush fluorescence amount', min: 0, max: 1, step: 0.01, value: brush.fluorescence?.amount ?? 0 }),
+      toggle('fluorescence.invisible', 'Invisible in daylight'),
+      withNote({ kind: 'colour', path: 'thermochromic.hotColor', label: 'Hot colour', ariaLabel: 'Brush thermochromic hot colour', value: brush.thermochromic?.hotColor ?? null, dark: null, gradient: false }),
+      withNote({ kind: 'slider', path: 'thermochromic.threshold', label: 'Heat threshold', ariaLabel: 'Brush thermochromic threshold', min: 0.05, max: 0.95, step: 0.01, value: brush.thermochromic?.threshold ?? 0.5 }),
       full(profile.iridescence ?? 'none') && marks !== 'objects' && withNote({ kind: 'toggle', path: 'iridescence', label: 'Thin-film iridescence', ariaLabel: 'Brush thin-film iridescence', value: Boolean(brush.iridescence) }),
       ...(brush.iridescence && full(profile.iridescence ?? 'none')
         ? [
@@ -313,6 +317,10 @@ function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
       return 'several dabs per step';
     case 'light':
       return 'light';
+    case 'fluorescence':
+      return 'UV-fluorescent ink';
+    case 'thermochromic':
+      return 'thermochromic ink';
     case 'iridescence':
       return 'iridescence';
     case 'ghost':
@@ -434,6 +442,8 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
       delete next.variety;
       delete next.marks;
       delete next.light;
+      delete next.fluorescence;
+      delete next.thermochromic;
       delete next.iridescence;
       delete next.ghost;
       delete next.mutation;

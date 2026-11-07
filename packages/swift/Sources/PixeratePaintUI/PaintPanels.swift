@@ -357,6 +357,31 @@ public struct PaintPaperPanel: View {
             Toggle("Mirror tiling", isOn: Binding(get: { paper.tiling == "mirror" }, set: { on in model.attempt { _ = try model.controller.setPaper(["tiling": .string(on ? "mirror" : "repeat")]) } }))
             Button("New sheet") { model.newSheet() }
             PaintLightPanel(model: model)
+            PaintUvHeatPanel(model: model)
+        }
+    }
+}
+
+/// The virtual UV blacklight and thermochromic heat controls (`PaperPanel`'s UV & heat section).
+public struct PaintUvHeatPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let uv = model.uvLight
+        let heat = model.heatSummary
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("UV blacklight & heat")
+            Toggle("UV blacklight", isOn: Binding(get: { uv.on }, set: { model.setUvLight(on: $0) }))
+            if uv.on {
+                PaintSliderRow(label: "UV strength", value: uv.strength, range: 0...2, step: 0.05, onChange: { model.setUvLight(strength: $0) })
+                PaintSliderRow(label: "UV ambient", value: uv.ambient, range: 0...1, step: 0.05, onChange: { model.setUvLight(ambient: $0) })
+            }
+            HStack(spacing: 4) {
+                Button("Spread & cool heat") { model.advanceHeat() }.disabled(heat.hotCells == 0)
+                Button("Cool canvas") { model.clearHeat() }.disabled(heat.hotCells == 0)
+            }
+            .controlSize(.small)
         }
     }
 }

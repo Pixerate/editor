@@ -20,6 +20,8 @@ func liveStrokeRefusal(_ brush: PaintBrush) -> String? {
     }
     if brush.mutation != nil { return "The \(brush.name) brush paints mutation strokes (which fade when an agent reads them), so it can't paint on a stroke layer; paint on a pixel layer (add_layer), or set mutation to null (set_brush)." }
     if brush.light.amount > 0 { return "The \(brush.name) brush lays light, which a stroke layer doesn't redraw yet; paint light on a pixel layer (add_layer), or set light.amount to 0 (set_brush)." }
+    if brush.fluorescence.amount > 0 { return "The \(brush.name) brush paints UV-fluorescent ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or set fluorescence.amount to 0 (set_brush)." }
+    if brush.thermochromic.hotColor != nil { return "The \(brush.name) brush paints thermochromic ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or remove thermochromic (set_brush)." }
     if brush.behavior.pickup > 0 { return "The \(brush.name) brush picks up the paint under it (pickup \(jsText(brush.behavior.pickup))), so it can't be redrawn on its own; set behavior.pickup to 0 (set_brush) or paint on a pixel layer." }
     return nil
 }

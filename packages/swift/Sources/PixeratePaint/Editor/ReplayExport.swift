@@ -141,6 +141,7 @@ extension PaintEditorController {
         paper.scale = Swift.min(8, paper.scale * scale)
         target.doc = PaintDocumentState(canvas: target.doc.canvas, paper: paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [])
         target.lighting = lighting
+        target.uvLight = uvLight
         // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
         target.effectsProvider = effectsProvider
         if Int(w) == width && Int(h) == height { target.effectPaintPixels = effectPaintPixels }

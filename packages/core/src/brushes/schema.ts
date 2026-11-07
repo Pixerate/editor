@@ -226,6 +226,16 @@ const LIGHT = object('Light the brush gives off with its colour (glow and spill)
   glow: bool('Suggest a glow layer effect for the layer (glow stays a layer effect).'),
 });
 
+const FLUORESCENCE = object('UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.', {
+  amount: unit('Fluorescence intensity under UV blacklight, 0 (none) .. 1.'),
+  invisible: bool('Invisible ink in normal light: lays no daylight paint and glows only under UV (default false).'),
+});
+
+const THERMOCHROMIC = object('Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.', {
+  hotColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Colour (#rrggbb) the ink turns when heated.' },
+  threshold: num(0.05, 0.95, 'Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5).'),
+});
+
 const IRIDESCENCE = object('Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt. Missing fields take their defaults.', {
   thickness: num(100, 1000, 'Film thickness in nanometres, 100..1000 (default 400).'),
   pressureToThickness: unit('How much pen pressure shifts the film thickness per dab, 0..1 (default 0: uniform thickness).'),
@@ -314,6 +324,8 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
+    fluorescence: FLUORESCENCE,
+    thermochromic: THERMOCHROMIC,
     iridescence: IRIDESCENCE,
     ghost: GHOST,
     mutation: MUTATION,
@@ -331,6 +343,8 @@ export const BRUSH_FACET_SCHEMAS = {
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
+  fluorescence: FLUORESCENCE,
+  thermochromic: THERMOCHROMIC,
   iridescence: IRIDESCENCE,
   ghost: GHOST,
   mutation: MUTATION,

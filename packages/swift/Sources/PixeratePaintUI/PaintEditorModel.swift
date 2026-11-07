@@ -407,6 +407,20 @@ public final class PaintEditorModel {
     /// Flattens the active layer's relief (one undo step).
     public func flattenRelief() { attempt { _ = try controller.flattenRelief() } }
 
+    // MARK: - UV blacklight and thermochromic heat
+
+    public var uvLight: UvLightSettings { track(); return controller.uvLight }
+    public func setUvLight(on: Bool? = nil, strength: Double? = nil, ambient: Double? = nil) {
+        attempt { _ = try controller.setUvLight(on: on, strength: strength, ambient: ambient) }
+    }
+    public var heatSummary: (max: Double, hotCells: Int) {
+        track()
+        let st = try? controller.getHeat()
+        return (st?["max"]?.numberValue ?? 0, Int(st?["hotCells"]?.numberValue ?? 0))
+    }
+    public func advanceHeat(steps: Int = 10) { attempt { _ = try controller.advanceHeat(steps: steps) } }
+    public func clearHeat() { attempt { _ = try controller.clearHeat() } }
+
     /// The active layer's light paint (`get_light`): whether it has any and its spill.
     public var activeLight: (hasLight: Bool, radius: Double, strength: Double)? {
         track()

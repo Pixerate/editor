@@ -187,6 +187,9 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   feature(profile.exchange, !ex?.reservoir && (nonZero(ex?.pickup) || !!ex?.dirty), 'behaviour.exchange', 'picking paint up', 'Remove behaviour.exchange.');
   feature(profile.grain, nonZero(brush.behaviour?.grain), 'behaviour.grain', 'paper grain', 'Set behaviour.grain to 0.');
   feature(profile.light, nonZero(brush.light?.amount), 'light', 'light paint (glow and spill)', 'Remove light (or set light.amount to 0).');
+  const smartInks: BrushSupport = profile.id === 'paint' ? 'full' : 'none';
+  feature(smartInks, nonZero(brush.fluorescence?.amount), 'fluorescence', 'UV-fluorescent ink', 'Remove fluorescence (or set fluorescence.amount to 0).');
+  feature(smartInks, Boolean(brush.thermochromic?.hotColor), 'thermochromic', 'thermochromic ink', 'Remove thermochromic.');
   feature(profile.iridescence ?? 'none', !!brush.iridescence, 'iridescence', 'thin-film iridescence', 'Remove iridescence.');
   feature(profile.surfaces.includes('wet') && profile.light === 'full' ? 'full' : 'none', !!brush.ghost, 'ghost', 'ghost paint', 'Remove ghost.');
   if (brush.mutation) {
@@ -310,6 +313,12 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         break;
       case 'light':
         delete b.light;
+        break;
+      case 'fluorescence':
+        delete b.fluorescence;
+        break;
+      case 'thermochromic':
+        delete b.thermochromic;
         break;
       case 'iridescence':
         delete b.iridescence;

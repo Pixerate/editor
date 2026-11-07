@@ -59,6 +59,12 @@ public final class PaintDocumentState {
     public var liveStrokes: OrderedMap<String, [RecordedStroke]>?
     /// Light paint: each layer's light channel (layers without light are missing).
     public var light: OrderedMap<String, TiledSurface>?
+    /// UV-fluorescent ink: each layer's 4-channel RGBA fluorescence surface in layer space.
+    public var fluor: OrderedMap<String, TiledSurface>?
+    /// Thermochromic ink: each layer's 4-channel RGBA `[hotR, hotG, hotB, thresholdByte]` surface in layer space.
+    public var thermo: OrderedMap<String, TiledSurface>?
+    /// Coarse 1/4-resolution document heat field (`HEAT_SCALE = 4`).
+    public var heat: HeatField?
     /// Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
     public var origin: LayerOffset?
     /// Effect layers: the provider effect each is drawn from (layer id → effect).
@@ -86,6 +92,9 @@ public final class PaintDocumentState {
         d.paintEvents = paintEvents
         d.liveStrokes = liveStrokes
         d.light = light
+        d.fluor = fluor
+        d.thermo = thermo
+        d.heat = heat.map(cloneHeatField)
         d.origin = origin
         d.effectLayers = effectLayers
         d.paperEffect = paperEffect

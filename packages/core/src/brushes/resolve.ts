@@ -70,6 +70,8 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('tip.grain', 'tipGrain', DABS),
   f('behaviour.grain', 'grain'),
   ...each('light', 'light', ['amount', 'pressure']),
+  ...each('fluorescence', 'fluorescence', ['amount', 'invisible']),
+  ...each('thermochromic', 'thermochromic', ['hotColor', 'threshold']),
   ...each('iridescence', 'iridescence', ['thickness', 'pressureToThickness', 'ior'], FILM),
   // Paint exchange: the dab, wet and impasto engines' behaviour, or the Mixer Brush's settings.
   f('behaviour.exchange.pickup', 'behavior.pickup', EXCHANGE),

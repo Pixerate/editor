@@ -135,6 +135,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -275,6 +283,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -417,6 +433,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -557,6 +581,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -699,6 +731,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -839,6 +879,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -981,6 +1029,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -1121,6 +1177,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -1263,6 +1327,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -1403,6 +1475,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -1545,6 +1625,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -1685,6 +1773,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -1827,6 +1923,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -1967,6 +2071,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -2109,6 +2221,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -2250,6 +2370,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -2390,6 +2518,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -2548,6 +2684,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -2714,6 +2858,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": {
@@ -2874,6 +3026,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": {
@@ -3030,6 +3190,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -3207,6 +3375,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -3347,6 +3523,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -3489,6 +3673,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -3629,6 +3821,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -3790,6 +3990,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -3930,6 +4138,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -4072,6 +4288,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -4212,6 +4436,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -4354,6 +4586,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -4494,6 +4734,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -4636,6 +4884,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -4776,6 +5032,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -4918,6 +5182,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -5058,6 +5330,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -5200,6 +5480,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -5340,6 +5628,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -5482,6 +5778,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -5622,6 +5926,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -5764,6 +6076,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -5904,6 +6224,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -6046,6 +6374,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -6186,6 +6522,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -6328,6 +6672,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -6468,6 +6820,14 @@
       "light": {
         "amount": 0.85,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -6610,6 +6970,14 @@
         "amount": 1,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -6750,6 +7118,14 @@
       "light": {
         "amount": 0.7,
         "pressure": true
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -6892,6 +7268,14 @@
         "amount": 1,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -7032,6 +7416,14 @@
       "light": {
         "amount": 0.8,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -7174,6 +7566,14 @@
         "amount": 1,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -7315,6 +7715,14 @@
         "amount": 1,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -7455,6 +7863,14 @@
       "light": {
         "amount": 0.3,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -7601,6 +8017,14 @@
         "amount": 0.9,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -7746,6 +8170,14 @@
         "amount": 1,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -7887,6 +8319,14 @@
         "amount": 0.7,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -8027,6 +8467,14 @@
       "light": {
         "amount": 0.5,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -8170,6 +8618,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -8310,6 +8766,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -8454,6 +8918,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -8596,6 +9068,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -8736,6 +9216,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -8878,6 +9366,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -9018,6 +9514,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -9160,6 +9664,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -9300,6 +9812,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -9442,6 +9962,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -9582,6 +10110,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -9724,6 +10260,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -9864,6 +10408,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -10006,6 +10558,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -10146,6 +10706,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "stamp": null,
       "spray": null,
@@ -10288,6 +10856,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -10429,11 +11005,317 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "stamp": null,
       "spray": {
         "density": 0.7,
         "size": 0.04
       },
+      "paint": null
+    }
+  },
+  {
+    "id": "uv-marker",
+    "engine": "dab",
+    "category": "ink",
+    "brush": {
+      "id": "uv-marker",
+      "name": "UV marker",
+      "category": "ink",
+      "engine": "dab",
+      "tip": {
+        "size": 18,
+        "hardness": 0.75,
+        "spacing": 0.06,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 0.9,
+        "flow": 1,
+        "smoothing": 0.3,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0.9,
+        "invisible": true
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    }
+  },
+  {
+    "id": "thermo-ink",
+    "engine": "dab",
+    "category": "ink",
+    "brush": {
+      "id": "thermo-ink",
+      "name": "Thermochromic ink",
+      "category": "ink",
+      "engine": "dab",
+      "tip": {
+        "size": 12,
+        "hardness": 0.85,
+        "spacing": 0.05,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.3,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.4,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": "#ff7a18",
+        "threshold": 0.45
+      },
+      "stamp": null,
+      "spray": null,
       "paint": null
     }
   },
@@ -10572,6 +11454,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "iridescence": {
         "thickness": 480,
@@ -10719,6 +11609,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "iridescence": {
         "thickness": 340,
         "pressureToThickness": 0.8,
@@ -10864,6 +11762,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "iridescence": {
         "thickness": 560,
@@ -11011,6 +11917,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "ghost": {
         "linger": 4,
         "smear": 0.3
@@ -11155,6 +12069,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "ghost": {
         "linger": 5,
@@ -11301,6 +12223,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "ghost": {
         "linger": 10,
         "smear": 0.5
@@ -11446,6 +12376,14 @@
         "amount": 0,
         "pressure": false
       },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
       "ghost": {
         "linger": 4,
         "smear": 0.65
@@ -11590,6 +12528,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "ghost": {
         "linger": 2,
@@ -11741,6 +12687,14 @@
       "light": {
         "amount": 0,
         "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
       },
       "mutation": {
         "settle": 1.5,

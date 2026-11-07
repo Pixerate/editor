@@ -280,6 +280,10 @@ public final class PaintEditorController {
     let backlightCommitted = BacklightCache()
     /// Lit tiles of thick layers, per layer.
     var litCaches: [String: LitCache] = [:]
+    /// UV blacklight setting and per-layer UV / thermochromic tile caches.
+    public internal(set) var uvLight = DEFAULT_UV_LIGHT { didSet { emit() } }
+    var uvCaches: [String: UvCache] = [:]
+    var thermoCaches: [String: ThermoCache] = [:]
     /// Tracked mutation exchanges (editor state, not saved in the document).
     var mutations: [MutationEntry] = []
     var nextMutationId = 1
@@ -477,12 +481,15 @@ public final class PaintEditorController {
             }
         }
         var next = shiftDocument(withWetEvents(doc), l, t).with { $0.canvas = PaintCanvas(width: width, height: height, dpi: was.dpi) }
+        if let h = next.heat { next = next.with { $0.heat = shiftHeatField(h, l, t, width, height) } }
         for id in keptWet {
             if let layer = findLayer(next.layers, id)?.layer, layer.isPixel {
                 let dx = Double(layer.pixelOffset.x), dy = Double(layer.pixelOffset.y)
                 let moved = layer.withSurface(translateSurface(layer.pixelSurface, dx, dy), offset: LayerOffset(x: 0, y: 0))
                 next = next.with { d in
                     d.layers = mapLayer(next.layers, id) { _ in moved }
+                    if let fl = next.fluor?.get(id) { d.settingFluor(id, translateSurface(fl, dx, dy)) }
+                    if let th = next.thermo?.get(id) { d.settingThermo(id, translateSurface(th, dx, dy)) }
                     if let ch = next.thick?.get(id), (dx != 0 || dy != 0) {
                         var t = next.thick!
                         t.set(id, ThickChannels(height: translateSurface(ch.height, dx, dy), material: translateSurface(ch.material, dx, dy), film: translateSurface(ch.film, dx, dy)))
@@ -655,7 +662,8 @@ public final class PaintEditorController {
         let d = depth ?? loc?.path.count ?? 0
         var bounds: RasterRect? = nil
         if l.isPixel {
-            if let b = contentBounds(l.pixelSurface) { bounds = RasterRect(x: b.x + l.pixelOffset.x, y: b.y + l.pixelOffset.y, width: b.width, height: b.height) }
+            let fb = doc.fluor?.get(l.id).flatMap(contentBounds)
+            if let b = unionRectOpt(contentBounds(l.pixelSurface), fb) { bounds = RasterRect(x: b.x + l.pixelOffset.x, y: b.y + l.pixelOffset.y, width: b.width, height: b.height) }
         } else {
             for c in flattenLayers(l.children ?? []) where c.isPixel { bounds = unionRectOpt(bounds, describeLayer(c, parentId: .some(l.id), depth: d + 1).bounds) }
         }
@@ -762,6 +770,8 @@ public final class PaintEditorController {
             d.layers = layers
             d.activeLayerId = active
             d.removingLight(Array(removed))
+            d.removingFluor(Array(removed))
+            d.removingThermo(Array(removed))
             d.removingStickers(Array(removed))
             d.removingThick(Array(removed))
             if var live = d.liveStrokes {
@@ -782,10 +792,14 @@ public final class PaintEditorController {
         var live = doc.liveStrokes
         var stickers = doc.stickers
         var lightCopies: [(String, TiledSurface)] = []
+        var fluorCopies: [(String, TiledSurface)] = []
+        var thermoCopies: [(String, TiledSurface)] = []
         func copy(_ l: PaintLayer) -> PaintLayer {
             let nid = newPaintLayerId()
             if let list = stickers?.get(l.id) { stickers!.set(nid, list) }
             if let lit = doc.light?.get(l.id) { lightCopies.append((nid, lit)) }
+            if let fl = doc.fluor?.get(l.id) { fluorCopies.append((nid, fl)) }
+            if let th = doc.thermo?.get(l.id) { thermoCopies.append((nid, th)) }
             if let ch = thick?.get(l.id) { thick!.set(nid, ch) }
             if let spill = lightSpills[l.id] { lightSpills[nid] = spill }
             if let list = live?.get(l.id) {
@@ -807,6 +821,8 @@ public final class PaintEditorController {
             d.activeLayerId = dup.id
             if thick != nil { d.thick = thick }
             if lightCopies.count > 0 { var l = d.light ?? OrderedMap(); for (k, v) in lightCopies { l.set(k, v) }; d.light = l }
+            if fluorCopies.count > 0 { var fl = d.fluor ?? OrderedMap(); for (k, v) in fluorCopies { fl.set(k, v) }; d.fluor = fl }
+            if thermoCopies.count > 0 { var th = d.thermo ?? OrderedMap(); for (k, v) in thermoCopies { th.set(k, v) }; d.thermo = th }
             if live != nil { d.liveStrokes = live }
             if stickers != nil { d.stickers = stickers }
         }))
@@ -856,13 +872,21 @@ public final class PaintEditorController {
         let toDoc = { (t: TiledSurface?, l: PaintLayer) in t.map { translateSurface($0, Double(l.pixelOffset.x), Double(l.pixelOffset.y)) } }
         let lowerLight = doc.light?.get(below.id), upperLight = doc.light?.get(upper.id)
         let mergedLight = lowerLight != nil || upperLight != nil ? mergeLight(toDoc(lowerLight, below), upper.visible ? toDoc(upperLight, upper) : nil, translateSurface(upper.pixelSurface, Double(upper.pixelOffset.x), Double(upper.pixelOffset.y))) : nil
+        let lowerFluor = doc.fluor?.get(below.id), upperFluor = doc.fluor?.get(upper.id)
+        let mergedFluor = lowerFluor != nil || upperFluor != nil ? mergeFourChannel(toDoc(lowerFluor, below), upper.visible ? toDoc(upperFluor, upper) : nil) : nil
+        let lowerThermo = doc.thermo?.get(below.id), upperThermo = doc.thermo?.get(upper.id)
+        let mergedThermo = lowerThermo != nil || upperThermo != nil ? mergeFourChannel(toDoc(lowerThermo, below), upper.visible ? toDoc(upperThermo, upper) : nil) : nil
         commit("Merge down", withWetEvents(doc.with { d in
             d.layers = layers
             d.activeLayerId = below.id
             d.removingThick([upper.id])
             d.removingLight([upper.id, below.id])
+            d.removingFluor([upper.id, below.id])
+            d.removingThermo([upper.id, below.id])
             d.removingStickers([upper.id, below.id])
             if let mergedLight { var l = d.light ?? OrderedMap(); l.set(below.id, mergedLight); d.light = l }
+            if let mergedFluor { var fl = d.fluor ?? OrderedMap(); fl.set(below.id, mergedFluor); d.fluor = fl }
+            if let mergedThermo { var th = d.thermo ?? OrderedMap(); th.set(below.id, mergedThermo); d.thermo = th }
             if var live = d.liveStrokes {
                 _ = live.delete(upper.id)
                 _ = live.delete(below.id)
@@ -884,6 +908,8 @@ public final class PaintEditorController {
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(emptySurface(4)) }
             d.removingThick([l.id])
             d.removingLight([l.id])
+            d.removingFluor([l.id])
+            d.removingThermo([l.id])
             d.removingStickers([l.id])
             if var live = d.liveStrokes, live.get(l.id) != nil {
                 live.set(l.id, [])
@@ -933,9 +959,12 @@ public final class PaintEditorController {
         let data: JSONObject = ["color": .string(color), "opacity": .number(opacity), "grain": .number(grainAmount), "pressure": .number(pressure), "blend": .string(blendName)]
         // A fill covers the paint, and its light with it.
         let lit = doc.light?.get(l.id)
+        let fl = doc.fluor?.get(l.id)
         commit("Fill layer", withPaintEvent(withWetEvents(doc.with { d in
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(surface) }
             if let lit { d.settingLight(l.id, scaleLight(lit, 1 - opacity)) }
+            if let fl { d.settingFluor(l.id, scaleFluor(fl, 1 - opacity)) }
+            if opacity >= 1 { d.removingThermo([l.id]) }
         }), kind: "fill", layerId: l.id, data: data))
         return ["layerId": .string(l.id), "bounds": rect.json]
     }
@@ -1494,6 +1523,12 @@ public final class PaintEditorController {
                 throw PaintEditorError("Layer \"\(layer.name)\" has ghost paint fading on it, which uses the wet light channel; paint light on another layer (add_layer), or finish the ghost first (dry_paint).")
             }
         }
+        if brush.fluorescence.amount > 0 && (brush.engine == "sticker" || isWetBrush(brush)) {
+            throw PaintEditorError("The \(brush.name) brush paints \(brush.engine == "sticker" ? "stickers" : "wet media"), which don't take UV-fluorescent ink; use a dry mark brush (uv-marker; list_brush_presets), or set fluorescence.amount to 0 (set_brush).")
+        }
+        if brush.thermochromic.hotColor != nil && (brush.engine == "sticker" || isWetBrush(brush)) {
+            throw PaintEditorError("The \(brush.name) brush paints \(brush.engine == "sticker" ? "stickers" : "wet media"), which don't take thermochromic ink; use a dry mark brush (thermo-ink; list_brush_presets), or remove thermochromic (set_brush).")
+        }
         if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         if d.liveStrokes?.get(layer.id) != nil, let e = effect?.source, e.live {
             // Each live source needs a renderer every frame.
@@ -1614,6 +1649,8 @@ public final class PaintEditorController {
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
         withLight.stampArt = stampArt
         if wetInit == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
+        if wetInit == nil && brush.engine != "sticker" && (brush.fluorescence.amount > 0 || d.fluor?.get(layer.id) != nil) { withLight.fluor = d.fluor?.get(layer.id) ?? emptyFluor() }
+        if wetInit == nil && brush.engine != "sticker" && (brush.thermochromic.hotColor != nil || d.thermo?.get(layer.id) != nil) { withLight.thermo = d.thermo?.get(layer.id) ?? emptyThermo() }
         let session = try PaintStrokeSession(withLight)
         session.maskStencils = i.maskStencils
         if let w = wetInit { wet.driver = w.driver }
@@ -1683,6 +1720,8 @@ public final class PaintEditorController {
                 o.layers = mapLayer(baseLayers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
                 o.strokes = d.strokes + [stroke]
                 o.settingLight(session.layerId, session.lightChannel ?? wetLight)
+                o.settingFluor(session.layerId, session.fluorChannel)
+                o.settingThermo(session.layerId, session.thermoChannel)
                 if let thick {
                     var t = o.thick ?? OrderedMap()
                     if hasThickChannels(thick) { t.set(session.layerId, thick) } else { _ = t.delete(session.layerId) }
@@ -1772,14 +1811,15 @@ public final class PaintEditorController {
             }
             return nil
         }
-        var layers = lightLayers(litLayers(base, liveThick: live), liveThick: live)
+        var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live)), liveThick: live)
         // Backlit paper shines through everything: its light goes on top.
         let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
         if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
         if let layerIds {
             layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }
         }
-        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(doc.paper, light: lighting)]
+        let effectivePaper = uvLight.on ? uvPaper(doc.paper, uvLight) : doc.paper
+        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(effectivePaper, light: lighting)]
         if paper != false, let p = doc.paperEffect { under.append(paperEffectNode(p)) }
         return under + layers.map(ViewLayer.init)
     }

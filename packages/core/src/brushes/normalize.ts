@@ -130,12 +130,14 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   if (kind === 'tool' && !tool) throw new Error(`Brush "${raw.id}" is a tool and needs tool: one of ${BRUSH_TOOLS.join(', ')}.`);
 
   const { colour: rawColour, marks: rawMarks, kind: _k, id: _i, name: _n, tool: _t, ...rest } = raw;
+  if (typeof rest.fluorescence === 'number' && Number.isFinite(rest.fluorescence)) rest.fluorescence = { amount: rest.fluorescence };
   const out = readObject(rest, BRUSH_JSON_SCHEMA, 'brush', problems) as Partial<Brush>;
+  if (out.thermochromic?.hotColor) out.thermochromic.hotColor = out.thermochromic.hotColor.toLowerCase();
   const brush: Brush = { id: raw.id, name, ...out, kind, ...(tool ? { tool } : {}), tip: out.tip ?? { shape: 'round' } } as Brush;
   // Keep the key order of a hand-written brush: identity, what it is, then the facets.
   const ordered = (): Brush => {
-    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, iridescence, ghost, mutation, motion, colour } = brush;
-    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, iridescence, ghost, mutation, motion, colour };
+    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, motion, colour } = brush;
+    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, motion, colour };
     return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as unknown as Brush;
   };
 

@@ -333,6 +333,28 @@ export interface BrushLight {
   glow?: boolean;
 }
 
+/**
+ * UV-fluorescent ink: paint that emits its colour under the virtual UV blacklight (`uvLight`).
+ * With `invisible: true`, the stroke lays no daylight paint and reveals only under UV.
+ */
+export interface BrushFluorescence {
+  /** Fluorescence intensity under UV blacklight, 0..1 (default 0: none). */
+  amount?: number;
+  /** Invisible in normal light: lays no daylight paint and glows only under UV (default false). */
+  invisible?: boolean;
+}
+
+/**
+ * Thermochromic ink: paint that shifts smoothly toward `hotColor` where the canvas heat field
+ * warms it past `threshold`.
+ */
+export interface BrushThermochromic {
+  /** Colour (#rrggbb) the ink turns when heated above `threshold`. */
+  hotColor?: string;
+  /** Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5). */
+  threshold?: number;
+}
+
 /** Structural colour: a thin dielectric film over the paint whose interference hue shifts with light and view angle. */
 export interface BrushIridescence {
   /** Film thickness in nanometres, 100..1000 (default 400). */
@@ -416,6 +438,8 @@ export interface Brush {
   dynamics?: BrushDynamics;
   behaviour?: BrushBehaviour;
   light?: BrushLight;
+  fluorescence?: BrushFluorescence;
+  thermochromic?: BrushThermochromic;
   iridescence?: BrushIridescence;
   ghost?: BrushGhost;
   mutation?: BrushMutation;

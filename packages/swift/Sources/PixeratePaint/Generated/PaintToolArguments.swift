@@ -603,6 +603,8 @@ public struct SetBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case fluorescence
+        case thermochromic
         case iridescence
         case ghost
         case mutation
@@ -636,6 +638,10 @@ public struct SetBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.
+    public var fluorescence: JSONValue?
+    /// Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.
+    public var thermochromic: JSONValue?
     /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
     public var iridescence: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
@@ -664,6 +670,8 @@ public struct SetBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        fluorescence = args.argument("fluorescence")
+        thermochromic = args.argument("thermochromic")
         iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
@@ -1951,6 +1959,76 @@ public struct SetInstantDryArguments: Sendable {
     }
 }
 
+/// Arguments of `set_uv_light`.
+public struct SetUvLightArguments: Sendable {
+    /// Whether the UV blacklight is switched on (default false).
+    public var on: Bool?
+    /// UV emission and spill strength, 0..2 (default 1).
+    public var strength: Double?
+    /// How much normal daylight remains under UV, 0 (pitch dark) ..
+    public var ambient: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        on = try args.bool("on")
+        strength = try args.number("strength")
+        ambient = try args.number("ambient")
+    }
+}
+
+/// Arguments of `get_uv_light`.
+public struct GetUvLightArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `paint_heat`.
+public struct PaintHeatArguments: Sendable {
+    /// Polyline of document positions to warm or cool along.
+    public var points: [JSONValue]
+    /// Heat falloff radius in document pixels, 1..512 (default 24).
+    public var radius: Double?
+    /// Target temperature along the stroke, 0 (cool) ..
+    public var temperature: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        points = try args.required(try args.array("points"), "points")
+        radius = try args.number("radius")
+        temperature = try args.number("temperature")
+    }
+}
+
+/// Arguments of `advance_heat`.
+public struct AdvanceHeatArguments: Sendable {
+    /// Diffusion and cooling steps to run, 1..200 (default 10).
+    public var steps: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        steps = try args.integer("steps")
+    }
+}
+
+/// Arguments of `clear_heat`.
+public struct ClearHeatArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `get_heat`.
+public struct GetHeatArguments: Sendable {
+    /// Optional document positions (px) at which to sample the local temperature (0..1).
+    public var points: [JSONValue]?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        points = try args.array("points")
+    }
+}
+
 /// Arguments of `export_time_lapse`.
 public struct ExportTimeLapseArguments: Sendable {
     /// About how many frames (default 120); one after every few strokes.
@@ -2904,6 +2982,10 @@ public struct CreateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.
+    public var fluorescence: JSONValue?
+    /// Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.
+    public var thermochromic: JSONValue?
     /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
     public var iridescence: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
@@ -2931,6 +3013,8 @@ public struct CreateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        fluorescence = args.argument("fluorescence")
+        thermochromic = args.argument("thermochromic")
         iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
@@ -2978,6 +3062,8 @@ public struct UpdateBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case fluorescence
+        case thermochromic
         case iridescence
         case ghost
         case mutation
@@ -3011,6 +3097,10 @@ public struct UpdateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.
+    public var fluorescence: JSONValue?
+    /// Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.
+    public var thermochromic: JSONValue?
     /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
     public var iridescence: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
@@ -3039,6 +3129,8 @@ public struct UpdateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        fluorescence = args.argument("fluorescence")
+        thermochromic = args.argument("thermochromic")
         iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
@@ -3321,6 +3413,12 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .getRelief: try GetReliefArguments(args)
     case .flattenRelief: try FlattenReliefArguments(args)
     case .setInstantDry: try SetInstantDryArguments(args)
+    case .setUvLight: try SetUvLightArguments(args)
+    case .getUvLight: try GetUvLightArguments(args)
+    case .paintHeat: try PaintHeatArguments(args)
+    case .advanceHeat: try AdvanceHeatArguments(args)
+    case .clearHeat: try ClearHeatArguments(args)
+    case .getHeat: try GetHeatArguments(args)
     case .exportTimeLapse: try ExportTimeLapseArguments(args)
     case .exportHighRes: try ExportHighResArguments(args)
     case .breedStrokes: try BreedStrokesArguments(args)

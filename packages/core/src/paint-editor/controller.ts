@@ -140,6 +140,36 @@ import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMa
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, DEFAULT_VIEW_TILT, emptyThickChannels, FilmBuffer, hasThickChannels, LitCache, normalizeLighting, normalizeViewTilt, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type PaintViewTilt, type ThickChannels } from './thick';
 import {
+  DEFAULT_UV_LIGHT,
+  HEAT_DRY_THRESHOLD,
+  ThermoCache,
+  UvCache,
+  advanceHeatField,
+  cloneHeatField,
+  createHeatField,
+  emptyFluor,
+  emptyThermo,
+  fluorFromJSON,
+  fluorToJSON,
+  heatFromJSON,
+  heatStats,
+  heatToJSON,
+  hotCellsBounds,
+  mergeFourChannel,
+  normalizeUvLight,
+  paintHeatField,
+  sampleHeatAt,
+  scaleFluor,
+  shiftHeatField,
+  thermoFromJSON,
+  thermoToJSON,
+  uvPaper,
+  type HeatField,
+  type HeatSample,
+  type HeatStats,
+  type UvLightSettings,
+} from './heat';
+import {
   mutationBrushRefusal,
   type PaintMutationAnswerInput,
   type PaintMutationAnswerResult,
@@ -304,6 +334,10 @@ export interface PaintEditorState {
   stroking: boolean;
   /** Wet media. */
   wet: PaintWetStateInfo;
+  /** The UV / blacklight view setting (saved with the document, not undo steps). */
+  uvLight: UvLightSettings;
+  /** The coarse heat field's temperature summary. */
+  heat: HeatStats;
   /** Pending and active mutation exchanges (editor state, not saved with the document). */
   mutations: readonly PaintMutationInfo[];
   /** Whether an agent is listening for mutation requests (`onMutationRequest` or `setMutationAgentConnected`). */
@@ -740,6 +774,12 @@ export class PaintEditorController {
   private readonly litCaches = new Map<string, LitCache>();
   /** The live impasto stroke's channels. */
   private liveThick: { layerId: string; channels: ThickChannels } | null = null;
+  /** The UV / blacklight setting (saved with the document, not undo steps). */
+  private uvLight: UvLightSettings = { ...DEFAULT_UV_LIGHT };
+  private readonly uvCaches = new Map<string, UvCache>();
+  private readonly thermoCaches = new Map<string, ThermoCache>();
+  private liveFluor: { layerId: string; surface: TiledSurface } | null = null;
+  private liveThermo: { layerId: string; surface: TiledSurface } | null = null;
   /** Set while an operation that changes wet paint runs: the simulation before it (for undo). */
   private wetOp: { before: WetSnapshot | null } | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
@@ -1069,6 +1109,8 @@ export class PaintEditorController {
         gpu: this.wet.gpuMode,
         gpuActive: Boolean(this.wet.world?.gpuActive),
       },
+      uvLight: { ...this.uvLight },
+      heat: heatStats(this.doc.heat),
       mutations: this.mutations.map((m) => this.toMutationInfo(m)),
       hasMutationAgent: this.mutationListeners.size > 0 || this.mutationAgentConnected,
       version: this.version,
@@ -1313,12 +1355,14 @@ export class PaintEditorController {
       height: update.height ?? this.doc.canvas.height,
       dpi: update.dpi ?? this.doc.canvas.dpi,
     });
-    if (this.wet.world && (canvas.width !== this.doc.canvas.width || canvas.height !== this.doc.canvas.height)) {
+    const resized = canvas.width !== this.doc.canvas.width || canvas.height !== this.doc.canvas.height;
+    if (this.wet.world && resized) {
       // The wet simulation is canvas-sized: the paint dries first.
       this.dryLayersFirst(this.wet.wetLayerIds());
       this.wet.reset();
     }
-    this.commit('Canvas size', this.withWetEvents({ ...this.doc, canvas }));
+    const heat = resized && this.doc.heat ? shiftHeatField(this.doc.heat, canvas.width, canvas.height, 0, 0) : this.doc.heat;
+    this.commit('Canvas size', this.withWetEvents({ ...this.doc, canvas, ...(heat ? { heat } : {}) }));
     return canvas;
   }
 
@@ -1366,6 +1410,7 @@ export class PaintEditorController {
       }
     }
     let next: PaintDocumentState = { ...shiftDocument(this.withWetEvents(this.doc), left, top), canvas: { ...was, width, height } };
+    if (next.heat) next = { ...next, heat: shiftHeatField(next.heat, left, top, width, height) };
     for (const id of keptWet) {
       const l = findLayer(next.layers, id)?.layer;
       if (isPixelLayer(l)) {
@@ -1386,6 +1431,8 @@ export class PaintEditorController {
             },
           };
         }
+        if (next.fluor?.[id] && (ox || oy)) next = { ...next, fluor: { ...next.fluor, [id]: translateSurface(next.fluor[id], ox, oy) } };
+        if (next.thermo?.[id] && (ox || oy)) next = { ...next, thermo: { ...next.thermo, [id]: translateSurface(next.thermo[id], ox, oy) } };
       }
     }
     if (this.wet.world) {
@@ -1461,7 +1508,7 @@ export class PaintEditorController {
   describeLayer(l: PaintLayer, parentId: string | null = findLayer(this.doc.layers, l.id)?.parent?.id ?? null, depth = findLayer(this.doc.layers, l.id)?.path.length ?? 0): PaintLayerInfo {
     let bounds: RasterRect | null = null;
     if (l.type === 'pixel') {
-      const b = contentBounds(l.surface);
+      const b = unionRect(contentBounds(l.surface), this.doc.fluor?.[l.id] ? contentBounds(this.doc.fluor[l.id]) : null);
       bounds = b ? { ...b, x: b.x + l.offset.x, y: b.y + l.offset.y } : null;
     } else for (const c of flattenLayers(l.children)) if (c.type === 'pixel') bounds = unionRect(bounds, this.describeLayer(c, l.id, depth + 1).bounds);
     return {
@@ -1671,7 +1718,18 @@ export class PaintEditorController {
     const layers = mapLayer(this.doc.layers, id, () => null);
     let active = this.doc.activeLayerId;
     if (active && !findLayer(layers, active)) active = flattenLayers(layers).filter((x) => x.type === 'pixel').pop()?.id ?? null;
-    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)), ...this.stickersWithout(flattenLayers([l]).map((x) => x.id)), ...this.liveStrokesWithout(flattenLayers([l]).map((x) => x.id)), ...this.lightWithout(flattenLayers([l]).map((x) => x.id)) });
+    const removedIds = flattenLayers([l]).map((x) => x.id);
+    this.commit('Remove layer', {
+      ...this.doc,
+      layers,
+      activeLayerId: active,
+      ...this.thickWithout(removedIds),
+      ...this.stickersWithout(removedIds),
+      ...this.liveStrokesWithout(removedIds),
+      ...this.lightWithout(removedIds),
+      ...this.fluorWithout(removedIds),
+      ...this.thermoWithout(removedIds),
+    });
     return { removed: id, activeLayerId: active };
   }
 
@@ -1687,10 +1745,14 @@ export class PaintEditorController {
     const stickers: Record<string, Sticker[]> = { ...(this.doc.stickers ?? {}) };
     const liveStrokes: Record<string, RecordedStroke[]> = { ...(this.doc.liveStrokes ?? {}) };
     const light: Record<string, TiledSurface> = { ...(this.doc.light ?? {}) };
+    const fluor: Record<string, TiledSurface> = { ...(this.doc.fluor ?? {}) };
+    const thermo: Record<string, TiledSurface> = { ...(this.doc.thermo ?? {}) };
     const copy = (l: PaintLayer): PaintLayer => {
       const id = newPaintLayerId();
       if (light[l.id]) light[id] = light[l.id];
       if (this.lightSpills[l.id]) this.lightSpills[id] = { ...this.lightSpills[l.id] };
+      if (fluor[l.id]) fluor[id] = fluor[l.id];
+      if (thermo[l.id]) thermo[id] = thermo[l.id];
       if (thick[l.id]) thick[id] = thick[l.id];
       if (stickers[l.id]) stickers[id] = stickers[l.id].map((x) => ({ ...x }));
       // Stroke ids are unique across the document: the copies get new ones.
@@ -1699,7 +1761,20 @@ export class PaintEditorController {
     };
     const dup = { ...copy(loc.layer), name: `${loc.layer.name} copy` };
     const layers = insertLayer(this.doc.layers, dup, loc.parent?.id ?? null, loc.index + 1);
-    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}), ...(this.doc.liveStrokes ? { liveStrokes } : {}), ...(this.doc.light ? { light } : {}) }));
+    this.commit(
+      'Duplicate layer',
+      this.withWetEvents({
+        ...this.doc,
+        layers,
+        activeLayerId: dup.id,
+        ...(this.doc.thick ? { thick } : {}),
+        ...(this.doc.stickers ? { stickers } : {}),
+        ...(this.doc.liveStrokes ? { liveStrokes } : {}),
+        ...(this.doc.light ? { light } : {}),
+        ...(this.doc.fluor ? { fluor } : {}),
+        ...(this.doc.thermo ? { thermo } : {}),
+      }),
+    );
     return this.describeLayer(dup);
   }
 
@@ -1748,12 +1823,32 @@ export class PaintEditorController {
     }
     const merged: PaintPixelLayer = { ...below, surface, offset: { x: 0, y: 0 } };
     const layers = mapLayer(mapLayer(this.doc.layers, upper.id, () => null), below.id, () => merged);
-    // Light: the upper layer's over the lower's (where the upper paint is transparent), in the merged layer's space.
+    // Light, fluorescence and thermochromic ink: the upper layer's over the lower's (where the upper paint is transparent), in the merged layer's space.
     const toDoc = (t: TiledSurface | undefined, l: PaintPixelLayer) => (t ? translateSurface(t, l.offset.x, l.offset.y) : undefined);
-    const mergedLight = this.doc.light?.[upper.id] || this.doc.light?.[below.id] ? mergeLight(toDoc(this.doc.light?.[below.id], below), upper.visible ? toDoc(this.doc.light?.[upper.id], upper) : undefined, translateSurface(upper.surface, upper.offset.x, upper.offset.y)) : undefined;
+    const upperDoc = translateSurface(upper.surface, upper.offset.x, upper.offset.y);
+    const mergedLight = this.doc.light?.[upper.id] || this.doc.light?.[below.id] ? mergeLight(toDoc(this.doc.light?.[below.id], below), upper.visible ? toDoc(this.doc.light?.[upper.id], upper) : undefined, upperDoc) : undefined;
     const lightAfter = this.lightWithout([upper.id, below.id]).light ?? (this.doc.light ? { ...this.doc.light } : undefined);
     const light = mergedLight ? { ...(lightAfter ?? {}), [below.id]: mergedLight } : lightAfter;
-    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]), ...this.liveStrokesWithout([upper.id, below.id]), ...(light ? { light } : {}) }));
+    const mergedFluor = this.doc.fluor?.[upper.id] || this.doc.fluor?.[below.id] ? mergeFourChannel(toDoc(this.doc.fluor?.[below.id], below), upper.visible ? toDoc(this.doc.fluor?.[upper.id], upper) : undefined) : undefined;
+    const fluorAfter = this.fluorWithout([upper.id, below.id]).fluor ?? (this.doc.fluor ? { ...this.doc.fluor } : undefined);
+    const fluor = mergedFluor ? { ...(fluorAfter ?? {}), [below.id]: mergedFluor } : fluorAfter;
+    const mergedThermo = this.doc.thermo?.[upper.id] || this.doc.thermo?.[below.id] ? mergeFourChannel(toDoc(this.doc.thermo?.[below.id], below), upper.visible ? toDoc(this.doc.thermo?.[upper.id], upper) : undefined) : undefined;
+    const thermoAfter = this.thermoWithout([upper.id, below.id]).thermo ?? (this.doc.thermo ? { ...this.doc.thermo } : undefined);
+    const thermo = mergedThermo ? { ...(thermoAfter ?? {}), [below.id]: mergedThermo } : thermoAfter;
+    this.commit(
+      'Merge down',
+      this.withWetEvents({
+        ...this.doc,
+        layers,
+        activeLayerId: below.id,
+        ...this.thickWithout([upper.id]),
+        ...this.stickersWithout([upper.id, below.id]),
+        ...this.liveStrokesWithout([upper.id, below.id]),
+        ...(light ? { light } : {}),
+        ...(fluor ? { fluor } : {}),
+        ...(thermo ? { thermo } : {}),
+      }),
+    );
     return this.describeLayer(merged);
   }
 
@@ -1766,7 +1861,22 @@ export class PaintEditorController {
       this.wet.world!.removeLane(l.id);
     }
     const bounds = this.describeLayer(l).bounds;
-    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]), ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: { ...this.doc.liveStrokes, [l.id]: [] } } : {}), ...this.lightWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
+    this.commit(
+      'Clear layer',
+      this.withPaintEvent(
+        {
+          ...this.doc,
+          layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })),
+          ...this.thickWithout([l.id]),
+          ...this.stickersWithout([l.id]),
+          ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: { ...this.doc.liveStrokes, [l.id]: [] } } : {}),
+          ...this.lightWithout([l.id]),
+          ...this.fluorWithout([l.id]),
+          ...this.thermoWithout([l.id]),
+        },
+        { kind: 'clear', layerId: l.id },
+      ),
+    );
     return { layerId: l.id, bounds };
   }
 
@@ -1811,10 +1921,26 @@ export class PaintEditorController {
       offset: l.offset,
     };
     const surface = this.applyCoverage(l, coverage, rect, apply);
-    // A fill covers the paint, and its light with it.
+    // A fill covers the paint, and its light / fluorescence / thermochromic ink with it.
     const lit = this.doc.light?.[l.id];
     const light = lit ? withLayerLight(this.doc.light, l.id, scaleLight(lit, 1 - opacity)) : undefined;
-    this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), ...(light ? { light } : {}) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
+    const fl = this.doc.fluor?.[l.id];
+    const fluor = fl ? withLayerLight(this.doc.fluor, l.id, scaleFluor(fl, 1 - opacity)) : undefined;
+    const th = this.doc.thermo?.[l.id];
+    const thermo = th && opacity >= 0.5 ? this.thermoWithout([l.id]).thermo : undefined;
+    this.commit(
+      'Fill layer',
+      this.withPaintEvent(
+        this.withWetEvents({
+          ...this.doc,
+          layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })),
+          ...(light ? { light } : {}),
+          ...(fluor ? { fluor } : {}),
+          ...(thermo ? { thermo } : {}),
+        }),
+        { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } },
+      ),
+    );
     return { layerId: l.id, bounds: rect };
   }
 
@@ -3104,6 +3230,12 @@ export class PaintEditorController {
         throw new PaintEditorError(`Layer "${layer.name}" has ghost paint fading on it, which uses the wet light channel; paint light on another layer (add_layer), or finish the ghost first (dry_paint).`);
       }
     }
+    if (brush.fluorescence.amount > 0 && brush.engine === 'sticker') {
+      throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take fluorescence; paint UV ink with a dab or particle brush (uv-marker; list_brush_presets lists them), or set fluorescence.amount to 0 (set_brush).`);
+    }
+    if (brush.thermochromic.hotColor !== null && brush.engine === 'sticker') {
+      throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take thermochromic ink; paint thermochromic ink with a dab or particle brush (thermo-ink; list_brush_presets lists them), or set thermochromic.hotColor to null (set_brush).`);
+    }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
       if (why) throw new PaintEditorError(`Layer "${layer.name}" is a stroke layer. ${why}`);
@@ -3238,6 +3370,8 @@ export class PaintEditorController {
       thick: needThick ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
+      fluor: brush.engine !== 'sticker' && (brush.fluorescence.amount > 0 || doc.fluor?.[layer.id]) ? { surface: doc.fluor?.[layer.id] ?? emptyFluor() } : null,
+      thermo: brush.engine !== 'sticker' && (brush.thermochromic.hotColor !== null || doc.thermo?.[layer.id]) ? { surface: doc.thermo?.[layer.id] ?? emptyThermo() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get, variant: (ref) => this.stickerArt.variantFor(ref, this.colorScheme === 'dark') } : undefined,
       stampArt: this.stampArt,
       paint: effect ? null : this.strokeGradient(init, brush, color),
@@ -3289,6 +3423,10 @@ export class PaintEditorController {
         this.live = { layerId, surface };
         const ch = this.session?.thickChannels();
         this.liveThick = ch ? { layerId, channels: ch } : null;
+        const fl = this.session?.fluorChannel();
+        this.liveFluor = fl ? { layerId, surface: fl } : null;
+        const th = this.session?.thermoChannel();
+        this.liveThermo = th ? { layerId, surface: th } : null;
         this.emit(rects);
       },
       sampled: (s, points) => {
@@ -3308,6 +3446,8 @@ export class PaintEditorController {
         this.live = null;
         this.liveLayers = null;
         this.liveThick = null;
+        this.liveFluor = null;
+        this.liveThermo = null;
         const wetStroke = Boolean(s.init.wet);
         if (wetStroke) this.wet.driver = null;
         const brush = s.init.brush;
@@ -3344,7 +3484,27 @@ export class PaintEditorController {
         // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
         const wetLight = wetStroke && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null;
         const light = withLayerLight(this.doc.light, l.id, s.lightChannel() ?? wetLight);
-        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}) }, stroke)), before);
+        const fluor = withLayerLight(this.doc.fluor, l.id, s.fluorChannel());
+        const thermo = withLayerLight(this.doc.thermo, l.id, s.thermoChannel());
+        this.commit(
+          `${brush.name} stroke`,
+          this.withWetEvents(
+            withLiveStroke(
+              {
+                ...this.doc,
+                layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })),
+                strokes: [...this.doc.strokes, stroke],
+                ...(thick ? { thick } : {}),
+                ...(stickers ? { stickers } : {}),
+                ...(light ? { light } : {}),
+                ...(fluor ? { fluor } : {}),
+                ...(thermo ? { thermo } : {}),
+              },
+              stroke,
+            ),
+          ),
+          before,
+        );
         this.recordMutationStroke(stroke, s.result?.bounds ?? null);
         // After the commit, so a listener that paints in reply finds the editor idle.
         this.notifySample('end', s, [], stroke.id);
@@ -3429,6 +3589,8 @@ export class PaintEditorController {
       this.live = null;
       this.liveLayers = null;
       this.liveThick = null;
+      this.liveFluor = null;
+      this.liveThermo = null;
       const masks = s.init.selection ? (s.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask') : [];
       const load = s.init.mixerLoad;
       const result = this.paintStroke({ layerId: s.layerId, points: s.points, color: s.init.colorHex, brush: brushToJSON(s.init.brush) as PaintBrush, seed: s.init.seed, copies: s.init.affineCopies as Affine[], ...(load.reservoir || load.pickup ? { load } : {}), paint, snapToPerspective: false, stencils: false, maskStencils: masks });
@@ -3449,6 +3611,8 @@ export class PaintEditorController {
       this.live = null;
       this.liveLayers = null;
       this.liveThick = null;
+      this.liveFluor = null;
+      this.liveThermo = null;
       this.emit();
       this.notifySample('cancel', s, []);
       throw e;
@@ -3479,6 +3643,8 @@ export class PaintEditorController {
         const thick = withLayerThick(out.thick, l.id, s.thickChannels());
         const sprayed = s.stickers();
         const lit = s.lightChannel() ?? (s.init.wet && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null);
+        const fl = s.fluorChannel();
+        const th = s.thermoChannel();
         out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
@@ -3486,6 +3652,8 @@ export class PaintEditorController {
           ...(thick ? { thick } : {}),
           ...(sprayed ? { stickers: { ...(out.stickers ?? {}), [l.id]: [...(out.stickers?.[l.id] ?? []), ...sprayed] } } : {}),
           ...(lit ? { light: withLayerLight(out.light, l.id, lit) } : {}),
+          ...(fl ? { fluor: withLayerLight(out.fluor, l.id, fl) } : {}),
+          ...(th ? { thermo: withLayerLight(out.thermo, l.id, th) } : {}),
         }, stroke);
       },
     };
@@ -3706,6 +3874,153 @@ export class PaintEditorController {
     return { layerId: l.id, cleared: true };
   }
 
+  // --- UV blacklight and thermochromic heat ---------------------------------------
+
+  private fluorWithout(ids: readonly string[]): { fluor?: Record<string, TiledSurface> } {
+    const t = this.doc.fluor;
+    if (!t || !ids.some((id) => t[id])) return {};
+    const out = { ...t };
+    for (const id of ids) delete out[id];
+    return { fluor: out };
+  }
+
+  private thermoWithout(ids: readonly string[]): { thermo?: Record<string, TiledSurface> } {
+    const t = this.doc.thermo;
+    if (!t || !ids.some((id) => t[id])) return {};
+    const out = { ...t };
+    for (const id of ids) delete out[id];
+    return { thermo: out };
+  }
+
+  /** The UV / blacklight view setting. */
+  getUvLight(): UvLightSettings {
+    return { ...this.uvLight };
+  }
+
+  /** Layers that carry UV-fluorescent ink. */
+  fluorescentLayerIds(): string[] {
+    return Object.entries(this.doc.fluor ?? {})
+      .filter(([id, s]) => s.tiles.size > 0 && Boolean(findLayer(this.doc.layers, id)))
+      .map(([id]) => id);
+  }
+
+  /** Layers that carry thermochromic ink. */
+  thermochromicLayerIds(): string[] {
+    return Object.entries(this.doc.thermo ?? {})
+      .filter(([id, s]) => s.tiles.size > 0 && Boolean(findLayer(this.doc.layers, id)))
+      .map(([id]) => id);
+  }
+
+  /**
+   * Switches or tunes the virtual UV / blacklight (`on`, `strength` 0..2, `ambient` 0..1). When
+   * `on` is true, the composite dims to `ambient` and fluorescent ink (`brush.fluorescence`) glows
+   * in its stroke colour with a Linear Dodge halo. Saved with the document, not an undo step.
+   */
+  setUvLight(update: Partial<UvLightSettings>): UvLightSettings {
+    if (update.on !== undefined && typeof update.on !== 'boolean') throw new PaintEditorError('on must be true or false.');
+    if (update.strength !== undefined && !(typeof update.strength === 'number' && Number.isFinite(update.strength) && update.strength >= 0 && update.strength <= 2)) {
+      throw new PaintEditorError(`strength ${update.strength} is out of range; use 0..2.`);
+    }
+    if (update.ambient !== undefined && !(typeof update.ambient === 'number' && Number.isFinite(update.ambient) && update.ambient >= 0 && update.ambient <= 1)) {
+      throw new PaintEditorError(`ambient ${update.ambient} is out of range; use 0..1.`);
+    }
+    this.uvLight = normalizeUvLight(update, this.uvLight);
+    this.emit('all');
+    return { ...this.uvLight };
+  }
+
+  /**
+   * Reads the document's heat field: its temperature summary (`peak`, `mean`, `hotCells`) and,
+   * when `points` are given (document pixels), the bilinearly sampled temperature (0..1) at each.
+   */
+  getHeat(points: readonly { x: number; y: number }[] = []): HeatStats & { samples: HeatSample[]; thermochromicLayerIds: string[] } {
+    const samples: HeatSample[] = points.map((p, i) => {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) throw new PaintEditorError(`points[${i}] needs finite x and y in document pixels.`);
+      return { x: p.x, y: p.y, temperature: this.doc.heat ? Math.round(sampleHeatAt(this.doc.heat, p.x, p.y) * 1000) / 1000 : 0 };
+    });
+    return { ...heatStats(this.doc.heat), samples, thermochromicLayerIds: this.thermochromicLayerIds() };
+  }
+
+  /**
+   * Warms (or with `temperature` 0 cools) the canvas heat field along `points` (document pixels)
+   * with a soft brush of `radius` px (default 28) towards `temperature` 0..1 (default 1). Where
+   * temperature reaches `HEAT_DRY_THRESHOLD` (0.5), any wet paint on those tiles dries at once.
+   * One undo step.
+   */
+  paintHeat(options: { points: readonly { x: number; y: number }[]; radius?: number; temperature?: number }): HeatStats & { bounds: RasterRect | null; dried: Array<{ layerId: string; bounds: RasterRect | null }> } {
+    this.requireIdle('painting heat');
+    this.requireWetIdle('painting heat');
+    const points = this.checkPoints(options.points);
+    const radius = options.radius ?? 28;
+    if (!(typeof radius === 'number' && Number.isFinite(radius) && radius >= 1 && radius <= 512)) {
+      throw new PaintEditorError(`radius ${options.radius} is out of range; use 1..512 px.`);
+    }
+    const temperature = options.temperature ?? 1;
+    if (!(typeof temperature === 'number' && Number.isFinite(temperature) && temperature >= 0 && temperature <= 1)) {
+      throw new PaintEditorError(`temperature ${options.temperature} is out of range; use 0..1 (0 cools back to ambient).`);
+    }
+    const before = this.doc;
+    const { width, height } = this.doc.canvas;
+    const field = this.doc.heat ? cloneHeatField(this.doc.heat) : createHeatField(width, height);
+    const { stats } = paintHeatField(field, points, radius, temperature);
+    const dried = this.dryWetFromHeat(field);
+    const next: PaintDocumentState = { ...this.doc, ...(stats.max > 0 ? { heat: field } : {}) };
+    if (stats.max === 0) delete next.heat;
+    if (next !== before || this.wetOp) this.commit('Paint heat', this.withWetEvents(next), before);
+    else this.emit([]);
+    return { ...stats, dried };
+  }
+
+  /**
+   * Advances the heat field by `steps` simulation steps (1..200, default 10): heat diffuses into
+   * neighbouring cells and cools towards 0 by Newtonian cooling. Newly heated tiles above the dry
+   * threshold dry any wet paint on them. Not an undo step (time passing never is).
+   */
+  advanceHeat(stepsOrOptions: number | { steps?: number } = 10): HeatStats & { steps: number; dried: Array<{ layerId: string; bounds: RasterRect | null }> } {
+    this.requireIdle('advancing heat');
+    this.requireWetIdle('advancing heat');
+    const rawSteps = typeof stepsOrOptions === 'number' ? stepsOrOptions : stepsOrOptions?.steps;
+    const steps = rawSteps ?? 10;
+    if (!(Number.isInteger(steps) && steps >= 1 && steps <= 200)) {
+      throw new PaintEditorError(`steps ${rawSteps} is out of range; use a whole number 1..200.`);
+    }
+    if (!this.doc.heat || heatStats(this.doc.heat).max === 0) {
+      return { steps, max: 0, mean: 0, hotCells: 0, bounds: null, dried: [] };
+    }
+    const field = cloneHeatField(this.doc.heat);
+    const stats = advanceHeatField(field, steps);
+    const dried = this.dryWetFromHeat(field);
+    const next: PaintDocumentState = { ...this.doc, ...(stats.max > 0 ? { heat: field } : {}) };
+    if (stats.max === 0) delete next.heat;
+    this.doc = this.withWetEvents(next);
+    this.docRevision++;
+    this.emit('all');
+    return { steps, ...stats, dried };
+  }
+
+  /** Cools the whole canvas heat field to 0 at once (one undo step when anything was warm). */
+  clearHeat(): { cleared: boolean } {
+    this.requireIdle('clearing heat');
+    if (!this.doc.heat || heatStats(this.doc.heat).max === 0) {
+      return { cleared: false };
+    }
+    const { heat: _gone, ...rest } = this.doc;
+    this.commit('Clear heat', rest);
+    return { cleared: true };
+  }
+
+  /** Dries any wet paint on tiles where `field` is at or above `HEAT_DRY_THRESHOLD`. */
+  private dryWetFromHeat(field: HeatField): Array<{ layerId: string; bounds: RasterRect | null }> {
+    const ids = this.wet.wetLayerIds();
+    if (!ids.length) return [];
+    const hotRect = hotCellsBounds(field, HEAT_DRY_THRESHOLD);
+    if (!hotRect) return [];
+    this.beginWetOp();
+    const dried = ids.flatMap((id) => this.wet.dry(id, hotRect)).filter((d) => d.bounds !== null);
+    if (dried.length) this.logWet({ kind: 'dry', data: hotRect });
+    return dried;
+  }
+
   // --- Thick paint and light -------------------------------------------------------
 
   /** The document's `thick` without these layers (as a spread: `{}` when unchanged). */
@@ -3789,6 +4104,7 @@ export class PaintEditorController {
     const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
     target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
+    target.uvLight = { ...this.uvLight };
     // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
     target.effects.set(this.effects.provider);
     if (w === width && h === height) for (const [key, img] of this.effectPaintPixels) target.effectPaintPixels.set(key, img);
@@ -4115,6 +4431,57 @@ export class PaintEditorController {
     return out;
   }
 
+  /** The layers with thermochromic paint shifted toward its hot colour where the canvas is warm. */
+  private thermoLayers(layers: PaintLayer[]): PaintLayer[] {
+    const thermo = this.doc.thermo;
+    const heat = this.doc.heat;
+    if (!thermo || !heat || heat.max === 0) return layers;
+    let out = layers;
+    for (const [id, th] of Object.entries(thermo)) {
+      const l = findLayer(out, id)?.layer;
+      if (!isPixelLayer(l) || !th.tiles.size) continue;
+      let cache = this.thermoCaches.get(id);
+      if (!cache) this.thermoCaches.set(id, (cache = new ThermoCache()));
+      const shifted = cache.render(l.surface, th, l.offset, heat);
+      if (shifted !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: shifted }));
+    }
+    return out;
+  }
+
+  /**
+   * Under the UV blacklight: every pixel layer's daylight paint dims to `uvLight.ambient`, any
+   * fluorescent ink (`doc.fluor[id]`) glows in its own colour, and each fluorescent layer casts a
+   * Linear Dodge (`::uv`) spill layer directly above it.
+   */
+  private uvLayers(layers: PaintLayer[]): PaintLayer[] {
+    if (!this.uvLight.on) return layers;
+    const fluor = this.doc.fluor ?? {};
+    const visit = (list: PaintLayer[]): PaintLayer[] => {
+      let out: PaintLayer[] = [];
+      for (const l of list) {
+        if (l.type === 'group') {
+          out.push({ ...l, children: visit(l.children) });
+          continue;
+        }
+        if (!isPixelLayer(l)) {
+          out.push(l);
+          continue;
+        }
+        let cache = this.uvCaches.get(l.id);
+        if (!cache) this.uvCaches.set(l.id, (cache = new UvCache()));
+        const fl = fluor[l.id];
+        const surface = cache.render(l.surface, fl, this.uvLight);
+        out.push(surface !== l.surface ? { ...l, surface } : l);
+        const spill = fl ? cache.spill(fl, this.uvLight) : null;
+        if (spill) {
+          out.push({ type: 'pixel', id: `${l.id}${UV_SPILL_SUFFIX}`, name: `${l.name} UV`, visible: l.visible, opacity: l.opacity, blend: 'linear-dodge', surface: spill, offset: { ...l.offset } } as PaintPixelLayer);
+        }
+      }
+      return out;
+    };
+    return visit(layers);
+  }
+
   /** The layers with thick paint lit (each thick layer's pixels replaced by its lit tiles). */
   private litLayers(layers: PaintLayer[]): PaintLayer[] {
     const thick = this.doc.thick;
@@ -4190,7 +4557,7 @@ export class PaintEditorController {
 
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
     const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers();
-    let layers: PaintLayer[] = this.lightLayers(this.litLayers(base));
+    let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base))));
     const backlight = options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
     if (backlight) layers = [...layers, backlight];
     if (options.layerIds) {
@@ -4198,7 +4565,7 @@ export class PaintEditorController {
       for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
       layers = picked.map((l) => ({ ...l, visible: true }) as PaintLayer);
     }
-    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(this.doc.paper, this.lighting)];
+    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting)];
     if (options.paper !== false && this.doc.paperEffect) under.push(this.paperEffectNode(this.doc.paperEffect));
     if (view) under.push(...this.underlayLayers());
     return [...under, ...layers];
@@ -4348,6 +4715,27 @@ export class PaintEditorController {
     else delete ext.paperEffect;
     if (this.lighting.azimuth !== DEFAULT_LIGHTING.azimuth || this.lighting.elevation !== DEFAULT_LIGHTING.elevation || this.lighting.relief !== DEFAULT_LIGHTING.relief) ext.lighting = { ...this.lighting };
     else delete ext.lighting;
+    const fluor: Record<string, unknown> = {};
+    for (const [id, f] of Object.entries(this.doc.fluor ?? {})) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      const saved = fluorToJSON(f);
+      if (saved) fluor[id] = saved;
+    }
+    if (Object.keys(fluor).length) ext.fluor = fluor;
+    else delete ext.fluor;
+    const thermo: Record<string, unknown> = {};
+    for (const [id, th] of Object.entries(this.doc.thermo ?? {})) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      const saved = thermoToJSON(th);
+      if (saved) thermo[id] = saved;
+    }
+    if (Object.keys(thermo).length) ext.thermo = thermo;
+    else delete ext.thermo;
+    const savedHeat = this.doc.heat ? heatToJSON(this.doc.heat) : null;
+    if (savedHeat) ext.heat = savedHeat;
+    else delete ext.heat;
+    if (this.uvLight.on !== DEFAULT_UV_LIGHT.on || this.uvLight.strength !== DEFAULT_UV_LIGHT.strength || this.uvLight.ambient !== DEFAULT_UV_LIGHT.ambient) ext.uvLight = { ...this.uvLight };
+    else delete ext.uvLight;
     return ext;
   }
 
@@ -4355,7 +4743,10 @@ export class PaintEditorController {
   private readThick(state: PaintDocumentState, ext: PaintDocumentExtensions, problems: string[]): PaintDocumentState {
     if (Array.isArray(ext.brushSources)) this.brushSources.set(ext.brushSources.map((x, i) => readBrushSource(x, `brushSources[${i}]`, problems)).filter((x) => x !== null));
     this.lighting = normalizeLighting((ext.lighting as Partial<PaintLighting>) ?? {}, DEFAULT_LIGHTING);
+    this.uvLight = normalizeUvLight((ext.uvLight as Partial<UvLightSettings>) ?? {}, DEFAULT_UV_LIGHT);
     this.litCaches.clear();
+    this.uvCaches.clear();
+    this.thermoCaches.clear();
     if (ext.stickers && typeof ext.stickers === 'object') {
       const stickers: Record<string, Sticker[]> = {};
       for (const [id, list] of Object.entries(ext.stickers as Record<string, unknown>)) {
@@ -4427,6 +4818,35 @@ export class PaintEditorController {
       }
       if (Object.keys(light).length) state = { ...state, light };
     }
+    if (ext.fluor && typeof ext.fluor === 'object') {
+      const fluor: Record<string, TiledSurface> = {};
+      for (const [id, v] of Object.entries(ext.fluor as Record<string, unknown>)) {
+        if (!isPixelLayer(findLayer(state.layers, id)?.layer)) continue;
+        try {
+          fluor[id] = fluorFromJSON(v);
+        } catch (e) {
+          problems.push(`The fluorescent ink of layer "${id}" could not be read (${(e as Error).message}); it loads without fluorescence.`);
+        }
+      }
+      if (Object.keys(fluor).length) state = { ...state, fluor };
+    }
+    if (ext.thermo && typeof ext.thermo === 'object') {
+      const thermo: Record<string, TiledSurface> = {};
+      for (const [id, v] of Object.entries(ext.thermo as Record<string, unknown>)) {
+        if (!isPixelLayer(findLayer(state.layers, id)?.layer)) continue;
+        try {
+          thermo[id] = thermoFromJSON(v);
+        } catch (e) {
+          problems.push(`The thermochromic ink of layer "${id}" could not be read (${(e as Error).message}); it loads without thermochromic shift.`);
+        }
+      }
+      if (Object.keys(thermo).length) state = { ...state, thermo };
+    }
+    if (ext.heat !== undefined) {
+      const heat = heatFromJSON(ext.heat, state.canvas.width, state.canvas.height);
+      if (heat) state = { ...state, heat };
+      else problems.push('The heat field could not be read; the canvas loads cool.');
+    }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
     const thick: Record<string, ThickChannels> = {};
@@ -4480,6 +4900,10 @@ export class PaintEditorController {
     delete this.extensions.brushSources;
     delete this.extensions.effectLayers;
     delete this.extensions.paperEffect;
+    delete this.extensions.fluor;
+    delete this.extensions.thermo;
+    delete this.extensions.heat;
+    delete this.extensions.uvLight;
     this.viewCompositor.clear();
     this.emit();
     // Provider stickers keep their saved pixels; their art loads now so they can be edited.
@@ -4549,7 +4973,7 @@ export class PaintEditorController {
     // Thick paint lit, light paint glowing, and each layer's spill as a Linear Dodge (Add) layer above it.
     const driedBase = this.driedLayers(this.doc.layers);
     const backlight = this.backlightLayer(driedBase);
-    const dried = [...this.lightLayers(this.litLayers(driedBase)), ...(backlight ? [backlight] : [])];
+    const dried = [...this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(driedBase)))), ...(backlight ? [backlight] : [])];
     const { width, height, dpi } = this.doc.canvas;
     const paperPixels = this.compositePixels({ layerIds: [], paper: true });
     const paperLayer: PaintPixelLayer = {
@@ -6545,6 +6969,7 @@ const moveRect = <R extends { x: number; y: number }>(r: R, dx: number, dy: numb
 
 /** The id suffix of a layer's spill pass in the compositor (and PSD export). */
 const SPILL_SUFFIX = '::light';
+const UV_SPILL_SUFFIX = '::uv';
 
 /** The document's light with one layer's set (removed when it is empty), or the same map when `next` is `null`. */
 function withLayerLight(light: PaintDocumentState['light'], layerId: string, next: TiledSurface | null): Record<string, TiledSurface> | undefined {

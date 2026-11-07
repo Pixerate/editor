@@ -711,6 +711,12 @@ export const LIGHT_SLIDERS: readonly SliderControl[] = [
   { path: 'relief', label: 'Relief', min: 0, max: 1, step: 0.01 },
 ];
 
+/** The UV blacklight sliders. */
+export const UV_LIGHT_SLIDERS: readonly SliderControl[] = [
+  { path: 'strength', label: 'UV strength', min: 0, max: 2, step: 0.05 },
+  { path: 'ambient', label: 'Ambient light', min: 0, max: 1, step: 0.01 },
+];
+
 /** The view tilt sliders (thin-film iridescence and specular highlights). */
 export const VIEW_TILT_SLIDERS: readonly SliderControl[] = [
   { path: 'x', label: 'View tilt X', min: -1, max: 1, step: 0.01 },

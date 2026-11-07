@@ -106,6 +106,24 @@ public struct LightSettings: Equatable, Sendable {
 
 public let DEFAULT_LIGHT = LightSettings(amount: 0, pressure: false)
 
+/// UV-fluorescent ink: how strongly the stroke glows under the virtual UV blacklight, and whether it leaves no daylight pigment.
+public struct FluorescenceSettings: Equatable, Sendable {
+    public var amount: Double
+    public var invisible: Bool
+    var json: JSONValue { ["amount": .number(amount), "invisible": .bool(invisible)] }
+}
+
+public let DEFAULT_FLUORESCENCE = FluorescenceSettings(amount: 0, invisible: false)
+
+/// Thermochromic ink: the colour the stroke shifts toward where the canvas heat field exceeds `threshold` (0.05..0.95).
+public struct ThermochromicSettings: Equatable, Sendable {
+    public var hotColor: String?
+    public var threshold: Double
+    var json: JSONValue { ["hotColor": hotColor.map { .string($0) } ?? .null, "threshold": .number(threshold)] }
+}
+
+public let DEFAULT_THERMOCHROMIC = ThermochromicSettings(hotColor: nil, threshold: 0.5)
+
 /// Thin-film iridescence: interference coat whose hue shifts with the light and view angle.
 public struct IridescenceSettings: Equatable, Sendable {
     /// Film thickness at full pressure in nanometres (100..1000).
@@ -435,6 +453,8 @@ public struct PaintBrush: Equatable, Sendable {
     public var bristle: JSONObject
     public var sticker: JSONObject
     public var light: LightSettings
+    public var fluorescence: FluorescenceSettings
+    public var thermochromic: ThermochromicSettings
     /// Thin-film iridescence coat (nil: none).
     public var iridescence: IridescenceSettings? = nil
     public var ghost: GhostSettings? = nil
@@ -459,6 +479,8 @@ public struct PaintBrush: Equatable, Sendable {
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
             "light": light.json,
+            "fluorescence": fluorescence.json,
+            "thermochromic": thermochromic.json,
         ]
         if let iridescence { o["iridescence"] = iridescence.json }
         if let ghost { o["ghost"] = ghost.json }
@@ -555,7 +577,7 @@ let BASE_BRUSH = PaintBrush(
     id: "round", name: "Round", category: "custom", engine: "dab", tip: DEFAULT_BRUSH, grain: 0, pressureSmoothing: 0, rotation: "fixed",
     dynamics: DEFAULT_DYNAMICS, mixer: DEFAULT_MIXER, loadsColor: true, behavior: DEFAULT_BEHAVIOR, blender: DEFAULT_BLENDER, smudge: DEFAULT_SMUDGE,
     wet: DEFAULT_WET_BRUSH, impasto: DEFAULT_IMPASTO, particle: DEFAULT_PARTICLE, bristle: DEFAULT_BRISTLE, sticker: DEFAULT_STICKER,
-    light: DEFAULT_LIGHT, stamp: nil, spray: nil, paint: nil, builtin: nil
+    light: DEFAULT_LIGHT, fluorescence: DEFAULT_FLUORESCENCE, thermochromic: DEFAULT_THERMOCHROMIC, stamp: nil, spray: nil, paint: nil, builtin: nil
 )
 
 /// A brush with every field in range; missing fields come from `base` (default: a plain round dab brush).
@@ -608,6 +630,19 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
     let rbl = raw["blender"]?.objectValue ?? [:]
     let rsm = raw["smudge"]?.objectValue ?? [:]
     let rl = raw["light"]?.objectValue ?? [:]
+    let rfl: JSONObject = {
+        if let n = raw["fluorescence"]?.finite { return ["amount": .number(n)] }
+        return raw["fluorescence"]?.objectValue ?? [:]
+    }()
+    let rth = raw["thermochromic"]?.objectValue ?? [:]
+    let hotColor: String? = {
+        if rth["hotColor"] == .null { return nil }
+        if let s = rth["hotColor"]?.stringValue {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if isHexColor(t) { return t }
+        }
+        return b.thermochromic.hotColor
+    }()
     let wet = normalizeWetBrush(raw["wet"]?.objectValue ?? [:], b.wet)
     let wantsLight = (rl["amount"]?.finite ?? 0) > 0
     let canMutate = engine == "dab" || (engine == "wet" && wet.tool == "paint") || engine == "impasto" || engine == "particle" || engine == "bristle"
@@ -662,6 +697,8 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
         light: ghost != nil && !wantsLight ? DEFAULT_LIGHT : LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
+        fluorescence: FluorescenceSettings(amount: unitValue(rfl["amount"], b.fluorescence.amount), invisible: boolValue(rfl["invisible"], b.fluorescence.invisible)),
+        thermochromic: ThermochromicSettings(hotColor: hotColor, threshold: rangeValue(rth["threshold"], 0.05, 0.95, b.thermochromic.threshold)),
         iridescence: readIridescence(raw["iridescence"], b.iridescence),
         ghost: ghost,
         mutation: mutation,

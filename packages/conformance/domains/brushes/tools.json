@@ -1133,6 +1133,41 @@
             },
             "additionalProperties": false
           },
+          "fluorescence": {
+            "type": "object",
+            "description": "UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Fluorescence intensity under UV blacklight, 0 (none) .. 1."
+              },
+              "invisible": {
+                "type": "boolean",
+                "description": "Invisible ink in normal light: lays no daylight paint and glows only under UV (default false)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "thermochromic": {
+            "type": "object",
+            "description": "Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.",
+            "properties": {
+              "hotColor": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "description": "Colour (#rrggbb) the ink turns when heated."
+              },
+              "threshold": {
+                "type": "number",
+                "minimum": 0.05,
+                "maximum": 0.95,
+                "description": "Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5)."
+              }
+            },
+            "additionalProperties": false
+          },
           "iridescence": {
             "type": "object",
             "description": "Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt. Missing fields take their defaults.",
@@ -2604,6 +2639,41 @@
             },
             "additionalProperties": false
           },
+          "fluorescence": {
+            "type": "object",
+            "description": "UV-fluorescent ink: glows in its colour under the virtual UV blacklight (set_uv_light); invisible in normal light when invisible is true.",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Fluorescence intensity under UV blacklight, 0 (none) .. 1."
+              },
+              "invisible": {
+                "type": "boolean",
+                "description": "Invisible ink in normal light: lays no daylight paint and glows only under UV (default false)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "thermochromic": {
+            "type": "object",
+            "description": "Thermochromic ink: shifts smoothly toward hotColor where the canvas heat field warms it past threshold.",
+            "properties": {
+              "hotColor": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "description": "Colour (#rrggbb) the ink turns when heated."
+              },
+              "threshold": {
+                "type": "number",
+                "minimum": 0.05,
+                "maximum": 0.95,
+                "description": "Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5)."
+              }
+            },
+            "additionalProperties": false
+          },
           "iridescence": {
             "type": "object",
             "description": "Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt. Missing fields take their defaults.",
@@ -3207,6 +3277,8 @@
                 "dynamics",
                 "behaviour",
                 "light",
+                "fluorescence",
+                "thermochromic",
                 "iridescence",
                 "ghost",
                 "mutation",
