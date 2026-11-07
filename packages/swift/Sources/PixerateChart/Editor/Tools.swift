@@ -19,19 +19,23 @@ public struct ChartToolProviderOptions {
     public var readOnly: (() -> Any)?
     public var width: Double
     public var height: Double
+    /// Turns SVG into an image so `render_chart` can return PNG (e.g. through CoreGraphics).
+    public var rasterize: (@Sendable (String, (width: Double, height: Double)) async throws -> ChartRasterImage)?
 
     public init(
         id: String = "chart",
         namespace: String = "",
         readOnly: (() -> Any)? = nil,
         width: Double = 640,
-        height: Double = 400
+        height: Double = 400,
+        rasterize: (@Sendable (String, (width: Double, height: Double)) async throws -> ChartRasterImage)? = nil
     ) {
         self.id = id
         self.namespace = namespace
         self.readOnly = readOnly
         self.width = width
         self.height = height
+        self.rasterize = rasterize
     }
 }
 
@@ -242,8 +246,76 @@ final class ChartToolProviderImpl: @unchecked Sendable {
             return .object(out)
         }
 
-        add("render_chart") { _ in
-            throw ToolExecutionError("not ported yet (#698)")
+        if let def = defsByName["render_chart"] {
+            list.append(AgentTool(
+                name: def.name,
+                title: def.title,
+                description: def.description,
+                inputSchema: def.inputSchema,
+                outputSchema: def.outputSchema,
+                annotations: def.annotations,
+                handler: { args, _ in
+                    let width = args["width"]?.doubleValue ?? self.size.width
+                    let height = args["height"]?.doubleValue ?? self.size.height
+                    let format = args["format"]?.stringValue ?? "svg"
+                    let json = self.controller.toJSON()
+                    let raceFrame: Double?
+                    if let time = args["time"], time != .null {
+                        raceFrame = try self.raceFrameOf(time)
+                    } else {
+                        raceFrame = self.controller.getState().raceFrame
+                    }
+                    let scene = layoutChart(
+                        json,
+                        ChartLayoutOptions(
+                            width: width,
+                            height: height,
+                            selection: nil,
+                            measureText: self.controller.measureText,
+                            raceFrame: raceFrame
+                        )
+                    )
+                    let svg = chartSceneToSvg(
+                        scene,
+                        ChartSvgOptions(
+                            ariaLabel: json.title.isEmpty ? nil : json.title,
+                            description: describeChart(json)
+                        )
+                    )
+                    let warnings = scene.warnings
+                    let warningsJSON: JSONValue = .array(warnings.map { $0.toJSON() })
+                    if format == "png" {
+                        guard let rasterize = self.options.rasterize else {
+                            throw ToolExecutionError("This host cannot rasterize charts; call render_chart with format \"svg\", or get_chart for the layout warnings.")
+                        }
+                        let image = try await rasterize(svg, (width: width, height: height))
+                        let info = JSONObject([
+                            ("width", .number(width)),
+                            ("height", .number(height)),
+                            ("mimeType", .string(image.mimeType)),
+                            ("warnings", warningsJSON),
+                        ])
+                        let note = !warnings.isEmpty
+                            ? "Layout warnings: \(warnings.map { $0.message }.joined(separator: " "))"
+                            : "No layout warnings."
+                        let wStr = JSONValue.jsNumber(width)
+                        let hStr = JSONValue.jsNumber(height)
+                        return .result(McpToolResult(
+                            content: [
+                                .image(data: image.data, mimeType: image.mimeType),
+                                .text("Chart at \(wStr) × \(hStr). \(note)"),
+                            ],
+                            structuredContent: info
+                        ))
+                    }
+                    return .value([
+                        "svg": .string(svg),
+                        "width": .number(width),
+                        "height": .number(height),
+                        "warnings": warningsJSON,
+                    ])
+                }
+            ))
         }
 
         add("check_chart_colors") { args in
@@ -411,8 +483,11 @@ extension ChartToolProviderImpl {
             ]
         }
 
-        add("export_chart_mermaid") { _ in
-            throw ToolExecutionError("not ported yet (#698)")
+        add("export_chart_mermaid") { args in
+            let meta = args["meta"]?.boolValue ?? true
+            return [
+                "mermaid": .string(chartToMermaid(self.controller.toJSON(), ChartMermaidOptions(meta: meta)))
+            ]
         }
 
         add("export_chart_ooxml") { _ in

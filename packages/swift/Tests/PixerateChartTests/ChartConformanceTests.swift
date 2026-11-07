@@ -42,8 +42,8 @@ final class ChartConformanceTests: XCTestCase {
             }
         }
         for failure in failures { XCTFail(failure.description) }
-        XCTAssertEqual(passed.count, 13)
-        XCTAssertEqual(skipped.count, 3)
+        XCTAssertEqual(passed.count, 15)
+        XCTAssertEqual(skipped.count, 1)
         ChartConformanceReport.write(passed: passed, skipped: skipped, failed: Set(failures.map(\.scenario)).count)
     }
 
@@ -82,16 +82,6 @@ final class ChartConformanceTests: XCTestCase {
 
     func testUnportedToolsAndCommandsReportClearError() async throws {
         let host = try ChartConformanceHost(setup: [:])
-        let cases698: [(String, JSONObject)] = [
-            ("render_chart", JSONObject()),
-            ("export_chart_mermaid", JSONObject()),
-            ("import_chart_mermaid", JSONObject([("mermaid", .string("pie\n\"A\": 10"))]))
-        ]
-        for (tool, args) in cases698 {
-            let res = await host.callTool(tool, args)
-            XCTAssertTrue(res.isError)
-            XCTAssertTrue(res.structuredContent?["error"]?["message"]?.stringValue?.contains("#698") == true)
-        }
         let cases702: [(String, JSONObject)] = [
             ("import_chart_ooxml", JSONObject([("xml", .string("<c:chartSpace/>"))])),
             ("export_chart_ooxml", JSONObject())

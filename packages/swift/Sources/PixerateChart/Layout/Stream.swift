@@ -127,6 +127,12 @@ public final class ChartStream {
                 spec = read.spec
                 issues = complete ? read.issues : []
             }
+        } else {
+            let read = chartFromMermaid(text, ChartMermaidParseOptions(partial: !complete))
+            if read.family != nil {
+                spec = read.spec
+            }
+            issues = read.issues
         }
         if let cur = spec, !cur.series.contains(where: { $0.values.contains(where: { $0 != nil }) }) {
             spec = complete ? cur : last

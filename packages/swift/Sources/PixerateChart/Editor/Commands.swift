@@ -472,20 +472,47 @@ private func chartCommandRunsTail() -> [String: ChartCommandRun] {
         ]
     }
 
-    runs["importMermaid"] = { _, _ in
-        throw fail("not ported yet (#698)")
+    runs["importMermaid"] = { controller, params in
+        let mermaid = params["mermaid"]?.stringValue ?? ""
+        let read = chartFromMermaid(mermaid)
+        if read.family == nil {
+            let joined = read.issues.map { $0.message }.joined(separator: " ")
+            throw fail(
+                !joined.isEmpty
+                    ? joined
+                    : "Expected Mermaid starting with xychart-beta, pie, radar-beta, sankey-beta or treemap-beta."
+            )
+        }
+        let patch = read.spec.toJSON().objectValue ?? JSONObject()
+        try check(controller.update(patch, options: ChartEditOptions(label: "Import Mermaid chart")))
+        return [
+            "spec": controller.toJSON().toJSON(),
+            "issues": .array(read.issues.map { $0.toJSON() })
+        ]
     }
 
-    runs["exportMermaid"] = { _, _ in
-        throw fail("not ported yet (#698)")
+    runs["exportMermaid"] = { controller, params in
+        let meta = params["meta"]?.boolValue
+        return [
+            "mermaid": .string(chartToMermaid(controller.toJSON(), ChartMermaidOptions(meta: meta)))
+        ]
     }
 
     runs["exportOoxml"] = { _, _ in
         throw fail("not ported yet (#702)")
     }
 
-    runs["exportSvg"] = { _, _ in
-        throw fail("not ported yet (#698)")
+    runs["exportSvg"] = { controller, params in
+        let width = params["width"]?.doubleValue ?? 640
+        let height = params["height"]?.doubleValue ?? 400
+        return [
+            "svg": .string(chartToSvg(
+                controller.toJSON(),
+                width: width,
+                height: height,
+                measureText: controller.measureText
+            ))
+        ]
     }
 
     runs["recommend"] = { controller, params in

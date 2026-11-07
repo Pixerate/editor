@@ -160,8 +160,34 @@ extension ChartToolProviderImpl {
             ]
         }
 
-        add("import_chart_mermaid") { _ in
-            throw ToolExecutionError("not ported yet (#698)")
+        add("import_chart_mermaid") { args in
+            let mermaid = args["mermaid"]?.stringValue ?? ""
+            let fencedRegex = try! NSRegularExpression(
+                pattern: "```(?:mermaid)?\\s*\\n([\\s\\S]*?)```"
+            )
+            let ns = mermaid as NSString
+            let source: String
+            if let m = fencedRegex.firstMatch(in: mermaid, range: NSRange(location: 0, length: ns.length)),
+               m.range(at: 1).location != NSNotFound {
+                source = ns.substring(with: m.range(at: 1))
+            } else {
+                source = mermaid
+            }
+            let read = chartFromMermaid(source)
+            if read.family == nil {
+                let joined = read.issues.map { $0.message }.joined(separator: " ")
+                throw ToolExecutionError(
+                    !joined.isEmpty
+                        ? joined
+                        : "Expected Mermaid starting with xychart-beta, pie, radar-beta, sankey-beta or treemap-beta."
+                )
+            }
+            let patch = read.spec.toJSON().objectValue ?? JSONObject()
+            try self.check(self.controller.update(patch, options: ChartEditOptions(label: "Import Mermaid chart")))
+            return [
+                "spec": self.controller.toJSON().toJSON(),
+                "issues": .array(read.issues.map { $0.toJSON() })
+            ]
         }
 
         add("import_chart_ooxml") { _ in

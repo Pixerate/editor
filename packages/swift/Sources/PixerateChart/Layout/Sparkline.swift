@@ -20,6 +20,7 @@ public struct ChartSparklineOptions: Sendable, Equatable {
     public var highLow: Bool?
     public var min: Double?
     public var max: Double?
+    public var ariaLabel: String?
 
     public init(
         kind: ChartSparklineKind? = nil,
@@ -30,7 +31,8 @@ public struct ChartSparklineOptions: Sendable, Equatable {
         markers: Bool? = nil,
         highLow: Bool? = nil,
         min: Double? = nil,
-        max: Double? = nil
+        max: Double? = nil,
+        ariaLabel: String? = nil
     ) {
         self.kind = kind
         self.width = width
@@ -41,6 +43,7 @@ public struct ChartSparklineOptions: Sendable, Equatable {
         self.highLow = highLow
         self.min = min
         self.max = max
+        self.ariaLabel = ariaLabel
     }
 
     public init(json: JSONValue) {
@@ -54,6 +57,7 @@ public struct ChartSparklineOptions: Sendable, Equatable {
         self.highLow = obj["highLow"]?.boolValue
         self.min = obj["min"]?.doubleValue
         self.max = obj["max"]?.doubleValue
+        self.ariaLabel = obj["ariaLabel"]?.stringValue
     }
 }
 
@@ -221,3 +225,15 @@ public func layoutSparkline(_ values: [ChartValue], _ options: ChartSparklineOpt
     out.marks = marks
     return out
 }
+
+/// Renders a sparkline as a standalone SVG string.
+public func sparklineToSvg(
+    _ values: [ChartValue],
+    _ options: ChartSparklineOptions
+) -> String {
+    return chartSceneToSvg(
+        layoutSparkline(values, options),
+        ChartSvgOptions(ariaLabel: options.ariaLabel)
+    )
+}
+

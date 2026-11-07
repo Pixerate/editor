@@ -6,9 +6,6 @@
     "width": 640,
     "height": 400
   },
-  "skip": {
-    "swift": "mermaid and svg not ported yet (#698)"
-  },
   "steps": [
     {
       "tool": "set_chart_data",
