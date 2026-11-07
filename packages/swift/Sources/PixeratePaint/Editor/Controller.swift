@@ -236,6 +236,7 @@ public final class PaintEditorController {
     var seedCounter = 1
     var strokeCounter = 1
     public internal(set) var lighting = PaintLighting() { didSet { emit() } }
+    public internal(set) var viewTilt = PaintViewTilt() { didSet { emit() } }
     private var library: LibraryCancellable?
     /// Change listeners (`subscribe`) and how many changes there have been.
     var listeners: [UUID: () -> Void] = [:]
@@ -478,8 +479,16 @@ public final class PaintEditorController {
         var next = shiftDocument(withWetEvents(doc), l, t).with { $0.canvas = PaintCanvas(width: width, height: height, dpi: was.dpi) }
         for id in keptWet {
             if let layer = findLayer(next.layers, id)?.layer, layer.isPixel {
-                let moved = layer.withSurface(translateSurface(layer.pixelSurface, Double(layer.pixelOffset.x), Double(layer.pixelOffset.y)), offset: LayerOffset(x: 0, y: 0))
-                next = next.with { $0.layers = mapLayer(next.layers, id) { _ in moved } }
+                let dx = Double(layer.pixelOffset.x), dy = Double(layer.pixelOffset.y)
+                let moved = layer.withSurface(translateSurface(layer.pixelSurface, dx, dy), offset: LayerOffset(x: 0, y: 0))
+                next = next.with { d in
+                    d.layers = mapLayer(next.layers, id) { _ in moved }
+                    if let ch = next.thick?.get(id), (dx != 0 || dy != 0) {
+                        var t = next.thick!
+                        t.set(id, ThickChannels(height: translateSurface(ch.height, dx, dy), material: translateSurface(ch.material, dx, dy), film: translateSurface(ch.film, dx, dy)))
+                        d.thick = t
+                    }
+                }
             }
         }
         if wet.world != nil {
@@ -1508,8 +1517,16 @@ public final class PaintEditorController {
             }
             if layer.pixelOffset.x != 0 || layer.pixelOffset.y != 0 {
                 // The wet simulation works in canvas space: move the pixels into it (same picture, not an undo step).
-                let moved = layer.withSurface(translateSurface(layer.pixelSurface, Double(layer.pixelOffset.x), Double(layer.pixelOffset.y)), offset: LayerOffset(x: 0, y: 0))
-                doc = doc.with { $0.layers = mapLayer(doc.layers, moved.id) { _ in moved } }
+                let dx = Double(layer.pixelOffset.x), dy = Double(layer.pixelOffset.y)
+                let moved = layer.withSurface(translateSurface(layer.pixelSurface, dx, dy), offset: LayerOffset(x: 0, y: 0))
+                doc = doc.with { o in
+                    o.layers = mapLayer(doc.layers, moved.id) { _ in moved }
+                    if let ch = doc.thick?.get(moved.id) {
+                        var t = doc.thick!
+                        t.set(moved.id, ThickChannels(height: translateSurface(ch.height, dx, dy), material: translateSurface(ch.material, dx, dy), film: translateSurface(ch.film, dx, dy)))
+                        o.thick = t
+                    }
+                }
                 layer = moved
             }
             beginWetOp()
@@ -1522,10 +1539,12 @@ public final class PaintEditorController {
             let load = i.load ?? brushLoadForStroke(brush, mixerLoad, rgb)
             let seedW = i.seed ?? Int(PixerateRandom.mix32(UInt32(truncatingIfNeeded: seedCounter &* 0x9E37_79B1)) & 0x7FFF_FFFF)
             let copiesW = (i.copies ?? symmetryCopies(guides.symmetry)).filter { m in m.enumerated().contains { $0.element != IDENTITY_AFFINE[$0.offset] } }
+            let wetMask = i.maskStencils.map { stencilSelection($0) } ?? (i.stencils != false ? stencilSelection() : nil)
+            let wetFilm = brush.iridescence != nil && brush.wet.tool == "paint" ? FilmBuffer(d.thick?.get(id)?.film ?? emptySurface(4, 0), LayerOffset(x: 0, y: 0), wetMask) : nil
             let driver = WetStrokeDriver(WetStrokeInit(
                 world: world, laneId: id, brush: brush, color: rgb, load: load, grain: paperGrain(d.paper), paperDepth: d.paper.depth, paperColor: hexToRgb8(d.paper.color),
                 seed: seedW, copies: ([IDENTITY_AFFINE] + copiesW).map(affineCopy), mask: i.maskStencils.map { stencilSelection($0) } ?? (i.stencils != false ? stencilSelection() : nil),
-                paint: wetGradient, effect: effect?.pixels, speed: wet.speed
+                paint: wetGradient, effect: effect?.pixels, film: wetFilm, speed: wet.speed
             ))
             i.seed = seedW
             i.load = load
@@ -1584,7 +1603,14 @@ public final class PaintEditorController {
         var withLight = initValues
         withLight.effect = effect
         withLight.wet = wetInit
-        if brush.engine == "impasto" { withLight.thick = d.thick?.get(layer.id) ?? emptyThickChannels() }
+        if brush.engine == "impasto" {
+            withLight.thick = d.thick?.get(layer.id) ?? emptyThickChannels()
+        } else if wetInit == nil && brush.engine != "sticker" {
+            let existingFilm = d.thick?.get(layer.id)?.film
+            if brush.iridescence != nil || (brush.engine == "eraser" && existingFilm != nil && !existingFilm!.tiles.isEmpty) {
+                withLight.film = existingFilm ?? emptySurface(4, 0)
+            }
+        }
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
         withLight.stampArt = stampArt
         if wetInit == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
@@ -1642,7 +1668,11 @@ public final class PaintEditorController {
             result.strokeId = stroke.id
             paintedBounds[stroke.key] = .some(result.bounds)
             let wetStroke = session.initValues.wet != nil
-            let thick = session.thickChannels()
+            var thick = session.thickChannels()
+            if thick == nil, let nextFilm = session.filmChannel() ?? session.initValues.wet?.driver.initValues.film?.surface() {
+                let prev = d.thick?.get(session.layerId) ?? emptyThickChannels()
+                thick = ThickChannels(height: prev.height, material: prev.material, film: nextFilm)
+            }
             // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
             let wetLight = wetStroke && wet.world?.hasLane(session.layerId) == true ? try? wet.world!.lightDisplay(session.layerId) : nil
             var baseLayers = d.layers
@@ -1653,7 +1683,11 @@ public final class PaintEditorController {
                 o.layers = mapLayer(baseLayers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
                 o.strokes = d.strokes + [stroke]
                 o.settingLight(session.layerId, session.lightChannel ?? wetLight)
-                if let thick { var t = o.thick ?? OrderedMap(); t.set(session.layerId, thick); o.thick = t }
+                if let thick {
+                    var t = o.thick ?? OrderedMap()
+                    if hasThickChannels(thick) { t.set(session.layerId, thick) } else { _ = t.delete(session.layerId) }
+                    o.thick = t.isEmpty ? nil : t
+                }
                 if let sprayed = session.sprayedStickers {
                     var t = o.stickers ?? OrderedMap()
                     t.set(session.layerId, (t.get(session.layerId) ?? []) + sprayed)
@@ -1729,7 +1763,15 @@ public final class PaintEditorController {
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
     func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display") -> [ViewLayer] {
         let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
-        let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in l.open ? l.shown.thickChannels().map { (l.layerId, $0) } : nil }
+        let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in
+            guard l.open else { return nil }
+            if let ch = l.shown.thickChannels() { return (l.layerId, ch) }
+            if let f = l.shown.filmChannel() ?? l.shown.initValues.wet?.driver.initValues.film?.surface() {
+                let prev = doc.thick?.get(l.layerId) ?? emptyThickChannels()
+                return (l.layerId, ThickChannels(height: prev.height, material: prev.material, film: f))
+            }
+            return nil
+        }
         var layers = lightLayers(litLayers(base, liveThick: live), liveThick: live)
         // Backlit paper shines through everything: its light goes on top.
         let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)

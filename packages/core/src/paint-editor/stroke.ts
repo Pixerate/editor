@@ -22,7 +22,7 @@ import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engi
 import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
-import { ThickStrokeDriver, type ThickChannels } from './thick';
+import { FilmBuffer, ThickStrokeDriver, type ThickChannels } from './thick';
 import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
 import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
 import { StickerSpray, type Sticker } from './stickers';
@@ -137,6 +137,7 @@ export class PaintStrokeSession {
   private wet: PaintDabStroke | null = null;
   private readonly wetDriver: WetStrokeDriver | null = null;
   private thickDriver: ThickStrokeDriver | null = null;
+  private filmBuffer: FilmBuffer | null = null;
   private stickerSpray: StickerSpray | null = null;
   /** Light paint: the stroke's twin over the light channel, and what it left there. */
   private readonly lightTwin: PaintStrokeSession | null = null;
@@ -177,30 +178,36 @@ export class PaintStrokeSession {
   private build(effect: EffectPaintPixels | null): void {
     const init = this.init;
     const brush = init.brush;
-    this.dry = this.wet = this.thickDriver = this.stickerSpray = null;
+    this.dry = this.wet = this.thickDriver = this.stickerSpray = this.filmBuffer = null;
     if (init.sticker) {
       this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect, art: init.sticker.art, variant: init.sticker.variant });
-    } else if (init.thick) {
+    } else if (brush.engine === 'impasto' && init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect });
-    } else if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush, Boolean(init.paint))) {
-      const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
-      this.wet = new PaintDabStroke(brush, {
-        target: this.tileTarget(),
-        color: rgb(init.color),
-        secondary: rgb(init.secondary ?? init.background),
-        load: init.mixerLoad,
-        grain: init.grain,
-        paperDepth: init.paperDepth,
-        seed: init.seed,
-        copies: this.copies,
-        paint: init.paint ?? null,
-        effect,
-        stampArt: init.stampArt,
-      });
     } else {
-      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect, stampArt: init.stampArt };
-      this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
+      if (init.thick && (brush.iridescence || brush.engine === 'eraser')) {
+        this.filmBuffer = new FilmBuffer(init.thick.channels.film, init.offset, init.selection ?? null);
+      }
+      if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush, Boolean(init.paint))) {
+        const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
+        this.wet = new PaintDabStroke(brush, {
+          target: this.tileTarget(),
+          color: rgb(init.color),
+          secondary: rgb(init.secondary ?? init.background),
+          load: init.mixerLoad,
+          grain: init.grain,
+          paperDepth: init.paperDepth,
+          seed: init.seed,
+          copies: this.copies,
+          paint: init.paint ?? null,
+          effect,
+          stampArt: init.stampArt,
+          film: this.filmBuffer,
+        });
+      } else {
+        const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect, stampArt: init.stampArt, film: this.filmBuffer };
+        this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
+      }
     }
   }
 
@@ -246,7 +253,7 @@ export class PaintStrokeSession {
       secondary: [grey, grey, grey, 255],
       inputFilter: undefined,
       mixerLoad: { reservoir: init.mixerLoad.reservoir ? [g, g, g] : null, amount: init.mixerLoad.amount, pickup: null },
-      thick: init.thick,
+      thick: undefined,
       paint,
       effect,
       light: null,
@@ -302,9 +309,12 @@ export class PaintStrokeSession {
     return this.stickerSpray ? this.stickerSpray.stickers.map((s) => ({ ...s })) : null;
   }
 
-  /** Impasto strokes: the layer's thick-paint channels with the stroke so far. */
+  /** Impasto or iridescent strokes: the layer's thick-paint channels with the stroke so far. */
   thickChannels(): ThickChannels | null {
-    return this.thickDriver?.channels() ?? null;
+    if (this.thickDriver) return this.thickDriver.channels();
+    const f = this.filmBuffer ?? this.wetDriver?.init.film ?? null;
+    if (f && this.init.thick) return { ...this.init.thick.channels, film: f.surface() };
+    return null;
   }
 
   /** Shows a wet stroke's progress (the wet layer's display). */

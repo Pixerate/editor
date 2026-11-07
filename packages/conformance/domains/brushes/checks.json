@@ -2718,6 +2718,126 @@
     }
   },
   {
+    "id": "scarab-lacquer",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "soap-film",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "pearl-glaze",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
     "id": "ghost-wash",
     "hosts": {
       "paint": {

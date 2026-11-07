@@ -20,6 +20,7 @@ more; this is where each one went.
 | Bristles | `tip.shape` `bristle` and `tip.bristle` |
 | A brush's own gradient (paint) | `colour.default` (a gradient); `unset: ['colour']` drops it |
 | Light | `light` (`amount`, `pressure`) |
+| Thin-film iridescence | `iridescence` (`thickness` 100..1000 nm, `pressureToThickness` 0..1, `ior` 1.2..2.0); `unset: ['iridescence']` drops it |
 | Ghost paint (linger, smear) | `ghost` (`linger`, `smear`); `unset: ['ghost']` drops it |
 
 ## Examples

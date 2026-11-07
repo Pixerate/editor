@@ -45,6 +45,8 @@ export interface BrushHostProfile {
   tipGrain?: BrushSupport;
   /** Several dabs per spacing step (`dynamics.count` above 1); missing: `none`. */
   dabCount?: BrushSupport;
+  /** Structural colour (`iridescence`); missing: `none`. */
+  iridescence?: BrushSupport;
 }
 
 export interface BrushIssue {
@@ -84,6 +86,7 @@ export const PAINT_PROFILE: BrushHostProfile = {
   tilt: 'full',
   tipGrain: 'full',
   dabCount: 'full',
+  iridescence: 'full',
 };
 
 /** The image editor's brush: dry dabs on pixels, its Mixer Brush and the eraser. */
@@ -105,6 +108,7 @@ export const IMAGE_PROFILE: BrushHostProfile = {
   tilt: 'ignored',
   tipGrain: 'ignored',
   dabCount: 'ignored',
+  iridescence: 'none',
 };
 
 /**
@@ -129,6 +133,7 @@ export const CANVAS_PROFILE: BrushHostProfile = {
   tilt: 'full',
   tipGrain: 'ignored',
   dabCount: 'ignored',
+  iridescence: 'none',
 };
 
 /**
@@ -182,6 +187,7 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   feature(profile.exchange, !ex?.reservoir && (nonZero(ex?.pickup) || !!ex?.dirty), 'behaviour.exchange', 'picking paint up', 'Remove behaviour.exchange.');
   feature(profile.grain, nonZero(brush.behaviour?.grain), 'behaviour.grain', 'paper grain', 'Set behaviour.grain to 0.');
   feature(profile.light, nonZero(brush.light?.amount), 'light', 'light paint (glow and spill)', 'Remove light (or set light.amount to 0).');
+  feature(profile.iridescence ?? 'none', !!brush.iridescence, 'iridescence', 'thin-film iridescence', 'Remove iridescence.');
   feature(profile.surfaces.includes('wet') && profile.light === 'full' ? 'full' : 'none', !!brush.ghost, 'ghost', 'ghost paint', 'Remove ghost.');
   if (brush.mutation) {
     if (profile.id !== 'paint') feature('none', true, 'mutation', 'mutation paint', 'Remove mutation.');
@@ -304,6 +310,9 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         break;
       case 'light':
         delete b.light;
+        break;
+      case 'iridescence':
+        delete b.iridescence;
         break;
       case 'motion':
         delete b.motion;

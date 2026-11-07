@@ -51,7 +51,7 @@ export function createPaintThickTools(c: PaintEditorController): PaintAgentTool[
       name: 'set_lighting',
       title: 'Move the light',
       description:
-        'Sets where the light comes from for thick paint (impasto relief) and metallic paper: azimuth (degrees clockwise from the top of the canvas; 315 is top left), elevation (5 grazing, deep shadows .. 90 straight on, no relief) and relief (0 flat .. 1 strong). Nothing is repainted: the relief is lit at render time. Saved with the document, not an undo step. Returns the lighting.',
+        'Sets where the light comes from for thick paint (impasto relief), thin-film iridescence and metallic paper: azimuth (degrees clockwise from the top of the canvas; 315 is top left), elevation (5 grazing, deep shadows .. 90 straight on, no relief) and relief (0 flat .. 1 strong). Nothing is repainted: the relief and iridescence are lit at render time. Saved with the document, not an undo step. Returns the lighting.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -63,6 +63,30 @@ export function createPaintThickTools(c: PaintEditorController): PaintAgentTool[
       },
       annotations: { title: 'Move the light', ...SET },
       handler: (a) => c.setLighting(a),
+    },
+    {
+      name: 'set_view_tilt',
+      title: 'Tilt the view angle for iridescence',
+      description:
+        'Tilts the viewer’s look angle for thin-film iridescence and specular highlights: x (-1 left .. 1 right, default 0) and y (-1 top .. 1 bottom, default 0). Moves the view vector, not the light, so iridescent paint (brushes with iridescence, such as scarab-lacquer, soap-film, pearl-glaze) shifts hue across the spectrum as the angle changes. Editor state (not saved with the document, not an undo step). Returns the view tilt.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          x: { type: 'number', minimum: -1, maximum: 1, description: 'Horizontal view tilt, -1 (left) .. 1 (right); default 0.' },
+          y: { type: 'number', minimum: -1, maximum: 1, description: 'Vertical view tilt, -1 (top) .. 1 (bottom); default 0.' },
+        },
+        additionalProperties: false,
+      },
+      annotations: { title: 'Tilt the view angle for iridescence', ...SET },
+      handler: (a) => c.setViewTilt(a),
+    },
+    {
+      name: 'get_view_tilt',
+      title: 'Read the view tilt',
+      description: 'Reads the viewer’s look angle for thin-film iridescence and specular highlights: x and y in -1..1 (0, 0 is straight on). Changes nothing.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      annotations: { title: 'Read the view tilt', ...READ },
+      handler: () => c.getViewTilt(),
     },
     {
       name: 'get_relief',

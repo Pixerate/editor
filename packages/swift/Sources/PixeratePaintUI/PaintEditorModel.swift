@@ -5,6 +5,9 @@ import PixeratePaint
 import PixerateRaster
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(CoreMotion) && os(iOS)
+import CoreMotion
+#endif
 
 /// Reads `a.b` from a JSON object as a number, 0 when missing (`readPath` in `paint-editor/ui.ts`).
 public func readPath(_ obj: JSONObject, _ path: String) -> Double {
@@ -104,6 +107,15 @@ public final class PaintEditorModel {
     @ObservationIgnored public private(set) var gesture: PaintGesture!
     @ObservationIgnored private var subscriptions: [Cancellable] = []
     @ObservationIgnored private var fitted: String?
+    #if canImport(CoreMotion) && os(iOS)
+    @ObservationIgnored private var motionManager: CMMotionManager?
+    #endif
+    /// Whether device motion (gyroscope on iPhone / iPad) drives `viewTilt`.
+    public var deviceTiltEnabled = false {
+        didSet {
+            if deviceTiltEnabled != oldValue { updateDeviceMotion() }
+        }
+    }
 
     /// A model over `controller` (default a new 1024 × 768 painting), with its tools in `registry` (default a new one).
     public init(controller: PaintEditorController? = nil, registry: ToolRegistry? = nil) throws {
@@ -363,6 +375,34 @@ public final class PaintEditorModel {
     /// Moves the light (not an undo step: thick paint and metallic paper are relit).
     public func setLighting(_ path: String, _ value: Double) {
         attempt { _ = try controller.setLighting(azimuth: path == "azimuth" ? value : nil, elevation: path == "elevation" ? value : nil, relief: path == "relief" ? value : nil) }
+    }
+    /// The view tilt sliders (`PaintUITables.sliders.viewTilt`): viewer X and Y tilt for thin-film iridescence and specular highlights.
+    public var viewTiltSliders: [PaintUISlidersViewTiltItem] { tables.sliders.viewTilt }
+    public var viewTilt: PaintViewTilt { track(); return controller.viewTilt }
+    public func viewTiltValue(_ path: String) -> Double { readPath(viewTilt.json.objectValue ?? [:], path) }
+    /// Tilts the viewer angle (not an undo step: thin-film iridescence and specular highlights shift).
+    public func setViewTilt(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setViewTilt(x: path == "x" ? value : nil, y: path == "y" ? value : nil) }
+    }
+    private func updateDeviceMotion() {
+        #if canImport(CoreMotion) && os(iOS)
+        if deviceTiltEnabled {
+            let mgr = motionManager ?? CMMotionManager()
+            motionManager = mgr
+            guard mgr.isDeviceMotionAvailable else { return }
+            mgr.deviceMotionUpdateInterval = 1.0 / 60.0
+            mgr.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+                guard let self, let attitude = motion?.attitude else { return }
+                let x = Swift.min(1, Swift.max(-1, attitude.roll / (.pi / 4)))
+                let y = Swift.min(1, Swift.max(-1, (attitude.pitch - .pi / 6) / (.pi / 4)))
+                MainActor.assumeIsolated {
+                    _ = try? self.controller.setViewTilt(x: x, y: y)
+                }
+            }
+        } else {
+            motionManager?.stopDeviceMotionUpdates()
+        }
+        #endif
     }
     /// Flattens the active layer's relief (one undo step).
     public func flattenRelief() { attempt { _ = try controller.flattenRelief() } }

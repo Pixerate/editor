@@ -603,6 +603,7 @@ public struct SetBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case iridescence
         case ghost
         case mutation
         case motion
@@ -635,6 +636,8 @@ public struct SetBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
+    public var iridescence: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
     public var ghost: JSONValue?
     /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
@@ -661,6 +664,7 @@ public struct SetBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
         motion = args.argument("motion")
@@ -1893,6 +1897,27 @@ public struct SetLightingArguments: Sendable {
     }
 }
 
+/// Arguments of `set_view_tilt`.
+public struct SetViewTiltArguments: Sendable {
+    /// Horizontal view tilt, -1 (left) ..
+    public var x: Double?
+    /// Vertical view tilt, -1 (top) ..
+    public var y: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        x = try args.number("x")
+        y = try args.number("y")
+    }
+}
+
+/// Arguments of `get_view_tilt`.
+public struct GetViewTiltArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
 /// Arguments of `get_relief`.
 public struct GetReliefArguments: Sendable {
     /// Pixel layer id from list_layers (default the active layer).
@@ -2879,6 +2904,8 @@ public struct CreateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
+    public var iridescence: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
     public var ghost: JSONValue?
     /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
@@ -2904,6 +2931,7 @@ public struct CreateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
         motion = args.argument("motion")
@@ -2950,6 +2978,7 @@ public struct UpdateBrushArguments: Sendable {
         case dynamics
         case behaviour
         case light
+        case iridescence
         case ghost
         case mutation
         case motion
@@ -2982,6 +3011,8 @@ public struct UpdateBrushArguments: Sendable {
     public var behaviour: JSONValue?
     /// Light the brush gives off with its colour (glow and spill).
     public var light: JSONValue?
+    /// Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt.
+    public var iridescence: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
     public var ghost: JSONValue?
     /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
@@ -3008,6 +3039,7 @@ public struct UpdateBrushArguments: Sendable {
         dynamics = args.argument("dynamics")
         behaviour = args.argument("behaviour")
         light = args.argument("light")
+        iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
         motion = args.argument("motion")
@@ -3284,6 +3316,8 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .setLightSpill: try SetLightSpillArguments(args)
     case .clearLight: try ClearLightArguments(args)
     case .setLighting: try SetLightingArguments(args)
+    case .setViewTilt: try SetViewTiltArguments(args)
+    case .getViewTilt: try GetViewTiltArguments(args)
     case .getRelief: try GetReliefArguments(args)
     case .flattenRelief: try FlattenReliefArguments(args)
     case .setInstantDry: try SetInstantDryArguments(args)

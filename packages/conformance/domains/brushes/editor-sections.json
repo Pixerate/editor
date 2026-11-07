@@ -600,6 +600,13 @@
             "label": "Suggest a glow",
             "ariaLabel": "Brush suggest a glow",
             "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -2499,6 +2506,13 @@
             "label": "Suggest a glow",
             "ariaLabel": "Brush suggest a glow",
             "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -4298,6 +4312,13 @@
             "path": "light.glow",
             "label": "Suggest a glow",
             "ariaLabel": "Brush suggest a glow",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
             "value": false
           }
         ]
@@ -5829,6 +5850,13 @@
             "label": "Suggest a glow",
             "ariaLabel": "Brush suggest a glow",
             "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -7208,6 +7236,13 @@
             "path": "light.glow",
             "label": "Suggest a glow",
             "ariaLabel": "Brush suggest a glow",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
             "value": false
           }
         ]
@@ -9851,6 +9886,13 @@
             "path": "light.glow",
             "label": "Suggest a glow",
             "ariaLabel": "Brush suggest a glow",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
             "value": false
           }
         ]

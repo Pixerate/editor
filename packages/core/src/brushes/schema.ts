@@ -226,6 +226,12 @@ const LIGHT = object('Light the brush gives off with its colour (glow and spill)
   glow: bool('Suggest a glow layer effect for the layer (glow stays a layer effect).'),
 });
 
+const IRIDESCENCE = object('Structural colour: a thin dielectric film over the paint whose interference hue shifts with the light and view tilt. Missing fields take their defaults.', {
+  thickness: num(100, 1000, 'Film thickness in nanometres, 100..1000 (default 400).'),
+  pressureToThickness: unit('How much pen pressure shifts the film thickness per dab, 0..1 (default 0: uniform thickness).'),
+  ior: num(1.2, 2.0, 'Refractive index of the film, 1.2..2.0 (default 1.5; water/soap ~1.33, pearl ~1.55, beetle lacquer ~1.65).'),
+});
+
 const GHOST = object('Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").', {
   linger: num(0.5, 60, 'Seconds of simulated time before the ghost paint has fully faded (default 4).'),
   smear: unit('How much the ghost paint drags and lifts the paint it passes through: 0 none .. 1 full (default 0.3).'),
@@ -308,6 +314,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
+    iridescence: IRIDESCENCE,
     ghost: GHOST,
     mutation: MUTATION,
     motion: MOTION,
@@ -324,6 +331,7 @@ export const BRUSH_FACET_SCHEMAS = {
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
+  iridescence: IRIDESCENCE,
   ghost: GHOST,
   mutation: MUTATION,
   motion: MOTION,

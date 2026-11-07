@@ -23,6 +23,7 @@ import { rand01, randSigned } from './noise';
 import { rasterizeStampDab, sprayDroplets, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
 import type { StickerArtLookup } from './sticker-art';
 import { grainCatch, type PaperGrain } from './paper';
+import type { FilmBuffer } from './thick';
 import { TipGrain } from './tip-grain';
 
 /** One pen sample in document pixels. Every channel but x and y is optional. */
@@ -365,6 +366,8 @@ export interface DryStrokeOptions {
    * tip grain (`brush.tipGrain.source`); without it such a tip paints round, and the grain is left out.
    */
   stampArt?: StickerArtLookup;
+  /** Thin-film iridescence channel for dry brushes with `iridescence` (or eraser). */
+  film?: FilmBuffer | null;
 }
 
 /**
@@ -461,6 +464,10 @@ export class DryStroke {
       sampleEffectField(this.options.effect, rect, vals, field, d);
     }
     this.coverage.accumulate(rect, vals, m.opacity, null, field);
+    if (this.options.film) {
+      if (this.brush.engine === 'eraser') this.options.film.erase(rect, vals, m.opacity * this.brush.tip.opacity);
+      else if (this.brush.iridescence) this.options.film.deposit(rect, vals, m.opacity * this.brush.tip.opacity, this.brush.iridescence, d.pressure);
+    }
     rects.push(rect);
     this.dabCount++;
   }

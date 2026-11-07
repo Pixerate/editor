@@ -30,6 +30,8 @@ export interface PaintEditorProps {
   proposals?: PaintProposals;
   /** Strokes an agent is painting live alongside the user's (see `createPaintAgentStrokes`). */
   agentStrokes?: PaintAgentStrokes;
+  /** Follow device orientation (gyroscope tilt on iPhone and iPad) for thin-film iridescence view tilt. */
+  deviceTilt?: boolean;
   className?: string;
   /**
    * Agent playback: act out the paint tools' calls here with the agent's cursor, opening the panel
@@ -57,7 +59,7 @@ type SideTab = 'color' | 'wet' | 'paper' | 'layers' | 'effects';
  * harmonies, swatches, mixing pad), wet media, paper and layers on the right, and provider effects
  * when an effects provider is registered.
  */
-export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, proposals, agentStrokes, className, playback, playbackId = 'paint', onPlaybackReveal }) => {
+export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, proposals, agentStrokes, deviceTilt, className, playback, playbackId = 'paint', onPlaybackReveal }) => {
   const [tool, setTool] = useState<PaintTool>('brush');
   const [fillOptions, setFillOptions] = useState<PaintFillToolbarOptions>({ reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true });
   const [tab, setTab] = useState<SideTab>('color');
@@ -136,7 +138,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
         <BrushPanel controller={controller} className="w-60 shrink-0 overflow-y-auto pr-1" />
         <div className="flex min-w-0 flex-1 flex-col">
           {/* With playback the editor draws the cursor (over the panels too), so the canvas doesn't. */}
-          <PaintCanvas controller={controller} tool={tool} fillOptions={fillOptions} onError={setError} presence={playing ? undefined : presence} proposals={proposals} agentStrokes={agentStrokes} className="flex-1 rounded-lg" />
+          <PaintCanvas controller={controller} tool={tool} fillOptions={fillOptions} onError={setError} presence={playing ? undefined : presence} proposals={proposals} agentStrokes={agentStrokes} deviceTilt={deviceTilt} className="flex-1 rounded-lg" />
           {error && (
             <p role="alert" className="mt-1 text-[11px] text-rose-400">
               {error}

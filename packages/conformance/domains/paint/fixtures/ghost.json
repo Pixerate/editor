@@ -34,7 +34,7 @@
             "code": "invalid_arguments",
             "details": [
               {
-                "message": "Unknown property \"preset\". Allowed: id, name, description, tags, kind, medium, variety, tool, tip, marks, dynamics, behaviour, light, ghost, mutation, motion, colour, unset.",
+                "message": "Unknown property \"preset\". Allowed: id, name, description, tags, kind, medium, variety, tool, tip, marks, dynamics, behaviour, light, iridescence, ghost, mutation, motion, colour, unset.",
                 "path": "/preset"
               }
             ],

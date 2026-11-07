@@ -18,6 +18,8 @@ private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impast
 private let EXCHANGE = ["dab", "wet", "impasto"]
 /// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
 private let DABS = ["dab", "eraser", "mixer", "blender", "smudge"]
+/// Engines that can deposit a thin-film iridescence coat.
+private let FILM = ["dab", "mixer", "wet", "impasto", "particle", "bristle"]
 
 /// One facet field and the engine field it sets.
 struct BrushField: Sendable {
@@ -81,6 +83,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("tip.grain", "tipGrain", DABS))
     out.append(f("behaviour.grain", "grain"))
     out += each("light", "light", ["amount", "pressure"])
+    out += each("iridescence", "iridescence", ["thickness", "pressureToThickness", "ior"], FILM)
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))
     out.append(f("behaviour.exchange.mix", "behavior.mix", EXCHANGE))
     out.append(f("behaviour.exchange.dirty", "behavior.dirty", EXCHANGE))
@@ -220,6 +223,7 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     }
     // Spray marks: the dab engine with droplets.
     if engine == "dab" && marksKind == "scatter" { input["spray"] = .object(input["spray"]?.objectValue ?? [:]) }
+    if brush["iridescence"] != nil && FILM.contains(engine) { input["iridescence"] = .object(input["iridescence"]?.objectValue ?? [:]) }
     if engine == "wet" {
         let tool = brush["kind"]?.stringValue == "tool" ? WET_TOOL_OF.first { $0.0 == brush["tool"]?.stringValue }?.1 : "paint"
         setPath(&input, "wet.tool", tool.map { .string($0) } ?? .null)

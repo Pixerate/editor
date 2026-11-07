@@ -388,6 +388,8 @@ final class DryStroke {
     private let stamp: StampSampler?
     /// The tip's own grain, or nil.
     private let tipGrain: TipGrain?
+    /// Thin-film coat buffer (deposit for iridescent brushes, erase for erasers).
+    var film: FilmBuffer? = nil
 
     /// `stampArt`: the art of image sources (stamp tips and tip grain); without it such a tip paints round, and the grain is left out.
     init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], effect: EffectPaintPixels? = nil, stampArt: StampArtLookup? = nil) {
@@ -466,6 +468,13 @@ final class DryStroke {
             fieldArg = field
         }
         coverage.accumulate(rect, buf, m.opacity, field: fieldArg)
+        if let film {
+            if brush.engine == "eraser" {
+                film.erase(rect, buf, m.opacity * brush.tip.opacity)
+            } else if let ir = brush.iridescence {
+                film.deposit(rect, buf, m.opacity * brush.tip.opacity, d.pressure, ir)
+            }
+        }
         rects.append(rect)
         dabCount += 1
     }
