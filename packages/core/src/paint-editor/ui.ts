@@ -11,7 +11,7 @@
 
 import type { MixerLoad } from '../paint/exchange';
 import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
-import type { ImpastoTool, PaintBrush, PaintBrushInput, WetMediumKind, WetTool } from './brushes';
+import type { ImpastoTool, PaintBrush, PaintBrushInput, WetMediumKind, WetTool, LivePatternKind } from './brushes';
 import { TILE, type RasterRect } from '../raster/surface';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -593,6 +593,22 @@ export const WET_TILT_SLIDERS: readonly SliderControl[] = [
 
 /** The speed slider (steps per second). */
 export const WET_SPEED_SLIDER: SliderControl = { path: 'speed', label: 'Speed', min: 15, max: 480, step: 15 };
+
+/** Labels of the Gray-Scott live pattern kinds. */
+export const LIVE_PATTERN_LABELS: Readonly<Record<LivePatternKind, string>> = {
+  spots: 'Spots',
+  stripes: 'Stripes',
+  coral: 'Coral',
+  maze: 'Maze',
+  worms: 'Worms',
+};
+
+/** The wet panel's sliders for a layer's live patterns. */
+export const LIVE_PATTERN_SLIDERS: readonly SliderControl[] = [
+  { path: 'scale', label: 'Scale', min: 0.25, max: 4, step: 0.05 },
+  { path: 'contrast', label: 'Contrast', min: 0, max: 2, step: 0.05 },
+  { path: 'relief', label: 'Relief', min: 0, max: 1, step: 0.01 },
+];
 
 /** The wet-engine choices a panel offers (Engine B, the WebGPU accelerator). */
 export const WET_GPU_OPTIONS: readonly { value: WetGpuMode; label: string }[] = [

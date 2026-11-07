@@ -123,6 +123,15 @@ import { isWetBrush } from './brushes';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { MAX_WET_LANES, type WetBackendInfo, type WetSnapshot } from '../paint/wet/world';
+import {
+  LIVE_PATTERN_KINDS,
+  LIVE_PATTERN_PRESETS,
+  normalizeLivePatterns,
+  type LivePatternKind,
+  type LivePatternStats,
+  type LivePatternsInput,
+  type LivePatternsSettings,
+} from '../paint/live-patterns';
 import { wetSupport } from '../paint/wet/wasm';
 import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
@@ -214,6 +223,14 @@ export interface PaintWetStateInfo {
   gpu: WetGpuMode;
   /** Engine B is shading the wet paint now. */
   gpuActive: boolean;
+}
+
+/** One layer's Gray-Scott live-pattern state and wet coverage. */
+export interface PaintLayerLivePatternsInfo extends LivePatternStats {
+  layerId: string;
+  wet: boolean;
+  wetCells: number;
+  wetBounds: RasterRect | null;
 }
 
 export interface PaintEditorState {
@@ -662,6 +679,16 @@ export class PaintEditorController {
           for (const [id, surface] of lights) if (findLayer(this.doc.layers, id)) light = withLayerLight(light, id, surface);
           // Wet light moving is not an undo step either.
           this.doc = { ...this.doc, ...(light ? { light } : {}) };
+        },
+        layerHeight: (id) => this.doc.thick?.[id]?.height ?? null,
+        updateHeights: (heights) => {
+          let thick = this.doc.thick;
+          for (const [id, height] of heights) {
+            if (!findLayer(this.doc.layers, id)) continue;
+            const prev = thick?.[id] ?? emptyThickChannels();
+            thick = { ...(thick ?? {}), [id]: { ...prev, height } };
+          }
+          if (thick !== this.doc.thick) this.doc = { ...this.doc, ...(thick ? { thick } : {}) };
         },
         changed: () => {},
       },
@@ -1143,7 +1170,7 @@ export class PaintEditorController {
     this.extensions = {};
     this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
     this.tracingVersion++;
-    if (this.wet.world) {
+    if (this.wet.world || this.wet.patterns.size) {
       this.beginWetOp();
       this.wet.reset();
     }
@@ -2842,7 +2869,18 @@ export class PaintEditorController {
         }
         const l = this.getLayer(s.layerId) as PaintPixelLayer;
         const ch = s.thickChannels();
-        const thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
+        let thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
+        if (wetStroke) {
+          const f = this.wet.patterns.get(l.id);
+          if (f?.enabled) {
+            this.wet.settingsOf(l.id).livePatterns = { ...f.settings };
+            if (f.settings.relief > 0 && f.tiles.size > 0) {
+              const prevCh = thick?.[l.id] ?? emptyThickChannels();
+              const nextHeight = f.applyReliefHeight(prevCh.height);
+              if (nextHeight !== prevCh.height) thick = { ...(thick ?? {}), [l.id]: { ...prevCh, height: nextHeight } };
+            }
+          }
+        }
         const sprayed = s.stickers();
         const stickers = sprayed ? { ...(this.doc.stickers ?? {}), [l.id]: [...(this.doc.stickers?.[l.id] ?? []), ...sprayed] } : this.doc.stickers;
         // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
@@ -2974,7 +3012,18 @@ export class PaintEditorController {
         this.paintedBounds.set(stroke, s.result?.bounds ?? null);
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
         const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
-        const ch = s.thickChannels();
+        let ch = s.thickChannels();
+        if (s.init.wet) {
+          const f = this.wet.patterns.get(l.id);
+          if (f?.enabled) {
+            this.wet.settingsOf(l.id).livePatterns = { ...f.settings };
+            if (f.settings.relief > 0 && f.tiles.size > 0) {
+              const prevCh = ch ?? out.thick?.[l.id] ?? emptyThickChannels();
+              const nextHeight = f.applyReliefHeight(prevCh.height);
+              if (nextHeight !== prevCh.height) ch = { ...prevCh, height: nextHeight };
+            }
+          }
+        }
         const sprayed = s.stickers();
         const lit = s.lightChannel() ?? (s.init.wet && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null);
         out = withLiveStroke({
@@ -3512,6 +3561,180 @@ export class PaintEditorController {
     return this.wet.waterOverlay(rect);
   }
 
+  private layerLivePatternsInfo(layerId: string): PaintLayerLivePatternsInfo {
+    const info = this.wet.info(layerId);
+    const stats = this.wet.livePatternStats(layerId);
+    return {
+      layerId,
+      wet: info.wet,
+      wetCells: info.wetCells,
+      wetBounds: info.wetBounds,
+      ...stats,
+    };
+  }
+
+  private checkLivePatternsInput(input: LivePatternsInput | undefined): LivePatternsInput {
+    if (!input) return {};
+    const out: LivePatternsInput = {};
+    if (input.pattern !== undefined) {
+      if (!(LIVE_PATTERN_KINDS as readonly string[]).includes(input.pattern)) {
+        throw new PaintEditorError(`pattern must be one of ${LIVE_PATTERN_KINDS.join(', ')}, not ${JSON.stringify(input.pattern)}.`);
+      }
+      out.pattern = input.pattern;
+    }
+    if (input.feed !== undefined) {
+      if (!(Number.isFinite(input.feed) && input.feed >= 0.005 && input.feed <= 0.1)) {
+        throw new PaintEditorError(`feed ${input.feed} is out of range; use 0.005..0.1.`);
+      }
+      out.feed = input.feed;
+    }
+    if (input.kill !== undefined) {
+      if (!(Number.isFinite(input.kill) && input.kill >= 0.02 && input.kill <= 0.08)) {
+        throw new PaintEditorError(`kill ${input.kill} is out of range; use 0.02..0.08.`);
+      }
+      out.kill = input.kill;
+    }
+    if (input.scale !== undefined) {
+      if (!(Number.isFinite(input.scale) && input.scale >= 0.25 && input.scale <= 4)) {
+        throw new PaintEditorError(`scale ${input.scale} is out of range; use 0.25..4.`);
+      }
+      out.scale = input.scale;
+    }
+    if (input.contrast !== undefined) {
+      if (!(Number.isFinite(input.contrast) && input.contrast >= 0 && input.contrast <= 2)) {
+        throw new PaintEditorError(`contrast ${input.contrast} is out of range; use 0..2.`);
+      }
+      out.contrast = input.contrast;
+    }
+    if (input.secondColor !== undefined) {
+      out.secondColor = input.secondColor === null ? null : parseColor(input.secondColor, 'secondColor');
+    }
+    if (input.relief !== undefined) {
+      if (!(Number.isFinite(input.relief) && input.relief >= 0 && input.relief <= 1)) {
+        throw new PaintEditorError(`relief ${input.relief} is out of range; use 0..1.`);
+      }
+      out.relief = input.relief;
+    }
+    return out;
+  }
+
+  /**
+   * Reads a layer's Gray-Scott reaction-diffusion live patterns (`layerId`, default the active
+   * layer), plus all layers with wet paint or live patterns and the built-in Pearson presets.
+   */
+  getLivePatterns(layerId?: string): PaintLayerLivePatternsInfo & {
+    layers: PaintLayerLivePatternsInfo[];
+    presets: Readonly<Record<LivePatternKind, { feed: number; kill: number }>>;
+    brushPresets: readonly string[];
+  } {
+    const l = this.wetLayer(layerId, 'read the live patterns of');
+    const primary = this.layerLivePatternsInfo(l.id);
+    const ids = new Set<string>([l.id, ...this.wet.wetLayerIds()]);
+    for (const [id, f] of this.wet.patterns) {
+      if ((f.enabled || f.tiles.size > 0) && findLayer(this.doc.layers, id)) ids.add(id);
+    }
+    for (const [id, s] of this.wet.settings) {
+      if (s.livePatterns && findLayer(this.doc.layers, id)) ids.add(id);
+    }
+    const layers = [...ids].map((id) => (id === l.id ? primary : this.layerLivePatternsInfo(id)));
+    return {
+      ...primary,
+      layers,
+      presets: LIVE_PATTERN_PRESETS,
+      brushPresets: ['turing-wash', 'coral-ink'],
+    };
+  }
+
+  /**
+   * Configures a layer's Gray-Scott reaction-diffusion live patterns (or clears them with
+   * `enabled: false`). One undo step.
+   */
+  setLivePatterns(
+    layerId: string | undefined,
+    update: LivePatternsInput & { enabled?: boolean }
+  ): PaintLayerLivePatternsInfo {
+    this.requireIdle('changing live patterns');
+    this.requireWetIdle('changing live patterns');
+    const l = this.wetLayer(layerId, 'set the live patterns of');
+    if (isLayerLocked(l, 'pixels')) throw new PaintEditorError(`Layer "${l.name}" has its pixels locked; unlock it first.`);
+    if (update.enabled !== undefined && typeof update.enabled !== 'boolean') {
+      throw new PaintEditorError('enabled must be true or false.');
+    }
+    const checked = this.checkLivePatternsInput(update);
+    const before = this.doc;
+    this.beginWetOp();
+    const next = this.wet.setLivePatterns(l.id, update.enabled === false ? null : checked);
+    this.logWet({ kind: 'live-patterns', layerId: l.id, data: next });
+    this.commit('Live patterns', this.withWetEvents(this.doc), before);
+    return this.layerLivePatternsInfo(l.id);
+  }
+
+  /**
+   * Seeds Gray-Scott reaction-diffusion activator (`V`) discs into a layer's live-pattern field so
+   * patterns grow where the layer holds wet water and freeze where it dries. One undo step.
+   */
+  seedLivePatterns(options: {
+    layerId?: string;
+    points: ReadonlyArray<{ x: number; y: number; strength?: number }>;
+    radius?: number;
+    seed?: number;
+    pattern?: LivePatternKind;
+    feed?: number;
+    kill?: number;
+    scale?: number;
+    contrast?: number;
+    secondColor?: string | null;
+    relief?: number;
+  }): PaintLayerLivePatternsInfo & { seededCells: number } {
+    this.requireIdle('seeding live patterns');
+    this.requireWetIdle('seeding live patterns');
+    const l = this.wetLayer(options.layerId, 'seed live patterns on');
+    if (isLayerLocked(l, 'pixels')) throw new PaintEditorError(`Layer "${l.name}" has its pixels locked; unlock it first.`);
+    if (!Array.isArray(options.points) || !options.points.length) {
+      throw new PaintEditorError('points is empty; give at least one {x, y} in document pixels.');
+    }
+    const { width, height } = this.doc.canvas;
+    const points = options.points.map((p, i) => {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+        throw new PaintEditorError(`points[${i}] needs finite x and y in document pixels.`);
+      }
+      if (p.x < 0 || p.y < 0 || p.x >= width || p.y >= height) {
+        throw new PaintEditorError(`points[${i}] (${p.x}, ${p.y}) is outside the ${width}×${height} canvas.`);
+      }
+      if (p.strength !== undefined && !(Number.isFinite(p.strength) && p.strength > 0 && p.strength <= 1)) {
+        throw new PaintEditorError(`points[${i}].strength ${p.strength} is out of range; use above 0 up to 1.`);
+      }
+      return { x: p.x, y: p.y, ...(p.strength !== undefined ? { strength: p.strength } : {}) };
+    });
+    const radius = options.radius ?? 16;
+    if (!(Number.isFinite(radius) && radius >= 1 && radius <= 512)) {
+      throw new PaintEditorError(`radius ${radius} is out of range; use 1..512 px.`);
+    }
+    const seed = options.seed ?? mix32((this.seedCounter++ * 0x9e3779b1) >>> 0) & 0x7fffffff;
+    if (!Number.isInteger(seed) || seed < 0) {
+      throw new PaintEditorError(`seed ${seed} must be a whole number of 0 or more.`);
+    }
+    const hasSettings =
+      options.pattern !== undefined ||
+      options.feed !== undefined ||
+      options.kill !== undefined ||
+      options.scale !== undefined ||
+      options.contrast !== undefined ||
+      options.secondColor !== undefined ||
+      options.relief !== undefined;
+    const settings = hasSettings ? this.checkLivePatternsInput(options) : undefined;
+    const before = this.doc;
+    this.beginWetOp();
+    const { seededCells } = this.wet.seedLivePatterns(l.id, points, radius, seed, settings);
+    this.logWet({
+      kind: 'seed-live-patterns',
+      layerId: l.id,
+      data: { points, radius, seed, ...(settings ? { settings } : {}) },
+    });
+    this.commit('Seed live patterns', this.withWetEvents(this.doc), before);
+    return { ...this.layerLivePatternsInfo(l.id), seededCells };
+  }
+
   // --- Rendering -----------------------------------------------------------------
 
   private sources() {
@@ -3701,7 +3924,14 @@ export class PaintEditorController {
   /** Wet settings saved with the document (`null` when they are all defaults). */
   private wetJSON(): unknown {
     const layers: Record<string, WetLayerSettings> = {};
-    for (const [id, set] of this.wet.settings) if (findLayer(this.doc.layers, id)) layers[id] = { params: { ...set.params }, flow: { ...set.flow } };
+    for (const [id, set] of this.wet.settings) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      layers[id] = {
+        params: { ...set.params },
+        flow: { ...set.flow },
+        ...(set.livePatterns ? { livePatterns: { ...set.livePatterns } } : {}),
+      };
+    }
     const flat = this.wet.tilt.angle === 0;
     if (!Object.keys(layers).length && flat) return undefined;
     return { tilt: { ...this.wet.tilt }, layers };
@@ -3718,8 +3948,14 @@ export class PaintEditorController {
           problems.push(`wet.layers["${id}"] is not wet settings; skipped.`);
           continue;
         }
-        const x = v as { params?: Partial<WetParams>; flow?: Partial<WetFlowSpec> };
-        this.wet.settings.set(id, { params: normalizeWetParams(x.params ?? {}), flow: normalizeFlow(x.flow ?? {}) });
+        const x = v as { params?: Partial<WetParams>; flow?: Partial<WetFlowSpec>; livePatterns?: LivePatternsInput | null };
+        const livePatterns = x.livePatterns ? normalizeLivePatterns(x.livePatterns) : null;
+        this.wet.settings.set(id, {
+          params: normalizeWetParams(x.params ?? {}),
+          flow: normalizeFlow(x.flow ?? {}),
+          ...(livePatterns ? { livePatterns } : {}),
+        });
+        if (livePatterns) this.wet.patternFieldOf(id).configure(livePatterns);
       }
     }
   }
@@ -5301,11 +5537,14 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
   }
   if (doc.wetEvents) {
     out.wetEvents = doc.wetEvents.map((e) => {
-      const d = e.data as { x?: number; rect?: RasterRect; center?: { x: number; y: number } } | undefined;
+      const d = e.data as { x?: number; rect?: RasterRect; center?: { x: number; y: number }; points?: Array<{ x: number; y: number; strength?: number }> } | undefined;
       if (!d) return e;
       if (e.kind === 'dry' && typeof d.x === 'number') return { ...e, data: moveRect(d as RasterRect, dx, dy) };
       if (e.kind === 'wet-paper' && d.rect) return { ...e, data: { ...d, rect: moveRect(d.rect, dx, dy) } };
       if (e.kind === 'flow' && d.center) return { ...e, data: { ...d, center: movePoint(d.center, dx, dy) } };
+      if (e.kind === 'seed-live-patterns' && Array.isArray(d.points)) {
+        return { ...e, data: { ...d, points: d.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) } };
+      }
       return e;
     });
   }

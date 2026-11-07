@@ -30,6 +30,14 @@
  */
 
 import { TILE, TiledSurface, finishTile, tileKey, type RasterRect, type Tile } from '../../raster/surface';
+import {
+  LivePatternField,
+  moveLivePatternSnapshot,
+  type LivePatternFieldSnapshot,
+  type LivePatternStats,
+  type LivePatternsInput,
+  type LivePatternsSettings,
+} from '../live-patterns';
 import { filmPixel, pixelPigment, shadeLightTile, shadeTile } from './film';
 import { stepSlotTs } from './kernel';
 import {
@@ -125,6 +133,8 @@ export interface WetLaneOptions {
   flowStrength?: number;
   /** The layer's light paint under the wet paint (one channel; default none). */
   light?: TiledSurface | null;
+  /** Shared per-layer reaction-diffusion field outside the wet kernel. */
+  livePatterns?: LivePatternField;
 }
 
 interface Lane {
@@ -152,13 +162,45 @@ interface Lane {
   lightShaded: Map<number, { stamp: number; tile: Tile | null }>;
   lightDisplay: TiledSurface | null;
   lightKey: string;
+  /** Half-resolution Gray-Scott reaction-diffusion field outside the wet kernel. */
+  livePatterns: LivePatternField;
 }
 
 const noLight = () => new TiledSurface(1, new Map(), 0);
 
-function newLane(id: string, index: number, params: WetParams, flow: WetFlowField | null, flowStrength: number, base: TiledSurface, light: TiledSurface | null | undefined): Lane {
+function newLane(
+  id: string,
+  index: number,
+  params: WetParams,
+  flow: WetFlowField | null,
+  flowStrength: number,
+  base: TiledSurface,
+  light: TiledSurface | null | undefined,
+  width: number,
+  height: number,
+  livePatterns?: LivePatternField
+): Lane {
   const l = light ?? noLight();
-  return { id, index, params, flow, flowStrength, base, shaded: new Map(), urgent: new Set(), stamp: 1, display: null, shadedVersion: 0, displayKey: '', light: l, lit: l.tiles.size > 0, lightShaded: new Map(), lightDisplay: null, lightKey: '' };
+  return {
+    id,
+    index,
+    params,
+    flow,
+    flowStrength,
+    base,
+    shaded: new Map(),
+    urgent: new Set(),
+    stamp: 1,
+    display: null,
+    shadedVersion: 0,
+    displayKey: '',
+    light: l,
+    lit: l.tiles.size > 0,
+    lightShaded: new Map(),
+    lightDisplay: null,
+    lightKey: '',
+    livePatterns: livePatterns ?? new LivePatternField(width, height),
+  };
 }
 
 /** Totals for one wet layer. */
@@ -179,9 +221,11 @@ export interface WetLaneStats {
 export interface WetSnapshot {
   readonly clock: number;
   readonly tilt: WetTilt;
-  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean }>;
+  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean; livePatterns?: LivePatternFieldSnapshot }>;
   /** Per active key: the current set and the deposit planes; and its last flags. */
   readonly slots: ReadonlyMap<number, { planes: Float32Array; last: number }>;
+  /** Per-layer live-pattern snapshots (including layers whose water has already dried). */
+  readonly patterns?: ReadonlyMap<string, LivePatternFieldSnapshot>;
   /** Bytes held. */
   readonly bytes: number;
 }
@@ -367,11 +411,26 @@ export class WetWorld {
       if (options.params) this.setParams(id, options.params);
       if (options.base) this.setBase(id, options.base);
       if (options.light) this.setLight(id, options.light);
+      if (options.livePatterns && existing.livePatterns !== options.livePatterns) {
+        existing.livePatterns = options.livePatterns;
+        this.touchAll(existing);
+      }
       return;
     }
     const index = this.lanes.indexOf(null);
     if (index < 0) throw new WetWorldError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one (dry_paint) first.`);
-    this.lanes[index] = newLane(id, index, normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS), options.flow ?? null, options.flow ? (options.flowStrength ?? 1) : 0, options.base ?? new TiledSurface(4, new Map(), 0), options.light);
+    this.lanes[index] = newLane(
+      id,
+      index,
+      normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS),
+      options.flow ?? null,
+      options.flow ? (options.flowStrength ?? 1) : 0,
+      options.base ?? new TiledSurface(4, new Map(), 0),
+      options.light,
+      this.width,
+      this.height,
+      options.livePatterns
+    );
     this.pack(this.lanes[index]!);
   }
 
@@ -393,6 +452,64 @@ export class WetWorld {
     lane.params = normalizeWetParams(params, lane.params);
     this.pack(lane);
     return { ...lane.params };
+  }
+
+  getLivePatterns(id: string): LivePatternsSettings {
+    return { ...this.laneOf(id).livePatterns.settings };
+  }
+
+  hasLivePatterns(id: string): boolean {
+    const lane = this.laneOf(id);
+    return lane.livePatterns.enabled;
+  }
+
+  livePatternField(id: string): LivePatternField {
+    return this.laneOf(id).livePatterns;
+  }
+
+  setLivePatterns(id: string, settings: LivePatternsInput): LivePatternsSettings {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    const next = lane.livePatterns.configure(settings);
+    this.touchAll(lane);
+    return next;
+  }
+
+  seedLivePatterns(id: string, cx: number, cy: number, radius: number, seed = 1, strength = 1, settings?: LivePatternsInput): number {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (settings) lane.livePatterns.configure(settings);
+    const count = lane.livePatterns.seedDisc(cx, cy, radius, seed, strength);
+    if (count > 0) this.touchAll(lane);
+    return count;
+  }
+
+  livePatternStats(id: string): LivePatternStats {
+    const lane = this.laneOf(id);
+    return lane.livePatterns.stats((tx, ty, lx, ly) => this.isPatternCellWet(lane, tx, ty, lx, ly));
+  }
+
+  private isPatternCellWet(lane: Lane, tx: number, ty: number, lx: number, ly: number): boolean {
+    const { tilesX, tilesY, perLane } = this.layout;
+    if (tx < 0 || ty < 0 || tx >= tilesX || ty >= tilesY) return false;
+    const slot = this.slotOf(lane.index * perLane + ty * tilesX + tx);
+    if (slot < 0) return false;
+    const cur = this.slotBase(slot) + this.parity * SET_PLANES * PLANE;
+    const x0 = lx * 2 + 1;
+    const y0 = ly * 2 + 1;
+    const c00 = y0 * S + x0;
+    const c10 = c00 + 1;
+    const c01 = c00 + S;
+    const c11 = c01 + 1;
+    const rhoBase = cur + P_RHO * PLANE;
+    const swBase = cur + P_SW * PLANE;
+    const f = this.f32;
+    return (
+      f[rhoBase + c00] + f[swBase + c00] > DRY_EPS ||
+      f[rhoBase + c10] + f[swBase + c10] > DRY_EPS ||
+      f[rhoBase + c01] + f[swBase + c01] > DRY_EPS ||
+      f[rhoBase + c11] + f[swBase + c11] > DRY_EPS
+    );
   }
 
   getTilt(): WetTilt {
@@ -698,6 +815,14 @@ export class WetWorld {
     const flagsBase = l.flags >> 2;
     const lastBase = l.last >> 2;
     const { tilesX, tilesY, perLane } = l;
+    for (const lane of this.lanes) {
+      if (!lane || !lane.livePatterns.enabled || lane.livePatterns.tiles.size === 0) continue;
+      lane.livePatterns.step(
+        n,
+        (tx, ty, lx, ly) => this.isPatternCellWet(lane, tx, ty, lx, ly),
+        (tx, ty) => this.slotOf(lane.index * perLane + ty * tilesX + tx) >= 0
+      );
+    }
     const wakeups: number[] = [];
     for (const key of this.active) {
       const fl = this.u32[flagsBase + key];
@@ -1240,6 +1365,7 @@ export class WetWorld {
     }
     const src = lane.base.tiles.get(tk)?.data ?? null;
     const out = this.shadeSlot(key, src, all ? 'bake-all' : 'bake');
+    if (lane.livePatterns.enabled) lane.livePatterns.markBaked(tx, ty);
     if (!out) return lightChanged;
     const tiles = new Map(lane.base.tiles);
     const t = finishTile(out, 4, 0);
@@ -1275,8 +1401,9 @@ export class WetWorld {
     const out = src ? new Uint8ClampedArray(src) : new Uint8ClampedArray(TILE * TILE * 4);
     const w = Math.min(WET_TILE, this.width - tx * WET_TILE);
     const h = Math.min(WET_TILE, this.height - ty * WET_TILE);
-    const lit = this.lanes[this.laneIndexOf(key)]!.lit;
-    const changed = shadeTile(
+    const lane = this.lanes[this.laneIndexOf(key)]!;
+    const lit = lane.lit;
+    let changed = shadeTile(
       this.f32,
       PLANE,
       S,
@@ -1293,6 +1420,9 @@ export class WetWorld {
       lit ? b + P_DL * PLANE : -1,
       lit && mode !== 'bake' ? cur + P_L * PLANE : -1
     );
+    if (lane.livePatterns.enabled && lane.livePatterns.tiles.size > 0) {
+      changed = lane.livePatterns.shadeTile(tx, ty, out, w, h) || changed;
+    }
     return changed ? out : null;
   }
 
@@ -1747,7 +1877,11 @@ export class WetWorld {
       slots.set(key, { planes, last: this.u32[(this.layout.last >> 2) + key] });
       bytes += planes.byteLength;
     }
-    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => ({ id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit }));
+    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => {
+      const lp = l.livePatterns.snapshot();
+      bytes += lp.bytes;
+      return { id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, livePatterns: lp };
+    });
     return { clock: this.clock, tilt: { ...this.tilt }, lanes, slots, bytes };
   }
 
@@ -1758,8 +1892,9 @@ export class WetWorld {
     this.lanes.fill(null);
     this.tilt = { ...snap.tilt };
     for (const l of snap.lanes) {
-      const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light);
+      const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light, this.width, this.height);
       lane.lit = lane.lit || Boolean(l.lit);
+      if (l.livePatterns) lane.livePatterns.restore(l.livePatterns);
       this.lanes[l.index] = lane;
       this.pack(this.lanes[l.index]!);
     }
@@ -1844,9 +1979,19 @@ export function moveWetSnapshot(
   }
   const lanes = snap.lanes.map((l) => {
     const moved = lane(l);
-    return { ...l, base: moved.base ?? l.base, light: moved.light ?? l.light, flow: moved.flow === undefined ? l.flow : moved.flow };
+    const lp = l.livePatterns ? moveLivePatternSnapshot(l.livePatterns, to, tx0, ty0) : undefined;
+    if (lp) bytes += lp.bytes;
+    return { ...l, base: moved.base ?? l.base, light: moved.light ?? l.light, flow: moved.flow === undefined ? l.flow : moved.flow, ...(lp ? { livePatterns: lp } : {}) };
   });
-  return { clock: snap.clock, tilt: { ...snap.tilt }, lanes, slots, bytes };
+  let patterns: Map<string, LivePatternFieldSnapshot> | undefined;
+  if (snap.patterns) {
+    patterns = new Map();
+    for (const [id, p] of snap.patterns) {
+      const mp = moveLivePatternSnapshot(p, to, tx0, ty0);
+      patterns.set(id, mp);
+    }
+  }
+  return { clock: snap.clock, tilt: { ...snap.tilt }, lanes, slots, ...(patterns ? { patterns } : {}), bytes };
 }
 
 function unionRect(a: RasterRect | null, b: RasterRect): RasterRect {

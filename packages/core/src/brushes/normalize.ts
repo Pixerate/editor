@@ -28,17 +28,19 @@ function read(value: unknown, schema: JsonSchema, path: string, problems: string
     problems.push(`${path} must be ${JSON.stringify(schema.const)}; dropped.`);
     return undefined;
   }
-  switch (schema.type) {
+  if (value === null && Array.isArray(schema.type) && schema.type.includes('null')) return null;
+  const schemaType = Array.isArray(schema.type) ? schema.type[0] : schema.type;
+  switch (schemaType) {
     case 'number':
     case 'integer': {
       if (typeof value !== 'number' || !Number.isFinite(value)) {
         problems.push(`${path} must be a number; dropped.`);
         return undefined;
       }
-      let n = schema.type === 'integer' ? Math.round(value) : value;
+      let n = schemaType === 'integer' ? Math.round(value) : value;
       if (schema.minimum !== undefined && n < schema.minimum) n = schema.minimum;
       if (schema.maximum !== undefined && n > schema.maximum) n = schema.maximum;
-      if (n !== value) problems.push(`${path} ${value} is out of range (${schema.minimum}..${schema.maximum}${schema.type === 'integer' ? ', whole' : ''}); set to ${n}.`);
+      if (n !== value) problems.push(`${path} ${value} is out of range (${schema.minimum}..${schema.maximum}${schemaType === 'integer' ? ', whole' : ''}); set to ${n}.`);
       return n;
     }
     case 'boolean':
@@ -51,7 +53,8 @@ function read(value: unknown, schema: JsonSchema, path: string, problems: string
         problems.push(`${path} ${JSON.stringify(value)} is not valid${schema.enum ? `; use one of ${schema.enum.join(', ')}` : ''}; dropped.`);
         return undefined;
       }
-      return schema.maxLength !== undefined ? value.slice(0, schema.maxLength) : value;
+      const s = schema.pattern === '^#[0-9a-fA-F]{6}$' ? value.toLowerCase() : value;
+      return schema.maxLength !== undefined ? s.slice(0, schema.maxLength) : s;
     }
     case 'array': {
       if (!Array.isArray(value)) {
@@ -134,8 +137,8 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   const brush: Brush = { id: raw.id, name, ...out, kind, ...(tool ? { tool } : {}), tip: out.tip ?? { shape: 'round' } } as Brush;
   // Keep the key order of a hand-written brush: identity, what it is, then the facets.
   const ordered = (): Brush => {
-    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, colour } = brush;
-    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, colour };
+    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, livePatterns, colour } = brush;
+    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, livePatterns, colour };
     return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as unknown as Brush;
   };
 
@@ -279,6 +282,10 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       drop('behaviour.exchange', 'particle, object and bristle marks do not pick paint up');
       delete b.exchange;
     }
+  }
+  if (brush.livePatterns && (kind !== 'mark' || brush.behaviour?.surface !== 'wet' || brush.marks?.kind === 'particles' || brush.marks?.kind === 'objects' || brush.tip.shape === 'bristle')) {
+    drop('livePatterns', 'only wet paint brushes grow live patterns (set behaviour.surface to wet)');
+    delete brush.livePatterns;
   }
   return ordered();
 }

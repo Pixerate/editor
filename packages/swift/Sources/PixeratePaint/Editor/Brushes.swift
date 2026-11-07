@@ -349,6 +349,8 @@ public struct PaintBrush: Equatable, Sendable {
     public var spray: SpraySettings?
     /// Dab engines: texture inside the tip (nil: none).
     public var tipGrain: TipGrainSettings? = nil
+    /// Wet engine: Gray-Scott reaction-diffusion patterns that grow in wet paint (nil: none).
+    public var livePatterns: LivePatternsSettings? = nil
     public var paint: PaintGradientSource?
     public var builtin: Bool?
 
@@ -369,6 +371,7 @@ public struct PaintBrush: Equatable, Sendable {
             "spray": spray?.json ?? .null,
         ]
         if let tipGrain { o["tipGrain"] = tipGrain.json }
+        if let livePatterns { o["livePatterns"] = livePatterns.json }
         o["paint"] = paint?.json ?? .null
         if withBuiltin, builtin == true { o["builtin"] = true }
         return o
@@ -454,6 +457,13 @@ private func readSpray(_ raw: JSONValue?, _ base: SpraySettings?) -> SpraySettin
     return SpraySettings(density: unitValue(r["density"], b.density), size: rangeValue(r["size"], 0.02, 1, b.size))
 }
 
+private func readLivePatterns(_ raw: JSONValue?, _ base: LivePatternsSettings?) -> LivePatternsSettings? {
+    guard let raw else { return base }
+    if raw == .null { return nil }
+    guard let r = raw.objectValue else { return base }
+    return normalizeLivePatterns(r, base ?? DEFAULT_LIVE_PATTERNS)
+}
+
 let BASE_BRUSH = PaintBrush(
     id: "round", name: "Round", category: "custom", engine: "dab", tip: DEFAULT_BRUSH, grain: 0, pressureSmoothing: 0, rotation: "fixed",
     dynamics: DEFAULT_DYNAMICS, mixer: DEFAULT_MIXER, loadsColor: true, behavior: DEFAULT_BEHAVIOR, blender: DEFAULT_BLENDER, smudge: DEFAULT_SMUDGE,
@@ -535,6 +545,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
         tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),
+        livePatterns: readLivePatterns(raw["livePatterns"], b.livePatterns),
         paint: paint,
         builtin: raw["builtin"]?.boolValue == true ? true : nil
     )

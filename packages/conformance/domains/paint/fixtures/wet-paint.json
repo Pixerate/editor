@@ -179,6 +179,7 @@
                 "strength": 0.4
               },
               "layerId": "@1",
+              "livePatterns": null,
               "params": {
                 "bleed": 0.3,
                 "bloom": 0.4,
@@ -233,6 +234,7 @@
                 "strength": 0.4
               },
               "layerId": "@1",
+              "livePatterns": null,
               "params": {
                 "bleed": 0.3,
                 "bloom": 0.4,

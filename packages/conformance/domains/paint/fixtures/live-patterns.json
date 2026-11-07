@@ -1,0 +1,826 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "live-patterns",
+  "description": "Gray-Scott reaction-diffusion patterns that grow inside wet paint and freeze when dried.",
+  "setup": {
+    "width": 64,
+    "height": 48
+  },
+  "steps": [
+    {
+      "tool": "get_live_patterns",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeTiles": 0,
+          "bounds": null,
+          "brushPresets": [
+            "turing-wash",
+            "coral-ink"
+          ],
+          "enabled": false,
+          "layerId": "@1",
+          "layers": [
+            {
+              "activeTiles": 0,
+              "bounds": null,
+              "enabled": false,
+              "layerId": "@1",
+              "maxV": 0,
+              "meanV": 0,
+              "patternCells": 0,
+              "settings": {
+                "contrast": 1,
+                "feed": 0.035,
+                "kill": 0.065,
+                "pattern": "spots",
+                "relief": 0,
+                "scale": 1,
+                "secondColor": null
+              },
+              "wet": false,
+              "wetBounds": null,
+              "wetCells": 0,
+              "wetPatternCells": 0
+            }
+          ],
+          "maxV": 0,
+          "meanV": 0,
+          "patternCells": 0,
+          "presets": {
+            "coral": {
+              "description": "Branching coral dendrites.",
+              "feed": 0.0545,
+              "kill": 0.062,
+              "kind": "coral",
+              "label": "Coral"
+            },
+            "maze": {
+              "description": "Winding interconnected maze channels.",
+              "feed": 0.029,
+              "kill": 0.057,
+              "kind": "maze",
+              "label": "Maze"
+            },
+            "spots": {
+              "description": "Dividing Turing spots (mitosis).",
+              "feed": 0.035,
+              "kill": 0.065,
+              "kind": "spots",
+              "label": "Spots"
+            },
+            "stripes": {
+              "description": "Labyrinthine Turing stripes.",
+              "feed": 0.042,
+              "kill": 0.06,
+              "kind": "stripes",
+              "label": "Stripes"
+            },
+            "worms": {
+              "description": "Wiggling vermicular tracks.",
+              "feed": 0.058,
+              "kill": 0.065,
+              "kind": "worms",
+              "label": "Worms"
+            }
+          },
+          "settings": {
+            "contrast": 1,
+            "feed": 0.035,
+            "kill": 0.065,
+            "pattern": "spots",
+            "relief": 0,
+            "scale": 1,
+            "secondColor": null
+          },
+          "wet": false,
+          "wetBounds": null,
+          "wetCells": 0,
+          "wetPatternCells": 0
+        }
+      }
+    },
+    {
+      "tool": "set_live_patterns",
+      "arguments": {
+        "pattern": "coral",
+        "scale": 1.2,
+        "contrast": 1.3,
+        "secondColor": "#0f766e",
+        "relief": 0.4
+      },
+      "expect": {
+        "result": {
+          "activeTiles": 0,
+          "bounds": null,
+          "enabled": true,
+          "layerId": "@1",
+          "maxV": 0,
+          "meanV": 0,
+          "patternCells": 0,
+          "settings": {
+            "contrast": 1.3,
+            "feed": 0.0545,
+            "kill": 0.062,
+            "pattern": "coral",
+            "relief": 0.4,
+            "scale": 1.2,
+            "secondColor": "#0f766e"
+          },
+          "stillWet": false,
+          "wet": false,
+          "wetBounds": null,
+          "wetCells": 0,
+          "wetPatternCells": 0
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "turing-wash",
+        "brush": {
+          "livePatterns": {
+            "relief": 0.5,
+            "secondColor": "#1d4ed8"
+          }
+        },
+        "color": "#38bdf8",
+        "seed": 7,
+        "points": [
+          {
+            "x": 12,
+            "y": 24,
+            "pressure": 0.8
+          },
+          {
+            "x": 52,
+            "y": 24,
+            "pressure": 0.8
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 48,
+            "width": 85,
+            "x": -12,
+            "y": 0
+          },
+          "dabs": 11,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#38bdf8"
+          },
+          "strokeId": "s1",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "seed_live_patterns",
+      "arguments": {
+        "points": [
+          {
+            "x": 32,
+            "y": 24,
+            "strength": 0.9
+          }
+        ],
+        "radius": 10,
+        "seed": 11
+      },
+      "expect": {
+        "result": {
+          "activeTiles": 1,
+          "bounds": {
+            "height": 24,
+            "width": 62,
+            "x": 0,
+            "y": 12
+          },
+          "enabled": true,
+          "layerId": "@1",
+          "maxV": 0.4903,
+          "meanV": 0.4,
+          "patternCells": 271,
+          "seededCells": 27,
+          "settings": {
+            "contrast": 1.2,
+            "feed": 0.035,
+            "kill": 0.065,
+            "pattern": "spots",
+            "relief": 0.5,
+            "scale": 1,
+            "secondColor": "#1d4ed8"
+          },
+          "stillWet": true,
+          "wet": true,
+          "wetBounds": {
+            "height": 40,
+            "width": 64,
+            "x": 0,
+            "y": 4
+          },
+          "wetCells": 2434,
+          "wetPatternCells": 271
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "steps": 16
+      },
+      "expect": {
+        "result": {
+          "clock": 16,
+          "layers": [
+            {
+              "activeTiles": 1,
+              "flow": {
+                "angle": 0,
+                "clockwise": true,
+                "kind": "none",
+                "scale": 120,
+                "seed": 1,
+                "strength": 0.5
+              },
+              "layerId": "@1",
+              "livePatterns": {
+                "contrast": 1.2,
+                "feed": 0.035,
+                "kill": 0.065,
+                "pattern": "spots",
+                "relief": 0.5,
+                "scale": 1,
+                "secondColor": "#1d4ed8"
+              },
+              "params": {
+                "bleed": 0.3,
+                "bloom": 0.4,
+                "edgeDarkening": 0.5,
+                "evaporation": 0.45,
+                "fixture": 0.2,
+                "granulation": 0.4,
+                "pickup": 0.2,
+                "pigmentWeight": 0.3,
+                "viscosity": 0.3
+              },
+              "wet": true,
+              "wetBounds": {
+                "height": 40,
+                "width": 64,
+                "x": 0,
+                "y": 4
+              },
+              "wetCells": 2420
+            }
+          ],
+          "steps": 16,
+          "stillWet": true
+        }
+      }
+    },
+    {
+      "tool": "get_live_patterns",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeTiles": 1,
+          "bounds": {
+            "height": 32,
+            "width": 64,
+            "x": 0,
+            "y": 8
+          },
+          "brushPresets": [
+            "turing-wash",
+            "coral-ink"
+          ],
+          "enabled": true,
+          "layerId": "@1",
+          "layers": [
+            {
+              "activeTiles": 1,
+              "bounds": {
+                "height": 32,
+                "width": 64,
+                "x": 0,
+                "y": 8
+              },
+              "enabled": true,
+              "layerId": "@1",
+              "maxV": 0.4608,
+              "meanV": 0.1047,
+              "patternCells": 426,
+              "settings": {
+                "contrast": 1.2,
+                "feed": 0.035,
+                "kill": 0.065,
+                "pattern": "spots",
+                "relief": 0.5,
+                "scale": 1,
+                "secondColor": "#1d4ed8"
+              },
+              "wet": true,
+              "wetBounds": {
+                "height": 40,
+                "width": 64,
+                "x": 0,
+                "y": 4
+              },
+              "wetCells": 2420,
+              "wetPatternCells": 426
+            }
+          ],
+          "maxV": 0.4608,
+          "meanV": 0.1047,
+          "patternCells": 426,
+          "presets": {
+            "coral": {
+              "description": "Branching coral dendrites.",
+              "feed": 0.0545,
+              "kill": 0.062,
+              "kind": "coral",
+              "label": "Coral"
+            },
+            "maze": {
+              "description": "Winding interconnected maze channels.",
+              "feed": 0.029,
+              "kill": 0.057,
+              "kind": "maze",
+              "label": "Maze"
+            },
+            "spots": {
+              "description": "Dividing Turing spots (mitosis).",
+              "feed": 0.035,
+              "kill": 0.065,
+              "kind": "spots",
+              "label": "Spots"
+            },
+            "stripes": {
+              "description": "Labyrinthine Turing stripes.",
+              "feed": 0.042,
+              "kill": 0.06,
+              "kind": "stripes",
+              "label": "Stripes"
+            },
+            "worms": {
+              "description": "Wiggling vermicular tracks.",
+              "feed": 0.058,
+              "kill": 0.065,
+              "kind": "worms",
+              "label": "Worms"
+            }
+          },
+          "settings": {
+            "contrast": 1.2,
+            "feed": 0.035,
+            "kill": 0.065,
+            "pattern": "spots",
+            "relief": 0.5,
+            "scale": 1,
+            "secondColor": "#1d4ed8"
+          },
+          "wet": true,
+          "wetBounds": {
+            "height": 40,
+            "width": 64,
+            "x": 0,
+            "y": 4
+          },
+          "wetCells": 2420,
+          "wetPatternCells": 426
+        }
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "arguments": {},
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "dried": [
+            {
+              "bounds": {
+                "height": 48,
+                "width": 64,
+                "x": 0,
+                "y": 0
+              },
+              "layerId": "@1"
+            }
+          ],
+          "stillWet": false
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:4gm-csktlgte98"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 24
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 48,
+            "layerChannels": {
+              "@1": {
+                "height": "pixerate-asset:x6-jx0tpuqira",
+                "material": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 3
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.45
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "pigment": 0.55,
+                      "rewet": 0.2,
+                      "water": 0.75
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "turing-wash",
+                  "kind": "mark",
+                  "livePatterns": {
+                    "contrast": 1.2,
+                    "pattern": "spots",
+                    "relief": 0.5,
+                    "secondColor": "#1d4ed8"
+                  },
+                  "medium": "paint",
+                  "name": "Turing wash",
+                  "tip": {
+                    "hardness": 0.5,
+                    "shape": "round",
+                    "size": 36,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#38bdf8",
+                "id": "s1",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.2196078431372549,
+                    0.7411764705882353,
+                    0.9725490196078431
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 12,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 52,
+                    "y": 24
+                  }
+                ],
+                "seed": 7,
+                "steps": [
+                  0,
+                  0
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "@1": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "livePatterns": {
+                    "contrast": 1.2,
+                    "feed": 0.035,
+                    "kill": 0.065,
+                    "pattern": "spots",
+                    "relief": 0.5,
+                    "scale": 1,
+                    "secondColor": "#1d4ed8"
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.45,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "wetEvents": [
+              {
+                "at": 0,
+                "clock": 0,
+                "data": {
+                  "contrast": 1.3,
+                  "feed": 0.0545,
+                  "kill": 0.062,
+                  "pattern": "coral",
+                  "relief": 0.4,
+                  "scale": 1.2,
+                  "secondColor": "#0f766e"
+                },
+                "kind": "live-patterns",
+                "layerId": "@1"
+              },
+              {
+                "at": 1,
+                "clock": 0,
+                "data": {
+                  "points": [
+                    {
+                      "strength": 0.9,
+                      "x": 32,
+                      "y": 24
+                    }
+                  ],
+                  "radius": 10,
+                  "seed": 11
+                },
+                "kind": "seed-live-patterns",
+                "layerId": "@1"
+              },
+              {
+                "at": 1,
+                "clock": 16,
+                "kind": "dry"
+              }
+            ],
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/live-patterns.7.png",
+          "width": 64,
+          "height": 48,
+          "sha256": "8193d4981bcd08623a938c328da39a579fe7724857ca4471fa5f5db0f7a74e7d",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_live_patterns",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeTiles": 1,
+          "bounds": {
+            "height": 32,
+            "width": 64,
+            "x": 0,
+            "y": 8
+          },
+          "brushPresets": [
+            "turing-wash",
+            "coral-ink"
+          ],
+          "enabled": true,
+          "layerId": "@1",
+          "layers": [
+            {
+              "activeTiles": 1,
+              "bounds": {
+                "height": 32,
+                "width": 64,
+                "x": 0,
+                "y": 8
+              },
+              "enabled": true,
+              "layerId": "@1",
+              "maxV": 0.4608,
+              "meanV": 0.1047,
+              "patternCells": 426,
+              "settings": {
+                "contrast": 1.2,
+                "feed": 0.035,
+                "kill": 0.065,
+                "pattern": "spots",
+                "relief": 0.5,
+                "scale": 1,
+                "secondColor": "#1d4ed8"
+              },
+              "wet": false,
+              "wetBounds": null,
+              "wetCells": 0,
+              "wetPatternCells": 0
+            }
+          ],
+          "maxV": 0.4608,
+          "meanV": 0.1047,
+          "patternCells": 426,
+          "presets": {
+            "coral": {
+              "description": "Branching coral dendrites.",
+              "feed": 0.0545,
+              "kill": 0.062,
+              "kind": "coral",
+              "label": "Coral"
+            },
+            "maze": {
+              "description": "Winding interconnected maze channels.",
+              "feed": 0.029,
+              "kill": 0.057,
+              "kind": "maze",
+              "label": "Maze"
+            },
+            "spots": {
+              "description": "Dividing Turing spots (mitosis).",
+              "feed": 0.035,
+              "kill": 0.065,
+              "kind": "spots",
+              "label": "Spots"
+            },
+            "stripes": {
+              "description": "Labyrinthine Turing stripes.",
+              "feed": 0.042,
+              "kill": 0.06,
+              "kind": "stripes",
+              "label": "Stripes"
+            },
+            "worms": {
+              "description": "Wiggling vermicular tracks.",
+              "feed": 0.058,
+              "kill": 0.065,
+              "kind": "worms",
+              "label": "Worms"
+            }
+          },
+          "settings": {
+            "contrast": 1.2,
+            "feed": 0.035,
+            "kill": 0.065,
+            "pattern": "spots",
+            "relief": 0.5,
+            "scale": 1,
+            "secondColor": "#1d4ed8"
+          },
+          "wet": false,
+          "wetBounds": null,
+          "wetCells": 0,
+          "wetPatternCells": 0
+        }
+      }
+    },
+    {
+      "tool": "set_live_patterns",
+      "arguments": {
+        "layerId": "missing-layer",
+        "pattern": "spots"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown layer \"missing-layer\". Call list_layers for the ids."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

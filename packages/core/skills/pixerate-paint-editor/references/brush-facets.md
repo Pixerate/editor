@@ -20,6 +20,7 @@ more; this is where each one went.
 | Bristles | `tip.shape` `bristle` and `tip.bristle` |
 | A brush's own gradient (paint) | `colour.default` (a gradient); `unset: ['colour']` drops it |
 | Light | `light` (`amount`, `pressure`) |
+| Live reaction-diffusion patterns in wet paint | `livePatterns` (`pattern`: `spots` / `stripes` / `coral` / `maze` / `worms`, `feed`, `kill`, `scale`, `contrast`, `secondColor`, `relief`); `unset: ['livePatterns']` drops it |
 
 ## Examples
 

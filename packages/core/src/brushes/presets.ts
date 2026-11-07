@@ -164,6 +164,21 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     behaviour: { surface: 'wet', exchange: { pickup: 0.4, mix: 0.4 }, wet: { water: 0.8, pigment: 0.45, rewet: 0.2 } },
     colour: { default: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'distance', length: 500, repeat: 'mirror', unit: 'px' } } },
   },
+  // Live patterns: Gray-Scott reaction-diffusion that grows inside the wet wash and freezes as it dries.
+  {
+    id: 'turing-wash', name: 'Turing wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 36, hardness: 0.5, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.45 }, wet: { water: 0.75, pigment: 0.55, rewet: 0.2 } },
+    livePatterns: { pattern: 'spots', contrast: 1.2, secondColor: '#0ea5e9', relief: 0.25 },
+  },
+  {
+    id: 'coral-ink', name: 'Coral ink', kind: 'mark', medium: 'ink', variety: 'watercolor',
+    tip: { shape: 'round', size: 22, hardness: 0.65, spacing: 0.12 },
+    dynamics: { smoothing: 0.3, pressureOpacity: true, minSize: 0.3 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.35 }, wet: { water: 0.7, pigment: 0.75, rewet: 0.15 } },
+    livePatterns: { pattern: 'coral', scale: 1.2, contrast: 1.3 },
+  },
   {
     id: 'watercolor-detail', name: 'Watercolour rigger', kind: 'mark', medium: 'paint', variety: 'watercolor',
     tip: { shape: 'round', size: 7, hardness: 0.75 },

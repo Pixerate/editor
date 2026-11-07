@@ -1156,6 +1156,62 @@
             },
             "additionalProperties": false
           },
+          "livePatterns": {
+            "type": "object",
+            "description": "Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "enum": [
+                  "spots",
+                  "stripes",
+                  "coral",
+                  "maze",
+                  "worms"
+                ],
+                "description": "Named Pearson feed/kill preset: spots (default, dividing mitosis spots), stripes (labyrinthine stripes), coral (branching dendrites), maze (winding channels) or worms (vermicular tracks)."
+              },
+              "feed": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 0.1,
+                "description": "Gray-Scott feed rate F (0.01..0.1; default from pattern)."
+              },
+              "kill": {
+                "type": "number",
+                "minimum": 0.03,
+                "maximum": 0.08,
+                "description": "Gray-Scott kill rate k (0.03..0.08; default from pattern)."
+              },
+              "scale": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 4,
+                "description": "Spatial scale of the pattern (diffusion multiplier, 0.5..4, default 1)."
+              },
+              "contrast": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "Visual contrast of the V concentration field (0..2, default 1)."
+              },
+              "secondColor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "description": "Optional second colour (#rrggbb) that V blends the wet paint towards; null or omitted modulates pigment density/contrast."
+              },
+              "relief": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Impasto relief height written to the layer thick map as patterns grow (0..1, default 0)."
+              }
+            },
+            "additionalProperties": false
+          },
           "colour": {
             "type": "object",
             "description": "The brush's colours. The user's colour still wins unless own is set.",
@@ -2550,6 +2606,62 @@
             },
             "additionalProperties": false
           },
+          "livePatterns": {
+            "type": "object",
+            "description": "Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "enum": [
+                  "spots",
+                  "stripes",
+                  "coral",
+                  "maze",
+                  "worms"
+                ],
+                "description": "Named Pearson feed/kill preset: spots (default, dividing mitosis spots), stripes (labyrinthine stripes), coral (branching dendrites), maze (winding channels) or worms (vermicular tracks)."
+              },
+              "feed": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 0.1,
+                "description": "Gray-Scott feed rate F (0.01..0.1; default from pattern)."
+              },
+              "kill": {
+                "type": "number",
+                "minimum": 0.03,
+                "maximum": 0.08,
+                "description": "Gray-Scott kill rate k (0.03..0.08; default from pattern)."
+              },
+              "scale": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 4,
+                "description": "Spatial scale of the pattern (diffusion multiplier, 0.5..4, default 1)."
+              },
+              "contrast": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "Visual contrast of the V concentration field (0..2, default 1)."
+              },
+              "secondColor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "description": "Optional second colour (#rrggbb) that V blends the wet paint towards; null or omitted modulates pigment density/contrast."
+              },
+              "relief": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Impasto relief height written to the layer thick map as patterns grow (0..1, default 0)."
+              }
+            },
+            "additionalProperties": false
+          },
           "colour": {
             "type": "object",
             "description": "The brush's colours. The user's colour still wins unless own is set.",
@@ -3054,6 +3166,7 @@
                 "behaviour",
                 "light",
                 "motion",
+                "livePatterns",
                 "colour"
               ],
               "description": "A facet to remove."

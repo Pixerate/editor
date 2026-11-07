@@ -269,6 +269,158 @@ extension PaintEditorController {
     /// The water overlay's tiles over a document rectangle (RGBA, view only).
     public func waterOverlayTiles(_ rect: RasterRect) -> [(tx: Int, ty: Int, data: [UInt8])] { wet.waterOverlay(rect) }
 
+    func layerLivePatternsInfo(_ layerId: String) -> JSONObject {
+        let info = wet.info(layerId)
+        let stats = wet.livePatternStats(layerId)
+        return [
+            "layerId": .string(layerId),
+            "wet": .bool(info.wet),
+            "wetCells": .number(Double(info.wetCells)),
+            "wetBounds": rectJSON(info.wetBounds),
+            "enabled": .bool(stats.enabled),
+            "settings": stats.settings.json,
+            "activeTiles": .number(Double(stats.activeTiles)),
+            "patternCells": .number(Double(stats.patternCells)),
+            "wetPatternCells": .number(Double(stats.wetPatternCells)),
+            "meanV": .number(stats.meanV),
+            "maxV": .number(stats.maxV),
+            "bounds": rectJSON(stats.bounds),
+        ]
+    }
+
+    func checkLivePatternsInput(_ input: JSONObject) throws -> JSONObject {
+        var out = JSONObject()
+        if let pat = input["pattern"] {
+            guard let s = pat.stringValue, LIVE_PATTERN_KINDS.contains(s) else {
+                throw PaintEditorError("pattern must be one of \(LIVE_PATTERN_KINDS.joined(separator: ", ")), not \(pat.stringified()).")
+            }
+            out["pattern"] = .string(s)
+        }
+        if let feed = input["feed"]?.numberValue {
+            if !(feed.isFinite && feed >= 0.005 && feed <= 0.1) { throw PaintEditorError("feed \(jsText(feed)) is out of range; use 0.005..0.1.") }
+            out["feed"] = .number(feed)
+        }
+        if let kill = input["kill"]?.numberValue {
+            if !(kill.isFinite && kill >= 0.02 && kill <= 0.08) { throw PaintEditorError("kill \(jsText(kill)) is out of range; use 0.02..0.08.") }
+            out["kill"] = .number(kill)
+        }
+        if let scale = input["scale"]?.numberValue {
+            if !(scale.isFinite && scale >= 0.25 && scale <= 4) { throw PaintEditorError("scale \(jsText(scale)) is out of range; use 0.25..4.") }
+            out["scale"] = .number(scale)
+        }
+        if let contrast = input["contrast"]?.numberValue {
+            if !(contrast.isFinite && contrast >= 0 && contrast <= 2) { throw PaintEditorError("contrast \(jsText(contrast)) is out of range; use 0..2.") }
+            out["contrast"] = .number(contrast)
+        }
+        if let sc = input["secondColor"] {
+            if sc == .null { out["secondColor"] = .null }
+            else { out["secondColor"] = .string(try parseColor(sc, "secondColor")) }
+        }
+        if let relief = input["relief"]?.numberValue {
+            if !(relief.isFinite && relief >= 0 && relief <= 1) { throw PaintEditorError("relief \(jsText(relief)) is out of range; use 0..1.") }
+            out["relief"] = .number(relief)
+        }
+        return out
+    }
+
+    /// Reads a layer's Gray-Scott reaction-diffusion live patterns (`layerId`, default the active layer),
+    /// plus all layers with wet paint or live patterns and the built-in Pearson presets.
+    public func getLivePatterns(layerId: String? = nil) throws -> JSONObject {
+        let l = try wetLayer(layerId, "read the live patterns of")
+        let primary = layerLivePatternsInfo(l.id)
+        var ids: [String] = []
+        func addId(_ id: String) { if !ids.contains(id) { ids.append(id) } }
+        addId(l.id)
+        for id in wet.wetLayerIds() { addId(id) }
+        for (id, f) in wet.patterns where (f.enabled || !f.tiles.isEmpty) && findLayer(doc.layers, id) != nil { addId(id) }
+        for (id, s) in wet.settings where s.livePatterns != nil && findLayer(doc.layers, id) != nil { addId(id) }
+        let layers: [JSONValue] = ids.map { id in .object(id == l.id ? primary : layerLivePatternsInfo(id)) }
+        var presets = JSONObject()
+        for k in LIVE_PATTERN_KINDS {
+            if let p = LIVE_PATTERN_PRESETS[k] { presets[k] = p.json }
+        }
+        var out = primary
+        out["layers"] = .array(layers)
+        out["presets"] = .object(presets)
+        out["brushPresets"] = .array(["turing-wash", "coral-ink"])
+        return out
+    }
+
+    /// Configures a layer's Gray-Scott reaction-diffusion live patterns (or clears them with `enabled: false`). One undo step.
+    public func setLivePatterns(_ layerId: String?, _ update: JSONObject) throws -> JSONObject {
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before changing live patterns.") }
+        let l = try wetLayer(layerId, "set the live patterns of")
+        if isLayerLocked(l.locks, .pixels) { throw PaintEditorError("Layer \"\(l.name)\" has its pixels locked; unlock it first.") }
+        if let en = update["enabled"], en.boolValue == nil { throw PaintEditorError("enabled must be true or false.") }
+        let enabled = update["enabled"]?.boolValue ?? true
+        let checked = try checkLivePatternsInput(update)
+        let before = doc
+        beginWetOp()
+        let next = try wet.setLivePatterns(l.id, enabled ? checked : nil)
+        logWet("live-patterns", layerId: l.id, data: next?.json ?? .null)
+        commit("Live patterns", withWetEvents(doc), before: before)
+        return layerLivePatternsInfo(l.id)
+    }
+
+    /// Seeds Gray-Scott reaction-diffusion activator (`V`) discs into a layer's live-pattern field. One undo step.
+    public func seedLivePatterns(_ args: JSONObject) throws -> JSONObject {
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before seeding live patterns.") }
+        let l = try wetLayer(args["layerId"]?.stringValue, "seed live patterns on")
+        if isLayerLocked(l.locks, .pixels) { throw PaintEditorError("Layer \"\(l.name)\" has its pixels locked; unlock it first.") }
+        guard let rawPoints = args["points"]?.arrayValue, !rawPoints.isEmpty else {
+            throw PaintEditorError("points is empty; give at least one {x, y} in document pixels.")
+        }
+        let width = Double(doc.canvas.width), height = Double(doc.canvas.height)
+        var points: [(x: Double, y: Double, strength: Double?)] = []
+        var pointsJSON: [JSONValue] = []
+        for (i, item) in rawPoints.enumerated() {
+            guard let o = item.objectValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue, x.isFinite, y.isFinite else {
+                throw PaintEditorError("points[\(i)] needs finite x and y in document pixels.")
+            }
+            if x < 0 || y < 0 || x >= width || y >= height {
+                throw PaintEditorError("points[\(i)] (\(jsText(x)), \(jsText(y))) is outside the \(doc.canvas.width)×\(doc.canvas.height) canvas.")
+            }
+            var strength: Double? = nil
+            if let st = o["strength"]?.numberValue {
+                if !(st.isFinite && st > 0 && st <= 1) {
+                    throw PaintEditorError("points[\(i)].strength \(jsText(st)) is out of range; use above 0 up to 1.")
+                }
+                strength = st
+            }
+            points.append((x: x, y: y, strength: strength))
+            var pj: JSONObject = ["x": .number(x), "y": .number(y)]
+            if let strength { pj["strength"] = .number(strength) }
+            pointsJSON.append(.object(pj))
+        }
+        let radius = args["radius"]?.numberValue ?? 16
+        if !(radius.isFinite && radius >= 1 && radius <= 512) {
+            throw PaintEditorError("radius \(jsText(radius)) is out of range; use 1..512 px.")
+        }
+        let seed: Int
+        if let rawSeed = args["seed"]?.numberValue {
+            if !rawSeed.isFinite || rawSeed.rounded(.towardZero) != rawSeed || rawSeed < 0 {
+                throw PaintEditorError("seed \(jsText(rawSeed)) must be a whole number of 0 or more.")
+            }
+            seed = Int(rawSeed)
+        } else {
+            seed = Int(PixerateRandom.mix32(UInt32(truncatingIfNeeded: seedCounter &* 0x9E37_79B1)) & 0x7FFF_FFFF)
+            seedCounter += 1
+        }
+        let settingKeys = ["pattern", "feed", "kill", "scale", "contrast", "secondColor", "relief"]
+        let hasSettings = settingKeys.contains { args[$0] != nil }
+        let settings = hasSettings ? try checkLivePatternsInput(args) : nil
+        let before = doc
+        beginWetOp()
+        let res = try wet.seedLivePatterns(l.id, points: points, radius: radius, seed: seed, settings: settings)
+        var logData: JSONObject = ["points": .array(pointsJSON), "radius": .number(radius), "seed": .number(Double(seed))]
+        if let settings { logData["settings"] = .object(settings) }
+        logWet("seed-live-patterns", layerId: l.id, data: .object(logData))
+        commit("Seed live patterns", withWetEvents(doc), before: before)
+        var out = layerLivePatternsInfo(l.id)
+        out["seededCells"] = .number(Double(res.seededCells))
+        return out
+    }
+
     /// The layers with every wet layer dried where it is (what saving and exporting see).
     func driedLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
         let ids = wet.wetLayerIds()
@@ -283,7 +435,11 @@ extension PaintEditorController {
     /// Wet settings saved with the document (nil when they are all defaults).
     func wetJSON() -> JSONValue? {
         var layers = JSONObject()
-        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil { layers[id] = ["params": s.params.json, "flow": s.flow.json] }
+        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil {
+            var entry: JSONObject = ["params": s.params.json, "flow": s.flow.json]
+            if let lp = s.livePatterns { entry["livePatterns"] = lp.json }
+            layers[id] = .object(entry)
+        }
         if layers.isEmpty && wet.tilt.angle == 0 { return nil }
         return ["tilt": wet.tilt.json, "layers": .object(layers)]
     }
@@ -432,6 +588,22 @@ func paintWetHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] 
     h["set_water_overlay"] = { a in
         let x = try SetWaterOverlayArguments(a)
         return ["visible": .bool(c.setWaterOverlay(x.visible)), "stillWet": stillWet()]
+    }
+    h["get_live_patterns"] = { a in
+        let x = try GetLivePatternsArguments(a)
+        return .object(try c.getLivePatterns(layerId: x.layerId))
+    }
+    h["set_live_patterns"] = { a in
+        _ = try SetLivePatternsArguments(a)
+        var out = try c.setLivePatterns(a["layerId"]?.stringValue, a)
+        out["stillWet"] = stillWet()
+        return .object(out)
+    }
+    h["seed_live_patterns"] = { a in
+        _ = try SeedLivePatternsArguments(a)
+        var out = try c.seedLivePatterns(a)
+        out["stillWet"] = stillWet()
+        return .object(out)
     }
     // Thick paint and light (`thick-tools.ts`).
     h["get_light"] = { a in .object(try c.lightOf(try GetLightArguments(a).layerId)) }

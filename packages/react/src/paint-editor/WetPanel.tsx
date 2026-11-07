@@ -1,5 +1,5 @@
 import React from 'react';
-import { WET_FLOW_KINDS, WET_GPU_OPTIONS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, wetEngineSummary, type PaintEditorController, type WetFlowKind, type WetGpuMode } from '@pixerate/editor/paint-editor';
+import { LIVE_PATTERN_KINDS, LIVE_PATTERN_LABELS, LIVE_PATTERN_SLIDERS, WET_FLOW_KINDS, WET_GPU_OPTIONS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, wetEngineSummary, type LivePatternKind, type PaintEditorController, type WetFlowKind, type WetGpuMode } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, PaintSlider, button, chip, panel, useAttempt } from './shared';
 
@@ -23,6 +23,7 @@ export const WetPanel: React.FC<WetPanelProps> = ({ controller, className }) => 
   const wet = state.wet;
   const layerId = state.document.activeLayerId;
   const info = layerId ? controller.wetLayerInfo(layerId) : null;
+  const livePattern = layerId ? controller.getLivePatterns(layerId).layers[0] ?? null : null;
   const backend = controller.wetState();
   return (
     <div className={`${panel} ${className ?? ''}`} data-testid="wet-panel">
@@ -76,6 +77,45 @@ export const WetPanel: React.FC<WetPanelProps> = ({ controller, className }) => 
               onCommit={(v) => attempt(async () => (await controller.wetIdle(), controller.setFlowMap(layerId!, { strength: v })))}
             />
           )}
+        </div>
+      )}
+      {livePattern && layerId && (
+        <div className="flex flex-col gap-1.5" data-testid="wet-live-patterns">
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-slate-300">Live patterns</span>
+            <button
+              type="button"
+              className={button}
+              onClick={() =>
+                attempt(async () => {
+                  await controller.wetIdle();
+                  const cx = Math.round(state.document.canvas.width / 2);
+                  const cy = Math.round(state.document.canvas.height / 2);
+                  controller.seedLivePatterns({ layerId, points: [{ x: cx, y: cy }] });
+                })
+              }
+            >
+              Seed pattern
+            </button>
+          </div>
+          <label className="flex items-center justify-between gap-2">
+            <span className="text-slate-400">Pattern</span>
+            <select
+              aria-label="Live pattern"
+              value={livePattern.settings.pattern}
+              onChange={(e) => attempt(async () => (await controller.wetIdle(), controller.setLivePatterns(layerId, { pattern: e.target.value as LivePatternKind })))}
+              className="rounded bg-slate-800 px-1 py-0.5"
+            >
+              {LIVE_PATTERN_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {LIVE_PATTERN_LABELS[k]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {LIVE_PATTERN_SLIDERS.map((c) => (
+            <PaintSlider key={c.path} control={c} value={readPath(livePattern.settings, c.path)} onCommit={(v) => attempt(async () => (await controller.wetIdle(), controller.setLivePatterns(layerId, { [c.path]: v })))} />
+          ))}
         </div>
       )}
       {backend.message && (

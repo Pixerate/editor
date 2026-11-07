@@ -45,6 +45,8 @@ export interface BrushHostProfile {
   tipGrain?: BrushSupport;
   /** Several dabs per spacing step (`dynamics.count` above 1); missing: `none`. */
   dabCount?: BrushSupport;
+  /** Gray-Scott reaction-diffusion patterns in wet paint (`livePatterns`); missing: `none`. */
+  livePatterns?: BrushSupport;
 }
 
 export interface BrushIssue {
@@ -84,6 +86,7 @@ export const PAINT_PROFILE: BrushHostProfile = {
   tilt: 'full',
   tipGrain: 'full',
   dabCount: 'full',
+  livePatterns: 'full',
 };
 
 /** The image editor's brush: dry dabs on pixels, its Mixer Brush and the eraser. */
@@ -182,6 +185,7 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   feature(profile.exchange, !ex?.reservoir && (nonZero(ex?.pickup) || !!ex?.dirty), 'behaviour.exchange', 'picking paint up', 'Remove behaviour.exchange.');
   feature(profile.grain, nonZero(brush.behaviour?.grain), 'behaviour.grain', 'paper grain', 'Set behaviour.grain to 0.');
   feature(profile.light, nonZero(brush.light?.amount), 'light', 'light paint (glow and spill)', 'Remove light (or set light.amount to 0).');
+  feature(profile.livePatterns ?? 'none', Boolean(brush.livePatterns), 'livePatterns', 'live reaction-diffusion patterns', 'Remove livePatterns.');
   const m = brush.motion;
   feature(profile.motion, !!m && (!!m.live || nonZero(m.waveSpeed) || m.fps !== undefined), 'motion', 'animation', 'Remove motion.');
   const d = brush.dynamics ?? {};
@@ -270,6 +274,10 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         delete b.behaviour!.surface;
         delete b.behaviour!.wet;
         delete b.behaviour!.thick;
+        delete b.livePatterns;
+        break;
+      case 'livePatterns':
+        delete b.livePatterns;
         break;
       case 'behaviour.exchange.reservoir':
         delete b.behaviour!.exchange!.reservoir;

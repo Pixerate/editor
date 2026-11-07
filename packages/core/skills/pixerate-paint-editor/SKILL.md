@@ -146,6 +146,9 @@ Watercolour, gouache and wet oil run on a fluid simulation: lay washes light to 
 flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves for an agent
 until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and
 read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools.
+**Live patterns** (Gray-Scott reaction-diffusion spots, stripes, coral, maze and worms that grow
+in wet paint and freeze when it dries; presets `turing-wash`, `coral-ink`):
+[references/live-patterns.md](references/live-patterns.md).
 
 ## Oils and thick paint
 
@@ -295,7 +298,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `motion`, `colour`, `livePatterns` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -356,6 +359,9 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `set_water_overlay` | Show where the water is (`visible`), view only. |
 | `set_wet_engine` | Let Engine B (WebGPU in browsers, Metal in the Swift editors) shade large washes (`gpu` "auto", the default) or force the CPU (`gpu` "off"); `minTiles` sets the wet area at which the GPU takes over. Never changes the result, only how it is drawn; editor setting, not saved, not an undo step. Returns `engine` (`state`: off, not-started, starting, unavailable, standby, active, failed; `reason`, `adapter`). |
 | `set_instant_dry` | `on`: every wet stroke dries as it ends (same undo step); off (default) wet paint keeps moving. Returns `instantDry`. |
+| `get_live_patterns` | Read live reaction-diffusion pattern fields on one layer (`layerId`) or every layer, plus the Pearson `presets` (`spots`, `stripes`, `coral`, `maze`, `worms`) and built-in `brushPresets` (`turing-wash`, `coral-ink`). Returns `layers` (`active`, `settings`, `activeTiles`, `patternCells`, `wetPatternCells`, `maxV`, `meanV`, `bounds`). Changes nothing. |
+| `set_live_patterns` | Configure a layer's Gray-Scott reaction-diffusion settings (`layerId`, `pattern`, `feed`, `kill`, `scale`, `contrast`, `secondColor`, `relief`). One undo step. Returns `layerId`, `settings`, `stats` and `stillWet`. |
+| `seed_live_patterns` | Seed Gray-Scott reagent V at `points` (`[{x, y}]` in document px) with `radius` and `seed` on a layer (`layerId`, default active), optionally updating pattern settings (`pattern`, `feed`, `kill`, `scale`, `contrast`, `secondColor`, `relief`). Follow with `advance_wet_paint` to grow the pattern while wet, then `dry_paint` to freeze it. One undo step. Returns `layerId`, `seeded`, `radius`, `seed`, `settings`, `stats`, `stillWet`. |
 
 ### Thick paint and light
 
@@ -445,20 +451,13 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
 ## Pitfalls
 
 - With agent playback on, strokes, fills and replays are painted live by the director, and other writes open their panel (Colour, Wet, Paper, Layers, Effects) and point at the control. Results are unchanged.
-- **Stroke-by-stroke drawing is slow and expensive.** Do not draw a detailed picture point by
-  point. Block in with fills and big strokes, then replay and vary a few good strokes.
-- **A hidden or locked layer refuses paint**: show it (`update_layer visible true`) or unlock it.
-  `transparency` lock is not an error: paint only lands where the layer already has paint.
-- **Depth 0 means no grain** whatever the brush; grainy media then look smooth. Smooth bristol
-  has depth 0.
-- **Grain is fixed to the document**, not to the layer: moving content does not move the grain,
-  and two strokes on the same spot catch the same peaks.
-- **Blending tools need paint to blend.** Blender and smudge only move what is on the target
-  layer: blend on the layer you painted, not on an empty one above it.
-- **A dirty brush stays dirty** across strokes and colour changes until `clean_mixer_brush`.
-  Pick-up lifts only paint on the target layer: the paper and other layers lift nothing.
-- **Replays use the recorded load**: a replayed pick-up stroke starts with what the brush carried
-  when it was painted, not with the current load.
+- **Stroke-by-stroke drawing is slow and expensive.** Do not draw a detailed picture point by point. Block in with fills and big strokes, then replay and vary a few good strokes.
+- **A hidden or locked layer refuses paint**: show it (`update_layer visible true`) or unlock it. `transparency` lock is not an error: paint only lands where the layer already has paint.
+- **Depth 0 means no grain** whatever the brush; grainy media then look smooth. Smooth bristol has depth 0.
+- **Grain is fixed to the document**, not to the layer: moving content does not move the grain, and two strokes on the same spot catch the same peaks.
+- **Blending tools need paint to blend.** Blender and smudge only move what is on the target layer: blend on the layer you painted, not on an empty one above it.
+- **A dirty brush stays dirty** across strokes and colour changes until `clean_mixer_brush`. Pick-up lifts only paint on the target layer: the paper and other layers lift nothing.
+- **Replays use the recorded load**: a replayed pick-up stroke starts with what the brush carried when it was painted, not with the current load.
 - **Big soft brushes at full flow look flat.** Lower `flow` (airbrush 0.05..0.15) and build up.
 - **JPEG and WebP need a browser**; in Node use PNG. Exports never upscale (`scale` ≤ 1).
 - **Symmetry stays on until you turn it off.** Set `mode: "off"` after the symmetric part, or

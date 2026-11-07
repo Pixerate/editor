@@ -173,6 +173,15 @@
         "none"
       ],
       "description": "Several dabs per spacing step (dynamics.count); missing: none."
+    },
+    "livePatterns": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Gray-Scott reaction-diffusion patterns in wet paint (livePatterns); missing: none."
     }
   },
   "required": [

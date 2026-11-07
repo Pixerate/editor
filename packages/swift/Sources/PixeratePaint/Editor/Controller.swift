@@ -322,6 +322,20 @@ public final class PaintEditorController {
                 // Anywhere: light spills past its tiles (`computeSpill`), so tile rectangles would miss the glow around them.
                 emit(nil)
             },
+            layerHeight: { [unowned self] id in doc.thick?.get(id)?.height },
+            updateHeights: { [unowned self] heights in
+                let d = doc
+                setDocSilently(d.with { o in
+                    var t = o.thick ?? OrderedMap()
+                    for (id, height) in heights where findLayer(d.layers, id) != nil {
+                        var ch = t.get(id) ?? emptyThickChannels()
+                        ch.height = height
+                        t.set(id, ch)
+                    }
+                    if !t.isEmpty { o.thick = t }
+                })
+                emit(nil)
+            },
             changed: { [unowned self] in emit([]) }
         ), wetOptions)
         self.wetOptions = wetOptions
@@ -400,7 +414,7 @@ public final class PaintEditorController {
         let next = try createPaintDocument(width: Double(width ?? doc.canvas.width), height: Double(height ?? doc.canvas.height), dpi: dpi ?? doc.canvas.dpi, paper: try resolvePaper(paper) ?? currentPaper.json)
         guides.symmetry.center = Point2(x: Double(next.canvas.width) / 2, y: Double(next.canvas.height) / 2)
         guides.tracing = nil
-        if wet.world != nil {
+        if wet.world != nil || !wet.patterns.isEmpty {
             beginWetOp()
             wet.reset()
         }
@@ -457,7 +471,7 @@ public final class PaintEditorController {
                 next = next.with { $0.layers = mapLayer(next.layers, id) { _ in moved } }
             }
         }
-        if wet.world != nil {
+        if wet.world != nil || !wet.patterns.isEmpty {
             if !keptWet.isEmpty {
                 try wet.extend(width, height, l, t, next.paper)
             } else {
@@ -531,6 +545,7 @@ public final class PaintEditorController {
                     if e.kind == "dry", data["x"]?.numberValue != nil { e.data = moved(data) }
                     else if e.kind == "wet-paper", let r = data["rect"]?.objectValue { var d2 = data; d2["rect"] = moved(r); e.data = .object(d2) }
                     else if e.kind == "flow", let c = data["center"]?.objectValue { var d2 = data; d2["center"] = moved(c); e.data = .object(d2) }
+                    else if e.kind == "seed-live-patterns", let pts = data["points"]?.arrayValue { var d2 = data; d2["points"] = .array(pts.compactMap { $0.objectValue.map(moved) }); e.data = .object(d2) }
                     return e
                 }
             }
@@ -1279,7 +1294,17 @@ public final class PaintEditorController {
             result.strokeId = stroke.id
             paintedBounds[stroke.key] = .some(result.bounds)
             let wetStroke = session.initValues.wet != nil
-            let thick = session.thickChannels()
+            var thick = session.thickChannels()
+            if wetStroke, let f = wet.patterns.get(session.layerId), f.enabled {
+                var s = wet.settingsOf(session.layerId)
+                s.livePatterns = f.settings
+                wet.settings.set(session.layerId, s)
+                if f.settings.relief > 0 && !f.tiles.isEmpty {
+                    let base = thick ?? d.thick?.get(session.layerId) ?? emptyThickChannels()
+                    let height = f.applyReliefHeight(base.height)
+                    thick = ThickChannels(height: height, material: base.material)
+                }
+            }
             // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
             let wetLight = wetStroke && wet.world?.hasLane(session.layerId) == true ? try? wet.world!.lightDisplay(session.layerId) : nil
             out = d.with { o in

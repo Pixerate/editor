@@ -59,6 +59,27 @@ private let ONE_STAMP: FieldMap = (
     { v in v.arrayValue?.first ?? .null },
     { v in v == .null || v == .bool(false) || v == .string("") ? nil : .array([v]) }
 )
+/// Live reaction-diffusion patterns (`livePatterns`): sparse facet ↔ normalized engine settings.
+private let LIVE_PATTERNS_MAP: FieldMap = (
+    { v in
+        guard let o = v.objectValue else { return .null }
+        return normalizeLivePatterns(o, DEFAULT_LIVE_PATTERNS).json
+    },
+    { v in
+        guard let r = v.objectValue else { return nil }
+        let pattern = isLivePatternKind(r["pattern"]?.stringValue) ? r["pattern"]!.stringValue! : DEFAULT_LIVE_PATTERNS.pattern
+        let preset = LIVE_PATTERN_PRESETS[pattern] ?? LIVE_PATTERN_PRESETS["spots"]!
+        var out = JSONObject()
+        out["pattern"] = .string(pattern)
+        if let feed = r["feed"]?.numberValue, feed != preset.feed { out["feed"] = .number(feed) }
+        if let kill = r["kill"]?.numberValue, kill != preset.kill { out["kill"] = .number(kill) }
+        if let scale = r["scale"]?.numberValue, scale != DEFAULT_LIVE_PATTERNS.scale { out["scale"] = .number(scale) }
+        if let contrast = r["contrast"]?.numberValue, contrast != DEFAULT_LIVE_PATTERNS.contrast { out["contrast"] = .number(contrast) }
+        if let secondColor = r["secondColor"]?.stringValue, !secondColor.isEmpty { out["secondColor"] = .string(secondColor) }
+        if let relief = r["relief"]?.numberValue, relief != DEFAULT_LIVE_PATTERNS.relief { out["relief"] = .number(relief) }
+        return .object(out)
+    }
+)
 
 private func f(_ facet: String, _ engine: String, _ engines: [String] = ALL, map: FieldMap? = nil, shapes: [String]? = nil, marks: [String]? = nil) -> BrushField {
     BrushField(facet: facet, engine: engine, engines: engines, map: map, shapes: shapes, marks: marks)
@@ -100,6 +121,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("behaviour.mixing", "smudge.mixing", ["smudge"]))
     out.append(f("behaviour.strength", "wet.strength", ["wet"]))
     out += each("behaviour.wet", "wet", ["medium", "water", "pigment", "body", "rewet", "load", "thinner"], ["wet"])
+    out.append(f("livePatterns", "livePatterns", ["wet"], map: LIVE_PATTERNS_MAP))
     out.append(f("behaviour.thick.applicator", "impasto.tool", ["impasto"]))
     out += each("behaviour.thick", "impasto", ["thickness", "gloss", "metallic", "load", "thinner", "drag", "rim", "clarity"], ["impasto"])
     out.append(f("marks.physics", "particle.kind", ["particle"]))

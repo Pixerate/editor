@@ -63,6 +63,12 @@ light that flows and dries with its pigment: paint it on dark paper, let it flow
 `backlight` on any paper) before painting: strong transparent glazes glow, gouache and solid ink
 block the light. See `references/light-paint.md` in `pixerate-paint-editor`.
 
+**Live reaction-diffusion patterns (let it grow, then dry).** Paint with `turing-wash` or
+`coral-ink` (or seed any wet wash with `seed_live_patterns` and tune with `set_live_patterns`),
+then call `advance_wet_paint` to let Gray-Scott spots, stripes, coral, maze or worms grow where the
+layer holds water. Call `dry_paint` to freeze the pattern in place (`get_live_patterns` checks its
+coverage). See `references/live-patterns.md` in `pixerate-paint-editor`.
+
 ## Decision table
 
 | Want | Approach |
@@ -77,6 +83,7 @@ block the light. See `references/light-paint.md` in `pixerate-paint-editor`.
 | Cauliflower blooms | Add water into a drying wash; `bloom` up |
 | A glowing (neon) wash | Dark paper (`set_paper` `color`), `glow-wash` or `light.amount` on a wet brush; flow, dry, `get_light` |
 | Stained glass, a lightbox | `set_paper` `stained-glass` (or `backlight`); strong glazes for panes, opaque black lines above |
+| Organic spots, coral dendrites or Turing stripes in a wash | Paint with `turing-wash` or `coral-ink` (or `seed_live_patterns` into a wet wash), `advance_wet_paint` to let it grow, then `dry_paint` to freeze it |
 
 ## Recipes
 
@@ -110,6 +117,7 @@ warm colour near the horizon → `advance_wet_paint` → `blot` a few clouds →
 - `paint_stroke`: washes, shapes and details, and the wet tools (water, dryer, blot)
 - `wet_paper`, `advance_wet_paint`, `dry_paint`, `get_wet_paint`: wet-in-wet, flow, drying and checking
 - `set_wet_settings`, `set_canvas_tilt`, `set_flow_map`: tune and steer the water
+- `get_live_patterns`, `set_live_patterns`, `seed_live_patterns`: grow and tune reaction-diffusion patterns in wet washes
 - `get_light`: check a glowing wash's light once it dries
 - `undo_paint`: take back a step
 - `export_image`: deliver

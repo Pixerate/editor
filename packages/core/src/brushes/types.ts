@@ -15,7 +15,7 @@ import type { ColorValue } from '../color/dual';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
-import type { BrushRotation, ImpastoTool, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
+import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
 import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';
@@ -344,6 +344,27 @@ export interface BrushMotion {
 }
 
 /**
+ * Gray-Scott reaction-diffusion patterns (`spots`, `stripes`, `coral`, `maze`, `worms`) that grow
+ * inside wet paint (`behaviour.surface: 'wet'`) and freeze where the paint dries.
+ */
+export interface BrushLivePatterns {
+  /** Named Pearson feed/kill preset (`spots`, `stripes`, `coral`, `maze`, `worms`; default `spots`). */
+  pattern?: LivePatternKind;
+  /** Gray-Scott feed rate F, 0.01..0.1 (default from `pattern`). */
+  feed?: number;
+  /** Gray-Scott kill rate k, 0.03..0.08 (default from `pattern`). */
+  kill?: number;
+  /** Spatial scale of the pattern (diffusion multiplier), 0.5..4 (default 1). */
+  scale?: number;
+  /** Visual contrast of the V concentration field, 0..2 (default 1). */
+  contrast?: number;
+  /** Second colour (#rrggbb) that V blends the wet paint towards, or `null` to modulate pigment contrast (default `null`). */
+  secondColor?: string | null;
+  /** Impasto relief written to the layer's thick height map as patterns grow, 0..1 (default 0). */
+  relief?: number;
+}
+
+/**
  * A colour a brush can carry: a solid colour (hex, `#rrggbbaa`, `rgba()` or a light / dark
  * `DualColor`), a gradient, or effect paint.
  */
@@ -383,6 +404,7 @@ export interface Brush {
   behaviour?: BrushBehaviour;
   light?: BrushLight;
   motion?: BrushMotion;
+  livePatterns?: BrushLivePatterns;
   colour?: BrushColour;
 }
 

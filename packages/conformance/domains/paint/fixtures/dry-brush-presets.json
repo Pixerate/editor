@@ -364,6 +364,34 @@
               "builtin": true,
               "category": "watercolor",
               "engine": "wet",
+              "id": "turing-wash",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Turing wash",
+              "size": 36,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "coral-ink",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Coral ink",
+              "size": 22,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
               "id": "watercolor-detail",
               "kind": "mark",
               "marks": "continuous",
@@ -1035,7 +1063,7 @@
             }
           ],
           "host": "paint",
-          "total": 73
+          "total": 75
         }
       }
     },

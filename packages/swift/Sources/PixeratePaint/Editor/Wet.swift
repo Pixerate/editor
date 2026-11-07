@@ -267,6 +267,18 @@ final class WetStrokeDriver {
             }
             ex.drain()
             if wet.rewet > 0 { try world.rewet(laneId, rect, cov, amount: wet.rewet * k * 0.15, paper: initValues.paperColor) }
+            if let lp = brush.livePatterns {
+                let dabSeed = Int(Int32(truncatingIfNeeded: initValues.seed &+ dabCount &* 131 &+ copy &* 997))
+                _ = try world.seedLivePatterns(
+                    laneId,
+                    d.dab.x,
+                    d.dab.y,
+                    Swift.max(2, d.dab.radius),
+                    dabSeed,
+                    Swift.max(0.65, d.pressure),
+                    lp
+                )
+            }
         case "water":
             try world.paint(laneId, rect, cov, water: medium.options.water * k * (wet.water > 0 ? 1 : 0), pigment: nil)
             if wet.rewet > 0 { try world.rewet(laneId, rect, cov, amount: wet.rewet * k * 0.15, paper: initValues.paperColor) }
@@ -300,6 +312,7 @@ let WET_MEDIUM_PARAMS: [String: JSONObject] = [
 public struct WetLayerSettings: Equatable {
     public var params: WetParams
     public var flow: WetFlowSpec
+    public var livePatterns: LivePatternsSettings? = nil
 }
 
 /// One wet layer as tools describe it.
@@ -311,9 +324,10 @@ public struct WetLayerInfo {
     public var activeTiles: Int
     public var params: WetParams
     public var flow: WetFlowSpec
+    public var livePatterns: LivePatternsSettings? = nil
 
     public var json: JSONValue {
-        ["layerId": .string(layerId), "wet": .bool(wet), "wetCells": .number(Double(wetCells)), "wetBounds": rectJSON(wetBounds), "activeTiles": .number(Double(activeTiles)), "params": params.json, "flow": flow.json]
+        ["layerId": .string(layerId), "wet": .bool(wet), "wetCells": .number(Double(wetCells)), "wetBounds": rectJSON(wetBounds), "activeTiles": .number(Double(activeTiles)), "params": params.json, "flow": flow.json, "livePatterns": livePatterns?.json ?? .null]
     }
 }
 
@@ -369,6 +383,10 @@ struct PaintWetHost {
     var layerLight: (String) -> TiledSurface?
     /// Shows new light paint for wet layers (not an undo step).
     var updateLights: (OrderedMap<String, TiledSurface>) -> Void
+    /// The layer's thick height map (one channel), or nil.
+    var layerHeight: ((String) -> TiledSurface?)? = nil
+    /// Shows new thick height maps for wet layers with live pattern relief (not an undo step).
+    var updateHeights: ((OrderedMap<String, TiledSurface>) -> Void)? = nil
     /// The paint dried while time passed.
     var changed: () -> Void
 }
@@ -396,6 +414,7 @@ public final class PaintWetLayers {
     public private(set) var world: WetWorld?
     public internal(set) var tilt = FLAT_TILT
     var settings = OrderedMap<String, WetLayerSettings>()
+    var patterns = OrderedMap<String, LivePatternField>()
     public internal(set) var paused = false
     /// Wet strokes dry as soon as they end.
     public internal(set) var instantDry = false
@@ -502,6 +521,14 @@ public final class PaintWetLayers {
         for (id, s) in settings {
             if let c = s.flow.center { var n = s; n.flow.center = (c.x + Double(left), c.y + Double(top)); settings.set(id, n) }
         }
+        let tx0 = left / WET_TILE
+        let ty0 = top / WET_TILE
+        for (id, f) in patterns {
+            let moved = moveLivePatternSnapshot(f.snapshot(), to: (width: width, height: height), tx0: tx0, ty0: ty0)
+            let next = LivePatternField(width: width, height: height)
+            next.restore(moved)
+            patterns.set(id, next)
+        }
         let old = world
         let snap = old.flatMap { $0.laneIds().isEmpty ? nil : $0.snapshot() }
         dropWorld()
@@ -515,6 +542,9 @@ public final class PaintWetLayers {
         }
         world = try makeWorld(width, height, paper)
         world!.restore(moved)
+        for id in world!.laneIds() {
+            if let f = try? world!.livePatternField(id) { patterns.set(id, f) }
+        }
     }
 
     /// Whether any layer (or `layerId`) has wet paint.
@@ -529,18 +559,31 @@ public final class PaintWetLayers {
 
     func settingsOf(_ layerId: String, _ medium: String = "watercolor") -> WetLayerSettings {
         if let s = settings.get(layerId) { return s }
-        let s = WetLayerSettings(params: normalizeWetParams(WET_MEDIUM_PARAMS[medium] ?? [:], DEFAULT_WET_PARAMS), flow: DEFAULT_FLOW)
+        let s = WetLayerSettings(params: normalizeWetParams(WET_MEDIUM_PARAMS[medium] ?? [:], DEFAULT_WET_PARAMS), flow: DEFAULT_FLOW, livePatterns: nil)
         settings.set(layerId, s)
         return s
+    }
+
+    func patternFieldOf(_ layerId: String) -> LivePatternField {
+        let c = host.canvas()
+        if let f = patterns.get(layerId) {
+            if f.width != c.width || f.height != c.height { f.resize(c.width, c.height) }
+            return f
+        }
+        let f = LivePatternField(width: c.width, height: c.height)
+        if let lp = settings.get(layerId)?.livePatterns { f.configure(lp) }
+        patterns.set(layerId, f)
+        return f
     }
 
     /// Puts a layer in the world (its current pixels become the base under the wet paint).
     func ensureLane(_ layerId: String, _ medium: String? = nil) throws -> WetWorld {
         let w = try ensureWorld()
+        let lp = patternFieldOf(layerId)
         if !w.hasLane(layerId) {
             let base = host.layerSurface(layerId) ?? emptySurface(4)
             let s = settingsOf(layerId, medium ?? "watercolor")
-            try w.ensureLane(layerId, params: s.params, base: base, light: host.layerLight(layerId))
+            try w.ensureLane(layerId, params: s.params, base: base, light: host.layerLight(layerId), livePatterns: lp)
             let c = host.canvas()
             if s.flow.kind != "none" { try w.setFlow(layerId, flowField(s.flow, c.width, c.height), strength: s.flow.strength) }
         }
@@ -566,6 +609,102 @@ public final class PaintWetLayers {
         return s.flow
     }
 
+    @discardableResult
+    func setLivePatterns(_ layerId: String, _ update: JSONObject?) throws -> LivePatternsSettings? {
+        var s = settingsOf(layerId)
+        let f = patternFieldOf(layerId)
+        guard let update else {
+            f.clear()
+            s.livePatterns = nil
+            settings.set(layerId, s)
+            if let w = world, w.hasLane(layerId) { syncDisplays() }
+            return nil
+        }
+        let next: LivePatternsSettings
+        if let w = world, w.hasLane(layerId) {
+            next = try w.setLivePatterns(layerId, update)
+        } else {
+            next = f.configure(update)
+        }
+        s.livePatterns = next
+        settings.set(layerId, s)
+        syncDisplays()
+        return next
+    }
+
+    func seedLivePatterns(_ layerId: String, points: [(x: Double, y: Double, strength: Double?)], radius: Double, seed: Int = 1, settings update: JSONObject? = nil) throws -> (seededCells: Int, stats: LivePatternStats) {
+        var s = settingsOf(layerId)
+        let f = patternFieldOf(layerId)
+        if let update {
+            let next: LivePatternsSettings
+            if let w = world, w.hasLane(layerId) {
+                next = try w.setLivePatterns(layerId, update)
+            } else {
+                next = f.configure(update)
+            }
+            s.livePatterns = next
+            settings.set(layerId, s)
+        } else if !f.enabled {
+            let next: LivePatternsSettings
+            if let w = world, w.hasLane(layerId) {
+                if let existing = s.livePatterns {
+                    next = try w.setLivePatterns(layerId, existing)
+                } else {
+                    next = try w.setLivePatterns(layerId, [:])
+                }
+            } else {
+                if let existing = s.livePatterns {
+                    next = f.configure(existing)
+                } else {
+                    next = f.configure([:])
+                }
+            }
+            s.livePatterns = next
+            settings.set(layerId, s)
+        }
+        var seededCells = 0
+        let hasLane = world?.hasLane(layerId) ?? false
+        for (i, p) in points.enumerated() {
+            let str = p.strength ?? 1
+            let ptSeed = Int(Int32(truncatingIfNeeded: seed &+ i &* 7919))
+            if hasLane, let w = world {
+                seededCells += try w.seedLivePatterns(layerId, p.x, p.y, radius, ptSeed, str)
+            } else {
+                seededCells += f.seedDisc(cx: p.x, cy: p.y, radius: radius, seed: ptSeed, strength: str)
+            }
+        }
+        syncDisplays()
+        return (seededCells, livePatternStats(layerId))
+    }
+
+    func livePatternStats(_ layerId: String) -> LivePatternStats {
+        let f = patterns.get(layerId)
+        if let f, f.enabled {
+            var s = settingsOf(layerId)
+            if s.livePatterns == nil {
+                s.livePatterns = f.settings
+                settings.set(layerId, s)
+            }
+        }
+        if let w = world, w.hasLane(layerId), let st = try? w.livePatternStats(layerId) {
+            return st
+        }
+        if let f {
+            return f.stats { _, _, _, _ in false }
+        }
+        let cfg = settings.get(layerId)?.livePatterns
+        return LivePatternStats(
+            enabled: cfg != nil,
+            settings: cfg ?? DEFAULT_LIVE_PATTERNS,
+            activeTiles: 0,
+            patternCells: 0,
+            wetPatternCells: 0,
+            meanV: 0,
+            maxV: 0,
+            bounds: nil
+        )
+    }
+
     func setTilt(angle: Double?, direction: Double?) -> WetTilt {
         tilt = normalizeTilt(angle: angle, direction: direction, tilt)
         _ = world?.setTilt(tilt)
@@ -577,9 +716,13 @@ public final class PaintWetLayers {
 
     /// A layer as tools describe it.
     func info(_ layerId: String) -> WetLayerInfo {
-        let s = settingsOf(layerId)
+        var s = settingsOf(layerId)
+        if let f = patterns.get(layerId), f.enabled, s.livePatterns == nil {
+            s.livePatterns = f.settings
+            settings.set(layerId, s)
+        }
         let st: WetLaneStats? = world.flatMap { $0.hasLane(layerId) ? try? $0.stats(layerId) : nil }
-        return WetLayerInfo(layerId: layerId, wet: (st?.wetCells ?? 0) > 0, wetCells: st?.wetCells ?? 0, wetBounds: st?.wetBounds, activeTiles: st?.activeTiles ?? 0, params: s.params, flow: s.flow)
+        return WetLayerInfo(layerId: layerId, wet: (st?.wetCells ?? 0) > 0, wetCells: st?.wetCells ?? 0, wetBounds: st?.wetBounds, activeTiles: st?.activeTiles ?? 0, params: s.params, flow: s.flow, livePatterns: s.livePatterns)
     }
 
     func backend() -> WetBackendInfo? { world?.backend() }
@@ -587,10 +730,16 @@ public final class PaintWetLayers {
     /// Shows the current wet pixels (at most `maxTiles` reshaded per layer).
     @discardableResult
     func syncDisplays(_ maxTiles: Int = Int.max) -> [RasterRect] {
+        syncHeights()
         guard let w = world else { return [] }
         var surfaces = OrderedMap<String, TiledSurface>()
         var rects: [RasterRect] = []
         for id in w.laneIds() {
+            if let f = patterns.get(id), f.enabled {
+                var s = settingsOf(id)
+                s.livePatterns = f.settings
+                settings.set(id, s)
+            }
             guard let d = try? w.display(id, maxTiles: maxTiles) else { continue }
             if host.layerSurface(id) !== d.surface { surfaces.set(id, d.surface) }
             rects += d.changed
@@ -603,10 +752,16 @@ public final class PaintWetLayers {
     /// Like `syncDisplays`, shading on the GPU when it is active (all stale tiles at once).
     @discardableResult
     func syncDisplaysGpu(_ maxCpuTiles: Int = Int.max) -> [RasterRect] {
+        syncHeights()
         guard let w = world else { return [] }
         var surfaces = OrderedMap<String, TiledSurface>()
         var rects: [RasterRect] = []
         for id in w.laneIds() {
+            if let f = patterns.get(id), f.enabled {
+                var s = settingsOf(id)
+                s.livePatterns = f.settings
+                settings.set(id, s)
+            }
             guard let d = try? w.displayGpu(id, maxCpuTiles: maxCpuTiles) else { continue }
             if host.layerSurface(id) !== d.surface { surfaces.set(id, d.surface) }
             rects += d.changed
@@ -614,6 +769,19 @@ public final class PaintWetLayers {
         syncLights()
         if !surfaces.isEmpty || !rects.isEmpty { host.updateSurfaces(surfaces, rects) }
         return rects
+    }
+
+    /// Updates thick height maps for any layers with live pattern relief (`relief > 0`).
+    private func syncHeights() {
+        guard let layerHeight = host.layerHeight, let updateHeights = host.updateHeights else { return }
+        var heights = OrderedMap<String, TiledSurface>()
+        for (id, f) in patterns {
+            if !f.enabled || !(f.settings.relief > 0) || f.tiles.isEmpty { continue }
+            let cur = layerHeight(id) ?? emptySurface(1, 0)
+            let next = f.applyReliefHeight(cur)
+            if next !== cur { heights.set(id, next) }
+        }
+        if !heights.isEmpty { updateHeights(heights) }
     }
 
     /// Shows each wet layer's live light paint.
@@ -700,19 +868,61 @@ public final class PaintWetLayers {
 
     /// A snapshot of the world for undo (nil when there is none).
     func snapshot() -> WetSnapshot? {
-        guard let w = world, !w.laneIds().isEmpty else { return nil }
-        return w.snapshot()
+        let w = world
+        var patSnaps = OrderedMap<String, LivePatternFieldSnapshot>()
+        var patternBytes = 0
+        for (id, f) in patterns {
+            if !f.enabled && f.tiles.isEmpty { continue }
+            let ps = f.snapshot()
+            patSnaps.set(id, ps)
+            patternBytes += ps.bytes
+        }
+        guard let w, !w.laneIds().isEmpty else {
+            if patSnaps.isEmpty { return nil }
+            return WetSnapshot(clock: w?.clock ?? 0, tilt: tilt, lanes: [], slots: [], patterns: patSnaps, bytes: patternBytes)
+        }
+        let snap = w.snapshot()
+        if patSnaps.isEmpty { return snap }
+        return WetSnapshot(clock: snap.clock, tilt: snap.tilt, lanes: snap.lanes, slots: snap.slots, patterns: patSnaps, bytes: snap.bytes)
     }
 
     /// Puts a snapshot back (nil: no wet layers).
     func restore(_ snap: WetSnapshot?) throws {
+        patterns = OrderedMap()
+        for (id, var s) in settings {
+            s.livePatterns = nil
+            settings.set(id, s)
+        }
         guard let snap else {
             if let w = world { for id in w.laneIds() { try? w.removeLane(id) } }
             return
         }
         let c = host.canvas()
         if let w = world, w.width != c.width || w.height != c.height { dropWorld() }
-        try ensureWorld().restore(snap)
+        if let sp = snap.patterns {
+            for (id, ps) in sp {
+                let f = LivePatternField(width: c.width, height: c.height)
+                f.restore(ps)
+                patterns.set(id, f)
+                var s = settingsOf(id)
+                s.livePatterns = f.enabled ? f.settings : nil
+                settings.set(id, s)
+            }
+        }
+        if !snap.lanes.isEmpty {
+            let w = try ensureWorld()
+            w.restore(snap)
+            for id in w.laneIds() {
+                if let f = try? w.livePatternField(id) {
+                    patterns.set(id, f)
+                    var s = settingsOf(id)
+                    s.livePatterns = f.enabled ? f.settings : nil
+                    settings.set(id, s)
+                }
+            }
+        } else if let w = world {
+            for id in w.laneIds() { try? w.removeLane(id) }
+        }
         syncDisplays()
     }
 
@@ -726,6 +936,7 @@ public final class PaintWetLayers {
         world = nil
         driver = nil
         settings = OrderedMap()
+        patterns = OrderedMap()
         lastTick = nil
         stepsOwed = 0
     }
