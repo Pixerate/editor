@@ -19,6 +19,7 @@ func liveStrokeRefusal(_ brush: PaintBrush) -> String? {
     default: break
     }
     if brush.light.amount > 0 { return "The \(brush.name) brush lays light, which a stroke layer doesn't redraw yet; paint light on a pixel layer (add_layer), or set light.amount to 0 (set_brush)." }
+    if brush.ferro.amount > 0 { return "The \(brush.name) brush lays liquid ferrofluid, which a stroke layer doesn't redraw; paint ferrofluid on a pixel layer (add_layer), or set ferro.amount to 0 (set_brush)." }
     if brush.behavior.pickup > 0 { return "The \(brush.name) brush picks up the paint under it (pickup \(jsText(brush.behavior.pickup))), so it can't be redrawn on its own; set behavior.pickup to 0 (set_brush) or paint on a pixel layer." }
     return nil
 }

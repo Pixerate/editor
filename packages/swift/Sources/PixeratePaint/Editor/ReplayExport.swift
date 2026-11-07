@@ -205,8 +205,16 @@ extension PaintEditorController {
                     break
                 }
             case .paint(let e):
-                if target.getLayer(e.layerId) == nil { continue }
                 let d = e.data ?? [:]
+                if e.kind == "magnets" {
+                    let list = magnetsFromJSON(.array(d["magnets"]?.arrayValue ?? [])).map { m -> PaintMagnet in
+                        if s == 1 { return m }
+                        return PaintMagnet(id: m.id, x: m.x * s, y: m.y * s, strength: m.strength, radius: Swift.min(2000, Swift.max(8, m.radius * s)))
+                    }
+                    try target.replaceMagnets(list, advect: d["advect"] == .bool(true))
+                    continue
+                }
+                if target.getLayer(e.layerId) == nil { continue }
                 switch e.kind {
                 case "fill":
                     _ = try target.fillLayer(layerId: e.layerId, color: d["color"]?.stringValue, opacity: d["opacity"]?.numberValue, grain: d["grain"]?.numberValue, pressure: d["pressure"]?.numberValue, blend: d["blend"]?.stringValue)
@@ -233,6 +241,8 @@ extension PaintEditorController {
                     try target.replaceStickers(e.layerId, list)
                 case "flatten":
                     _ = try target.flattenRelief(e.layerId)
+                case "cure-ferrofluid":
+                    _ = try target.cureFerrofluid(e.layerId)
                 default:
                     continue
                 }

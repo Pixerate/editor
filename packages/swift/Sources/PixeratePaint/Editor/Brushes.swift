@@ -345,6 +345,7 @@ public struct PaintBrush: Equatable, Sendable {
     public var bristle: JSONObject
     public var sticker: JSONObject
     public var light: LightSettings
+    public var ferro: FerroSettings = DEFAULT_FERRO
     public var stamp: String?
     public var spray: SpraySettings?
     /// Dab engines: texture inside the tip (nil: none).
@@ -365,6 +366,7 @@ public struct PaintBrush: Equatable, Sendable {
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
             "light": light.json,
+            "ferro": ferro.json,
             "stamp": stamp.map { .string($0) } ?? .null,
             "spray": spray?.json ?? .null,
         ]
@@ -458,7 +460,7 @@ let BASE_BRUSH = PaintBrush(
     id: "round", name: "Round", category: "custom", engine: "dab", tip: DEFAULT_BRUSH, grain: 0, pressureSmoothing: 0, rotation: "fixed",
     dynamics: DEFAULT_DYNAMICS, mixer: DEFAULT_MIXER, loadsColor: true, behavior: DEFAULT_BEHAVIOR, blender: DEFAULT_BLENDER, smudge: DEFAULT_SMUDGE,
     wet: DEFAULT_WET_BRUSH, impasto: DEFAULT_IMPASTO, particle: DEFAULT_PARTICLE, bristle: DEFAULT_BRISTLE, sticker: DEFAULT_STICKER,
-    light: DEFAULT_LIGHT, stamp: nil, spray: nil, paint: nil, builtin: nil
+    light: DEFAULT_LIGHT, ferro: DEFAULT_FERRO, stamp: nil, spray: nil, paint: nil, builtin: nil
 )
 
 /// A brush with every field in range; missing fields come from `base` (default: a plain round dab brush).
@@ -532,6 +534,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
         light: LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
+        ferro: normalizeFerro(raw["ferro"]?.objectValue ?? (raw["ferro"]?.numberValue.map { ["amount": .number($0)] } ?? [:]), b.ferro),
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
         tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),

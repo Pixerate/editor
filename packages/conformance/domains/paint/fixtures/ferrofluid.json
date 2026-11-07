@@ -1,0 +1,406 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "ferrofluid",
+  "description": "Ferrofluid paint pulled by dipole magnets into lit Rosensweig relief spikes, then cured into permanent impasto.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "ferrofluid",
+        "color": "#111827",
+        "seed": 42,
+        "points": [
+          {
+            "x": 16,
+            "y": 32
+          },
+          {
+            "x": 48,
+            "y": 32
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 40,
+            "width": 70,
+            "x": -4,
+            "y": 12
+          },
+          "dabs": 12,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "get_ferrofluid",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeSpikeArea": 0,
+          "bounds": {
+            "height": 256,
+            "width": 512,
+            "x": -256,
+            "y": 0
+          },
+          "coverage": 1962,
+          "ferro": true,
+          "layerId": "@1",
+          "magnetCount": 0,
+          "maxSpikeHeight": 0,
+          "peak": 217,
+          "threshold": 0.12,
+          "wavelength": 16
+        }
+      }
+    },
+    {
+      "tool": "add_magnet",
+      "arguments": {
+        "x": 32,
+        "y": 32,
+        "strength": 1,
+        "radius": 28
+      },
+      "pixels": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "mag1",
+          "radius": 28,
+          "strength": 1,
+          "x": 32,
+          "y": 32
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:17i-22ud5o1jwd5"
+            },
+            "dpi": 300,
+            "ferro": {
+              "@1": {
+                "ferro": "pixerate-asset:16m-1n8hpda163x",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -2,
+                "y": 14
+              }
+            ],
+            "magnets": [
+              {
+                "id": "mag1",
+                "radius": 28,
+                "strength": 1,
+                "x": 32,
+                "y": 32
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 1,
+                "data": {
+                  "advect": true,
+                  "magnets": [
+                    {
+                      "id": "mag1",
+                      "radius": 28,
+                      "strength": 1,
+                      "x": 32,
+                      "y": 32
+                    }
+                  ]
+                },
+                "kind": "magnets",
+                "layerId": ""
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "smoothing": 0.35
+                  },
+                  "ferro": {
+                    "amount": 0.85
+                  },
+                  "id": "ferrofluid",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Ferrofluid",
+                  "tip": {
+                    "flow": 0.9,
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 28
+                  }
+                },
+                "color": "#111827",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 16,
+                    "y": 32
+                  },
+                  {
+                    "x": 48,
+                    "y": 32
+                  }
+                ],
+                "seed": 42
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/ferrofluid.3.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "7bb8f71bf10024aadf1d3d4b8f5b33aa4737a8aa94e74c813469e5c8f918e67a",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_magnets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "magnets": [
+            {
+              "id": "mag1",
+              "radius": 28,
+              "strength": 1,
+              "x": 32,
+              "y": 32
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_ferrofluid",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeSpikeArea": 1700,
+          "bounds": {
+            "height": 256,
+            "width": 256,
+            "x": 0,
+            "y": 0
+          },
+          "coverage": 1700,
+          "ferro": true,
+          "layerId": "@1",
+          "magnetCount": 1,
+          "maxSpikeHeight": 236,
+          "peak": 255,
+          "threshold": 0.12,
+          "wavelength": 16
+        }
+      }
+    },
+    {
+      "tool": "update_magnet",
+      "arguments": {
+        "id": "mag1",
+        "x": 36,
+        "y": 30,
+        "strength": 0.9,
+        "radius": 32
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "id": "mag1",
+          "radius": 32,
+          "strength": 0.9,
+          "x": 36,
+          "y": 30
+        },
+        "pixels": {
+          "file": "png/ferrofluid.6.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "6531e33f11c9ad9f9171b85e17233e29162c837531d7f08481d94ea3b8d016b4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "cure_ferrofluid",
+      "arguments": {},
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeSpikeArea": 1416,
+          "bounds": {
+            "height": 256,
+            "width": 256,
+            "x": 0,
+            "y": 0
+          },
+          "cured": true,
+          "layerId": "@1",
+          "maxSpikeHeight": 227
+        },
+        "pixels": {
+          "file": "png/ferrofluid.7.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "6531e33f11c9ad9f9171b85e17233e29162c837531d7f08481d94ea3b8d016b4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "remove_magnets",
+      "arguments": {
+        "ids": [
+          "mag1"
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "removed": [
+            "mag1"
+          ]
+        },
+        "pixels": {
+          "file": "png/ferrofluid.8.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "6531e33f11c9ad9f9171b85e17233e29162c837531d7f08481d94ea3b8d016b4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

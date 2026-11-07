@@ -328,6 +328,50 @@ public struct PaintPaperPanel: View {
             Toggle("Mirror tiling", isOn: Binding(get: { paper.tiling == "mirror" }, set: { on in model.attempt { _ = try model.controller.setPaper(["tiling": .string(on ? "mirror" : "repeat")]) } }))
             Button("New sheet") { model.newSheet() }
             PaintLightPanel(model: model)
+            PaintFerroPanel(model: model)
+        }
+    }
+}
+
+/// Ferrofluid & magnets (`FerroPanel`): add/adjust/remove magnets on the canvas, inspect active spike stats, and cure liquid ferrofluid into permanent impasto relief.
+public struct PaintFerroPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let magnets = model.magnets
+        let ferro = model.ferrofluid
+        let hasFerro = ferro?["ferro"] == .bool(true)
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("Ferrofluid & magnets")
+            HStack(spacing: 4) {
+                Button("Add magnet") { model.addMagnet() }
+                if !magnets.isEmpty {
+                    Button("Clear magnets") { model.removeMagnets() }
+                }
+                Button("Cure ferrofluid") { model.cureFerrofluid() }.disabled(!hasFerro)
+            }
+            .controlSize(.small)
+            if hasFerro, let ferro {
+                let spikes = Int(ferro["activeSpikeArea"]?.numberValue ?? 0)
+                let maxH = Int(ferro["maxSpikeHeight"]?.numberValue ?? 0)
+                Text("Liquid ferrofluid · \(spikes) spike px (max \(maxH))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(magnets, id: \.id) { m in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("\(m.id) (\(Int(m.x.rounded())), \(Int(m.y.rounded())))").font(.caption).bold()
+                        Spacer()
+                        Button { model.removeMagnets([m.id]) } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Remove magnet \(m.id)")
+                    }
+                    PaintSliderRow(label: "Strength", value: m.strength, range: -1...1, step: 0.05, onCommit: { model.updateMagnet(m.id, strength: $0) })
+                    PaintSliderRow(label: "Radius", value: m.radius, range: 8...400, step: 4, unit: "px", onCommit: { model.updateMagnet(m.id, radius: $0) })
+                }
+            }
         }
     }
 }

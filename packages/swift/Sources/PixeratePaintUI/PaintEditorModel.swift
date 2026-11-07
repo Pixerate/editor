@@ -335,6 +335,32 @@ public final class PaintEditorModel {
     /// Takes the active layer's light away (one undo step).
     public func clearLight() { attempt { _ = try controller.clearLight() } }
 
+    // MARK: - Ferrofluid & Magnets
+
+    /// Magnets placed on the canvas (`list_magnets`).
+    public var magnets: [PaintMagnet] { track(); return controller.listMagnets() }
+    /// The active layer's liquid ferrofluid and Rosensweig spike status (`get_ferrofluid`).
+    public var ferrofluid: JSONObject? { track(); return try? controller.getFerrofluid() }
+    /// Places a magnet on the canvas (one undo step).
+    public func addMagnet(x: Double? = nil, y: Double? = nil, strength: Double? = nil, radius: Double? = nil) {
+        let c = controller.doc.canvas
+        let count = controller.listMagnets().count
+        let offset = Double((count % 5) - 2) * 28
+        attempt { _ = try controller.addMagnet(x: x ?? (Double(c.width) / 2 + offset), y: y ?? (Double(c.height) / 2 + offset), strength: strength, radius: radius) }
+    }
+    /// Moves or adjusts a magnet (one undo step).
+    public func updateMagnet(_ id: String, x: Double? = nil, y: Double? = nil, strength: Double? = nil, radius: Double? = nil) {
+        attempt { _ = try controller.updateMagnet(id, x: x, y: y, strength: strength, radius: radius) }
+    }
+    /// Removes magnets by id, or all magnets when `ids` is nil (one undo step).
+    public func removeMagnets(_ ids: [String]? = nil) {
+        attempt { _ = try controller.removeMagnets(ids) }
+    }
+    /// Cures the active layer's liquid ferrofluid into permanent impasto relief (one undo step).
+    public func cureFerrofluid() {
+        attempt { _ = try controller.cureFerrofluid() }
+    }
+
     // MARK: - Wet media
 
     /// The wet-paint sliders (`PaintUITables.sliders`): the layer's settings, the tilt and the speed.

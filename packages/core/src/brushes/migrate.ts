@@ -62,7 +62,7 @@ function skeleton(b: ResolvedBrush): Brush {
 }
 
 /** Key order of a hand-written brush. */
-const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'motion', 'colour'];
+const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'ferro', 'motion', 'colour'];
 
 /**
  * The facet brush a v1 brush (any `PaintBrush`, or the JSON of one) amounts to: its engine's

@@ -24,6 +24,7 @@ import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
 import { ThickStrokeDriver, type ThickChannels } from './thick';
 import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
+import { ferroToShadow, ferroTwinBrush, shadowToFerro } from './ferro';
 import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
 import { StickerSpray, type Sticker } from './stickers';
 import type { StickerArtLookup } from './sticker-art';
@@ -87,6 +88,11 @@ export interface StrokeSessionInit {
    * the light channel as grey (see `light.ts`); `lightChannel()` returns the result.
    */
   light?: { surface: TiledSurface } | null;
+  /**
+   * Ferrofluid paint: the layer's ferrofluid channel before the stroke. With it, a twin of the
+   * stroke paints the ferrofluid channel as grey (see `ferro.ts`); `ferroChannel()` returns the result.
+   */
+  ferro?: { surface: TiledSurface } | null;
 }
 
 export interface PaintStrokeResult {
@@ -141,6 +147,9 @@ export class PaintStrokeSession {
   /** Light paint: the stroke's twin over the light channel, and what it left there. */
   private readonly lightTwin: PaintStrokeSession | null = null;
   private lightResult: TiledSurface | null = null;
+  /** Ferrofluid paint: the stroke's twin over the ferrofluid channel, and what it left there. */
+  private readonly ferroTwin: PaintStrokeSession | null = null;
+  private ferroResult: TiledSurface | null = null;
   /** A wet stroke that ended while the simulation was mid-batch: it commits when the driver catches up. */
   private wetEndPending = false;
   private readonly apply: StrokeApply;
@@ -160,6 +169,7 @@ export class PaintStrokeSession {
     const brush = init.brush;
     if (init.wet) this.wetDriver = init.wet.driver;
     if (init.light && !init.wet && !init.sticker) this.lightTwin = this.makeLightTwin(init.light.surface);
+    if (init.ferro && !init.wet && !init.sticker) this.ferroTwin = this.makeFerroTwin(init.ferro.surface);
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -250,12 +260,50 @@ export class PaintStrokeSession {
       paint,
       effect,
       light: null,
+      ferro: null,
     });
   }
 
   /** Light paint: the layer's light channel after the stroke, or `null` when the stroke has no twin or left it unchanged. */
   lightChannel(): TiledSurface | null {
     return this.lightResult;
+  }
+
+  /** The stroke's twin over the ferrofluid channel: the same marks in grey at the brush's ferro amount (see `ferro.ts`). */
+  private makeFerroTwin(ferro: TiledSurface): PaintStrokeSession {
+    const init = this.init;
+    const grey = Math.round(init.brush.ferro.amount * 255);
+    const g = grey / 255;
+    const hex = '#' + grey.toString(16).padStart(2, '0').repeat(3);
+    const host: StrokeSessionHost = {
+      update: () => {},
+      commit: (_s, surface) => {
+        this.ferroResult = surface ? shadowToFerro(surface) : null;
+      },
+    };
+    const effect = init.effect ? { source: init.effect.source, pixels: { ...init.effect.pixels, data: greyPixels(init.effect.pixels.data, grey) } } : null;
+    const paint = init.paint ? { ...init.paint, stops: init.paint.stops.map((st) => ({ ...st, color: hex })) } : null;
+    return new PaintStrokeSession(host, {
+      ...init,
+      surface: ferroToShadow(ferro),
+      lockTransparency: false,
+      brush: ferroTwinBrush(init.brush),
+      color: [grey, grey, grey, 255],
+      colorHex: hex,
+      secondary: [grey, grey, grey, 255],
+      inputFilter: undefined,
+      mixerLoad: { reservoir: init.mixerLoad.reservoir ? [g, g, g] : null, amount: init.mixerLoad.amount, pickup: null },
+      thick: init.thick,
+      paint,
+      effect,
+      light: null,
+      ferro: null,
+    });
+  }
+
+  /** Ferrofluid paint: the layer's ferrofluid channel after the stroke, or `null` when the stroke has no twin or left it unchanged. */
+  ferroChannel(): TiledSurface | null {
+    return this.ferroResult;
   }
 
   private tileTarget(): PaintTileTarget {
@@ -290,6 +338,7 @@ export class PaintStrokeSession {
     this.lastRaw = points[points.length - 1];
     this.host.sampled?.(this, points);
     this.lightTwin?.push(points);
+    this.ferroTwin?.push(points);
     if (this.wetDriver) {
       this.wetUpdate(this.wetDriver.push(points));
       return;
@@ -380,6 +429,7 @@ export class PaintStrokeSession {
     this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.stickerSpray ? this.stickerSpray.finish() : this.wet!.finish());
     this.closed = true;
     if (this.lightTwin?.open) this.lightTwin.end();
+    if (this.ferroTwin?.open) this.ferroTwin.end();
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
     let changed = false;
@@ -408,6 +458,8 @@ export class PaintStrokeSession {
     this.closed = true;
     if (this.lightTwin?.open) this.lightTwin.cancel();
     this.lightResult = null;
+    if (this.ferroTwin?.open) this.ferroTwin.cancel();
+    this.ferroResult = null;
     this.host.commit(this, null, true);
   }
 }

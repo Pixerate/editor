@@ -333,6 +333,16 @@ export interface BrushLight {
   glow?: boolean;
 }
 
+/** Liquid ferrofluid paint that rises into glossy Rosensweig spikes near magnets until cured. */
+export interface BrushFerro {
+  /** Ferrofluid per dab, 0..1 (default 0: none). */
+  amount?: number;
+  /** Capillary wavelength (spike-to-spike spacing) in pixels, 4..64 (default 16). */
+  wavelength?: number;
+  /** Critical magnetic field |B| threshold where spikes begin to rise, 0.01..0.95 (default 0.12). */
+  threshold?: number;
+}
+
 /** Animation after painting. */
 export interface BrushMotion {
   /** Effect paint keeps playing on stroke layers. */
@@ -382,6 +392,7 @@ export interface Brush {
   dynamics?: BrushDynamics;
   behaviour?: BrushBehaviour;
   light?: BrushLight;
+  ferro?: BrushFerro;
   motion?: BrushMotion;
   colour?: BrushColour;
 }

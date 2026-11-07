@@ -481,4 +481,19 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
     colour: { palette: ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#a855f7', '#111827', '#f8fafc'] },
   },
+  // --- Ferrofluid paint: liquid magnetic paint that rises into lit Rosensweig spikes near magnets ---
+  {
+    id: 'ferrofluid', name: 'Ferrofluid', kind: 'mark', medium: 'paint', variety: 'ferrofluid',
+    tip: { shape: 'round', size: 28, hardness: 0.75, flow: 0.9 },
+    dynamics: { smoothing: 0.35 },
+    ferro: { amount: 0.85 },
+    colour: { default: '#111827', palette: ['#111827', '#1e293b', '#312e81', '#0f3d3e', '#3b0764', '#451a03'] },
+  },
+  {
+    id: 'ferro-ink', name: 'Ferro ink', kind: 'mark', medium: 'ink', variety: 'ferrofluid',
+    tip: { shape: 'round', size: 12, spacing: 0.08 },
+    dynamics: { smoothing: 0.45, minSize: 0.25, velocitySize: -0.25 },
+    ferro: { amount: 0.7, wavelength: 12, threshold: 0.15 },
+    colour: { default: '#0f172a' },
+  },
 ];

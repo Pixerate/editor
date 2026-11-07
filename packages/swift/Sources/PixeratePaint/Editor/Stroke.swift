@@ -40,6 +40,8 @@ struct StrokeSessionInit {
     var paint: PaintGradientSource?
     /// Light paint: the layer's light channel before the stroke; a grey twin of the stroke paints it.
     var light: TiledSurface? = nil
+    /// Ferrofluid paint: the layer's liquid ferrofluid channel before the stroke; a grey twin of the stroke paints it.
+    var ferro: TiledSurface? = nil
     /// Effect paint: the effect (recorded with the stroke) and its rendered pixels.
     var effect: (source: PaintEffectPaint, pixels: EffectPaintPixels)? = nil
     /// Sticker brushes: the number of the first sticker id (`st<n>`) the spray makes.
@@ -108,6 +110,8 @@ final class PaintStrokeSession: PaintTileTarget {
 
     /// Light paint: the stroke's twin over the light channel.
     private var lightTwin: PaintStrokeSession?
+    /// Ferrofluid paint: the stroke's twin over the ferrofluid channel.
+    private var ferroTwin: PaintStrokeSession?
     /// The tiles shown while the stroke is painted (`currentSurface`), and the keys changed since.
     private var shown: OrderedMap<TileKey, Tile>?
     private var stale: [TileKey] = []
@@ -118,6 +122,12 @@ final class PaintStrokeSession: PaintTileTarget {
 
     /// Light paint: the layer's light channel after the stroke, or nil when the stroke has no twin.
     var lightChannel: TiledSurface? { lightTwin?.surfaceAfter.map(shadowToLight) }
+
+    /// Ferrofluid paint: the layer's ferrofluid channel after the stroke, or nil when the stroke has no twin.
+    var ferroChannel: TiledSurface? { ferroTwin?.surfaceAfter.map(shadowToFerro) }
+
+    /// Ferrofluid paint while the stroke is open.
+    func currentFerro() -> TiledSurface? { ferroTwin.map { shadowToFerro($0.currentSurface()) } }
 
     init(_ i: StrokeSessionInit) throws {
         initValues = i
@@ -141,7 +151,28 @@ final class PaintStrokeSession: PaintTileTarget {
             t.paint = i.paint.map { p in var q = p; q.stops = p.stops.map { var st = $0; st.color = hex; return st }; return q }
             t.effect = i.effect.map { ($0.source, greyPixels($0.pixels, grey)) }
             t.light = nil
+            t.ferro = nil
             lightTwin = try PaintStrokeSession(t)
+        }
+        if let ferro = i.ferro, i.wet == nil, i.brush.engine != "sticker" {
+            // The twin paints the ferrofluid as grey at the brush's ferro amount (see `ferro.ts`).
+            let grey = Int(JS.round(brush.ferro.amount * 255))
+            let g = Double(grey) / 255
+            let hex = "#" + String(repeating: String(grey, radix: 16).leftPad(2), count: 3)
+            var t = i
+            t.surface = ferroToShadow(ferro)
+            t.lockTransparency = false
+            t.brush = ferroTwinBrush(brush)
+            t.color = [grey, grey, grey, 255]
+            t.colorHex = hex
+            t.secondary = [grey, grey, grey, 255]
+            t.inputFilter = nil
+            t.mixerLoad = MixerLoad(reservoir: i.mixerLoad.reservoir != nil ? [g, g, g] : nil, amount: i.mixerLoad.amount, pickup: nil)
+            t.paint = i.paint.map { p in var q = p; q.stops = p.stops.map { var st = $0; st.color = hex; return st }; return q }
+            t.effect = i.effect.map { ($0.source, greyPixels($0.pixels, grey)) }
+            t.light = nil
+            t.ferro = nil
+            ferroTwin = try PaintStrokeSession(t)
         }
         apply = StrokeApply(mode: brush.engine == "eraser" ? .erase : .paint, color: i.color, background: i.background, opacity: brush.tip.opacity, blend: brush.tip.blend, lockTransparency: i.lockTransparency, selection: i.selection, offset: i.offset)
         let copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
@@ -226,6 +257,7 @@ final class PaintStrokeSession: PaintTileTarget {
             return rects
         }
         try lightTwin?.push(filtered)
+        try ferroTwin?.push(filtered)
         let rects = dry != nil ? dry!.push(filtered) : thickDriver != nil ? thickDriver!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
         update(rects)
         markStale(rects)
@@ -305,6 +337,7 @@ final class PaintStrokeSession: PaintTileTarget {
         update(dry != nil ? dry!.finish() : thickDriver != nil ? thickDriver!.finish() : spray != nil ? spray!.finish() : wet!.finish())
         closed = true
         if let twin = lightTwin, twin.open { _ = try twin.end() }
+        if let twin = ferroTwin, twin.open { _ = try twin.end() }
         let ch = base.channels
         var tiles = base.tiles
         var changed = false

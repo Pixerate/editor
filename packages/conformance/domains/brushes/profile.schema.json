@@ -173,6 +173,15 @@
         "none"
       ],
       "description": "Several dabs per spacing step (dynamics.count); missing: none."
+    },
+    "ferro": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Liquid ferrofluid (ferro); missing: none."
     }
   },
   "required": [

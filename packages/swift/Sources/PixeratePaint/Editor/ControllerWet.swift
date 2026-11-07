@@ -346,18 +346,29 @@ extension PaintEditorController {
         return ["layerId": .string(l.id), "flattened": true]
     }
 
-    /// The layers with thick paint lit (each thick layer's pixels replaced by its lit tiles).
-    func litLayers(_ layers: [PaintLayer], liveThick: (layerId: String, channels: ThickChannels)? = nil) -> [PaintLayer] {
+    /// The layers with thick paint and/or ferrofluid relief lit (each layer's pixels replaced by its lit tiles).
+    func litLayers(_ layers: [PaintLayer], liveThick: (layerId: String, channels: ThickChannels)? = nil, liveFerro: (layerId: String, surface: TiledSurface, settings: FerroSettings)? = nil) -> [PaintLayer] {
         let thick = doc.thick
-        if thick == nil && liveThick == nil { return layers }
+        let ferro = doc.ferro
+        if thick == nil && liveThick == nil && ferro == nil && liveFerro == nil { return layers }
         var ids = thick?.keys ?? []
+        for id in ferro?.keys ?? [] where !ids.contains(id) { ids.append(id) }
         if let live = liveThick, !ids.contains(live.layerId) { ids.append(live.layerId) }
+        if let live = liveFerro, !ids.contains(live.layerId) { ids.append(live.layerId) }
+        let magnets = doc.magnets ?? []
         var out = layers
         for id in ids {
-            guard let ch = liveThick?.layerId == id ? liveThick!.channels : thick?.get(id), let l = findLayer(out, id)?.layer, l.isPixel else { continue }
+            guard let l = findLayer(out, id)?.layer, l.isPixel else { continue }
+            let ch = (liveThick?.layerId == id ? liveThick!.channels : thick?.get(id)) ?? emptyThickChannels()
+            let ferroSurf = liveFerro?.layerId == id ? liveFerro!.surface : ferro?.get(id)
+            let ferroSettings = liveFerro?.layerId == id ? liveFerro!.settings : (doc.ferroSettings?.get(id) ?? DEFAULT_FERRO)
+            let ferroInput = ferroSurf != nil && !ferroSurf!.tiles.isEmpty
+                ? FerroLayerInput(surface: ferroSurf!, magnets: magnets, settings: ferroSettings, offset: l.pixelOffset)
+                : nil
+            if ch.height.tiles.isEmpty && ferroInput == nil { continue }
             let cache = litCaches[id] ?? LitCache()
             litCaches[id] = cache
-            let lit = cache.lit(l.pixelSurface, ch, lighting)
+            let lit = cache.lit(l.pixelSurface, ch, lighting, ferroInput)
             if lit !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(lit) } }
         }
         return out

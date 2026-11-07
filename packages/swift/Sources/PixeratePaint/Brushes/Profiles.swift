@@ -27,6 +27,8 @@ public struct BrushHostProfile: Sendable {
     public var tipGrain: String? = nil
     /// Several dabs per spacing step (`dynamics.count` above 1); nil: `none`.
     public var dabCount: String? = nil
+    /// Liquid ferrofluid (`ferro`); nil: `none`.
+    public var ferro: String? = nil
 }
 
 private let ALL_COLOURS = ["solid", "dual", "gradient", "effect"]
@@ -34,7 +36,7 @@ private let ELLIPSES = ["round", "flat", "chisel"]
 public let BRUSH_TIP_SHAPES = ["round", "flat", "chisel", "bristle", "stamp"]
 public let BRUSH_MARKS_KINDS = ["continuous", "scatter", "particles", "objects"]
 
-public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full", tipGrain: "full", dabCount: "full")
+public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full", tipGrain: "full", dabCount: "full", ferro: "full")
 public let IMAGE_PROFILE = BrushHostProfile(id: "image", name: "Image editor", kinds: ["mark", "tool"], tools: ["eraser"], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "full", grain: "ignored", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "ignored", tipGrain: "ignored", dabCount: "ignored")
 public let CANVAS_PROFILE = BrushHostProfile(id: "canvas", name: "Canvas", kinds: ["mark"], tools: [], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "none", grain: "full", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "full", tipGrain: "ignored", dabCount: "ignored")
 /// Vector brushstrokes: as canvas, plus wet paint, the Mixer Brush, smudge and blender (#519); light paints as plain colour.
@@ -104,6 +106,7 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
     feature(profile.exchange, ex?["reservoir"] == nil && (nonZero(ex?["pickup"]) || ex?["dirty"] == .bool(true)), "behaviour.exchange", "picking paint up", "Remove behaviour.exchange.")
     feature(profile.grain, nonZero(brush.path("behaviour.grain")), "behaviour.grain", "paper grain", "Set behaviour.grain to 0.")
     feature(profile.light, nonZero(brush.path("light.amount")), "light", "light paint (glow and spill)", "Remove light (or set light.amount to 0).")
+    feature(profile.ferro ?? "none", nonZero(brush.path("ferro.amount")), "ferro", "ferrofluid spikes and magnets", "Remove ferro (or set ferro.amount to 0).")
     if let m = brush["motion"]?.objectValue {
         feature(profile.motion, m["live"] == .bool(true) || nonZero(m["waveSpeed"]) || m["fps"] != nil, "motion", "animation", "Remove motion.")
     }
@@ -159,6 +162,7 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "tip.grain": edit("tip") { $0["grain"] = nil }
         case "dynamics.count": edit("dynamics") { $0["count"] = nil }
         case "light": b["light"] = nil
+        case "ferro": b["ferro"] = nil
         case "motion": b["motion"] = nil
         case "dynamics.velocity": edit("dynamics") { o in o["velocitySize"] = nil; o["velocityOpacity"] = nil }
         case "dynamics.tilt": edit("dynamics") { o in o["tiltSize"] = nil; o["tiltRoundness"] = nil; o["tiltOpacity"] = nil }

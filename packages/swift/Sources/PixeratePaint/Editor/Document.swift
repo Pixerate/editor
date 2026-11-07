@@ -59,6 +59,12 @@ public final class PaintDocumentState {
     public var liveStrokes: OrderedMap<String, [RecordedStroke]>?
     /// Light paint: each layer's light channel (layers without light are missing).
     public var light: OrderedMap<String, TiledSurface>?
+    /// Ferrofluid paint: each layer's liquid ferrofluid channel (layers without ferrofluid are missing).
+    public var ferro: OrderedMap<String, TiledSurface>?
+    /// Ferrofluid Rosensweig parameters per layer (wavelength and critical field threshold).
+    public var ferroSettings: OrderedMap<String, FerroSettings>?
+    /// Magnets placed on the canvas that pull liquid ferrofluid into Rosensweig relief spikes.
+    public var magnets: [PaintMagnet]?
     /// Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
     public var origin: LayerOffset?
     /// Effect layers: the provider effect each is drawn from (layer id → effect).
@@ -86,6 +92,9 @@ public final class PaintDocumentState {
         d.paintEvents = paintEvents
         d.liveStrokes = liveStrokes
         d.light = light
+        d.ferro = ferro
+        d.ferroSettings = ferroSettings
+        d.magnets = magnets
         d.origin = origin
         d.effectLayers = effectLayers
         d.paperEffect = paperEffect

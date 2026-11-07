@@ -76,7 +76,7 @@ describe('the paint contracts in @pixerate/conformance', () => {
     expect(ui.tools.map((t) => t.id)).toContain('brush');
     expect(ui.layerEffects.length).toBe(10);
     for (const e of ui.layerEffects) expect(e.controls.length, e.kind).toBeGreaterThan(0);
-    expect(Object.keys(ui.sliders)).toEqual(['paper', 'wet', 'wetTilt', 'wetSpeed', 'light', 'stroke', 'sticker']);
+    expect(Object.keys(ui.sliders)).toEqual(['paper', 'wet', 'wetTilt', 'wetSpeed', 'light', 'stroke', 'sticker', 'magnet']);
   });
 
   it('has a manifest naming every other file, the format version and the document versions', () => {

@@ -38,6 +38,8 @@ export * from './wet-tools';
 export * from './thick';
 export { BACKLIGHT_SPILL, DEFAULT_BACKLIGHT_COLOR, backlightOf } from './backlight';
 export * from './thick-tools';
+export * from './ferro';
+export * from './ferro-tools';
 export * from './replay';
 export * from './replay-tools';
 export * from './stencils';

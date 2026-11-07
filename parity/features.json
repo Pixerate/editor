@@ -2126,6 +2126,13 @@
           "react": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
           "svelte": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
           "swift": "✅ `EffectProvider`, `FakeEffectProvider`, `createPaintEffectsToolProvider`, `PaintEffectPaint`: effect paper, effect layers, fills, light baked onto dried paint, effect paint for dab, particle, bristle, Mixer Brush, wet and impasto strokes, saved and replayed; no effects panel in `PaintEditorView`, live playback in the view or export at a moment yet; sticker effect paint: Planned (#545)"
+        },
+        {
+          "feature": "Ferrofluid Paint & Magnets (a per-layer liquid ferrofluid channel `doc.ferro[layerId]` laid by brushes with the `ferro` facet (`amount`, `wavelength`, `threshold`; built-in presets `ferrofluid` and `ferro-ink`); document magnets `doc.magnets` (`x`, `y`, `strength` in `-1..1`, `radius` in px) that deterministically advect liquid ferrofluid toward magnets when placed or moved and pull it into analytical hexagonal Rosensweig relief spikes where `|B| > threshold`, tilted along the magnetic field and shaded by `LitCache` / `lightTile` with glossy metallic material; `cure_ferrofluid` bakes the active spikes into permanent impasto relief and clears the liquid channel as one undo step; saved, undone and replayed; agent tools `add_magnet`, `update_magnet`, `remove_magnets`, `list_magnets`, `get_ferrofluid`, `cure_ferrofluid`)",
+          "core": "`ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`, `createFerroTools` (`/paint-editor`)",
+          "react": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
+          "svelte": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
+          "swift": "✅ `FerroSettings`, `PaintMagnet`, `ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`; `PaintEditorController` `addMagnet`, `updateMagnet`, `removeMagnets`, `listMagnets`, `getFerrofluid`, `cureFerrofluid`; `PaintFerroPanel` (in `PaintPaperPanel`) and magnet guides in `PaintCanvasView`"
         }
       ]
     },

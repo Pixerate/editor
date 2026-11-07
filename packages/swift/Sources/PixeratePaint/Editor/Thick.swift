@@ -105,36 +105,118 @@ func lightTile(_ color: [UInt8], _ height: [UInt8]?, _ heightAround: (Int, Int) 
     return out
 }
 
+private func expandTile(_ t: Tile, _ channels: Int) -> [UInt8] {
+    if t.data.count == TILE * TILE * channels { return t.data }
+    let u = t.uniform ?? 0
+    if channels == 1 { return [UInt8](repeating: UInt8(u & 255), count: TILE * TILE) }
+    var out = [UInt8](repeating: 0, count: TILE * TILE * 4)
+    let b0 = UInt8((u >> 24) & 255), b1 = UInt8((u >> 16) & 255), b2 = UInt8((u >> 8) & 255), b3 = UInt8(u & 255)
+    for i in stride(from: 0, to: out.count, by: 4) {
+        out[i] = b0; out[i + 1] = b1; out[i + 2] = b2; out[i + 3] = b3
+    }
+    return out
+}
+
 /// Cache of lit tiles for one layer, by the identity of their inputs (`LitCache`).
 final class LitCache {
-    private var tiles: [TileKey: (inputs: [ObjectIdentifier?], light: PaintLighting, tile: Tile)] = [:]
+    private var tiles: [TileKey: (inputs: [ObjectIdentifier?], light: PaintLighting, ferroKey: String, tile: Tile)] = [:]
 
-    /// The layer's pixels lit (tiles without relief nearby are the colour tiles themselves).
-    func lit(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting) -> TiledSurface {
-        if ch.height.tiles.isEmpty || light.relief <= 0 { return color }
+    /// The layer's pixels lit (tiles without relief or ferrofluid nearby are the colour tiles themselves).
+    func lit(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting, _ ferro: FerroLayerInput? = nil) -> TiledSurface {
+        let hasThick = !ch.height.tiles.isEmpty
+        let hasFerro = ferro != nil && !ferro!.surface.tiles.isEmpty
+        let hasFerroSpikes = hasFerro && !ferro!.magnets.isEmpty
+        if !hasThick && !hasFerro { return color }
+        if light.relief <= 0 && !hasFerro { return color }
+        let fk = ferroCacheKey(ferro)
         var out = color.tiles
-        var keys = Set<TileKey>()
-        for (key, tile) in color.tiles {
-            keys.insert(key)
+        var keys = OrderedMap<TileKey, Bool>()
+        for k in color.tiles.keys { keys.set(k, true) }
+        if hasFerro {
+            for k in ferro!.surface.tiles.keys { keys.set(k, true) }
+        }
+        for (key, _) in keys {
+            let tile = color.tiles.get(key)
             let (tx, ty) = tileCoord(key)
-            func around(_ dx: Int, _ dy: Int) -> Tile? { ch.height.tiles.get(tileKey(tx + dx, ty + dy)) }
+            func aroundH(_ dx: Int, _ dy: Int) -> Tile? { ch.height.tiles.get(tileKey(tx + dx, ty + dy)) }
+            func aroundF(_ dx: Int, _ dy: Int) -> Tile? { hasFerro ? ferro!.surface.tiles.get(tileKey(tx + dx, ty + dy)) : nil }
             var any = false
-            for dy in -1...1 where !any { for dx in -1...1 where !any { if around(dx, dy) != nil { any = true } } }
+            for dy in -1...1 where !any {
+                for dx in -1...1 where !any {
+                    if aroundH(dx, dy) != nil || aroundF(dx, dy) != nil { any = true }
+                }
+            }
             if !any { continue }
-            let h = ch.height.tiles.get(key)
             let m = ch.material.tiles.get(key)
-            var inputs: [ObjectIdentifier?] = [ObjectIdentifier(tile), m.map(ObjectIdentifier.init)]
-            for dy in -1...1 { for dx in -1...1 { inputs.append(around(dx, dy).map(ObjectIdentifier.init)) } }
-            if let cached = tiles[key], cached.inputs == inputs, cached.light == light {
+            let f = hasFerro ? ferro!.surface.tiles.get(key) : nil
+            if tile == nil && f == nil { continue }
+            var inputs: [ObjectIdentifier?] = [tile.map(ObjectIdentifier.init), m.map(ObjectIdentifier.init)]
+            for dy in -1...1 { for dx in -1...1 { inputs.append(aroundH(dx, dy).map(ObjectIdentifier.init)) } }
+            if hasFerro {
+                for dy in -1...1 { for dx in -1...1 { inputs.append(aroundF(dx, dy).map(ObjectIdentifier.init)) } }
+            }
+            if let cached = tiles[key], cached.inputs == inputs, cached.light == light, cached.ferroKey == fk {
                 out.set(key, cached.tile)
                 continue
             }
-            let data = lightTile(tile.data, h?.data, { dx, dy in around(dx, dy)?.data }, m?.data, light)
+
+            var cd = tile.map { expandTile($0, 4) } ?? [UInt8](repeating: 0, count: TILE * TILE * 4)
+            var md = m.map { expandTile($0, 4) }
+            if let f {
+                let fd = expandTile(f, 1)
+                var mBuf = md ?? [UInt8](repeating: 0, count: TILE * TILE * 4)
+                for p in 0..<fd.count {
+                    let fb = Int(fd[p])
+                    if fb == 0 { continue }
+                    let i = p * 4
+                    if Int(cd[i + 3]) < fb {
+                        let a0 = Double(cd[i + 3]) / Double(fb)
+                        cd[i] = JS.u8c(JS.round(Double(cd[i]) * a0 + Double(FERRO_CARRIER_RGB.0) * (1.0 - a0)))
+                        cd[i + 1] = JS.u8c(JS.round(Double(cd[i + 1]) * a0 + Double(FERRO_CARRIER_RGB.1) * (1.0 - a0)))
+                        cd[i + 2] = JS.u8c(JS.round(Double(cd[i + 2]) * a0 + Double(FERRO_CARRIER_RGB.2) * (1.0 - a0)))
+                        cd[i + 3] = UInt8(fb)
+                    }
+                    let w = Double(fb) / 255.0
+                    mBuf[i] = UInt8(Swift.max(Int(mBuf[i]), Int(JS.round(Double(FERRO_DEFAULT_GLOSS) * w))))
+                    mBuf[i + 1] = UInt8(Swift.max(Int(mBuf[i + 1]), Int(JS.round(Double(FERRO_DEFAULT_METALLIC) * w))))
+                    mBuf[i + 2] = UInt8(Swift.max(Int(mBuf[i + 2]), Int(JS.round(Double(FERRO_DEFAULT_RIM) * w))))
+                    if mBuf[i + 3] == 0 { mBuf[i + 3] = 255 }
+                }
+                md = mBuf
+            }
+
+            func buildHeightTile(_ ntx: Int, _ nty: Int) -> [UInt8]? {
+                let nkey = tileKey(ntx, nty)
+                let ht = ch.height.tiles.get(nkey)
+                let ft = hasFerroSpikes ? ferro!.surface.tiles.get(nkey) : nil
+                if ht == nil && ft == nil { return nil }
+                guard let ft else { return expandTile(ht!, 1) }
+                var outH = ht.map { expandTile($0, 1) } ?? [UInt8](repeating: 0, count: TILE * TILE)
+                let fData = expandTile(ft, 1)
+                let ox = Double(ntx * TILE + ferro!.offset.x) + 0.5
+                let oy = Double(nty * TILE + ferro!.offset.y) + 0.5
+                var p = 0
+                for py in 0..<TILE {
+                    let docY = oy + Double(py)
+                    for px in 0..<TILE {
+                        let fb = Int(fData[p])
+                        if fb != 0 {
+                            let hs = ferroSpikeHeightAt(ox + Double(px), docY, fb, ferro!.magnets, ferro!.settings)
+                            if hs > 0 { outH[p] = UInt8(Swift.min(255, Int(outH[p]) + hs)) }
+                        }
+                        p += 1
+                    }
+                }
+                return outH
+            }
+
+            let hd = buildHeightTile(tx, ty)
+            let data = lightTile(cd, hd, { dx, dy in buildHeightTile(tx + dx, ty + dy) }, md, light)
             let litTile = Tile(data: data, uniform: nil)
-            tiles[key] = (inputs, light, litTile)
+            tiles[key] = (inputs, light, fk, litTile)
             out.set(key, litTile)
         }
-        for key in Array(tiles.keys) where !keys.contains(key) { tiles[key] = nil }
+        for key in Array(tiles.keys) where !keys.has(key) { tiles[key] = nil }
         return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
     }
 }

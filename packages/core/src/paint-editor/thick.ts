@@ -24,6 +24,15 @@ import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, tileKey,
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
+import {
+  FERRO_CARRIER_RGB,
+  FERRO_DEFAULT_GLOSS,
+  FERRO_DEFAULT_METALLIC,
+  FERRO_DEFAULT_RIM,
+  ferroCacheKey,
+  ferroSpikeHeightAt,
+  type FerroLayerInput,
+} from './ferro';
 import { hash2 } from './noise';
 
 /** Where the light comes from. */
@@ -137,34 +146,98 @@ export class LitCache {
   private readonly tiles = new Map<TileKey, { inputs: unknown[]; tile: Tile }>();
 
   /** The layer's pixels lit (tiles without relief nearby are the colour tiles themselves). */
-  lit(color: TiledSurface, ch: ThickChannels, light: PaintLighting): TiledSurface {
-    if (!ch.height.tiles.size || light.relief <= 0) return color;
+  lit(color: TiledSurface, ch: ThickChannels, light: PaintLighting, ferro?: FerroLayerInput | null): TiledSurface {
+    const hasFerro = !!ferro && ferro.surface.tiles.size > 0;
+    const hasFerroSpikes = hasFerro && ferro!.magnets.length > 0;
+    if (!ch.height.tiles.size && !hasFerro) return color;
+    if (light.relief <= 0 && !hasFerro) return color;
     const lk = lightingKey(light);
+    const fk = hasFerro ? ferroCacheKey(ferro) : '';
     const out = new Map(color.tiles);
     const keys = new Set<TileKey>();
     for (const key of color.tiles.keys()) keys.add(key);
-    for (const [key, tile] of color.tiles) {
+    if (hasFerro) {
+      for (const key of ferro!.surface.tiles.keys()) keys.add(key);
+    }
+    for (const key of keys) {
+      const tile = color.tiles.get(key) ?? null;
       const tx = (key % 65536) - 32768;
       const ty = Math.floor(key / 65536) - 32768;
-      const around = (dx: number, dy: number) => ch.height.tiles.get(tileKey(tx + dx, ty + dy))?.data ?? null;
+      const aroundH = (dx: number, dy: number) => ch.height.tiles.get(tileKey(tx + dx, ty + dy)) ?? null;
+      const aroundF = (dx: number, dy: number) => (hasFerro ? ferro!.surface.tiles.get(tileKey(tx + dx, ty + dy)) ?? null : null);
       let any = false;
-      for (let dy = -1; dy <= 1 && !any; dy++) for (let dx = -1; dx <= 1 && !any; dx++) if (around(dx, dy)) any = true;
+      for (let dy = -1; dy <= 1 && !any; dy++) {
+        for (let dx = -1; dx <= 1 && !any; dx++) {
+          if (aroundH(dx, dy) || aroundF(dx, dy)) any = true;
+        }
+      }
       if (!any) continue;
       const h = ch.height.tiles.get(key) ?? null;
       const m = ch.material.tiles.get(key) ?? null;
-      const inputs: unknown[] = [tile, lk, m];
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) inputs.push(ch.height.tiles.get(tileKey(tx + dx, ty + dy)) ?? null);
+      const f = hasFerro ? ferro!.surface.tiles.get(key) ?? null : null;
+      if (!tile && !f) continue;
+      const inputs: unknown[] = [tile, lk, m, fk];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) inputs.push(aroundH(dx, dy));
+      if (hasFerro) {
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) inputs.push(aroundF(dx, dy));
+      }
       const cached = this.tiles.get(key);
       if (cached && cached.inputs.length === inputs.length && cached.inputs.every((v, i) => v === inputs[i])) {
         out.set(key, cached.tile);
         continue;
       }
-      const hd = h ? expand(h, 1) : null;
-      const md = m ? expand(m, 4) : null;
-      const data = lightTile(expand(tile, 4), hd, (dx, dy) => {
-        const t = ch.height.tiles.get(tileKey(tx + dx, ty + dy));
-        return t ? expand(t, 1) : null;
-      }, md, light);
+
+      let cd = tile ? expand(tile, 4) : new Uint8ClampedArray(TILE * TILE * 4);
+      let md = m ? expand(m, 4) : null;
+      if (f) {
+        const fd = expand(f, 1);
+        cd = new Uint8ClampedArray(cd);
+        const mBuf = md ? new Uint8ClampedArray(md) : new Uint8ClampedArray(TILE * TILE * 4);
+        for (let p = 0; p < fd.length; p++) {
+          const fb = fd[p];
+          if (!fb) continue;
+          const i = p * 4;
+          if (cd[i + 3] < fb) {
+            const a0 = cd[i + 3] / fb;
+            cd[i] = Math.round(cd[i] * a0 + FERRO_CARRIER_RGB[0] * (1 - a0));
+            cd[i + 1] = Math.round(cd[i + 1] * a0 + FERRO_CARRIER_RGB[1] * (1 - a0));
+            cd[i + 2] = Math.round(cd[i + 2] * a0 + FERRO_CARRIER_RGB[2] * (1 - a0));
+            cd[i + 3] = fb;
+          }
+          const w = fb / 255;
+          mBuf[i] = Math.max(mBuf[i], Math.round(FERRO_DEFAULT_GLOSS * w));
+          mBuf[i + 1] = Math.max(mBuf[i + 1], Math.round(FERRO_DEFAULT_METALLIC * w));
+          mBuf[i + 2] = Math.max(mBuf[i + 2], Math.round(FERRO_DEFAULT_RIM * w));
+          mBuf[i + 3] = mBuf[i + 3] || 255;
+        }
+        md = mBuf;
+      }
+
+      const buildHeightTile = (ntx: number, nty: number): Uint8ClampedArray | null => {
+        const nkey = tileKey(ntx, nty);
+        const ht = ch.height.tiles.get(nkey) ?? null;
+        const ft = hasFerroSpikes ? ferro!.surface.tiles.get(nkey) ?? null : null;
+        if (!ht && !ft) return null;
+        if (!ft) return expand(ht!, 1);
+        const hBase = ht ? expand(ht, 1) : null;
+        const fData = expand(ft, 1);
+        const outH = hBase ? new Uint8ClampedArray(hBase) : new Uint8ClampedArray(TILE * TILE);
+        const ox = ntx * TILE + ferro!.offset.x + 0.5;
+        const oy = nty * TILE + ferro!.offset.y + 0.5;
+        for (let py = 0, p = 0; py < TILE; py++) {
+          const docY = oy + py;
+          for (let px = 0; px < TILE; px++, p++) {
+            const fb = fData[p];
+            if (!fb) continue;
+            const hs = ferroSpikeHeightAt(ox + px, docY, fb, ferro!.magnets, ferro!.settings);
+            if (hs > 0) outH[p] = Math.min(255, outH[p] + hs);
+          }
+        }
+        return outH;
+      };
+
+      const hd = buildHeightTile(tx, ty);
+      const data = lightTile(cd, hd, (dx, dy) => buildHeightTile(tx + dx, ty + dy), md, light);
       const lit: Tile = { data, uniform: null };
       this.tiles.set(key, { inputs, tile: lit });
       out.set(key, lit);

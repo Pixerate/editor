@@ -174,7 +174,7 @@ export function deserializePaintDocument(raw: unknown): LoadedPaintDocument {
   const wetEvents = Array.isArray(r.wetEvents) ? (r.wetEvents as WetEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.clock) && typeof e.kind === 'string') : [];
   const state: PaintDocumentState = { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) };
   if (wetEvents.length) state.wetEvents = wetEvents;
-  const paintEvents = Array.isArray(r.paintEvents) ? (r.paintEvents as PaintEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.at) && typeof e.layerId === 'string' && ['fill', 'clear', 'flatten', 'stickers'].includes(e.kind)) : [];
+  const paintEvents = Array.isArray(r.paintEvents) ? (r.paintEvents as PaintEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.at) && typeof e.layerId === 'string' && ['fill', 'clear', 'flatten', 'stickers', 'live-strokes', 'magnets', 'cure-ferrofluid'].includes(e.kind)) : [];
   if (paintEvents.length) state.paintEvents = paintEvents;
   const o = r.origin as { x?: unknown; y?: unknown } | undefined;
   if (o && typeof o === 'object' && Number.isFinite(o.x) && Number.isFinite(o.y) && (o.x || o.y)) state.origin = { x: Math.round(o.x as number), y: Math.round(o.y as number) };

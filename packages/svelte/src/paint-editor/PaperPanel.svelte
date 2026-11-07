@@ -2,6 +2,7 @@
   import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
+  import FerroPanel from './FerroPanel.svelte';
   import { attempt, button, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
   interface Props {
@@ -65,5 +66,6 @@
     {/each}
     <button type="button" class={`self-start ${button}`} onclick={() => run(() => controller.flattenRelief())}>Flatten relief</button>
   </div>
+  <FerroPanel {controller} />
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
 </div>

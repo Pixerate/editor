@@ -28,6 +28,7 @@ import { IDENTITY_AFFINE, varyStroke, type Affine, type RecordedStroke } from '.
 import type { WetEvent } from './wet';
 import { scaleStencil } from './stencils';
 import type { Sticker } from './stickers';
+import type { PaintMagnet } from './ferro';
 import type { WetFlowSpec } from '../paint/wet/flow';
 import type { WetParams, WetTilt } from '../paint/wet/model';
 import { downsampleRgba } from './render';
@@ -132,9 +133,16 @@ export async function replayPainting(
     if (strokes >= maxStrokes && item.kind === 'stroke') break;
     if (item.kind === 'paint') {
       const e = item.event;
+      if (e.kind === 'magnets') {
+        const d = e.data as { magnets?: PaintMagnet[]; advect?: boolean } | undefined;
+        const list = (d?.magnets ?? []).map((m) => (s === 1 ? m : { ...m, x: m.x * s, y: m.y * s, radius: Math.min(2000, Math.max(8, m.radius * s)) }));
+        target.replaceMagnets(list, Boolean(d?.advect));
+        continue;
+      }
       if (!target.getLayer(e.layerId)) continue;
       if (e.kind === 'fill') target.fillLayer({ layerId: e.layerId, ...(e.data as object) });
       else if (e.kind === 'clear') target.clearLayer(e.layerId);
+      else if (e.kind === 'cure-ferrofluid') target.cureFerrofluid(e.layerId);
       else if (e.kind === 'live-strokes') {
         const d = e.data as { strokes?: RecordedStroke[]; rasterized?: boolean } | undefined;
         if (d?.rasterized) target.replaceLiveStrokes(e.layerId, null);

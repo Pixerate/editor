@@ -463,6 +463,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {
@@ -622,6 +627,11 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "grain": 0,
                         "id": "ink-pen",
                         "impasto": {
@@ -793,6 +803,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {
@@ -952,6 +967,11 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "grain": 0,
                         "id": "ink-pen",
                         "impasto": {
@@ -1123,6 +1143,11 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "grain": 0,
                         "id": "ink-pen",
                         "impasto": {
@@ -1285,6 +1310,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {
@@ -1453,6 +1483,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "grain": 0.7,
                         "id": "pencil-6b",
                         "impasto": {

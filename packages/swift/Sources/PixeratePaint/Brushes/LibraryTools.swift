@@ -126,6 +126,7 @@ func brushSummary(_ e: BrushLibraryEntry, withCheck: Bool) -> JSONValue {
     o["marks"] = b.path("marks.kind") ?? "continuous"
     o["surface"] = b.path("behaviour.surface") ?? "dry"
     if let l = b.path("light.amount"), l != 0 { o["light"] = l }
+    if let f = b.path("ferro.amount"), f != 0 { o["ferro"] = f }
     if let tags = b["tags"]?.arrayValue, !tags.isEmpty { o["tags"] = .array(tags) }
     if withCheck { o["renderable"] = .bool(checkBrush(b, PAINT_PROFILE).ok) }
     return .object(o)

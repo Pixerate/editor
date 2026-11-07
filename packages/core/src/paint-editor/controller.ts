@@ -130,6 +130,21 @@ import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } fro
 import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, withStrokePath, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
+import {
+  advectFerro,
+  bakeFerroIntoThick,
+  DEFAULT_FERRO,
+  emptyFerro,
+  ferroFromJSON,
+  ferroInfo,
+  ferroToJSON,
+  magnetsFromJSON,
+  mergeFerro,
+  normalizeMagnet,
+  scaleFerro,
+  type FerroSettings,
+  type PaintMagnet,
+} from './ferro';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -603,6 +618,9 @@ export class PaintEditorController {
   private readonly litCaches = new Map<string, LitCache>();
   /** The live impasto stroke's channels. */
   private liveThick: { layerId: string; channels: ThickChannels } | null = null;
+  /** The live ferrofluid stroke's channel. */
+  private liveFerro: { layerId: string; surface: TiledSurface; settings: FerroSettings } | null = null;
+  private nextMagnetId = 1;
   /** Set while an operation that changes wet paint runs: the simulation before it (for undo). */
   private wetOp: { before: WetSnapshot | null } | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
@@ -1141,6 +1159,7 @@ export class PaintEditorController {
       paper: options.paper === undefined ? { ...this.doc.paper, offset: undefined } : this.resolvePaper(options.paper),
     });
     this.extensions = {};
+    this.nextMagnetId = 1;
     this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
     this.tracingVersion++;
     if (this.wet.world) {
@@ -1289,7 +1308,7 @@ export class PaintEditorController {
   describeLayer(l: PaintLayer, parentId: string | null = findLayer(this.doc.layers, l.id)?.parent?.id ?? null, depth = findLayer(this.doc.layers, l.id)?.path.length ?? 0): PaintLayerInfo {
     let bounds: RasterRect | null = null;
     if (l.type === 'pixel') {
-      const b = contentBounds(l.surface);
+      const b = unionRect(contentBounds(l.surface), this.doc.ferro?.[l.id]?.bounds ?? null);
       bounds = b ? { ...b, x: b.x + l.offset.x, y: b.y + l.offset.y } : null;
     } else for (const c of flattenLayers(l.children)) if (c.type === 'pixel') bounds = unionRect(bounds, this.describeLayer(c, l.id, depth + 1).bounds);
     return {
@@ -1497,7 +1516,8 @@ export class PaintEditorController {
     const layers = mapLayer(this.doc.layers, id, () => null);
     let active = this.doc.activeLayerId;
     if (active && !findLayer(layers, active)) active = flattenLayers(layers).filter((x) => x.type === 'pixel').pop()?.id ?? null;
-    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)), ...this.stickersWithout(flattenLayers([l]).map((x) => x.id)), ...this.liveStrokesWithout(flattenLayers([l]).map((x) => x.id)), ...this.lightWithout(flattenLayers([l]).map((x) => x.id)) });
+    const removedIds = flattenLayers([l]).map((x) => x.id);
+    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(removedIds), ...this.stickersWithout(removedIds), ...this.liveStrokesWithout(removedIds), ...this.lightWithout(removedIds), ...this.ferroWithout(removedIds) });
     return { removed: id, activeLayerId: active };
   }
 
@@ -1513,10 +1533,14 @@ export class PaintEditorController {
     const stickers: Record<string, Sticker[]> = { ...(this.doc.stickers ?? {}) };
     const liveStrokes: Record<string, RecordedStroke[]> = { ...(this.doc.liveStrokes ?? {}) };
     const light: Record<string, TiledSurface> = { ...(this.doc.light ?? {}) };
+    const ferro: Record<string, TiledSurface> = { ...(this.doc.ferro ?? {}) };
+    const ferroSettings: Record<string, FerroSettings> = { ...(this.doc.ferroSettings ?? {}) };
     const copy = (l: PaintLayer): PaintLayer => {
       const id = newPaintLayerId();
       if (light[l.id]) light[id] = light[l.id];
       if (this.lightSpills[l.id]) this.lightSpills[id] = { ...this.lightSpills[l.id] };
+      if (ferro[l.id]) ferro[id] = ferro[l.id];
+      if (ferroSettings[l.id]) ferroSettings[id] = { ...ferroSettings[l.id] };
       if (thick[l.id]) thick[id] = thick[l.id];
       if (stickers[l.id]) stickers[id] = stickers[l.id].map((x) => ({ ...x }));
       // Stroke ids are unique across the document: the copies get new ones.
@@ -1525,7 +1549,7 @@ export class PaintEditorController {
     };
     const dup = { ...copy(loc.layer), name: `${loc.layer.name} copy` };
     const layers = insertLayer(this.doc.layers, dup, loc.parent?.id ?? null, loc.index + 1);
-    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}), ...(this.doc.liveStrokes ? { liveStrokes } : {}), ...(this.doc.light ? { light } : {}) }));
+    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}), ...(this.doc.liveStrokes ? { liveStrokes } : {}), ...(this.doc.light ? { light } : {}), ...(this.doc.ferro ? { ferro } : {}), ...(this.doc.ferroSettings ? { ferroSettings } : {}) }));
     return this.describeLayer(dup);
   }
 
@@ -1579,7 +1603,14 @@ export class PaintEditorController {
     const mergedLight = this.doc.light?.[upper.id] || this.doc.light?.[below.id] ? mergeLight(toDoc(this.doc.light?.[below.id], below), upper.visible ? toDoc(this.doc.light?.[upper.id], upper) : undefined, translateSurface(upper.surface, upper.offset.x, upper.offset.y)) : undefined;
     const lightAfter = this.lightWithout([upper.id, below.id]).light ?? (this.doc.light ? { ...this.doc.light } : undefined);
     const light = mergedLight ? { ...(lightAfter ?? {}), [below.id]: mergedLight } : lightAfter;
-    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]), ...this.liveStrokesWithout([upper.id, below.id]), ...(light ? { light } : {}) }));
+    const mergedFerro = this.doc.ferro?.[upper.id] || this.doc.ferro?.[below.id] ? mergeFerro(toDoc(this.doc.ferro?.[below.id], below), upper.visible ? toDoc(this.doc.ferro?.[upper.id], upper) : undefined, translateSurface(upper.surface, upper.offset.x, upper.offset.y)) : undefined;
+    const ferroRemoved = this.ferroWithout([upper.id, below.id]);
+    const ferroAfter = ferroRemoved.ferro ?? (this.doc.ferro ? { ...this.doc.ferro } : undefined);
+    const ferro = mergedFerro?.tiles.size ? { ...(ferroAfter ?? {}), [below.id]: mergedFerro } : ferroAfter;
+    const ferroSettingsAfter = ferroRemoved.ferroSettings ?? (this.doc.ferroSettings ? { ...this.doc.ferroSettings } : undefined);
+    const mergedFerroSettings = upper.visible && this.doc.ferroSettings?.[upper.id] ? this.doc.ferroSettings[upper.id] : this.doc.ferroSettings?.[below.id];
+    const ferroSettings = mergedFerro?.tiles.size && mergedFerroSettings ? { ...(ferroSettingsAfter ?? {}), [below.id]: mergedFerroSettings } : ferroSettingsAfter;
+    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]), ...this.liveStrokesWithout([upper.id, below.id]), ...(light ? { light } : {}), ...(ferro !== undefined ? { ferro } : {}), ...(ferroSettings !== undefined ? { ferroSettings } : {}) }));
     return this.describeLayer(merged);
   }
 
@@ -1592,7 +1623,7 @@ export class PaintEditorController {
       this.wet.world!.removeLane(l.id);
     }
     const bounds = this.describeLayer(l).bounds;
-    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]), ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: { ...this.doc.liveStrokes, [l.id]: [] } } : {}), ...this.lightWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
+    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]), ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: { ...this.doc.liveStrokes, [l.id]: [] } } : {}), ...this.lightWithout([l.id]), ...this.ferroWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
     return { layerId: l.id, bounds };
   }
 
@@ -1637,10 +1668,13 @@ export class PaintEditorController {
       offset: l.offset,
     };
     const surface = this.applyCoverage(l, coverage, rect, apply);
-    // A fill covers the paint, and its light with it.
+    // A fill covers the paint, and its light and ferrofluid with it.
     const lit = this.doc.light?.[l.id];
     const light = lit ? withLayerLight(this.doc.light, l.id, scaleLight(lit, 1 - opacity)) : undefined;
-    this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), ...(light ? { light } : {}) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
+    const fer = this.doc.ferro?.[l.id];
+    const ferro = fer ? withLayerFerro(this.doc.ferro, l.id, scaleFerro(fer, 1 - opacity)) : undefined;
+    const ferroSettings = fer ? withLayerFerroSettings(this.doc.ferroSettings, ferro, l.id, this.doc.ferroSettings?.[l.id] ?? null) : undefined;
+    this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), ...(light ? { light } : {}), ...(fer ? { ferro, ferroSettings } : {}) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
     return { layerId: l.id, bounds: rect };
   }
 
@@ -2642,6 +2676,10 @@ export class PaintEditorController {
     if (brush.light.amount > 0) {
       if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).`);
     }
+    if (brush.ferro.amount > 0) {
+      if (brush.engine === 'sticker') throw new PaintEditorError(`Sticker brushes spray objects and cannot lay ferrofluid (${brush.name}); paint ferrofluid with a dab or particle brush (ferrofluid, ferro-ink; list_brush_presets lists them), or set ferro.amount to 0 (set_brush).`);
+      if (brush.engine === 'wet') throw new PaintEditorError(`Wet brushes cannot lay ferrofluid (${brush.name}); paint ferrofluid with a dry or impasto brush (ferrofluid, ferro-ink), or set ferro.amount to 0 (set_brush).`);
+    }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
       if (why) throw new PaintEditorError(`Layer "${layer.name}" is a stroke layer. ${why}`);
@@ -2745,6 +2783,8 @@ export class PaintEditorController {
       thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
+      // Ferrofluid paint: a twin of the stroke paints the liquid ferrofluid channel.
+      ferro: !wet && brush.engine !== 'sticker' && (brush.ferro.amount > 0 || doc.ferro?.[layer.id]) ? { surface: doc.ferro?.[layer.id] ?? emptyFerro() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get, variant: (ref) => this.stickerArt.variantFor(ref, this.colorScheme === 'dark') } : undefined,
       stampArt: this.stampArt,
       paint: effect ? null : this.strokeGradient(init, brush, color),
@@ -2794,6 +2834,9 @@ export class PaintEditorController {
         this.live = { layerId, surface };
         const ch = this.session?.thickChannels();
         this.liveThick = ch ? { layerId, channels: ch } : null;
+        const fc = this.session?.ferroChannel();
+        const fb = this.session?.init.brush.ferro;
+        this.liveFerro = fc ? { layerId, surface: fc, settings: fb && fb.amount > 0 ? fb : (this.doc.ferroSettings?.[layerId] ?? DEFAULT_FERRO) } : null;
         this.emit(rects);
       },
       sampled: (s, points) => {
@@ -2813,6 +2856,7 @@ export class PaintEditorController {
         this.live = null;
         this.liveLayers = null;
         this.liveThick = null;
+        this.liveFerro = null;
         const wetStroke = Boolean(s.init.wet);
         if (wetStroke) this.wet.driver = null;
         const brush = s.init.brush;
@@ -2848,7 +2892,10 @@ export class PaintEditorController {
         // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
         const wetLight = wetStroke && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null;
         const light = withLayerLight(this.doc.light, l.id, s.lightChannel() ?? wetLight);
-        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}) }, stroke)), wetStroke ? before : this.doc);
+        const fc = s.ferroChannel();
+        const ferro = fc ? withLayerFerro(this.doc.ferro, l.id, fc) : this.doc.ferro;
+        const ferroSettings = fc ? withLayerFerroSettings(this.doc.ferroSettings, ferro, l.id, brush.ferro.amount > 0 ? brush.ferro : (this.doc.ferroSettings?.[l.id] ?? DEFAULT_FERRO)) : this.doc.ferroSettings;
+        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}), ...(ferro ? { ferro } : { ferro: undefined }), ...(ferroSettings ? { ferroSettings } : { ferroSettings: undefined }) }, stroke)), wetStroke ? before : this.doc);
         // After the commit, so a listener that paints in reply finds the editor idle.
         this.notifySample('end', s, [], stroke.id);
       },
@@ -2932,6 +2979,7 @@ export class PaintEditorController {
       this.live = null;
       this.liveLayers = null;
       this.liveThick = null;
+      this.liveFerro = null;
       const masks = s.init.selection ? (s.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask') : [];
       const load = s.init.mixerLoad;
       const result = this.paintStroke({ layerId: s.layerId, points: s.points, color: s.init.colorHex, brush: brushToJSON(s.init.brush) as PaintBrush, seed: s.init.seed, copies: s.init.affineCopies as Affine[], ...(load.reservoir || load.pickup ? { load } : {}), paint, snapToPerspective: false, stencils: false, maskStencils: masks });
@@ -2952,6 +3000,7 @@ export class PaintEditorController {
       this.live = null;
       this.liveLayers = null;
       this.liveThick = null;
+      this.liveFerro = null;
       this.emit();
       this.notifySample('cancel', s, []);
       throw e;
@@ -2977,6 +3026,16 @@ export class PaintEditorController {
         const ch = s.thickChannels();
         const sprayed = s.stickers();
         const lit = s.lightChannel() ?? (s.init.wet && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null);
+        const fc = s.ferroChannel();
+        const nextFerro = fc ? withLayerFerro(out.ferro, l.id, fc) : out.ferro;
+        const nextFerroSettings = fc
+          ? withLayerFerroSettings(
+              out.ferroSettings,
+              nextFerro,
+              l.id,
+              s.init.brush.ferro.amount > 0 ? s.init.brush.ferro : (out.ferroSettings?.[l.id] ?? DEFAULT_FERRO)
+            )
+          : out.ferroSettings;
         out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
@@ -2984,6 +3043,7 @@ export class PaintEditorController {
           ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}),
           ...(sprayed ? { stickers: { ...(out.stickers ?? {}), [l.id]: [...(out.stickers?.[l.id] ?? []), ...sprayed] } } : {}),
           ...(lit ? { light: withLayerLight(out.light, l.id, lit) } : {}),
+          ...(fc ? { ferro: nextFerro, ferroSettings: nextFerroSettings } : {}),
         }, stroke);
       },
     };
@@ -3240,6 +3300,205 @@ export class PaintEditorController {
     if (!t.thick) return { layerId: l.id, flattened: false };
     this.commit('Flatten relief', this.withPaintEvent({ ...this.doc, ...t }, { kind: 'flatten', layerId: l.id }));
     return { layerId: l.id, flattened: true };
+  }
+
+  // --- Ferrofluid paint and magnets -----------------------------------------------
+
+  /** The document's `ferro` and `ferroSettings` without these layers. */
+  private ferroWithout(ids: readonly string[]): { ferro?: Record<string, TiledSurface>; ferroSettings?: Record<string, FerroSettings> } {
+    const out: { ferro?: Record<string, TiledSurface>; ferroSettings?: Record<string, FerroSettings> } = {};
+    const f = this.doc.ferro;
+    if (f && ids.some((id) => f[id])) {
+      const next = { ...f };
+      for (const id of ids) delete next[id];
+      out.ferro = Object.keys(next).length ? next : undefined;
+    }
+    const fs = this.doc.ferroSettings;
+    if (fs && ids.some((id) => fs[id])) {
+      const next = { ...fs };
+      for (const id of ids) delete next[id];
+      out.ferroSettings = Object.keys(next).length ? next : undefined;
+    }
+    return out;
+  }
+
+  /** Runs deterministic advection on all pixel layers with liquid ferrofluid toward `magnets`. */
+  private advectDocumentFerro(doc: PaintDocumentState, magnets: readonly PaintMagnet[], steps = 4): Record<string, TiledSurface> | undefined {
+    const f = doc.ferro;
+    if (!f || !magnets.length) return f ? { ...f } : undefined;
+    const out: Record<string, TiledSurface> = {};
+    for (const [id, surf] of Object.entries(f)) {
+      const l = findLayer(doc.layers, id)?.layer;
+      if (isPixelLayer(l) && surf.tiles.size > 0) {
+        const next = advectFerro(surf, magnets, l.offset, steps);
+        if (next.tiles.size > 0) out[id] = next;
+      } else if (surf.tiles.size > 0) {
+        out[id] = surf;
+      }
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  /** Lists the magnets on the canvas. */
+  listMagnets(): PaintMagnet[] {
+    return (this.doc.magnets ?? []).map((m) => ({ ...m }));
+  }
+
+  /** Places a dipole magnet on the canvas and advects liquid ferrofluid toward it (one undo step). */
+  addMagnet(input: { x: number; y: number; strength?: number; radius?: number }): PaintMagnet {
+    this.requireIdle('adding a magnet');
+    const existing = this.doc.magnets ?? [];
+    const usedIds = new Set(existing.map((m) => m.id));
+    while (usedIds.has(`mag${this.nextMagnetId}`)) this.nextMagnetId++;
+    const id = `mag${this.nextMagnetId++}`;
+    let magnet: PaintMagnet;
+    try {
+      magnet = normalizeMagnet({ id, x: input.x, y: input.y, strength: input.strength, radius: input.radius });
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const magnets = [...existing, magnet];
+    const ferro = this.advectDocumentFerro(this.doc, magnets, 4);
+    const nextDoc = this.withPaintEvent(
+      { ...this.doc, magnets, ...(this.doc.ferro ? { ferro } : {}) },
+      { kind: 'magnets', layerId: '', data: { magnets: magnets.map((m) => ({ ...m })), advect: true } }
+    );
+    this.commit('Add magnet', nextDoc);
+    return { ...magnet };
+  }
+
+  /** Moves or retunes a magnet and advects liquid ferrofluid toward the magnets (one undo step). */
+  updateMagnet(id: string, update: { x?: number; y?: number; strength?: number; radius?: number }, commitToHistory = true): PaintMagnet {
+    this.requireIdle('updating a magnet');
+    if (update.x === undefined && update.y === undefined && update.strength === undefined && update.radius === undefined) {
+      throw new PaintEditorError('Pass at least one change: x, y, strength or radius.');
+    }
+    const existing = this.doc.magnets ?? [];
+    const idx = existing.findIndex((m) => m.id === id);
+    if (idx < 0) throw new PaintEditorError(`Unknown magnet "${id}". Call list_magnets for the ids.`);
+    const current = existing[idx];
+    let magnet: PaintMagnet;
+    try {
+      magnet = normalizeMagnet(
+        {
+          id,
+          x: update.x ?? current.x,
+          y: update.y ?? current.y,
+          strength: update.strength ?? current.strength,
+          radius: update.radius ?? current.radius,
+        },
+        current
+      );
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const magnets = existing.map((m, i) => (i === idx ? magnet : m));
+    const last = this.undoStack[this.undoStack.length - 1];
+    const amending = !commitToHistory && Boolean(last && last.label === 'Update magnet' && !last.wet && !this.wetOp && !this.grouping);
+    const baseDoc = amending && last ? last.before : this.doc;
+    const ferro = this.advectDocumentFerro(baseDoc, magnets, 4);
+    const nextDoc = this.withPaintEvent(
+      { ...this.doc, paintEvents: baseDoc.paintEvents, magnets, ...(baseDoc.ferro ? { ferro } : {}) },
+      { kind: 'magnets', layerId: '', data: { magnets: magnets.map((m) => ({ ...m })), advect: true } }
+    );
+    this.commitOrAmend('Update magnet', nextDoc, commitToHistory);
+    return { ...magnet };
+  }
+
+  /** Removes magnets by id, or all magnets when `ids` is omitted or empty (one undo step). Returns the removed ids. */
+  removeMagnets(ids?: readonly string[]): string[] {
+    this.requireIdle('removing magnets');
+    const existing = this.doc.magnets ?? [];
+    if (ids?.length) {
+      for (const id of ids) {
+        if (!existing.some((m) => m.id === id)) throw new PaintEditorError(`Unknown magnet "${id}". Call list_magnets for the ids.`);
+      }
+    }
+    const removed = ids?.length ? [...ids] : existing.map((m) => m.id);
+    if (!removed.length) return [];
+    const next = existing.filter((m) => !removed.includes(m.id));
+    const nextDoc = this.withPaintEvent(
+      { ...this.doc, magnets: next.length ? next : undefined },
+      { kind: 'magnets', layerId: '', data: { magnets: next.map((m) => ({ ...m })), advect: false } }
+    );
+    this.commit('Remove magnets', nextDoc);
+    return removed;
+  }
+
+  /** Replaces the canvas magnets (used by replay). */
+  replaceMagnets(magnets: readonly PaintMagnet[], advect = false): void {
+    const next = magnets.map((m) => normalizeMagnet(m));
+    const ferro = advect ? this.advectDocumentFerro(this.doc, next, 4) : this.doc.ferro;
+    this.commit('Magnets', { ...this.doc, magnets: next.length ? next : undefined, ...(this.doc.ferro ? { ferro } : {}) });
+  }
+
+  /** Reads a layer's liquid ferrofluid coverage and active Rosensweig spike relief under the canvas magnets. */
+  getFerrofluid(layerId?: string): {
+    layerId: string;
+    ferro: boolean;
+    bounds: RasterRect | null;
+    peak: number;
+    coverage: number;
+    activeSpikeArea: number;
+    maxSpikeHeight: number;
+    magnetCount: number;
+    wavelength: number;
+    threshold: number;
+  } {
+    const l = this.wetLayer(layerId, 'read the ferrofluid of');
+    const settings = this.doc.ferroSettings?.[l.id] ?? DEFAULT_FERRO;
+    const magnets = this.doc.magnets ?? [];
+    const info = ferroInfo(this.doc.ferro?.[l.id], magnets, settings, l.offset);
+    const bounds = info.bounds ? { ...info.bounds, x: info.bounds.x + l.offset.x, y: info.bounds.y + l.offset.y } : null;
+    return {
+      layerId: l.id,
+      ferro: info.peak > 0,
+      bounds,
+      peak: info.peak,
+      coverage: info.liquidPixels,
+      activeSpikeArea: info.spikePixels,
+      maxSpikeHeight: info.maxSpikeHeight,
+      magnetCount: info.magnetCount,
+      wavelength: settings.wavelength,
+      threshold: settings.threshold,
+    };
+  }
+
+  /** Cures a layer's liquid ferrofluid: bakes the current Rosensweig spikes and glossy metallic material into `doc.thick` and clears `doc.ferro` (one undo step). */
+  cureFerrofluid(layerId?: string): {
+    layerId: string;
+    cured: boolean;
+    bounds: RasterRect | null;
+    maxSpikeHeight: number;
+    activeSpikeArea: number;
+  } {
+    this.requireIdle('curing ferrofluid');
+    const l = this.paintTarget(layerId, 'cure the ferrofluid of');
+    const fSurf = this.doc.ferro?.[l.id];
+    if (!fSurf || !fSurf.tiles.size) {
+      return { layerId: l.id, cured: false, bounds: null, maxSpikeHeight: 0, activeSpikeArea: 0 };
+    }
+    const settings = this.doc.ferroSettings?.[l.id] ?? DEFAULT_FERRO;
+    const magnets = this.doc.magnets ?? [];
+    const fb = ferroInfo(fSurf, magnets, settings, l.offset).bounds;
+    const bounds = fb ? { ...fb, x: fb.x + l.offset.x, y: fb.y + l.offset.y } : null;
+    const baked = bakeFerroIntoThick(l.surface, fSurf, this.doc.thick?.[l.id], magnets, settings, l.offset);
+    const removed = this.ferroWithout([l.id]);
+    const nextDoc: PaintDocumentState = {
+      ...this.doc,
+      layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: baked.color })),
+      thick: { ...(this.doc.thick ?? {}), [l.id]: baked.thick },
+      ferro: removed.ferro,
+      ferroSettings: removed.ferroSettings,
+    };
+    this.commit('Cure ferrofluid', this.withPaintEvent(nextDoc, { kind: 'cure-ferrofluid', layerId: l.id }));
+    return {
+      layerId: l.id,
+      cured: true,
+      bounds,
+      maxSpikeHeight: baked.maxSpikeHeight,
+      activeSpikeArea: baked.spikePixels,
+    };
   }
 
   // --- Replay: time-lapse and high-resolution export ------------------------------
@@ -3571,20 +3830,33 @@ export class PaintEditorController {
     return out;
   }
 
-  /** The layers with thick paint lit (each thick layer's pixels replaced by its lit tiles). */
+  /** The layers with thick paint and ferrofluid spikes lit (each thick or ferrofluid layer's pixels replaced by its lit tiles). */
   private litLayers(layers: PaintLayer[]): PaintLayer[] {
     const thick = this.doc.thick;
     const live = this.liveThick;
-    if (!thick && !live) return layers;
+    const ferro = this.doc.ferro;
+    const liveFerro = this.liveFerro;
+    if (!thick && !live && !ferro && !liveFerro) return layers;
     let out = layers;
-    const ids = new Set([...Object.keys(thick ?? {}), ...(live ? [live.layerId] : [])]);
+    const ids = new Set([
+      ...Object.keys(thick ?? {}),
+      ...(live ? [live.layerId] : []),
+      ...Object.keys(ferro ?? {}),
+      ...(liveFerro ? [liveFerro.layerId] : []),
+    ]);
+    const magnets = this.doc.magnets ?? [];
     for (const id of ids) {
-      const ch = live?.layerId === id ? live.channels : thick?.[id];
-      const l = ch && findLayer(out, id)?.layer;
-      if (!ch || !isPixelLayer(l)) continue;
+      const l = findLayer(out, id)?.layer;
+      if (!isPixelLayer(l)) continue;
+      const ch = (live?.layerId === id ? live.channels : thick?.[id]) ?? emptyThickChannels();
+      const fSurf = liveFerro?.layerId === id ? liveFerro.surface : ferro?.[id];
+      const fSet = (liveFerro?.layerId === id ? liveFerro.settings : this.doc.ferroSettings?.[id]) ?? DEFAULT_FERRO;
+      const hasThick = ch.height.tiles.size > 0 || ch.material.tiles.size > 0;
+      const hasFerro = Boolean(fSurf && fSurf.tiles.size > 0);
+      if (!hasThick && !hasFerro) continue;
       let cache = this.litCaches.get(id);
       if (!cache) this.litCaches.set(id, (cache = new LitCache()));
-      const lit = cache.lit(l.surface, ch, this.lighting);
+      const lit = cache.lit(l.surface, ch, this.lighting, hasFerro ? { surface: fSurf!, magnets, settings: fSet, offset: l.offset } : null);
       if (lit !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: lit }));
     }
     return out;
@@ -3761,6 +4033,16 @@ export class PaintEditorController {
     const spills = Object.fromEntries(Object.entries(this.lightSpills).filter(([id]) => findLayer(this.doc.layers, id)));
     if (Object.keys(spills).length) ext.lightSpill = spills;
     else delete ext.lightSpill;
+    const ferro: Record<string, unknown> = {};
+    for (const [id, f] of Object.entries(this.doc.ferro ?? {})) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      const saved = ferroToJSON(f, this.doc.ferroSettings?.[id]);
+      if (saved) ferro[id] = saved;
+    }
+    if (Object.keys(ferro).length) ext.ferro = ferro;
+    else delete ext.ferro;
+    if (this.doc.magnets?.length) ext.magnets = this.doc.magnets.map((m) => ({ ...m }));
+    else delete ext.magnets;
     const effectLayers = effectLayersToJSON(this.doc.effectLayers ?? {}, (id) => isPixelLayer(findLayer(this.doc.layers, id)?.layer));
     if (effectLayers) ext.effectLayers = effectLayers;
     else delete ext.effectLayers;
@@ -3847,6 +4129,25 @@ export class PaintEditorController {
       }
       if (Object.keys(light).length) state = { ...state, light };
     }
+    if (ext.ferro && typeof ext.ferro === 'object') {
+      const ferro: Record<string, TiledSurface> = {};
+      const ferroSettings: Record<string, FerroSettings> = {};
+      for (const [id, v] of Object.entries(ext.ferro as Record<string, unknown>)) {
+        if (!isPixelLayer(findLayer(state.layers, id)?.layer)) continue;
+        try {
+          const loaded = ferroFromJSON(v);
+          ferro[id] = loaded.surface;
+          ferroSettings[id] = loaded.settings;
+        } catch (e) {
+          problems.push(`The ferrofluid of layer "${id}" could not be read (${(e as Error).message}); it loads without ferrofluid.`);
+        }
+      }
+      if (Object.keys(ferro).length) state = { ...state, ferro, ferroSettings };
+    }
+    if (ext.magnets !== undefined) {
+      const magnets = magnetsFromJSON(ext.magnets);
+      if (magnets.length) state = { ...state, magnets };
+    }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
     const thick: Record<string, ThickChannels> = {};
@@ -3883,6 +4184,11 @@ export class PaintEditorController {
     this.undoStack = [];
     this.redoStack = [];
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
+    this.nextMagnetId = 1;
+    for (const m of this.doc.magnets ?? []) {
+      const n = Number(/^mag(\d+)$/.exec(m.id)?.[1] ?? 0);
+      if (n >= this.nextMagnetId) this.nextMagnetId = n + 1;
+    }
     for (const list of Object.values(this.doc.liveStrokes ?? {})) {
       for (const s of list) {
         const n = Number(/^s(\d+)$/.exec(s.id)?.[1] ?? 0);
@@ -3893,6 +4199,8 @@ export class PaintEditorController {
     delete this.extensions.layerChannels;
     delete this.extensions.light;
     delete this.extensions.lightSpill;
+    delete this.extensions.ferro;
+    delete this.extensions.magnets;
     delete this.extensions.lighting;
     delete this.extensions.stickers;
     delete this.extensions.liveStrokes;
@@ -5213,6 +5521,28 @@ function withLayerLight(light: PaintDocumentState['light'], layerId: string, nex
   return out;
 }
 
+/** The document's ferrofluid with one layer's set (removed when it is empty), or the same map when `next` is `null`. */
+function withLayerFerro(ferro: PaintDocumentState['ferro'], layerId: string, next: TiledSurface | null): Record<string, TiledSurface> | undefined {
+  if (!next) return ferro ? { ...ferro } : undefined;
+  const out = { ...(ferro ?? {}) };
+  if (next.tiles.size) out[layerId] = next;
+  else delete out[layerId];
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** The document's per-layer ferrofluid spike settings, kept in step with `ferro`. */
+function withLayerFerroSettings(
+  settings: PaintDocumentState['ferroSettings'],
+  ferro: PaintDocumentState['ferro'],
+  layerId: string,
+  next: FerroSettings | null
+): Record<string, FerroSettings> | undefined {
+  const out = { ...(settings ?? {}) };
+  if (next && ferro?.[layerId]?.tiles.size) out[layerId] = { amount: next.amount, wavelength: next.wavelength, threshold: next.threshold };
+  else if (!ferro?.[layerId]?.tiles.size) delete out[layerId];
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** The id of backlit paper's light layer in renders and PSD exports (never a document layer). */
 const BACKLIGHT_LAYER_ID = '__backlight';
 
@@ -5275,6 +5605,7 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
   const m: Affine = [1, 0, 0, 1, dx, dy];
   // Stickers keep positions to 0.01 px, as sprayed.
   const moveStickers = (list: readonly Sticker[]) => list.map((s) => ({ ...s, x: Math.round((s.x + dx) * 100) / 100, y: Math.round((s.y + dy) * 100) / 100 }));
+  const moveMagnets = (list: readonly PaintMagnet[]) => list.map((mag) => ({ ...mag, x: Math.round((mag.x + dx) * 100) / 100, y: Math.round((mag.y + dy) * 100) / 100 }));
   const out: PaintDocumentState = {
     ...doc,
     layers,
@@ -5290,11 +5621,14 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
     return s.stencils ? { ...moved, stencils: s.stencils.map((x) => translateStencil(x, dx, dy)) } : moved;
   };
   if (doc.stickers) out.stickers = Object.fromEntries(Object.entries(doc.stickers).map(([id, list]) => [id, moveStickers(list)]));
+  if (doc.magnets) out.magnets = moveMagnets(doc.magnets);
   if (doc.liveStrokes) out.liveStrokes = Object.fromEntries(Object.entries(doc.liveStrokes).map(([id, list]) => [id, list.map(moveStroke)]));
   if (doc.paintEvents) {
     out.paintEvents = doc.paintEvents.map((e) => {
       const list = e.kind === 'stickers' ? (e.data as { stickers?: Sticker[] } | undefined)?.stickers : undefined;
       if (list) return { ...e, data: { ...e.data, stickers: moveStickers(list) } };
+      const magnets = e.kind === 'magnets' ? (e.data as { magnets?: PaintMagnet[] } | undefined)?.magnets : undefined;
+      if (magnets) return { ...e, data: { ...e.data, magnets: moveMagnets(magnets) } };
       const strokes = e.kind === 'live-strokes' ? (e.data as { strokes?: RecordedStroke[] } | undefined)?.strokes : undefined;
       return strokes ? { ...e, data: { ...e.data, strokes: strokes.map(moveStroke) } } : e;
     });

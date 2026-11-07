@@ -20,6 +20,7 @@ more; this is where each one went.
 | Bristles | `tip.shape` `bristle` and `tip.bristle` |
 | A brush's own gradient (paint) | `colour.default` (a gradient); `unset: ['colour']` drops it |
 | Light | `light` (`amount`, `pressure`) |
+| Ferrofluid | `ferro` (`amount` 0..1 or numeric shorthand, `wavelength` 4..64 px, `threshold` 0..1); `unset: ['ferro']` drops it |
 
 ## Examples
 

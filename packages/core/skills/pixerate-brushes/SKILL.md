@@ -20,6 +20,7 @@ built-in presets (read-only) and the user's brushes, shared by every editor that
 | Dynamics | Pen feel: pressure to size and opacity, smoothing, tilt, velocity, jitter (`sizeJitter`, `angleJitter` for rotation, `opacityJitter`, `scatter`), rotation, `count` (dabs per spacing step, each jittered) and `flip` (mirror dabs at random: `x`, `y`, `xy`). |
 | Behaviour | `surface` `dry`, `wet` (`wet` settings) or `thick` (`thick` impasto settings); paper `grain`; `exchange` (pick-up and mix; a `reservoir` makes a Mixer Brush); tool `strength`. |
 | Light | Light the brush gives off (`amount`), plus suggested layer `spill` and `glow`. |
+| Ferro | Liquid magnetic ferrofluid (`amount` 0..1, capillary `wavelength` 4..64 px, `threshold` 0..1; presets `ferrofluid`, `ferro-ink`). |
 | Motion | Animation after painting (live effect paint, particle `waveSpeed`). |
 | Colour | A `default` colour, a `palette` of up to 16, `own` (always its own colour). Each is a hex or `rgba()` colour, a light / dark pair `{ light, dark }`, a gradient or effect paint. A gradient default is always painted; a solid or light / dark default becomes the editor's colour when the brush is chosen (unless the user locked theirs), resolved for the colour scheme. Canvas strokes and vector brushstrokes take it too, when they are given no colour. Canvas and vector have the same lock (`canvas.setColorLocked`, `vector.setColorLocked`), and a canvas colour taken from a light / dark default follows the scheme like the paint editor's; vector strokes already made keep theirs. |
 

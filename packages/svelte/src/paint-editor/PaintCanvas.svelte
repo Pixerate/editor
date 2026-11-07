@@ -2,6 +2,8 @@
   import {
     PaintCanvasPresenter,
     PaintGesture,
+    documentToScreen,
+    screenToDocument,
     drawWaterOverlay,
     fitZoom,
     startWetClock,
@@ -62,6 +64,7 @@
   let size = $state({ width: 800, height: 600 });
   let predicted = $state<Array<{ x: number; y: number }>>([]);
   let strokeDrag = $state<{ id: string; dx: number; dy: number } | null>(null);
+  let magnetDrag: { id: string; moved: boolean } | null = null;
   const presenter = $derived(new PaintCanvasPresenter(controller));
   const gesture = $derived(
     new PaintGesture(controller, () => {
@@ -225,6 +228,43 @@
   {#each snap.guides.references.filter((r) => r.visible) as r (r.id)}
     <ReferencePanel {controller} reference={r} />
   {/each}
+  {#if showGuides}
+    {#each snap.document.magnets ?? [] as m (m.id)}
+      {@const p = documentToScreen(snap.view, doc, size, m.x, m.y)}
+      <button
+        type="button"
+        aria-label={`Magnet ${m.id}`}
+        data-testid={`paint-magnet-${m.id}`}
+        data-magnet={m.id}
+        title={`Magnet ${m.id} (${Math.round(m.x)}, ${Math.round(m.y)})`}
+        class="absolute -translate-x-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full border border-indigo-300 bg-slate-900/90 text-[9px] font-bold text-indigo-200 shadow cursor-move"
+        style={`left: ${p.x}px; top: ${p.y}px`}
+        onpointerdown={(e) => {
+          e.stopPropagation();
+          magnetDrag = { id: m.id, moved: false };
+          (e.target as Element).setPointerCapture?.(e.pointerId);
+        }}
+        onpointermove={(e) => {
+          if (!magnetDrag || magnetDrag.id !== m.id) return;
+          e.stopPropagation();
+          const r = viewport?.getBoundingClientRect();
+          const box = { width: r?.width || size.width, height: r?.height || size.height };
+          const pt = screenToDocument(snap.view, doc, box, e.clientX - (r?.left ?? 0), e.clientY - (r?.top ?? 0));
+          controller.updateMagnet(m.id, { x: Math.round(pt.x * 100) / 100, y: Math.round(pt.y * 100) / 100 }, !magnetDrag.moved);
+          magnetDrag.moved = true;
+        }}
+        onpointerup={(e) => {
+          e.stopPropagation();
+          magnetDrag = null;
+        }}
+        onpointercancel={() => {
+          magnetDrag = null;
+        }}
+      >
+        {m.strength >= 0 ? 'N' : 'S'}
+      </button>
+    {/each}
+  {/if}
   {#if proposals}<PaintProposalGhosts {proposals} {transform} zoom={snap.view.zoom} />{/if}
   {#if presence}<PaintPresenceLayer {presence} view={snap.view} canvas={doc} viewport={size} />{/if}
   <div class="absolute bottom-1 right-2 text-[10px] text-slate-500 pointer-events-none" data-testid="paint-view-status">

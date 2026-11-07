@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
+import { FerroPanel } from './FerroPanel';
 import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, panel, useAttempt } from './shared';
 
 export interface PaperPanelProps {
@@ -71,6 +72,7 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
           Flatten relief
         </button>
       </div>
+      <FerroPanel controller={controller} />
       <ErrorLine error={error} />
     </div>
   );

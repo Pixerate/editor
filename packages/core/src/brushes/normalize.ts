@@ -129,13 +129,13 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   else throw new Error(`Brush "${raw.id}" kind ${JSON.stringify(raw.kind)} is not valid: use mark (lays a material) or tool (works on paint already down).`);
   if (kind === 'tool' && !tool) throw new Error(`Brush "${raw.id}" is a tool and needs tool: one of ${BRUSH_TOOLS.join(', ')}.`);
 
-  const { colour: rawColour, marks: rawMarks, kind: _k, id: _i, name: _n, tool: _t, ...rest } = raw;
+  const { colour: rawColour, marks: rawMarks, ferro: rawFerro, kind: _k, id: _i, name: _n, tool: _t, ...rest } = raw;
   const out = readObject(rest, BRUSH_JSON_SCHEMA, 'brush', problems) as Partial<Brush>;
   const brush: Brush = { id: raw.id, name, ...out, kind, ...(tool ? { tool } : {}), tip: out.tip ?? { shape: 'round' } } as Brush;
   // Keep the key order of a hand-written brush: identity, what it is, then the facets.
   const ordered = (): Brush => {
-    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, colour } = brush;
-    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, motion, colour };
+    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ferro, motion, colour } = brush;
+    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ferro, motion, colour };
     return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as unknown as Brush;
   };
 
@@ -150,6 +150,12 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
     const schema = BRUSH_FACET_SCHEMAS.marks[k as keyof typeof BRUSH_FACET_SCHEMAS.marks];
     if (!schema) problems.push(`marks.kind ${JSON.stringify(k)} is not valid; use continuous, scatter, particles or objects. marks dropped.`);
     else brush.marks = readObject(rawMarks, schema, 'brush.marks', problems) as unknown as Brush['marks'];
+  }
+
+  if (rawFerro !== undefined) {
+    const ferroObj = typeof rawFerro === 'number' ? { amount: rawFerro } : rawFerro;
+    const f = readObject(ferroObj, BRUSH_FACET_SCHEMAS.ferro, 'brush.ferro', problems) as Brush['ferro'];
+    if (f && Object.keys(f).length) brush.ferro = f;
   }
 
   if (rawColour !== undefined) {
@@ -187,6 +193,10 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
     if (brush.marks) {
       drop('marks', 'tools lay no marks');
       delete brush.marks;
+    }
+    if (brush.ferro) {
+      drop('ferro', 'tools lay no ferrofluid');
+      delete brush.ferro;
     }
   }
   if (brush.marks?.kind === 'scatter') {
