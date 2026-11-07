@@ -459,6 +459,7 @@ public struct PaintBrush: Equatable, Sendable {
     public var iridescence: IridescenceSettings? = nil
     public var ghost: GhostSettings? = nil
     public var mutation: MutationSettings? = nil
+    public var ferro: FerroSettings = DEFAULT_FERRO
     public var stamp: String?
     public var spray: SpraySettings?
     /// Dab engines: texture inside the tip (nil: none).
@@ -487,6 +488,7 @@ public struct PaintBrush: Equatable, Sendable {
         if let iridescence { o["iridescence"] = iridescence.json }
         if let ghost { o["ghost"] = ghost.json }
         if let mutation { o["mutation"] = mutation.json }
+        o["ferro"] = ferro.json
         o["stamp"] = stamp.map { .string($0) } ?? .null
         o["spray"] = spray?.json ?? .null
         if let tipGrain { o["tipGrain"] = tipGrain.json }
@@ -587,7 +589,7 @@ let BASE_BRUSH = PaintBrush(
     id: "round", name: "Round", category: "custom", engine: "dab", tip: DEFAULT_BRUSH, grain: 0, pressureSmoothing: 0, rotation: "fixed",
     dynamics: DEFAULT_DYNAMICS, mixer: DEFAULT_MIXER, loadsColor: true, behavior: DEFAULT_BEHAVIOR, blender: DEFAULT_BLENDER, smudge: DEFAULT_SMUDGE,
     wet: DEFAULT_WET_BRUSH, impasto: DEFAULT_IMPASTO, particle: DEFAULT_PARTICLE, bristle: DEFAULT_BRISTLE, sticker: DEFAULT_STICKER,
-    light: DEFAULT_LIGHT, fluorescence: DEFAULT_FLUORESCENCE, thermochromic: DEFAULT_THERMOCHROMIC, stamp: nil, spray: nil, paint: nil, builtin: nil
+    light: DEFAULT_LIGHT, fluorescence: DEFAULT_FLUORESCENCE, thermochromic: DEFAULT_THERMOCHROMIC, ferro: DEFAULT_FERRO, stamp: nil, spray: nil, paint: nil, builtin: nil
 )
 
 /// A brush with every field in range; missing fields come from `base` (default: a plain round dab brush).
@@ -712,6 +714,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         iridescence: readIridescence(raw["iridescence"], b.iridescence),
         ghost: ghost,
         mutation: mutation,
+        ferro: normalizeFerro(raw["ferro"]?.objectValue ?? (raw["ferro"]?.numberValue.map { ["amount": .number($0)] } ?? [:]), b.ferro),
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
         tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),

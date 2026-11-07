@@ -608,6 +608,7 @@ public struct SetBrushArguments: Sendable {
         case iridescence
         case ghost
         case mutation
+        case ferro
         case motion
         case livePatterns
         case colour
@@ -649,6 +650,8 @@ public struct SetBrushArguments: Sendable {
     public var ghost: JSONValue?
     /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
     public var mutation: JSONValue?
+    /// Liquid ferrofluid paint: 0..1 (amount), or { amount, wavelength, threshold }.
+    public var ferro: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
@@ -678,6 +681,7 @@ public struct SetBrushArguments: Sendable {
         iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
+        ferro = args.argument("ferro")
         motion = args.argument("motion")
         livePatterns = args.argument("livePatterns")
         colour = args.argument("colour")
@@ -2138,6 +2142,89 @@ public struct GetHeatArguments: Sendable {
     }
 }
 
+/// Arguments of `add_magnet`.
+public struct AddMagnetArguments: Sendable {
+    /// Magnet centre x in document pixels.
+    public var x: Double
+    /// Magnet centre y in document pixels.
+    public var y: Double
+    /// Dipole strength -1..1 (default 0.8; negative flips the pole).
+    public var strength: Double?
+    /// Dipole falloff radius in pixels (default 80).
+    public var radius: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        x = try args.required(try args.number("x"), "x")
+        y = try args.required(try args.number("y"), "y")
+        strength = try args.number("strength")
+        radius = try args.number("radius")
+    }
+}
+
+/// Arguments of `update_magnet`.
+public struct UpdateMagnetArguments: Sendable {
+    /// Magnet id from list_magnets.
+    public var id: String
+    /// Magnet centre x in document pixels.
+    public var x: Double?
+    /// Magnet centre y in document pixels.
+    public var y: Double?
+    /// Dipole strength -1..1.
+    public var strength: Double?
+    /// Dipole falloff radius in pixels (4..2048).
+    public var radius: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        id = try args.required(try args.string("id"), "id")
+        x = try args.number("x")
+        y = try args.number("y")
+        strength = try args.number("strength")
+        radius = try args.number("radius")
+    }
+}
+
+/// Arguments of `remove_magnets`.
+public struct RemoveMagnetsArguments: Sendable {
+    /// Magnet ids to remove (default: remove all magnets).
+    public var ids: [String]?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        ids = try args.strings("ids")
+    }
+}
+
+/// Arguments of `list_magnets`.
+public struct ListMagnetsArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `get_ferrofluid`.
+public struct GetFerrofluidArguments: Sendable {
+    /// Pixel layer id from list_layers (default the active layer).
+    public var layerId: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+    }
+}
+
+/// Arguments of `cure_ferrofluid`.
+public struct CureFerrofluidArguments: Sendable {
+    /// Pixel layer id from list_layers (default the active layer).
+    public var layerId: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+    }
+}
+
 /// Arguments of `export_time_lapse`.
 public struct ExportTimeLapseArguments: Sendable {
     /// About how many frames (default 120); one after every few strokes.
@@ -3101,6 +3188,8 @@ public struct CreateBrushArguments: Sendable {
     public var ghost: JSONValue?
     /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
     public var mutation: JSONValue?
+    /// Liquid ferrofluid paint: 0..1 (amount), or { amount, wavelength, threshold }.
+    public var ferro: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
@@ -3129,6 +3218,7 @@ public struct CreateBrushArguments: Sendable {
         iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
+        ferro = args.argument("ferro")
         motion = args.argument("motion")
         livePatterns = args.argument("livePatterns")
         colour = args.argument("colour")
@@ -3179,6 +3269,7 @@ public struct UpdateBrushArguments: Sendable {
         case iridescence
         case ghost
         case mutation
+        case ferro
         case motion
         case livePatterns
         case colour
@@ -3220,6 +3311,8 @@ public struct UpdateBrushArguments: Sendable {
     public var ghost: JSONValue?
     /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
     public var mutation: JSONValue?
+    /// Liquid ferrofluid paint: 0..1 (amount), or { amount, wavelength, threshold }.
+    public var ferro: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
@@ -3249,6 +3342,7 @@ public struct UpdateBrushArguments: Sendable {
         iridescence = args.argument("iridescence")
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
+        ferro = args.argument("ferro")
         motion = args.argument("motion")
         livePatterns = args.argument("livePatterns")
         colour = args.argument("colour")
@@ -3538,6 +3632,12 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .advanceHeat: try AdvanceHeatArguments(args)
     case .clearHeat: try ClearHeatArguments(args)
     case .getHeat: try GetHeatArguments(args)
+    case .addMagnet: try AddMagnetArguments(args)
+    case .updateMagnet: try UpdateMagnetArguments(args)
+    case .removeMagnets: try RemoveMagnetsArguments(args)
+    case .listMagnets: try ListMagnetsArguments(args)
+    case .getFerrofluid: try GetFerrofluidArguments(args)
+    case .cureFerrofluid: try CureFerrofluidArguments(args)
     case .exportTimeLapse: try ExportTimeLapseArguments(args)
     case .exportHighRes: try ExportHighResArguments(args)
     case .breedStrokes: try BreedStrokesArguments(args)

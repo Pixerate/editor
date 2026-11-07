@@ -49,6 +49,8 @@ export interface BrushHostProfile {
   livePatterns?: BrushSupport;
   /** Structural colour (`iridescence`); missing: `none`. */
   iridescence?: BrushSupport;
+  /** Liquid ferrofluid (`ferro`); missing: `none`. */
+  ferro?: BrushSupport;
 }
 
 export interface BrushIssue {
@@ -90,6 +92,7 @@ export const PAINT_PROFILE: BrushHostProfile = {
   dabCount: 'full',
   livePatterns: 'full',
   iridescence: 'full',
+  ferro: 'full',
 };
 
 /** The image editor's brush: dry dabs on pixels, its Mixer Brush and the eraser. */
@@ -204,6 +207,7 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
     else if (nonZero(ex?.pickup) || !!ex?.dirty) add('mutation', 'error', 'Mutation brushes must lay their own colour without picking up paint from beneath.', 'Remove behaviour.exchange (or set pickup to 0 and dirty to false), or remove mutation.');
     else if (surface === 'wet' && nonZero(brush.light?.amount)) add('mutation', 'error', 'Wet mutation brushes use the wet light channel as their fade tracer.', 'Remove light (or set light.amount to 0), or remove mutation.');
   }
+  feature(profile.ferro ?? 'none', nonZero(brush.ferro?.amount), 'ferro', 'ferrofluid spikes and magnets', 'Remove ferro (or set ferro.amount to 0).');
   const m = brush.motion;
   feature(profile.motion, !!m && (!!m.live || nonZero(m.waveSpeed) || m.fps !== undefined), 'motion', 'animation', 'Remove motion.');
   const d = brush.dynamics ?? {};
@@ -330,6 +334,9 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         break;
       case 'iridescence':
         delete b.iridescence;
+        break;
+      case 'ferro':
+        delete b.ferro;
         break;
       case 'motion':
         delete b.motion;

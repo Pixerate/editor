@@ -7,6 +7,7 @@ export * from '../brushes/BrushEditor';
 // The library browser moved to `@pixerate/editor-react/brushes`; it is exported here too.
 export { BrushLibraryBrowser, type BrushLibraryBrowserProps } from '../brushes/BrushLibraryBrowser';
 export * from './PaperPanel';
+export * from './FerroPanel';
 export * from './ColorPanel';
 export * from './PaintLayersPanel';
 export * from './WetPanel';

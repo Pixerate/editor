@@ -152,6 +152,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -298,6 +303,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -469,6 +479,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -615,6 +630,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -786,6 +806,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -932,6 +957,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -1102,6 +1132,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -1248,6 +1283,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -1425,6 +1465,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -1571,6 +1616,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -1745,6 +1795,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -1891,6 +1946,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -2061,6 +2121,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -2207,6 +2272,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -2379,6 +2449,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -2526,6 +2601,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -2696,6 +2776,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -2842,6 +2927,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -3080,6 +3170,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": {
@@ -3262,6 +3357,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -3422,6 +3522,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -3568,6 +3673,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -3737,6 +3847,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": null,
       "paint": null
@@ -3883,6 +3998,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": {
@@ -4055,6 +4175,11 @@
         "hotColor": null,
         "threshold": 0.5
       },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
       "stamp": null,
       "spray": {
         "density": 0.7,
@@ -4204,6 +4329,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,
@@ -4365,6 +4495,11 @@
       "thermochromic": {
         "hotColor": null,
         "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
       },
       "stamp": null,
       "spray": null,

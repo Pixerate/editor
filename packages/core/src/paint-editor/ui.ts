@@ -877,6 +877,12 @@ export const EVOLUTION_SLIDERS: readonly SliderControl[] = [
   { path: 'seed', label: 'Seed', min: 0, max: 1, step: 0.05 },
 ];
 
+/** The ferrofluid panel's sliders for a magnet (`strength` and `radius`). */
+export const MAGNET_SLIDERS: readonly SliderControl[] = [
+  { path: 'strength', label: 'Strength', min: -1, max: 1, step: 0.05 },
+  { path: 'radius', label: 'Radius', min: 4, max: 512, step: 1 },
+];
+
 /** Stencils a toolbar can lay with one click, centred on the canvas. */
 export function quickStencil(kind: 'ruler' | 'circle' | 'ellipse-mask' | 'edge-mask', canvas: { width: number; height: number }): StencilInput {
   const { width: w, height: h } = canvas;

@@ -2178,6 +2178,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "`useMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
         "svelte": "`createMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
         "swift": "✅ `PaintMutationInfo`, `MutationSettings`, `DEFAULT_MUTATION`, `normalizeMutation`, `PaintEditorController` `onMutationRequest` / `listMutations` / `readMutation` / `answerMutation` / `declineMutation`; Settle / Patience / Fade sliders and agent status in `PaintBrushPanel`, Temporary badge in `PaintLayersPanel`"
+      },
+      {
+        "feature": "Ferrofluid Paint & Magnets (a per-layer liquid ferrofluid channel `doc.ferro[layerId]` laid by brushes with the `ferro` facet (`amount`, `wavelength`, `threshold`; built-in presets `ferrofluid` and `ferro-ink`); document magnets `doc.magnets` (`x`, `y`, `strength` in `-1..1`, `radius` in px) that deterministically advect liquid ferrofluid toward magnets when placed or moved and pull it into analytical hexagonal Rosensweig relief spikes where `|B| > threshold`, tilted along the magnetic field and shaded by `LitCache` / `lightTile` with glossy metallic material; `cure_ferrofluid` bakes the active spikes into permanent impasto relief and clears the liquid channel as one undo step; saved, undone and replayed; agent tools `add_magnet`, `update_magnet`, `remove_magnets`, `list_magnets`, `get_ferrofluid`, `cure_ferrofluid`)",
+        "core": "`ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`, `createFerroTools` (`/paint-editor`)",
+        "react": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
+        "svelte": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
+        "swift": "✅ `FerroSettings`, `PaintMagnet`, `ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`; `PaintEditorController` `addMagnet`, `updateMagnet`, `removeMagnets`, `listMagnets`, `getFerrofluid`, `cureFerrofluid`; `PaintFerroPanel` (in `PaintPaperPanel`) and magnet guides in `PaintCanvasView`"
       }
     ]
   },

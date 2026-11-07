@@ -454,6 +454,7 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
       delete next.iridescence;
       delete next.ghost;
       delete next.mutation;
+      delete next.ferro;
       delete next.colour;
       next.tool = next.tool ?? 'eraser';
       if (next.tip.shape === 'stamp') next.tip = { shape: 'round', ...(next.tip.size !== undefined ? { size: next.tip.size } : {}) };

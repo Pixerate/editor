@@ -53,6 +53,7 @@ export const BRUSH_PROFILE_JSON_SCHEMA: JsonSchema = {
     dabCount: { ...SUPPORT, description: 'Several dabs per spacing step (dynamics.count); missing: none.' },
     livePatterns: { ...SUPPORT, description: 'Gray-Scott reaction-diffusion patterns in wet paint (livePatterns); missing: none.' },
     iridescence: { ...SUPPORT, description: 'Thin-film iridescence (iridescence); missing: none.' },
+    ferro: { ...SUPPORT, description: 'Liquid ferrofluid (ferro); missing: none.' },
   },
   required: ['id', 'name', 'kinds', 'tools', 'tipShapes', 'marks', 'surfaces', 'exchange', 'reservoir', 'grain', 'light', 'motion', 'colours', 'velocity', 'tilt'],
   additionalProperties: false,

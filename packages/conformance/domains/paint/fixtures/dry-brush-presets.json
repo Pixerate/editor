@@ -1214,10 +1214,40 @@
               "surface": "dry",
               "tip": "round",
               "variety": "pen"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "ferro": 0.85,
+              "id": "ferrofluid",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Ferrofluid",
+              "size": 28,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "ferrofluid"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "ferro": 0.7,
+              "id": "ferro-ink",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Ferro ink",
+              "size": 12,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "ferrofluid"
             }
           ],
           "host": "paint",
-          "total": 86
+          "total": 88
         }
       }
     },

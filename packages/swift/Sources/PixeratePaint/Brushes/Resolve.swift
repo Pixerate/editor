@@ -107,6 +107,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out += each("fluorescence", "fluorescence", ["amount", "invisible"])
     out += each("thermochromic", "thermochromic", ["hotColor", "threshold"])
     out += each("iridescence", "iridescence", ["thickness", "pressureToThickness", "ior"], FILM)
+    out += each("ferro", "ferro", ["amount", "wavelength", "threshold"])
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))
     out.append(f("behaviour.exchange.mix", "behavior.mix", EXCHANGE))
     out.append(f("behaviour.exchange.dirty", "behavior.dirty", EXCHANGE))

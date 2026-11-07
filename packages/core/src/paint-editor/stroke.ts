@@ -23,6 +23,7 @@ import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
 import { FilmBuffer, ThickStrokeDriver, type ThickChannels } from './thick';
 import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
+import { ferroToShadow, ferroTwinBrush, shadowToFerro } from './ferro';
 import { emptyThermo, finalizeThermoStroke, fluorTwinBrush, thermoTwinBrush } from './heat';
 import { hexToRgb8, type PaperGrain } from './paper';
 import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
@@ -98,6 +99,11 @@ export interface StrokeSessionInit {
    * stroke paints the 4-channel thermochromic surface; `thermoChannel()` returns the result.
    */
   thermo?: { surface: TiledSurface } | null;
+  /**
+   * Ferrofluid paint: the layer's ferrofluid channel before the stroke. With it, a twin of the
+   * stroke paints the ferrofluid channel as grey (see `ferro.ts`); `ferroChannel()` returns the result.
+   */
+  ferro?: { surface: TiledSurface } | null;
 }
 
 export interface PaintStrokeResult {
@@ -153,6 +159,9 @@ export class PaintStrokeSession {
   /** Light paint: the stroke's twin over the light channel, and what it left there. */
   private readonly lightTwin: PaintStrokeSession | null = null;
   private lightResult: TiledSurface | null = null;
+  /** Ferrofluid paint: the stroke's twin over the ferrofluid channel, and what it left there. */
+  private readonly ferroTwin: PaintStrokeSession | null = null;
+  private ferroResult: TiledSurface | null = null;
   /** UV-fluorescent ink: the stroke's twin over the fluorescence channel, and what it left there. */
   private readonly fluorTwin: PaintStrokeSession | null = null;
   private fluorResult: TiledSurface | null = null;
@@ -180,6 +189,7 @@ export class PaintStrokeSession {
     this.invisibleDaylight = brush.fluorescence.amount > 0 && brush.fluorescence.invisible && brush.engine !== 'eraser' && brush.engine !== 'blender' && brush.engine !== 'smudge';
     if (init.wet) this.wetDriver = init.wet.driver;
     if (init.light && !init.wet && !init.sticker) this.lightTwin = this.makeLightTwin(init.light.surface);
+    if (init.ferro && !init.wet && !init.sticker) this.ferroTwin = this.makeFerroTwin(init.ferro.surface);
     if (init.fluor && !init.wet && !init.sticker) this.fluorTwin = this.makeFluorTwin(init.fluor.surface);
     if (init.thermo && !init.wet && !init.sticker) this.thermoTwin = this.makeThermoTwin(init.thermo.surface);
     this.apply = {
@@ -278,6 +288,7 @@ export class PaintStrokeSession {
       paint,
       effect,
       light: null,
+      ferro: null,
       fluor: null,
       thermo: null,
     });
@@ -303,6 +314,7 @@ export class PaintStrokeSession {
       light: null,
       fluor: null,
       thermo: null,
+      ferro: null,
     });
   }
 
@@ -339,6 +351,7 @@ export class PaintStrokeSession {
       light: null,
       fluor: null,
       thermo: null,
+      ferro: null,
     });
   }
 
@@ -355,6 +368,45 @@ export class PaintStrokeSession {
   /** Thermochromic ink: the layer's thermochromic channel after the stroke, or `null` when unchanged. */
   thermoChannel(): TiledSurface | null {
     return this.thermoResult;
+  }
+
+  /** The stroke's twin over the ferrofluid channel: the same marks in grey at the brush's ferro amount (see `ferro.ts`). */
+  private makeFerroTwin(ferro: TiledSurface): PaintStrokeSession {
+    const init = this.init;
+    const grey = Math.round(init.brush.ferro.amount * 255);
+    const g = grey / 255;
+    const hex = '#' + grey.toString(16).padStart(2, '0').repeat(3);
+    const host: StrokeSessionHost = {
+      update: () => {},
+      commit: (_s, surface) => {
+        this.ferroResult = surface ? shadowToFerro(surface) : null;
+      },
+    };
+    const effect = init.effect ? { source: init.effect.source, pixels: { ...init.effect.pixels, data: greyPixels(init.effect.pixels.data, grey) } } : null;
+    const paint = init.paint ? { ...init.paint, stops: init.paint.stops.map((st) => ({ ...st, color: hex })) } : null;
+    return new PaintStrokeSession(host, {
+      ...init,
+      surface: ferroToShadow(ferro),
+      lockTransparency: false,
+      brush: ferroTwinBrush(init.brush),
+      color: [grey, grey, grey, 255],
+      colorHex: hex,
+      secondary: [grey, grey, grey, 255],
+      inputFilter: undefined,
+      mixerLoad: { reservoir: init.mixerLoad.reservoir ? [g, g, g] : null, amount: init.mixerLoad.amount, pickup: null },
+      thick: init.thick,
+      paint,
+      effect,
+      light: null,
+      ferro: null,
+      fluor: null,
+      thermo: null,
+    });
+  }
+
+  /** Ferrofluid paint: the layer's ferrofluid channel after the stroke, or `null` when the stroke has no twin or left it unchanged. */
+  ferroChannel(): TiledSurface | null {
+    return this.ferroResult;
   }
 
   private tileTarget(): PaintTileTarget {
@@ -389,6 +441,7 @@ export class PaintStrokeSession {
     this.lastRaw = points[points.length - 1];
     this.host.sampled?.(this, points);
     this.lightTwin?.push(points);
+    this.ferroTwin?.push(points);
     this.fluorTwin?.push(points);
     this.thermoTwin?.push(points);
     if (this.wetDriver) {
@@ -490,6 +543,7 @@ export class PaintStrokeSession {
     this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.stickerSpray ? this.stickerSpray.finish() : this.wet!.finish());
     this.closed = true;
     if (this.lightTwin?.open) this.lightTwin.end();
+    if (this.ferroTwin?.open) this.ferroTwin.end();
     if (this.fluorTwin?.open) this.fluorTwin.end();
     if (this.thermoTwin?.open) this.thermoTwin.end();
     const ch = this.base.channels;
@@ -526,6 +580,8 @@ export class PaintStrokeSession {
     if (this.fluorTwin?.open) this.fluorTwin.cancel();
     if (this.thermoTwin?.open) this.thermoTwin.cancel();
     this.lightResult = null;
+    if (this.ferroTwin?.open) this.ferroTwin.cancel();
+    this.ferroResult = null;
     this.fluorResult = null;
     this.thermoResult = null;
     this.host.commit(this, null, true);

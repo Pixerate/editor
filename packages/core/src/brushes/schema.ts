@@ -254,6 +254,12 @@ const MUTATION = object('Mutation paint: you paint something and pause; once an 
   fade: num(0.5, 10, 'Seconds the paint takes to sink away once claimed by read_mutation (default 2).'),
 });
 
+const FERRO = object('Liquid ferrofluid paint: rises into glossy Rosensweig spikes near magnets until cured.', {
+  amount: unit('How much liquid ferrofluid the brush lays per dab (default 0: none).'),
+  wavelength: num(4, 64, 'Capillary wavelength (spike-to-spike spacing) in pixels (default 16).'),
+  threshold: num(0.01, 0.95, 'Critical magnetic field |B| threshold where spikes begin to rise (default 0.12).'),
+});
+
 const MOTION = object('Animation after painting.', {
   live: bool('Effect paint keeps playing on stroke layers (default false).'),
   fps: int(1, 60, 'Suggested playback rate in frames per second.'),
@@ -343,6 +349,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     iridescence: IRIDESCENCE,
     ghost: GHOST,
     mutation: MUTATION,
+    ferro: FERRO,
     motion: MOTION,
     livePatterns: LIVE_PATTERNS,
     colour: COLOUR,
@@ -363,6 +370,7 @@ export const BRUSH_FACET_SCHEMAS = {
   iridescence: IRIDESCENCE,
   ghost: GHOST,
   mutation: MUTATION,
+  ferro: FERRO,
   motion: MOTION,
   livePatterns: LIVE_PATTERNS,
   colour: COLOUR,

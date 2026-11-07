@@ -48,6 +48,7 @@ import {
   STROKE_SLIDERS,
   UV_LIGHT_SLIDERS,
   VIEW_TILT_SLIDERS,
+  MAGNET_SLIDERS,
   WET_GPU_OPTIONS,
   WET_MEDIUM_LABELS,
   WET_PARAM_SLIDERS,
@@ -121,6 +122,33 @@ export const PAINT_DOCUMENT_JSON_SCHEMA: JsonSchema = {
             required: ['id', 'layerId', 'points', 'brush'],
           },
         },
+        ferro: { type: 'object', additionalProperties: { type: 'string' }, description: 'Layer id → asset id of its liquid ferrofluid map.' },
+        ferroSettings: {
+          type: 'object',
+          additionalProperties: {
+            type: 'object',
+            properties: {
+              wavelength: { type: 'number', description: 'Rosensweig spike spacing in pixels.' },
+              threshold: { type: 'number', description: 'Critical magnetic field threshold.' },
+            },
+          },
+          description: 'Layer id → ferrofluid spike settings.',
+        },
+        magnets: {
+          type: 'array',
+          description: 'Magnets on the canvas that pull liquid ferrofluid into spikes.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'Magnet id.' },
+              x: { type: 'number', description: 'Document x in pixels.' },
+              y: { type: 'number', description: 'Document y in pixels.' },
+              strength: { type: 'number', minimum: -1, maximum: 1, description: 'Magnet dipole strength (-1..1).' },
+              radius: { type: 'number', minimum: 4, maximum: 512, description: 'Magnet field falloff radius in pixels.' },
+            },
+            required: ['id', 'x', 'y', 'strength', 'radius'],
+          },
+        },
         fluor: {
           type: 'object',
           description: 'Per-layer UV-fluorescent ink channels (layerId → bounds + PNG data URL).',
@@ -175,7 +203,7 @@ function uiTables() {
     brushOptions: BRUSH_OPTION_CONTROLS,
     blendMenu: BLEND_MENU_GROUPS,
     layerEffects: LAYER_EFFECT_MENU.map(({ kind, label }) => ({ kind, label, controls: layerEffectControls(defaultLayerEffect(kind, kind)) })),
-    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS },
+    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS, magnet: MAGNET_SLIDERS },
     pathStrokeTapers: PATH_STROKE_TAPERS,
     padSampleSizes: PAD_SAMPLE_SIZES,
     wetGpu: WET_GPU_OPTIONS,

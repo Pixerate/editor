@@ -1245,6 +1245,42 @@
             },
             "additionalProperties": false
           },
+          "ferro": {
+            "description": "Liquid ferrofluid paint: 0..1 (amount), or { amount, wavelength, threshold }. Rises into glossy Rosensweig spikes near magnets until cured.",
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much liquid ferrofluid the brush lays per dab (0..1)."
+              },
+              {
+                "type": "object",
+                "description": "Liquid ferrofluid paint: rises into glossy Rosensweig spikes near magnets until cured.",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much liquid ferrofluid the brush lays per dab (default 0: none)."
+                  },
+                  "wavelength": {
+                    "type": "number",
+                    "minimum": 4,
+                    "maximum": 64,
+                    "description": "Capillary wavelength (spike-to-spike spacing) in pixels (default 16)."
+                  },
+                  "threshold": {
+                    "type": "number",
+                    "minimum": 0.01,
+                    "maximum": 0.95,
+                    "description": "Critical magnetic field |B| threshold where spikes begin to rise (default 0.12)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
           "motion": {
             "type": "object",
             "description": "Animation after painting.",
@@ -2807,6 +2843,42 @@
             },
             "additionalProperties": false
           },
+          "ferro": {
+            "description": "Liquid ferrofluid paint: 0..1 (amount), or { amount, wavelength, threshold }. Rises into glossy Rosensweig spikes near magnets until cured.",
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much liquid ferrofluid the brush lays per dab (0..1)."
+              },
+              {
+                "type": "object",
+                "description": "Liquid ferrofluid paint: rises into glossy Rosensweig spikes near magnets until cured.",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much liquid ferrofluid the brush lays per dab (default 0: none)."
+                  },
+                  "wavelength": {
+                    "type": "number",
+                    "minimum": 4,
+                    "maximum": 64,
+                    "description": "Capillary wavelength (spike-to-spike spacing) in pixels (default 16)."
+                  },
+                  "threshold": {
+                    "type": "number",
+                    "minimum": 0.01,
+                    "maximum": 0.95,
+                    "description": "Critical magnetic field |B| threshold where spikes begin to rise (default 0.12)."
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
           "motion": {
             "type": "object",
             "description": "Animation after painting.",
@@ -3394,6 +3466,7 @@
                 "iridescence",
                 "ghost",
                 "mutation",
+                "ferro",
                 "motion",
                 "livePatterns",
                 "colour"

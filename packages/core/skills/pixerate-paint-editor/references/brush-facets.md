@@ -25,6 +25,7 @@ more; this is where each one went.
 | Thermochromic ink (shifts toward `hotColor` where `paint_heat` warms the canvas) | `thermochromic` (`hotColor` `#rrggbb`, `threshold` 0.05..0.95); `unset: ['thermochromic']` drops it |
 | Thin-film iridescence | `iridescence` (`thickness` 100..1000 nm, `pressureToThickness` 0..1, `ior` 1.2..2.0); `unset: ['iridescence']` drops it |
 | Ghost paint (linger, smear) | `ghost` (`linger`, `smear`); `unset: ['ghost']` drops it |
+| Ferrofluid | `ferro` (`amount` 0..1 or numeric shorthand, `wavelength` 4..64 px, `threshold` 0..1); `unset: ['ferro']` drops it |
 
 ## Examples
 

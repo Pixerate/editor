@@ -11,35 +11,10 @@ seed: its grain is a height map (peaks and valleys) that grain-responsive brushe
 is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y down. See
 `pixerate-agent-tools` for errors, namespacing and batching.
 
-- **Brush colours.** Choosing a brush with a default colour (highlighter yellow, ballpoint
-  blue, chalk light or dark for the colour scheme) makes it the paint colour, unless the colour is
-  locked (`set_color` `locked`). Set the colour after choosing the brush, or lock it first.
-- **Brushes** come from the shared brush library (`pixerate-brushes`: `list_brush_presets`,
-  `create_brush`, `preview_brush`…) and are made of facets: a tip (size, hardness, spacing, angle,
-  roundness, opacity, flow, blend), dynamics (pressure, tilt, velocity, jitter, a **rotation**
-  mode `fixed`, `stroke` or `barrel`), behaviour (paper **grain** response, pick-up, wet or thick
-  surface), marks, light, motion and colour. `set_brush` chooses one and lays facet changes over
-  it; `get_brush` reads it with the engine it paints with: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint
-  it picks up), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint
-  along the stroke), `wet` (watercolour, gouache, oil and the wet tools, below), `impasto`
-  (thick paint with relief and material, below), `particle` (procedural particle brushes),
-  `bristle` (a tuft of bristles) or `sticker` (sprays editable stickers).
-- **Wet media** (engine `wet`: `behaviour.surface` `wet`, and the wet tools; categories `watercolor` and `wet-tool`): a stroke lays water
-  and pigment on the layer's **wet layer**, a fluid simulation that keeps running after the
-  stroke: the water spreads until its edge is pinned by the paper, carries pigment out to the
-  rim as it dries (edge darkening), drops pigment into the paper's valleys (granulation), pushes
-  pigment back where new water flows in (blooms), bleeds between touching wet colours and runs
-  downhill on a tilted canvas. Paint stays wet until it dries by itself (a few thousand steps)
-  or `dry_paint` dries it; a dried wash is fixed, so the next wash **glazes** over it. A wet
-  brush paints, or is a tool (`tool` `water`, `dryer`, `blow`, `blot`, `wet-blend`, `wet-drag`);
-  `behaviour.wet` `water`, `pigment` (concentration), `body` (0 transparent watercolour .. 1
-  opaque gouache) and `rewet`, and `behaviour.strength`, set it up. Every result says whether paint is still wet (`wet` / `stillWet`).
-- **Behaviour** (`behaviour.exchange`, dab and mixer brushes) is how a brush treats paint already on the
-  canvas: a **pick-up ratio** (how much paint each dab lifts and carries), a **mix ratio** (how
-  much of the carried paint goes into what it lays down), **dirty** (keep the carried colour into
-  the next stroke) and **multi-colour** (`tip`: several colours side by side across the tip;
-  `dab`: the colour changes along the stroke). A Mixer Brush's `mixer.wet` / `mixer.mix` are the
-  same two ratios. `get_mixer_brush` reads what the brush carries; `clean_mixer_brush` wipes it.
+- **Brush colours.** Choosing a brush with a default colour (highlighter yellow, ballpoint blue, chalk light or dark for the colour scheme) makes it the paint colour, unless the colour is locked (`set_color` `locked`). Set the colour after choosing the brush, or lock it first.
+- **Brushes** come from the shared brush library (`pixerate-brushes`: `list_brush_presets`, `create_brush`, `preview_brush`…) and are made of facets: a tip (size, hardness, spacing, angle, roundness, opacity, flow, blend), dynamics (pressure, tilt, velocity, jitter, a **rotation** mode `fixed`, `stroke` or `barrel`), behaviour (paper **grain** response, pick-up, wet or thick surface), marks, light, ferrofluid, motion and colour. `set_brush` chooses one and lays facet changes over it; `get_brush` reads it with the engine it paints with: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint it picks up), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along the stroke), `wet` (watercolour, gouache, oil and the wet tools, below), `impasto` (thick paint with relief and material, below), `particle` (procedural particle brushes), `bristle` (a tuft of bristles) or `sticker` (sprays editable stickers).
+- **Wet media** (engine `wet`: `behaviour.surface` `wet`, and the wet tools; categories `watercolor` and `wet-tool`): a stroke lays water and pigment on the layer's **wet layer**, a fluid simulation that keeps running after the stroke: the water spreads until its edge is pinned by the paper, carries pigment out to the rim as it dries (edge darkening), drops pigment into the paper's valleys (granulation), pushes pigment back where new water flows in (blooms), bleeds between touching wet colours and runs downhill on a tilted canvas. Paint stays wet until it dries by itself (a few thousand steps) or `dry_paint` dries it; a dried wash is fixed, so the next wash **glazes** over it. A wet brush paints, or is a tool (`tool` `water`, `dryer`, `blow`, `blot`, `wet-blend`, `wet-drag`); `behaviour.wet` `water`, `pigment` (concentration), `body` (0 transparent watercolour .. 1 opaque gouache) and `rewet`, and `behaviour.strength`, set it up. Every result says whether paint is still wet (`wet` / `stillWet`).
+- **Behaviour** (`behaviour.exchange`, dab and mixer brushes) is how a brush treats paint already on the canvas: a **pick-up ratio** (how much paint each dab lifts and carries), a **mix ratio** (how much of the carried paint goes into what it lays down), **dirty** (keep the carried colour into the next stroke) and **multi-colour** (`tip`: several colours side by side across the tip; `dab`: the colour changes along the stroke). A Mixer Brush's `mixer.wet` / `mixer.mix` are the same two ratios. `get_mixer_brush` reads what the brush carries; `clean_mixer_brush` wipes it.
 - **Grain**: a brush's grain response times the paper's `depth` decides how much light pressure
   skips the valleys. Pencil, pastel and charcoal are grainy; airbrush, marker and ink are not.
   A brush can also carry its own texture, `tip.grain` (a pattern such as `sanded` or `canvas`, or
@@ -126,6 +101,7 @@ in wet paint and freeze when it dries; presets `turing-wash`, `coral-ink`):
 
 Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`, and `iridescence` (`scarab-lacquer`, `soap-film`, `pearl-glaze`) adds thin-film structural colour that shifts hue with light and `set_view_tilt`: load `pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint** (neon, glowing glass and watercolour: `light.amount`, the Light category; backlit paper): [references/light-paint.md](references/light-paint.md).
 **Smart inks** (`fluorescence` for UV/invisible ink under `set_uv_light`, `thermochromic` for heat-reactive ink with `paint_heat` / `advance_heat`; presets `uv-marker`, `thermo-ink`): [references/smart-inks.md](references/smart-inks.md).
+**Ferrofluid paint** (`ferro.amount`, presets `ferrofluid` and `ferro-ink`, pulled by dipole magnets into lit Rosensweig spikes until cured): [references/ferrofluid.md](references/ferrofluid.md).
 
 ## Gradient paint
 
@@ -336,6 +312,12 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `advance_heat` | Step thermal diffusion and Newtonian cooling by `steps` (1..200, default 10) so warm patches spread and fade. Not an undo step. Returns `steps`, heat stats and `dried`. |
 | `clear_heat` | Cool the entire canvas heat field back to 0 at once so thermochromic paint returns to its cold colour. One undo step when warm. Returns `{ cleared }`. |
 | `get_heat` | Read the canvas heat stats (`max`, `mean`, `hotCells`, `bounds`), optional temperature `samples` at `points`, and `thermochromicLayerIds`. Changes nothing. |
+| `add_magnet` | Place a dipole magnet at `x`, `y` (document px; `strength` -1..1 default 0.8, `radius` 4..2048 px default 80): liquid ferrofluid gathers toward it and rises into hexagonal Rosensweig spikes shaded by `set_lighting`. One undo step. Returns the magnet (`id`, `x`, `y`, `strength`, `radius`). |
+| `update_magnet` | Move or tune a magnet by `id` (`x`, `y`, `strength`, `radius`): liquid ferrofluid gathers and spikes update at once. One undo step. Returns the magnet. |
+| `remove_magnets` | Remove magnets by `ids` (or all when omitted): uncured ferrofluid relaxes, cured relief stays. One undo step. Returns `removed`. |
+| `list_magnets` | List the canvas magnets (`id`, `x`, `y`, `strength`, `radius`). Changes nothing. |
+| `get_ferrofluid` | Read a layer's liquid ferrofluid and live spikes (`ferro`, `bounds`, `peak`, `coverage`, `activeSpikeArea`, `maxSpikeHeight`, `magnetCount`, `wavelength`, `threshold`). Changes nothing. |
+| `cure_ferrofluid` | Bake a layer's current magnetic spikes into solid impasto height and dark glossy material, clearing its liquid ferrofluid so magnet edits no longer change it. One undo step. Returns `layerId`, `cured`, `bounds`, `maxSpikeHeight`, `activeSpikeArea`. |
 
 ### Stickers
 

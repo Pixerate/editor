@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
+  import FerroPanel from './FerroPanel.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
   interface Props {
@@ -102,5 +103,6 @@
       {#if editor.current.heat.hotCells > 0}<span class="text-[11px] text-amber-400">{Math.round(editor.current.heat.max * 100)}% warm</span>{/if}
     </div>
   </div>
+  <FerroPanel {controller} />
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
 </div>

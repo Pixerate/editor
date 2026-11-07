@@ -220,6 +220,7 @@ public final class PaintEditorController {
     public internal(set) var guides: PaintGuides { didSet { emit() } }
     var nextStencilId = 1
     var nextReferenceId = 1
+    var nextMagnetId = 1
     var stencilCache: (key: [Stencil], size: String, mask: PaintSelection?)?
     /// The undo step `group` is building, if any.
     var grouping: (label: String, before: PaintDocumentState, changed: Bool)?
@@ -443,6 +444,7 @@ public final class PaintEditorController {
         let next = try createPaintDocument(width: Double(width ?? doc.canvas.width), height: Double(height ?? doc.canvas.height), dpi: dpi ?? doc.canvas.dpi, paper: try resolvePaper(paper) ?? currentPaper.json)
         guides.symmetry.center = Point2(x: Double(next.canvas.width) / 2, y: Double(next.canvas.height) / 2)
         guides.tracing = nil
+        nextMagnetId = 1
         if wet.world != nil || !wet.patterns.isEmpty {
             beginWetOp()
             wet.reset()
@@ -573,6 +575,11 @@ public final class PaintEditorController {
                 for (id, list) in st { out.set(id, moveStickers(list)) }
                 o.stickers = out
             }
+            if let mags = d.magnets {
+                o.magnets = mags.map { m in
+                    PaintMagnet(id: m.id, x: JS.round((m.x + Double(dx)) * 100) / 100, y: JS.round((m.y + Double(dy)) * 100) / 100, strength: m.strength, radius: m.radius)
+                }
+            }
             if let events = d.wetEvents {
                 o.wetEvents = events.map { e in
                     guard let data = e.data?.objectValue else { return e }
@@ -596,6 +603,14 @@ public final class PaintEditorController {
                     var e = e
                     if e.kind == "stickers", let list = e.data?["stickers"]?.arrayValue {
                         e.data!["stickers"] = .array(moveStickers(list.compactMap(Sticker.init(json:))).map { .object($0.json) })
+                    } else if e.kind == "magnets", let list = e.data?["magnets"]?.arrayValue {
+                        let shifted = list.map { v -> JSONValue in
+                            guard var mo = v.objectValue, let x = mo["x"]?.numberValue, let y = mo["y"]?.numberValue else { return v }
+                            mo["x"] = .number(JS.round((x + Double(dx)) * 100) / 100)
+                            mo["y"] = .number(JS.round((y + Double(dy)) * 100) / 100)
+                            return .object(mo)
+                        }
+                        e.data!["magnets"] = .array(shifted)
                     } else if e.kind == "live-strokes", let strokes = e.strokes {
                         let moved = strokes.map(moveStroke)
                         e.strokes = moved
@@ -678,7 +693,7 @@ public final class PaintEditorController {
         var bounds: RasterRect? = nil
         if l.isPixel {
             let fb = doc.fluor?.get(l.id).flatMap(contentBounds)
-            if let b = unionRectOpt(contentBounds(l.pixelSurface), fb) { bounds = RasterRect(x: b.x + l.pixelOffset.x, y: b.y + l.pixelOffset.y, width: b.width, height: b.height) }
+            if let b = unionRectOpt(unionRectOpt(contentBounds(l.pixelSurface), fb), doc.ferro?.get(l.id)?.bounds) { bounds = RasterRect(x: b.x + l.pixelOffset.x, y: b.y + l.pixelOffset.y, width: b.width, height: b.height) }
         } else {
             for c in flattenLayers(l.children ?? []) where c.isPixel { bounds = unionRectOpt(bounds, describeLayer(c, parentId: .some(l.id), depth: d + 1).bounds) }
         }
@@ -785,6 +800,7 @@ public final class PaintEditorController {
             d.layers = layers
             d.activeLayerId = active
             d.removingLight(Array(removed))
+            d.removingFerro(Array(removed))
             d.removingFluor(Array(removed))
             d.removingThermo(Array(removed))
             d.removingStickers(Array(removed))
@@ -807,12 +823,14 @@ public final class PaintEditorController {
         var live = doc.liveStrokes
         var stickers = doc.stickers
         var lightCopies: [(String, TiledSurface)] = []
+        var ferroCopies: [(String, TiledSurface, FerroSettings?)] = []
         var fluorCopies: [(String, TiledSurface)] = []
         var thermoCopies: [(String, TiledSurface)] = []
         func copy(_ l: PaintLayer) -> PaintLayer {
             let nid = newPaintLayerId()
             if let list = stickers?.get(l.id) { stickers!.set(nid, list) }
             if let lit = doc.light?.get(l.id) { lightCopies.append((nid, lit)) }
+            if let fer = doc.ferro?.get(l.id) { ferroCopies.append((nid, fer, doc.ferroSettings?.get(l.id))) }
             if let fl = doc.fluor?.get(l.id) { fluorCopies.append((nid, fl)) }
             if let th = doc.thermo?.get(l.id) { thermoCopies.append((nid, th)) }
             if let ch = thick?.get(l.id) { thick!.set(nid, ch) }
@@ -836,6 +854,7 @@ public final class PaintEditorController {
             d.activeLayerId = dup.id
             if thick != nil { d.thick = thick }
             if lightCopies.count > 0 { var l = d.light ?? OrderedMap(); for (k, v) in lightCopies { l.set(k, v) }; d.light = l }
+            for (k, v, s) in ferroCopies { d.settingFerro(k, v, settings: s) }
             if fluorCopies.count > 0 { var fl = d.fluor ?? OrderedMap(); for (k, v) in fluorCopies { fl.set(k, v) }; d.fluor = fl }
             if thermoCopies.count > 0 { var th = d.thermo ?? OrderedMap(); for (k, v) in thermoCopies { th.set(k, v) }; d.thermo = th }
             if live != nil { d.liveStrokes = live }
@@ -887,6 +906,9 @@ public final class PaintEditorController {
         let toDoc = { (t: TiledSurface?, l: PaintLayer) in t.map { translateSurface($0, Double(l.pixelOffset.x), Double(l.pixelOffset.y)) } }
         let lowerLight = doc.light?.get(below.id), upperLight = doc.light?.get(upper.id)
         let mergedLight = lowerLight != nil || upperLight != nil ? mergeLight(toDoc(lowerLight, below), upper.visible ? toDoc(upperLight, upper) : nil, translateSurface(upper.pixelSurface, Double(upper.pixelOffset.x), Double(upper.pixelOffset.y))) : nil
+        let lowerFerro = doc.ferro?.get(below.id), upperFerro = doc.ferro?.get(upper.id)
+        let mergedFerro = lowerFerro != nil || upperFerro != nil ? mergeFerro(toDoc(lowerFerro, below), upper.visible ? toDoc(upperFerro, upper) : nil, translateSurface(upper.pixelSurface, Double(upper.pixelOffset.x), Double(upper.pixelOffset.y))) : nil
+        let mergedFerroSettings = (upper.visible && upperFerro != nil ? doc.ferroSettings?.get(upper.id) : nil) ?? doc.ferroSettings?.get(below.id)
         let lowerFluor = doc.fluor?.get(below.id), upperFluor = doc.fluor?.get(upper.id)
         let mergedFluor = lowerFluor != nil || upperFluor != nil ? mergeFourChannel(toDoc(lowerFluor, below), upper.visible ? toDoc(upperFluor, upper) : nil) : nil
         let lowerThermo = doc.thermo?.get(below.id), upperThermo = doc.thermo?.get(upper.id)
@@ -896,12 +918,14 @@ public final class PaintEditorController {
             d.activeLayerId = below.id
             d.removingThick([upper.id])
             d.removingLight([upper.id, below.id])
+            d.removingFerro([upper.id, below.id])
             d.removingFluor([upper.id, below.id])
             d.removingThermo([upper.id, below.id])
             d.removingStickers([upper.id, below.id])
             if let mergedLight { var l = d.light ?? OrderedMap(); l.set(below.id, mergedLight); d.light = l }
             if let mergedFluor { var fl = d.fluor ?? OrderedMap(); fl.set(below.id, mergedFluor); d.fluor = fl }
             if let mergedThermo { var th = d.thermo ?? OrderedMap(); th.set(below.id, mergedThermo); d.thermo = th }
+            if let mergedFerro { d.settingFerro(below.id, mergedFerro, settings: mergedFerroSettings) }
             if var live = d.liveStrokes {
                 _ = live.delete(upper.id)
                 _ = live.delete(below.id)
@@ -923,6 +947,7 @@ public final class PaintEditorController {
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(emptySurface(4)) }
             d.removingThick([l.id])
             d.removingLight([l.id])
+            d.removingFerro([l.id])
             d.removingFluor([l.id])
             d.removingThermo([l.id])
             d.removingStickers([l.id])
@@ -974,12 +999,15 @@ public final class PaintEditorController {
         let data: JSONObject = ["color": .string(color), "opacity": .number(opacity), "grain": .number(grainAmount), "pressure": .number(pressure), "blend": .string(blendName)]
         // A fill covers the paint, and its light with it.
         let lit = doc.light?.get(l.id)
+        let fer = doc.ferro?.get(l.id)
+        let ferSettings = doc.ferroSettings?.get(l.id)
         let fl = doc.fluor?.get(l.id)
         commit("Fill layer", withPaintEvent(withWetEvents(doc.with { d in
             d.layers = mapLayer(doc.layers, l.id) { $0.withSurface(surface) }
             if let lit { d.settingLight(l.id, scaleLight(lit, 1 - opacity)) }
             if let fl { d.settingFluor(l.id, scaleFluor(fl, 1 - opacity)) }
             if opacity >= 1 { d.removingThermo([l.id]) }
+            if let fer { d.settingFerro(l.id, scaleFerro(fer, 1 - opacity), settings: ferSettings) }
         }), kind: "fill", layerId: l.id, data: data))
         return ["layerId": .string(l.id), "bounds": rect.json]
     }
@@ -1544,6 +1572,8 @@ public final class PaintEditorController {
         if brush.thermochromic.hotColor != nil && (brush.engine == "sticker" || isWetBrush(brush)) {
             throw PaintEditorError("The \(brush.name) brush paints \(brush.engine == "sticker" ? "stickers" : "wet media"), which don't take thermochromic ink; use a dry mark brush (thermo-ink; list_brush_presets), or remove thermochromic (set_brush).")
         }
+        if brush.ferro.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't hold liquid ferrofluid; paint ferrofluid with a dab or impasto brush (ferrofluid, ferro-ink; list_brush_presets lists them), or set ferro.amount to 0 (set_brush).") }
+        if brush.ferro.amount > 0 && isWetBrush(brush) { throw PaintEditorError("The \(brush.name) brush paints wet media, while ferrofluid is its own magnetic relief fluid; use a dry or impasto brush with ferro (ferrofluid, ferro-ink), or set ferro.amount to 0 (set_brush).") }
         if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         if d.liveStrokes?.get(layer.id) != nil, let e = effect?.source, e.live {
             // Each live source needs a renderer every frame.
@@ -1664,6 +1694,7 @@ public final class PaintEditorController {
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
         withLight.stampArt = stampArt
         if wetInit == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
+        if wetInit == nil && brush.engine != "sticker" && (brush.ferro.amount > 0 || d.ferro?.get(layer.id) != nil) { withLight.ferro = d.ferro?.get(layer.id) ?? emptyFerro() }
         if wetInit == nil && brush.engine != "sticker" && (brush.fluorescence.amount > 0 || d.fluor?.get(layer.id) != nil) { withLight.fluor = d.fluor?.get(layer.id) ?? emptyFluor() }
         if wetInit == nil && brush.engine != "sticker" && (brush.thermochromic.hotColor != nil || d.thermo?.get(layer.id) != nil) { withLight.thermo = d.thermo?.get(layer.id) ?? emptyThermo() }
         let session = try PaintStrokeSession(withLight)
@@ -1745,6 +1776,10 @@ public final class PaintEditorController {
                 o.layers = mapLayer(baseLayers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
                 o.strokes = d.strokes + [stroke]
                 o.settingLight(session.layerId, session.lightChannel ?? wetLight)
+                if let fc = session.ferroChannel {
+                    let b = session.initValues.brush
+                    o.settingFerro(session.layerId, fc, settings: b.ferro.amount > 0 ? b.ferro : (d.ferroSettings?.get(session.layerId) ?? DEFAULT_FERRO))
+                }
                 o.settingFluor(session.layerId, session.fluorChannel)
                 o.settingThermo(session.layerId, session.thermoChannel)
                 if let thick {
@@ -1836,7 +1871,12 @@ public final class PaintEditorController {
             }
             return nil
         }
-        var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live)), liveThick: live)
+        let liveFerro = liveStroke.flatMap { l -> (layerId: String, surface: TiledSurface, settings: FerroSettings)? in
+            guard l.open, let f = l.shown.currentFerro() else { return nil }
+            let b = l.shown.initValues.brush
+            return (l.layerId, f, b.ferro.amount > 0 ? b.ferro : (doc.ferroSettings?.get(l.layerId) ?? DEFAULT_FERRO))
+        }
+        var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live, liveFerro: liveFerro)), liveThick: live)
         // Backlit paper shines through everything: its light goes on top.
         let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
         if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
@@ -1920,6 +1960,7 @@ public final class PaintEditorController {
         if let w = wetJSON() { out["wet"] = w }
         if let events = d.wetEvents, !events.isEmpty { out["wetEvents"] = .array(events.map(\.json)) }
         for (k, v) in thickJSON() { out[k] = v }
+        for (k, v) in ferroJSON() { out[k] = v }
         if let events = d.paintEvents, !events.isEmpty { out["paintEvents"] = .array(events.map(\.json)) }
         if let o = d.origin, o.x != 0 || o.y != 0 { out["origin"] = pointJSON(Double(o.x), Double(o.y)) }
         if let light = d.light {

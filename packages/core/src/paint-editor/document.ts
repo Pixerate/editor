@@ -14,6 +14,7 @@ import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
 import type { WetEvent } from './wet';
 import type { ThickChannels } from './thick';
+import type { FerroSettings, PaintMagnet } from './ferro';
 import type { Sticker } from './stickers';
 import type { PaintEffectSource, PaintPaperEffect } from './effects';
 import type { HeatField } from './heat';
@@ -66,6 +67,12 @@ export interface PaintDocumentState {
   thermo?: Readonly<Record<string, TiledSurface>>;
   /** Coarse document-level heat field (1/4 resolution) for thermochromic ink and wet-paint drying. See `heat.ts`. */
   heat?: HeatField;
+  /** Ferrofluid paint: each layer's liquid ferrofluid channel, 0..255 per pixel in layer space (layers without ferrofluid are missing). See `ferro.ts`. */
+  ferro?: Readonly<Record<string, TiledSurface>>;
+  /** Per-layer Rosensweig spike settings (`wavelength`, `threshold`) from the last ferrofluid stroke on that layer. */
+  ferroSettings?: Readonly<Record<string, FerroSettings>>;
+  /** Dipole magnets placed on the canvas (document pixel coordinates). */
+  magnets?: PaintMagnet[];
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
   /** Effect layers: the provider effect each one is drawn from (layers that are gone are ignored). */
@@ -82,7 +89,7 @@ export interface PaintDocumentState {
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
 export interface PaintEvent {
   at: number;
-  kind: 'fill' | 'fill-region' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
+  kind: 'fill' | 'fill-region' | 'clear' | 'flatten' | 'stickers' | 'live-strokes' | 'magnets' | 'cure-ferrofluid';
   layerId: string;
   /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers or live strokes after an edit. */
   data?: Record<string, unknown>;

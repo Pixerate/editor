@@ -463,6 +463,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "fluorescence": {
                           "amount": 0,
                           "invisible": false
@@ -630,6 +635,11 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "fluorescence": {
                           "amount": 0,
                           "invisible": false
@@ -809,6 +819,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "fluorescence": {
                           "amount": 0,
                           "invisible": false
@@ -976,6 +991,11 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "fluorescence": {
                           "amount": 0,
                           "invisible": false
@@ -1155,6 +1175,11 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "fluorescence": {
                           "amount": 0,
                           "invisible": false
@@ -1325,6 +1350,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "fluorescence": {
                           "amount": 0,
                           "invisible": false
@@ -1501,6 +1531,11 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
                         "fluorescence": {
                           "amount": 0,
                           "invisible": false

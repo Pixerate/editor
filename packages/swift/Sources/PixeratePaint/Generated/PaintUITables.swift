@@ -337,6 +337,23 @@ public struct PaintUISlidersStickerItem: Equatable, Sendable {
     }
 }
 
+public struct PaintUISlidersMagnetItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersMagnetItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersMagnetItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersMagnetItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersMagnetItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersMagnetItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersMagnetItem")
+    }
+}
+
 public struct PaintUISliders: Equatable, Sendable {
     public var paper: [PaintUISlidersPaperItem]
     public var wet: [PaintUISlidersWetItem]
@@ -350,6 +367,7 @@ public struct PaintUISliders: Equatable, Sendable {
     public var livePatterns: [PaintUISlidersLivePatternsItem]
     public var stroke: [PaintUISlidersStrokeItem]
     public var sticker: [PaintUISlidersStickerItem]
+    public var magnet: [PaintUISlidersMagnetItem]
 
     public init(json: JSONValue) throws {
         let o = try ContractTable.object(json, "PaintUISliders")
@@ -365,6 +383,7 @@ public struct PaintUISliders: Equatable, Sendable {
         livePatterns = try ContractTable.field(try o["livePatterns"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersLivePatternsItem") { v in try v.map(PaintUISlidersLivePatternsItem.init(json:)) } }, "livePatterns", "PaintUISliders")
         stroke = try ContractTable.field(try o["stroke"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStrokeItem") { v in try v.map(PaintUISlidersStrokeItem.init(json:)) } }, "stroke", "PaintUISliders")
         sticker = try ContractTable.field(try o["sticker"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStickerItem") { v in try v.map(PaintUISlidersStickerItem.init(json:)) } }, "sticker", "PaintUISliders")
+        magnet = try ContractTable.field(try o["magnet"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersMagnetItem") { v in try v.map(PaintUISlidersMagnetItem.init(json:)) } }, "magnet", "PaintUISliders")
     }
 }
 

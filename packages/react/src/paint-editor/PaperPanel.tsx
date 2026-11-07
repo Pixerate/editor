@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, UV_LIGHT_SLIDERS, VIEW_TILT_SLIDERS, patchPath, readPath, renderPaper, requestDeviceTiltPermission, startDeviceTilt, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
+import { FerroPanel } from './FerroPanel';
 import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, chip, panel, useAttempt } from './shared';
 
 export interface PaperPanelProps {
@@ -109,6 +110,7 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
           {state.heat.hotCells > 0 && <span className="text-[11px] text-amber-400">{Math.round(state.heat.max * 100)}% warm</span>}
         </div>
       </div>
+      <FerroPanel controller={controller} />
       <ErrorLine error={error} />
     </div>
   );

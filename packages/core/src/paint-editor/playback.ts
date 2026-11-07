@@ -10,7 +10,7 @@ import type { PlaybackRef, PlaybackStep } from '../tools/playback.js';
 export type PaintPlaybackPanel = 'color' | 'wet' | 'paper' | 'layers' | 'effects';
 
 const WET = /^(advance_wet_paint|dry_paint|wet_paper|set_wet_settings|set_flow_map|set_canvas_tilt|pause_wet_paint|set_wet_engine|set_water_overlay)$/;
-const PAPER = /^(set_paper|set_lighting|flatten_relief|set_instant_dry)$/;
+const PAPER = /^(set_paper|set_lighting|flatten_relief|set_instant_dry|add_magnet|update_magnet|remove_magnets|cure_ferrofluid)$/;
 const LAYERS = /^(add_layer|update_layer|set_active_layer|remove_layer|duplicate_layer|move_layer|merge_layer_down|clear_layer|update_sticker|arrange_stickers|remove_stickers)$/;
 const PAD = /^(mixing_pad_stroke|pick_mixing_pad_color|clear_mixing_pad|mix_on_pad|save_mixing_pad|load_mixing_pad|remove_mixing_pad|mix_colors)$/;
 const COLOR = /^(set_color|set_paint|color_harmony|add_swatch|remove_swatch|load_mixer_brush|clean_mixer_brush)$/;

@@ -165,7 +165,7 @@ private func readPaint(_ value: JSONValue, _ path: String, _ problems: inout [St
 }
 
 /// The facet order of a hand-written brush.
-let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour", "livePatterns"]
+let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "motion", "colour", "livePatterns"]
 
 func orderedBrush(_ brush: JSONObject) -> Brush {
     var out = Brush()
@@ -194,7 +194,8 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 
     let rawColour = raw["colour"]
     let rawMarks = raw["marks"]
-    var rest = raw.without("colour", "marks", "kind", "id", "name", "tool")
+    let rawFerro = raw["ferro"]
+    var rest = raw.without("colour", "marks", "ferro", "kind", "id", "name", "tool")
     if let fl = rest["fluorescence"]?.finite { rest["fluorescence"] = ["amount": .number(fl)] }
     var out = readObject(.object(rest), BrushSchema.schema, "brush", &problems) ?? [:]
     if var th = out["thermochromic"]?.objectValue, let hc = th["hotColor"]?.stringValue {
@@ -246,6 +247,14 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
         }
     }
 
+    if let rawFerro {
+        let ferroObj: JSONValue = rawFerro.numberValue != nil ? ["amount": rawFerro] : rawFerro
+        let ferroSchema = BrushSchema.properties["ferro"]?.objectValue ?? [:]
+        if let f = readObject(ferroObj, ferroSchema, "brush.ferro", &problems), !f.isEmpty {
+            brush["ferro"] = .object(f)
+        }
+    }
+
     // Facets the brush does not use are not stored.
     func drop(_ what: String, _ why: String) { problems.append("\(what) dropped: \(why).") }
     if kind == "mark" && brush["tool"] != nil {
@@ -260,6 +269,10 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
         if brush["marks"] != nil {
             drop("marks", "tools lay no marks")
             brush["marks"] = nil
+        }
+        if brush["ferro"] != nil {
+            drop("ferro", "tools lay no ferrofluid")
+            brush["ferro"] = nil
         }
         if brush["iridescence"] != nil {
             drop("iridescence", "tools lay no thin film")
@@ -408,13 +421,15 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 // MARK: - Patches (`brushes/patch.ts`)
 
 /// The facets a patch can remove (`unset`), back to the engine's defaults.
-public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour", "livePatterns"]
+public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "motion", "colour", "livePatterns"]
 
 /// `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks.
 public func mergeBrushPatch(_ base: JSONObject, _ patch: JSONObject, _ path: String = "") -> JSONObject {
     var out = base
-    for (k, v) in patch {
-        let old = out[k]
+    for (k, rawV) in patch {
+        let v: JSONValue = (path.isEmpty && k == "ferro" && rawV.numberValue != nil) ? ["amount": rawV] : rawV
+        let rawOld = out[k]
+        let old: JSONValue? = (path.isEmpty && k == "ferro" && rawOld?.numberValue != nil) ? ["amount": rawOld!] : rawOld
         let replaceMarks = path.isEmpty && k == "marks" && old?.objectValue != nil && v.objectValue != nil && old!.objectValue!["kind"] != v.objectValue!["kind"]
         if let vo = v.objectValue, let oo = old?.objectValue, !replaceMarks {
             out[k] = .object(mergeBrushPatch(oo, vo, "\(path)\(k)."))

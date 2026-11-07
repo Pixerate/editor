@@ -246,6 +246,30 @@ export function normalizeMutation(raw: Partial<MutationSettings> = {}, base: Mut
   };
 }
 
+/** Ferrofluid paint: how much liquid ferrofluid a brush lays, and its Rosensweig spike settings (see `doc.ferro`). */
+export interface FerroSettings {
+  /** How much liquid ferrofluid each dab lays, scaled by coverage and flow (0..1, default 0: none). */
+  amount: number;
+  /** Capillary wavelength (spike-to-spike spacing) in pixels (4..64, default 16). */
+  wavelength: number;
+  /** Critical magnetic field |B| threshold where spikes begin to rise (0.01..0.95, default 0.12). */
+  threshold: number;
+}
+
+export const DEFAULT_FERRO: Readonly<FerroSettings> = { amount: 0, wavelength: 16, threshold: 0.12 };
+
+export function normalizeFerro(raw: number | Partial<FerroSettings> | null | undefined = {}, base: FerroSettings = DEFAULT_FERRO): FerroSettings {
+  if (typeof raw === 'number') {
+    return { amount: unit(raw, base.amount), wavelength: base.wavelength, threshold: base.threshold };
+  }
+  const r = raw ?? {};
+  return {
+    amount: unit(r.amount, base.amount),
+    wavelength: range(r.wavelength, 4, 64, base.wavelength),
+    threshold: range(r.threshold, 0.01, 0.95, base.threshold),
+  };
+}
+
 export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
   return {
     tool: IMPASTO_TOOLS.includes(raw.tool as ImpastoTool) ? (raw.tool as ImpastoTool) : base.tool,
@@ -419,6 +443,8 @@ export interface PaintBrush {
   ghost?: GhostSettings;
   /** Mutation paint settings (missing when not a mutation brush). */
   mutation?: MutationSettings;
+  /** Ferrofluid paint: liquid ferrofluid it lays and its Rosensweig spike settings (amount 0: none). */
+  ferro: FerroSettings;
   /**
    * Dab engine: a stamp tip. Each dab (and each spray droplet) is this sticker's shape, an editor
    * stamp (`editor:star`) or any sticker ref from the sticker library, laid in the paint colour;
@@ -550,7 +576,7 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -565,6 +591,7 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   thermochromic?: Partial<ThermochromicSettings>;
   /** Thin-film iridescence (`null` removes it). */
   iridescence?: Partial<IridescenceSettings> | null;
+  ferro?: number | Partial<FerroSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
@@ -730,6 +757,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     ...withIridescence(readIridescence(raw.iridescence, b.iridescence ?? null)),
     ...(ghost ? { ghost } : {}),
     ...(mutation ? { mutation } : {}),
+    ferro: normalizeFerro(raw.ferro, b.ferro ?? DEFAULT_FERRO),
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
     ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),
@@ -762,6 +790,7 @@ const BASE_BRUSH: PaintBrush = {
   light: { ...DEFAULT_LIGHT },
   fluorescence: { ...DEFAULT_FLUORESCENCE },
   thermochromic: { ...DEFAULT_THERMOCHROMIC },
+  ferro: { ...DEFAULT_FERRO },
   stamp: null,
   spray: null,
   paint: null,

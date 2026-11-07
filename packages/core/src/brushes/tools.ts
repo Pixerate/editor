@@ -86,6 +86,7 @@ function summary(entry: BrushLibraryEntry, profile: BrushHostProfile, withCheck:
     marks: b.marks?.kind ?? 'continuous',
     surface: b.behaviour?.surface ?? 'dry',
     ...(b.light?.amount ? { light: b.light.amount } : {}),
+    ...(b.ferro?.amount ? { ferro: b.ferro.amount } : {}),
     ...(b.tags?.length ? { tags: b.tags } : {}),
     ...(check ? { renderable: check.ok } : {}),
   };

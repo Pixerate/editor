@@ -191,6 +191,15 @@
         "none"
       ],
       "description": "Thin-film iridescence (iridescence); missing: none."
+    },
+    "ferro": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Liquid ferrofluid (ferro); missing: none."
     }
   },
   "required": [
