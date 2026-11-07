@@ -22,6 +22,7 @@ import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSourc
 import { effectDabField, sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
+import type { IridescenceSettings } from './brush-model';
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { hash2 } from './noise';
@@ -47,16 +48,42 @@ export function normalizeLighting(raw: Partial<PaintLighting> = {}, base: PaintL
   };
 }
 
+/** View tilt (-1..1 on each axis, default 0): shifts the view vector for thin-film iridescence and highlights, not the light. Not saved with the document. */
+export interface PaintViewTilt {
+  x: number;
+  y: number;
+}
+
+export const DEFAULT_VIEW_TILT: Readonly<PaintViewTilt> = { x: 0, y: 0 };
+
+export function normalizeViewTilt(raw: Partial<PaintViewTilt> = {}, base: PaintViewTilt = DEFAULT_VIEW_TILT): PaintViewTilt {
+  const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  return {
+    x: Math.min(1, Math.max(-1, num(raw.x, base.x))),
+    y: Math.min(1, Math.max(-1, num(raw.y, base.y))),
+  };
+}
+
+export function viewTiltKey(v: PaintViewTilt): string {
+  return `${v.x.toFixed(3)}|${v.y.toFixed(3)}`;
+}
+
 /** A layer's thick-paint channels (layer space, like its pixels). */
 export interface ThickChannels {
   /** Height 0..255 per pixel (1 channel). */
   height: TiledSurface;
   /** Material per pixel (4 channels): R gloss, G metallic, B rim (light paint), A opacity for clarity (255 solid; 0 no material, read as solid). */
   material: TiledSurface;
+  /** Thin-film iridescence per pixel (4 channels): R thickness (0..255 → 100..1000 nm), G refractive index (0..255 → 1.2..2.0), B 0, A film coverage (0..255). */
+  film: TiledSurface;
 }
 
 export function emptyThickChannels(): ThickChannels {
-  return { height: new TiledSurface(1, new Map(), 0), material: new TiledSurface(4, new Map(), 0) };
+  return { height: new TiledSurface(1, new Map(), 0), material: new TiledSurface(4, new Map(), 0), film: new TiledSurface(4, new Map(), 0) };
+}
+
+export function hasThickChannels(ch: ThickChannels | undefined): boolean {
+  return Boolean(ch && (ch.height.tiles.size > 0 || ch.material.tiles.size > 0 || ch.film.tiles.size > 0));
 }
 
 /** Height in pixels of the full 0..255 range, for the slopes. */
@@ -70,20 +97,53 @@ function lightVector(l: PaintLighting): [number, number, number] {
   return [Math.cos(el) * Math.sin(az), -Math.cos(el) * Math.cos(az), Math.sin(el)];
 }
 
+/** View vector (towards the viewer) for a view tilt. */
+function viewVector(v: PaintViewTilt): [number, number, number] {
+  const vx = v.x * 1.25;
+  const vy = v.y * 1.25;
+  const vz = 1;
+  const vl = Math.hypot(vx, vy, vz);
+  return [vx / vl, vy / vl, vz / vl];
+}
+
+/**
+ * Thin-film interference reflectance (linear RGB 0..1) for an optical path difference `opd` in nm:
+ * Airy / cosine interference across the three primary bands (630, 532, 465 nm) with a half-wave
+ * top-surface phase shift.
+ */
+export function thinFilmRgb(opd: number): [number, number, number] {
+  const twoPi = Math.PI * 2;
+  return [
+    0.5 - 0.5 * Math.cos((twoPi * opd) / 630),
+    0.5 - 0.5 * Math.cos((twoPi * opd) / 532),
+    0.5 - 0.5 * Math.cos((twoPi * opd) / 465),
+  ];
+}
+
 export function lightingKey(l: PaintLighting): string {
   return `${l.azimuth.toFixed(2)}|${l.elevation.toFixed(2)}|${l.relief.toFixed(3)}`;
 }
 
 /**
- * One tile of a thick layer lit: `color` (RGBA, straight), the height and material of the tile, and
- * the height of its 8 neighbours for the slopes at the border (`heightAt(dx, dy)` returns the
- * neighbouring tile's data or null). Returns a new RGBA tile.
+ * One tile of a thick or iridescent layer lit: `color` (RGBA, straight), the height, material and
+ * thin-film channels of the tile, and the height of its 8 neighbours for the slopes at the border
+ * (`heightAround(dx, dy)` returns the neighbouring tile's data or null). Returns a new RGBA tile.
  */
-export function lightTile(color: Uint8ClampedArray, height: Uint8ClampedArray | null, heightAround: (dx: number, dy: number) => Uint8ClampedArray | null, material: Uint8ClampedArray | null, light: PaintLighting): Uint8ClampedArray {
+export function lightTile(
+  color: Uint8ClampedArray,
+  height: Uint8ClampedArray | null,
+  heightAround: (dx: number, dy: number) => Uint8ClampedArray | null,
+  material: Uint8ClampedArray | null,
+  light: PaintLighting,
+  film: Uint8ClampedArray | null = null,
+  viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT,
+): Uint8ClampedArray {
   const out = new Uint8ClampedArray(color);
-  if (!height || light.relief <= 0) return out;
+  const hasRelief = Boolean(height && light.relief > 0);
+  if (!hasRelief && !film) return out;
   const [lx, ly, lz] = lightVector(light);
-  const hv = [lx, ly, lz + 1];
+  const [vx, vy, vz] = viewVector(viewTilt);
+  const hv = [lx + vx, ly + vy, lz + vz];
   const hl = Math.hypot(hv[0], hv[1], hv[2]);
   const hx = hv[0] / hl;
   const hy = hv[1] / hl;
@@ -91,6 +151,7 @@ export function lightTile(color: Uint8ClampedArray, height: Uint8ClampedArray | 
   const k = (RELIEF_PX / 255) * light.relief * 2;
   const flatDiffuse = AMBIENT + (1 - AMBIENT) * lz;
   const read = (x: number, y: number): number => {
+    if (!height) return 0;
     if (x >= 0 && y >= 0 && x < TILE && y < TILE) return height[y * TILE + x];
     const dx = x < 0 ? -1 : x >= TILE ? 1 : 0;
     const dy = y < 0 ? -1 : y >= TILE ? 1 : 0;
@@ -103,29 +164,60 @@ export function lightTile(color: Uint8ClampedArray, height: Uint8ClampedArray | 
       const p = y * TILE + x;
       const i = p * 4;
       if (color[i + 3] === 0) continue;
-      const h = height[p];
-      const gx = (read(x + 1, y) - read(x - 1, y)) * 0.5;
-      const gy = (read(x, y + 1) - read(x, y - 1)) * 0.5;
-      if (h === 0 && gx === 0 && gy === 0) continue;
-      let nx = -gx * k;
-      let ny = -gy * k;
-      const nl = Math.hypot(nx, ny, 1);
-      nx /= nl;
-      ny /= nl;
-      const nz = 1 / nl;
-      const diffuse = Math.max(0, nx * lx + ny * ly + nz * lz);
-      const shade = (AMBIENT + (1 - AMBIENT) * diffuse) / flatDiffuse;
-      const gloss = material ? material[i] / 255 : 0.3;
-      const metal = material ? material[i + 1] / 255 : 0;
-      const shininess = 6 + 90 * gloss;
-      const nh = Math.max(0, nx * hx + ny * hy + nz * hz);
-      // Only slopes catch a highlight: subtract what a flat surface would show.
-      const spec = Math.max(0, Math.pow(nh, shininess) - Math.pow(hz, shininess)) * (0.25 + 0.75 * gloss) * light.relief;
+      const fa = film ? film[i + 3] / 255 : 0;
+      const h = hasRelief ? height![p] : 0;
+      const gx = hasRelief ? (read(x + 1, y) - read(x - 1, y)) * 0.5 : 0;
+      const gy = hasRelief ? (read(x, y + 1) - read(x, y - 1)) * 0.5 : 0;
+      const hasSlope = hasRelief && (h !== 0 || gx !== 0 || gy !== 0);
+      if (!hasSlope && fa <= 0) continue;
+      let nx = 0;
+      let ny = 0;
+      let nz = 1;
+      let shade = 1;
+      let gloss = 0.3;
+      let metal = 0;
+      let spec = 0;
+      if (hasSlope) {
+        nx = -gx * k;
+        ny = -gy * k;
+        const nl = Math.hypot(nx, ny, 1);
+        nx /= nl;
+        ny /= nl;
+        nz = 1 / nl;
+        const diffuse = Math.max(0, nx * lx + ny * ly + nz * lz);
+        shade = (AMBIENT + (1 - AMBIENT) * diffuse) / flatDiffuse;
+        gloss = material ? material[i] / 255 : 0.3;
+        metal = material ? material[i + 1] / 255 : 0;
+        const shininess = 6 + 90 * gloss;
+        const nh = Math.max(0, nx * hx + ny * hy + nz * hz);
+        // Only slopes catch a highlight: subtract what a flat surface would show.
+        spec = Math.max(0, Math.pow(nh, shininess) - Math.pow(hz, shininess)) * (0.25 + 0.75 * gloss) * light.relief;
+      }
+      let filmRgb: [number, number, number] | null = null;
+      if (fa > 0 && film) {
+        const d = 100 + (film[i] / 255) * 900;
+        const ior = 1.2 + (film[i + 1] / 255) * 0.8;
+        const nh = Math.max(0, nx * hx + ny * hy + nz * hz);
+        const nv = Math.max(0, nx * vx + ny * vy + nz * vz);
+        const cosThetaI = Math.max(0, Math.min(1, nh * nv));
+        const sin2ThetaT = (1 - cosThetaI * cosThetaI) / (ior * ior);
+        const cosThetaT = Math.sqrt(Math.max(0, 1 - sin2ThetaT));
+        const opd = 2 * ior * d * cosThetaT;
+        filmRgb = thinFilmRgb(opd);
+      }
       for (let c = 0; c < 3; c++) {
         const a = SRGB_TO_LINEAR[color[i + c]];
-        const tint = metal * a + (1 - metal);
-        const v = a * shade * (1 - 0.35 * metal) + spec * tint * (1 + metal);
-        out[i + c] = linearToSrgb8(v);
+        const fc = filmRgb ? filmRgb[c] : a;
+        if (hasSlope) {
+          const tint = metal * a + (1 - metal);
+          const diff = fa > 0 ? a * (1 - fa * 0.75) + fc * fa * (0.45 + 0.55 * a) : a;
+          const specTint = fa > 0 ? tint * (1 - fa) + fc * fa : tint;
+          const v = diff * shade * (1 - 0.35 * metal) + spec * specTint * (1 + metal);
+          out[i + c] = linearToSrgb8(v);
+        } else {
+          const v = a * (1 - fa * 0.75) + fc * fa * (0.45 + 0.55 * a);
+          out[i + c] = linearToSrgb8(v);
+        }
       }
     }
   }
@@ -136,10 +228,12 @@ export function lightTile(color: Uint8ClampedArray, height: Uint8ClampedArray | 
 export class LitCache {
   private readonly tiles = new Map<TileKey, { inputs: unknown[]; tile: Tile }>();
 
-  /** The layer's pixels lit (tiles without relief nearby are the colour tiles themselves). */
-  lit(color: TiledSurface, ch: ThickChannels, light: PaintLighting): TiledSurface {
-    if (!ch.height.tiles.size || light.relief <= 0) return color;
-    const lk = lightingKey(light);
+  /** The layer's pixels lit (tiles without relief or film nearby are the colour tiles themselves). */
+  lit(color: TiledSurface, ch: ThickChannels, light: PaintLighting, viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT): TiledSurface {
+    const hasRelief = ch.height.tiles.size > 0 && light.relief > 0;
+    const hasFilm = ch.film.tiles.size > 0;
+    if (!hasRelief && !hasFilm) return color;
+    const lk = `${lightingKey(light)}|${viewTiltKey(viewTilt)}`;
     const out = new Map(color.tiles);
     const keys = new Set<TileKey>();
     for (const key of color.tiles.keys()) keys.add(key);
@@ -148,12 +242,15 @@ export class LitCache {
       const ty = Math.floor(key / 65536) - 32768;
       const around = (dx: number, dy: number) => ch.height.tiles.get(tileKey(tx + dx, ty + dy))?.data ?? null;
       let any = false;
-      for (let dy = -1; dy <= 1 && !any; dy++) for (let dx = -1; dx <= 1 && !any; dx++) if (around(dx, dy)) any = true;
-      if (!any) continue;
-      const h = ch.height.tiles.get(key) ?? null;
-      const m = ch.material.tiles.get(key) ?? null;
-      const inputs: unknown[] = [tile, lk, m];
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) inputs.push(ch.height.tiles.get(tileKey(tx + dx, ty + dy)) ?? null);
+      if (hasRelief) {
+        for (let dy = -1; dy <= 1 && !any; dy++) for (let dx = -1; dx <= 1 && !any; dx++) if (around(dx, dy)) any = true;
+      }
+      const f = ch.film.tiles.get(key) ?? null;
+      if (!any && !f) continue;
+      const h = hasRelief ? (ch.height.tiles.get(key) ?? null) : null;
+      const m = hasRelief ? (ch.material.tiles.get(key) ?? null) : null;
+      const inputs: unknown[] = [tile, lk, m, f];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) inputs.push(hasRelief ? (ch.height.tiles.get(tileKey(tx + dx, ty + dy)) ?? null) : null);
       const cached = this.tiles.get(key);
       if (cached && cached.inputs.length === inputs.length && cached.inputs.every((v, i) => v === inputs[i])) {
         out.set(key, cached.tile);
@@ -161,10 +258,19 @@ export class LitCache {
       }
       const hd = h ? expand(h, 1) : null;
       const md = m ? expand(m, 4) : null;
-      const data = lightTile(expand(tile, 4), hd, (dx, dy) => {
-        const t = ch.height.tiles.get(tileKey(tx + dx, ty + dy));
-        return t ? expand(t, 1) : null;
-      }, md, light);
+      const fd = f ? expand(f, 4) : null;
+      const data = lightTile(
+        expand(tile, 4),
+        hd,
+        (dx, dy) => {
+          const t = ch.height.tiles.get(tileKey(tx + dx, ty + dy));
+          return t ? expand(t, 1) : null;
+        },
+        md,
+        light,
+        fd,
+        viewTilt,
+      );
       const lit: Tile = { data, uniform: null };
       this.tiles.set(key, { inputs, tile: lit });
       out.set(key, lit);
@@ -185,6 +291,128 @@ function expand(t: Tile, channels: 1 | 4): Uint8ClampedArray {
     for (let i = 0; i < out.length; i += 4) out.set(bytes, i);
   }
   return out;
+}
+
+/** Live thin-film iridescence buffer for any stroke engine (deposits or erases into 4-channel `ThickChannels.film`). */
+export class FilmBuffer {
+  private readonly tiles = new Map<TileKey, Uint8ClampedArray>();
+
+  constructor(
+    private readonly base: TiledSurface,
+    private readonly offset: { x: number; y: number } = { x: 0, y: 0 },
+    private readonly mask: PaintTileTarget['selection'] = null,
+  ) {}
+
+  private maskAt(wx: number, wy: number): number {
+    const sel = this.mask;
+    if (!sel) return 1;
+    return wx >= 0 && wy >= 0 && wx < sel.width && wy < sel.height ? sel.data[wy * sel.width + wx] / 255 : 0;
+  }
+
+  private tile(tx: number, ty: number): Uint8ClampedArray {
+    const key = tileKey(tx, ty);
+    let t = this.tiles.get(key);
+    if (!t) {
+      const b = this.base.tiles.get(key);
+      t = b ? new Uint8ClampedArray(expand(b, 4)) : new Uint8ClampedArray(TILE * TILE * 4);
+      this.tiles.set(key, t);
+    }
+    return t;
+  }
+
+  /** Deposits thin-film iridescence over `rect` with per-pixel `coverage` (0..1) scaled by `strength` (0..1). */
+  deposit(rect: RasterRect, coverage: ArrayLike<number>, strength: number, ir: IridescenceSettings, pressure = 0.5): void {
+    if (strength <= 0) return;
+    const nm = Math.max(100, Math.min(1000, ir.thickness * (1 + ir.pressureToThickness * (pressure - 0.5) * 2)));
+    const rByte = Math.round(((nm - 100) / 900) * 255);
+    const gByte = Math.round(((ir.ior - 1.2) / 0.8) * 255);
+    const ox = this.offset.x;
+    const oy = this.offset.y;
+    for (let yy = 0, p = 0; yy < rect.height; yy++) {
+      for (let xx = 0; xx < rect.width; xx++, p++) {
+        const wx = rect.x + xx;
+        const wy = rect.y + yy;
+        const m = this.maskAt(wx, wy);
+        const c = Math.min(1, coverage[p] * strength * m);
+        if (c <= 0) continue;
+        const lx = wx - ox;
+        const ly = wy - oy;
+        const t = this.tile(Math.floor(lx / TILE), Math.floor(ly / TILE));
+        const i = ((ly & 255) * TILE + (lx & 255)) * 4;
+        const prevA = t[i + 3] / 255;
+        const nextA = prevA + c * (1 - prevA);
+        const w = nextA > 0 ? c / nextA : 1;
+        t[i] = Math.round(t[i] + (rByte - t[i]) * w);
+        t[i + 1] = Math.round(t[i + 1] + (gByte - t[i + 1]) * w);
+        t[i + 2] = 0;
+        t[i + 3] = Math.round(nextA * 255);
+      }
+    }
+  }
+
+  /** Stamps a soft disc of thin-film iridescence at `(cx, cy)` (document pixels) with `radius` and `alpha` (0..1). */
+  stampDisc(cx: number, cy: number, radius: number, alpha: number, ir: IridescenceSettings, pressure = 0.5): void {
+    if (alpha <= 0 || radius <= 0) return;
+    const r = Math.max(0.5, radius);
+    const x0 = Math.floor(cx - r - 1);
+    const y0 = Math.floor(cy - r - 1);
+    const x1 = Math.ceil(cx + r + 1);
+    const y1 = Math.ceil(cy + r + 1);
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w <= 0 || h <= 0) return;
+    const cov = new Float32Array(w * h);
+    for (let yy = 0, p = 0; yy < h; yy++) {
+      for (let xx = 0; xx < w; xx++, p++) {
+        const d = Math.hypot(x0 + xx + 0.5 - cx, y0 + yy + 0.5 - cy);
+        if (d < r + 0.5) cov[p] = d <= r - 0.5 ? 1 : Math.max(0, r + 0.5 - d);
+      }
+    }
+    this.deposit({ x: x0, y: y0, width: w, height: h }, cov, Math.min(1, alpha), ir, pressure);
+  }
+
+  /** Erases thin-film coverage over `rect` by `coverage[p] * strength`. */
+  erase(rect: RasterRect, coverage: ArrayLike<number>, strength: number): void {
+    if (strength <= 0) return;
+    const ox = this.offset.x;
+    const oy = this.offset.y;
+    for (let yy = 0, p = 0; yy < rect.height; yy++) {
+      for (let xx = 0; xx < rect.width; xx++, p++) {
+        const wx = rect.x + xx;
+        const wy = rect.y + yy;
+        const m = this.maskAt(wx, wy);
+        const c = Math.min(1, coverage[p] * strength * m);
+        if (c <= 0) continue;
+        const lx = wx - ox;
+        const ly = wy - oy;
+        const tx = Math.floor(lx / TILE);
+        const ty = Math.floor(ly / TILE);
+        const key = tileKey(tx, ty);
+        if (!this.tiles.has(key) && !this.base.tiles.has(key)) continue;
+        const t = this.tile(tx, ty);
+        const i = ((ly & 255) * TILE + (lx & 255)) * 4;
+        const a = Math.round(t[i + 3] * (1 - c));
+        if (a <= 0) {
+          t[i] = 0;
+          t[i + 1] = 0;
+          t[i + 2] = 0;
+          t[i + 3] = 0;
+        } else {
+          t[i + 3] = a;
+        }
+      }
+    }
+  }
+
+  surface(): TiledSurface {
+    const out = new Map(this.base.tiles);
+    for (const [k, d] of this.tiles) {
+      const t = finishTile(new Uint8ClampedArray(d), 4, 0);
+      if (t) out.set(k, t);
+      else out.delete(k);
+    }
+    return new TiledSurface(4, out, 0);
+  }
 }
 
 export interface ThickStrokeInit {
@@ -221,6 +449,7 @@ export class ThickStrokeDriver {
   private readonly medium: TileMedium;
   private readonly height = new Map<TileKey, Uint8ClampedArray>();
   private readonly material = new Map<TileKey, Uint8ClampedArray>();
+  private readonly film: FilmBuffer | null;
   private readonly paint: RgbTriple = [0, 0, 0];
   private readonly centre: RgbTriple = [0, 0, 0];
   private tip = new Float32Array(0);
@@ -242,6 +471,7 @@ export class ThickStrokeDriver {
       amount: 1,
     }));
     this.medium = new TileMedium(init.target, {});
+    this.film = b.iridescence ? new FilmBuffer(init.channels.film, init.target.offset) : null;
     // Across the tip makes no sense for a loaded impasto tip: the colour follows the dab instead.
     this.sampler = init.paint ? new PaintGradientSampler(init.paint.map.by === 'across-tip' ? { ...init.paint, map: { by: 'distance', length: 300, repeat: 'mirror' } } : init.paint, init.seed) : null;
   }
@@ -270,7 +500,11 @@ export class ThickStrokeDriver {
       else m.delete(k);
     }
     void this.version;
-    return { height: new TiledSurface(1, h, 0), material: new TiledSurface(4, m, 0) };
+    return {
+      height: new TiledSurface(1, h, 0),
+      material: new TiledSurface(4, m, 0),
+      film: this.film ? this.film.surface() : this.init.channels.film,
+    };
   }
 
   private heightTile(tx: number, ty: number, write: boolean): Uint8ClampedArray | null {
@@ -379,6 +613,7 @@ export class ThickStrokeDriver {
       st.smudge!.dab(this.medium, { x: d.x, y: d.y, radius: d.radius, opacity: k }, rect, tip);
       this.knifeHeight(st, d, rect, tip, k, im.drag);
       this.paintMaterial(rect, tip, k * 0.6, im.gloss, im.metallic, im.rim, im.clarity);
+      if (this.film && b.iridescence) this.film.deposit(rect, tip, k * 0.6, b.iridescence, d.pressure);
       return;
     }
     // Colour: the exchange mixes the brush paint with the wet paint it picks up (like oil).
@@ -450,6 +685,7 @@ export class ThickStrokeDriver {
       }
     }
     this.paintMaterial(rect, tip, k, im.gloss * (1 - 0.3 * im.thinner), im.metallic, im.rim, im.clarity);
+    if (this.film && b.iridescence) this.film.deposit(rect, tip, k, b.iridescence, d.pressure);
   }
 
   /** The knife: flattens the relief under it and carries some of it along (a patch, like a smudge). */
@@ -507,6 +743,15 @@ export class ThickStrokeDriver {
   }
 }
 
+function unionRects(a: RasterRect | null, b: RasterRect | null): RasterRect | null {
+  if (!a) return b ? { ...b } : null;
+  if (!b) return { ...a };
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, yOf(b));
+  return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
+}
+const yOf = (r: RasterRect) => r.y;
+
 /** Height statistics of a layer's relief (for tools). */
 export function reliefInfo(ch: ThickChannels): { bounds: RasterRect | null; maxHeight: number; tiles: number } {
   let max = 0;
@@ -514,7 +759,8 @@ export function reliefInfo(ch: ThickChannels): { bounds: RasterRect | null; maxH
     if (t.uniform !== null) max = Math.max(max, t.uniform & 255);
     else for (let i = 0; i < t.data.length; i++) if (t.data[i] > max) max = t.data[i];
   }
-  return { bounds: ch.height.bounds, maxHeight: max, tiles: ch.height.tiles.size };
+  const bounds = unionRects(ch.height.bounds, ch.film.bounds);
+  return { bounds, maxHeight: max, tiles: ch.height.tiles.size || ch.film.tiles.size };
 }
 
 /** A layer's thick-paint channels as saved: PNG data URLs over a rectangle (layer space). */
@@ -524,13 +770,21 @@ export interface SavedThickChannels {
   height: string;
   /** RGBA PNG of the material (R gloss, G metallic). */
   material: string;
+  /** RGBA PNG of the thin-film iridescence (R thickness, G refractive index, A coverage), when any. */
+  film?: string;
 }
 
-/** Channels → saved form (`null` when there is no relief). */
+/** Channels → saved form (`null` when there is neither relief nor film). */
 export function thickToJSON(ch: ThickChannels): SavedThickChannels | null {
-  const b = ch.height.bounds;
+  const b = unionRects(ch.height.bounds, ch.film.bounds);
   if (!b) return null;
-  return { rect: { ...b }, height: pngDataUrl(b.width, b.height, readRegion(ch.height, b), 1), material: pngDataUrl(b.width, b.height, readRegion(ch.material, b), 4) };
+  const out: SavedThickChannels = {
+    rect: { ...b },
+    height: pngDataUrl(b.width, b.height, readRegion(ch.height, b), 1),
+    material: pngDataUrl(b.width, b.height, readRegion(ch.material, b), 4),
+  };
+  if (ch.film.bounds) out.film = pngDataUrl(b.width, b.height, readRegion(ch.film, b), 4);
+  return out;
 }
 
 /** Saved form → channels; throws a sentence when it cannot be read. */
@@ -545,8 +799,16 @@ export function thickFromJSON(raw: unknown): ThickChannels {
   const h = decode(r.height, true);
   const m = decode(r.material, false);
   const hd = h.channels === 1 ? h.data : Uint8ClampedArray.from({ length: h.width * h.height }, (_, i) => h.data[i * 4]);
+  const film =
+    typeof r.film === 'string'
+      ? (() => {
+          const f = decode(r.film, false);
+          return surfaceFromPixels({ width: f.width, height: f.height, data: f.data }, 4, r.rect.x, r.rect.y);
+        })()
+      : new TiledSurface(4, new Map(), 0);
   return {
     height: surfaceFromPixels({ width: h.width, height: h.height, data: hd }, 1, r.rect.x, r.rect.y),
     material: surfaceFromPixels({ width: m.width, height: m.height, data: m.data }, 4, r.rect.x, r.rect.y),
+    film,
   };
 }

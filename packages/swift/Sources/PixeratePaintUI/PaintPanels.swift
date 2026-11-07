@@ -157,6 +157,22 @@ public struct PaintToolbarView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+                if model.tool == "fill" {
+                    Divider().frame(height: 16)
+                    Picker("Fill reference", selection: Binding(get: { model.fillOptions.reference }, set: { model.fillOptions.reference = $0 })) {
+                        Text("All layers").tag("all")
+                        Text("Active layer").tag("layer")
+                        ForEach(model.layers.filter { $0.type == "pixel" }, id: \.id) { l in Text("Ref: \(l.name)").tag(l.id) }
+                    }
+                    .fixedSize()
+                    Stepper("Tol \(Int(model.fillOptions.tolerance))", value: Binding(get: { model.fillOptions.tolerance }, set: { model.fillOptions.tolerance = $0 }), in: 0...255, step: 4)
+                        .fixedSize()
+                    Stepper("Gap \(Int(model.fillOptions.closeGap))px", value: Binding(get: { model.fillOptions.closeGap }, set: { model.fillOptions.closeGap = $0 }), in: 0...32, step: 1)
+                        .fixedSize()
+                    Stepper("Expand \(Int(model.fillOptions.expand))px", value: Binding(get: { model.fillOptions.expand }, set: { model.fillOptions.expand = $0 }), in: -16...16, step: 1)
+                        .fixedSize()
+                    Toggle("Wet", isOn: Binding(get: { model.fillOptions.wet }, set: { model.fillOptions.wet = $0 })).toggleStyle(.button)
+                }
                 Divider().frame(height: 16)
                 Button("Undo") { model.undo() }.disabled(model.undoLabel == nil).help(model.undoLabel.map { "Undo \($0)" } ?? "Undo")
                 Button("Redo") { model.redo() }.disabled(model.redoLabel == nil).help(model.redoLabel.map { "Redo \($0)" } ?? "Redo")
@@ -234,6 +250,19 @@ public struct PaintBrushPanel: View {
             .labelsHidden()
             ForEach(model.tables.brushOptions, id: \.id) { item in
                 PaintSliderRow(label: item.label, value: model.brushOption(item), range: item.min...item.max, step: item.step, displayScale: item.displayScale ?? 1, unit: item.unit) { model.setBrushOption(item, $0) }
+            }
+            if brush.ghost != nil {
+                ForEach(model.ghostSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.ghostValue(item.path), range: item.min...item.max, step: item.step) { model.setGhostValue(item.path, $0) }
+                }
+            }
+            if brush.mutation != nil {
+                ForEach(model.mutationSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.mutationValue(item.path), range: item.min...item.max, step: item.step) { model.setMutationValue(item.path, $0) }
+                }
+                Text(model.hasMutationAgent ? "Agent connected" : "No agent connected — mutation paint will stay as ordinary paint")
+                    .font(.caption2)
+                    .foregroundStyle(model.hasMutationAgent ? Color.secondary : Color.orange)
             }
             if brush.engine == "mixer" || brush.behavior.dirty {
                 HStack(spacing: 6) {
@@ -357,7 +386,7 @@ public struct PaintUvHeatPanel: View {
     }
 }
 
-/// The light for thick paint and metallic paper (`PaintUITables.sliders.light`; not an undo step), and Flatten relief for the active layer.
+/// The light for thick paint, thin-film iridescence and metallic paper (`PaintUITables.sliders.light`, `sliders.viewTilt`; not an undo step), and Flatten relief for the active layer.
 public struct PaintLightPanel: View {
     let model: PaintEditorModel
     public init(model: PaintEditorModel) { self.model = model }
@@ -368,6 +397,10 @@ public struct PaintLightPanel: View {
             ForEach(model.lightSliders, id: \.path) { c in
                 PaintSliderRow(label: c.label, value: model.lightingValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setLighting(c.path, $0) })
             }
+            ForEach(model.viewTiltSliders, id: \.path) { c in
+                PaintSliderRow(label: c.label, value: model.viewTiltValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setViewTilt(c.path, $0) })
+            }
+            Toggle("Device tilt", isOn: Binding(get: { model.deviceTiltEnabled }, set: { model.deviceTiltEnabled = $0 }))
             Button("Flatten relief") { model.flattenRelief() }
         }
     }
@@ -491,6 +524,9 @@ public struct PaintLayersPanel: View {
                         if l.type == "group" { Image(systemName: "folder") }
                         if l.liveStrokes != nil { Image(systemName: "scribble").help("Stroke layer: \(l.liveStrokes!) editable strokes") }
                         Text(l.name).lineLimit(1)
+                        if l.temporary == true {
+                            Text("Temporary").font(.caption2).foregroundStyle(.secondary)
+                        }
                         Spacer()
                         if l.locks["pixels"] == .bool(true) || l.locks["all"] == .bool(true) { Image(systemName: "lock.fill").help("Locked") }
                     }

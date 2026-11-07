@@ -57,7 +57,10 @@ extension PaintEditorController {
         let wetIds = ids.filter { wet.wetLayerIds().contains($0) }
         if wetIds.isEmpty { return [] }
         beginWetOp()
-        for id in wetIds { _ = try? wet.dry(id) }
+        for id in wetIds {
+            finishWetMutationsOnDry(id)
+            _ = try? wet.dry(id)
+        }
         logWet("dry", layerId: wetIds.joined(separator: ","))
         return wetIds
     }
@@ -76,7 +79,7 @@ extension PaintEditorController {
     }
 
     /// Records a settings change as a wet event (not an undo step).
-    private func recordWetSetting(_ kind: String, layerId: String? = nil, data: JSONValue) {
+    func recordWetSetting(_ kind: String, layerId: String? = nil, data: JSONValue? = nil) {
         let d = doc
         doc = d.with { $0.wetEvents = (d.wetEvents ?? []) + [WetEvent(clock: wet.world?.clock ?? 0, at: d.strokes.count, kind: kind, layerId: layerId, data: data)] }
     }
@@ -139,7 +142,8 @@ extension PaintEditorController {
      */
     @discardableResult
     public func tickWet(_ now: Double, maxSteps: Int = 8) -> Int {
-        wet.tick(now, maxSteps: maxSteps)
+        tickMutations(now)
+        return wet.tick(now, maxSteps: maxSteps)
     }
 
     /// Lets the CPU engine run alone (`off`) or lets Metal shade large wet areas (`auto`). Not an undo step.
@@ -157,6 +161,8 @@ extension PaintEditorController {
         let n = steps ?? Int(JS.round((seconds ?? 1) * wet.speed))
         if !(n >= 0 && n <= 100000) { throw PaintEditorError("steps \(n) is out of range; use 0..100000 (or seconds).") }
         let run = wet.advance(n)
+        let sec = seconds ?? Double(n) / wet.speed
+        if sec > 0 { advanceMutations(sec) }
         emit()
         let st = wetState()
         return ["steps": .number(Double(run)), "clock": st["clock"]!, "stillWet": st["wet"]!, "layers": st["layers"]!]
@@ -172,7 +178,10 @@ extension PaintEditorController {
         let before = doc
         beginWetOp()
         var dried: [JSONValue] = []
-        for id in ids { for d in try wet.dry(id, rect) { dried.append(["layerId": .string(d.layerId), "bounds": rectJSON(d.bounds)]) } }
+        for id in ids {
+            if rect == nil { finishWetMutationsOnDry(id) }
+            for d in try wet.dry(id, rect) { dried.append(["layerId": .string(d.layerId), "bounds": rectJSON(d.bounds)]) }
+        }
         logWet("dry", layerId: layerId, data: rect.map { $0.json })
         commit("Dry paint", withWetEvents(doc), before: before)
         return ["dried": .array(dried), "stillWet": .bool(wet.isWet())]
@@ -209,6 +218,19 @@ extension PaintEditorController {
     /// Changes a layer's wet settings. Saved with the document, not an undo step.
     public func setWetParams(_ layerId: String?, _ update: JSONObject) throws -> WetParams {
         let l = try wetLayer(layerId, "change the wet settings of")
+        if let held = heldEvaporation[l.id] {
+            var merged = wet.info(l.id).params.json.objectValue ?? [:]
+            merged["evaporation"] = .number(held)
+            for (k, v) in update { merged[k] = v }
+            let intended = normalizeWetParams(merged)
+            heldEvaporation[l.id] = intended.evaporation
+            var heldUpdate = update
+            heldUpdate["evaporation"] = .number(0)
+            _ = try wet.setParams(l.id, heldUpdate)
+            recordWetSetting("params", layerId: l.id, data: intended.json)
+            emit()
+            return intended
+        }
         let params = try wet.setParams(l.id, update)
         recordWetSetting("params", layerId: l.id, data: params.json)
         emit()
@@ -283,7 +305,14 @@ extension PaintEditorController {
     /// Wet settings saved with the document (nil when they are all defaults).
     func wetJSON() -> JSONValue? {
         var layers = JSONObject()
-        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil { layers[id] = ["params": s.params.json, "flow": s.flow.json] }
+        for (id, s) in wet.settings where findLayer(doc.layers, id) != nil {
+            var params = s.params
+            if let held = heldEvaporation[id] { params.evaporation = held }
+            var entry: JSONObject = ["params": params.json, "flow": s.flow.json]
+            let ghost = wet.world?.hasLane(id) == true ? wet.world?.getGhost(id) : s.ghost
+            if let ghost, ghost.trigger != "agent" { entry["ghost"] = ghost.json }
+            layers[id] = .object(entry)
+        }
         if layers.isEmpty && wet.tilt.angle == 0 { return nil }
         return ["tilt": wet.tilt.json, "layers": .object(layers)]
     }
@@ -328,7 +357,18 @@ extension PaintEditorController {
         return lighting
     }
 
-    /// A layer's relief: where it is, its highest point (0..255); nil when it has none.
+    /// The current viewer tilt for thin-film iridescence and specular highlights.
+    public func getViewTilt() -> PaintViewTilt { viewTilt }
+
+    /// Tilts the viewer angle (`-1..1` on each axis). View state only (not saved with the document or an undo step).
+    public func setViewTilt(x: Double?, y: Double?) throws -> PaintViewTilt {
+        if let x, !(x.isFinite && x >= -1 && x <= 1) { throw PaintEditorError("x \(jsText(x)) is out of range; use -1..1.") }
+        if let y, !(y.isFinite && y >= -1 && y <= 1) { throw PaintEditorError("y \(jsText(y)) is out of range; use -1..1.") }
+        viewTilt = normalizeViewTilt(x: x, y: y, viewTilt)
+        return viewTilt
+    }
+
+    /// A layer's relief: where it is and its highest point (0..255); nil when it has none.
     public func reliefOf(_ layerId: String? = nil) throws -> (layerId: String, bounds: RasterRect?, maxHeight: Int)? {
         guard let id = layerId ?? doc.activeLayerId else { return nil }
         _ = try requireLayer(id)
@@ -357,7 +397,7 @@ extension PaintEditorController {
             guard let ch = liveThick?.layerId == id ? liveThick!.channels : thick?.get(id), let l = findLayer(out, id)?.layer, l.isPixel else { continue }
             let cache = litCaches[id] ?? LitCache()
             litCaches[id] = cache
-            let lit = cache.lit(l.pixelSurface, ch, lighting)
+            let lit = cache.lit(l.pixelSurface, ch, lighting, viewTilt)
             if lit !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(lit) } }
         }
         return out
@@ -625,9 +665,17 @@ func paintWetHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] 
         let x = try SetLightingArguments(a)
         return try c.setLighting(azimuth: x.azimuth, elevation: x.elevation, relief: x.relief).json
     }
+    h["get_view_tilt"] = { _ in c.getViewTilt().json }
+    h["set_view_tilt"] = { a in
+        let x = try SetViewTiltArguments(a)
+        return try c.setViewTilt(x: x.x, y: x.y).json
+    }
     h["get_relief"] = { a in
         let r = try c.reliefOf(try GetReliefArguments(a).layerId)
-        return ["relief": r.map { ["layerId": .string($0.layerId), "bounds": rectJSON($0.bounds), "maxHeight": .number(Double($0.maxHeight))] } ?? .null, "lighting": c.lighting.json]
+        return [
+            "relief": r.map { info in ["layerId": .string(info.layerId), "bounds": rectJSON(info.bounds), "maxHeight": .number(Double(info.maxHeight))] } ?? .null,
+            "lighting": c.lighting.json,
+        ]
     }
     h["flatten_relief"] = { a in .object(try c.flattenRelief(try FlattenReliefArguments(a).layerId)) }
     h["set_instant_dry"] = { a in ["instantDry": .bool(c.setInstantDry(a["on"]?.boolValue ?? false))] }

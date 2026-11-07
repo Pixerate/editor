@@ -41,6 +41,7 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
         brush["medium"] = "paint"
         brush["variety"] = .string(b.wet.medium)
         brush["behaviour"] = ["surface": "wet"]
+        if b.ghost != nil && b.mutation == nil { brush["ghost"] = [:] }
     case "impasto":
         brush["medium"] = "paint"
         brush["behaviour"] = ["surface": "thick"]
@@ -61,6 +62,8 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
         }
         if b.engine == "dab" && b.spray != nil { brush["marks"] = ["kind": "scatter"] }
     }
+    if b.iridescence != nil { brush["iridescence"] = [:] }
+    if b.mutation != nil { brush["mutation"] = [:] }
     return brush
 }
 

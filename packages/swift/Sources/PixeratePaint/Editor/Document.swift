@@ -162,10 +162,11 @@ extension RasterLayer {
     var pixelOffset: LayerOffset { offset ?? LayerOffset(x: 0, y: 0) }
 
     /// A copy with any property replaced (name and locks too, which `with` keeps).
-    func copy(id: String? = nil, name: String? = nil, visible: Bool? = nil, opacity: Double? = nil, blend: GroupBlendMode? = nil, clipped: Bool? = nil, mask: RasterMask?? = nil, locks: LayerLocks?? = nil, effects: LayerEffects?? = nil, content: Content? = nil) -> RasterLayer {
+    func copy(id: String? = nil, name: String? = nil, visible: Bool? = nil, opacity: Double? = nil, blend: GroupBlendMode? = nil, clipped: Bool? = nil, mask: RasterMask?? = nil, locks: LayerLocks?? = nil, effects: LayerEffects?? = nil, temporary: Bool?? = nil, content: Content? = nil) -> RasterLayer {
         RasterLayer(
             id: id ?? self.id, name: name ?? self.name, visible: visible ?? self.visible, opacity: opacity ?? self.opacity, blend: blend ?? self.blend,
             clipped: clipped ?? self.clipped, mask: mask ?? self.mask, locks: locks ?? self.locks, effects: effects ?? self.effects, edge: edge,
+            temporary: temporary ?? self.temporary,
             content: content ?? self.content
         )
     }

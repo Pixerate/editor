@@ -1,0 +1,547 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "mutation",
+  "description": "Mutation paint: a user stroke settles into a pending mutation, is claimed and faded by read_mutation, and answered by answer_mutation (or kept as ordinary paint by decline_mutation).",
+  "setup": {
+    "width": 64,
+    "height": 48
+  },
+  "steps": [
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "mutation-ink"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.25,
+              "smoothing": 0.35
+            },
+            "id": "mutation-ink",
+            "kind": "mark",
+            "medium": "ink",
+            "mutation": {},
+            "name": "Mutation ink",
+            "tip": {
+              "hardness": 0.9,
+              "shape": "round",
+              "size": 6,
+              "spacing": 0.06
+            },
+            "variety": "pen"
+          },
+          "engine": "dab",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "color": "#1e293b",
+        "points": [
+          {
+            "x": 10,
+            "y": 14,
+            "pressure": 0.8
+          },
+          {
+            "x": 46,
+            "y": 14,
+            "pressure": 0.8
+          }
+        ],
+        "seed": 7
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 48,
+            "x": 4,
+            "y": 8
+          },
+          "dabs": 73,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "seconds": 2
+      },
+      "expect": {
+        "result": {
+          "clock": 0,
+          "layers": [],
+          "steps": 0,
+          "stillWet": false
+        }
+      }
+    },
+    {
+      "tool": "list_mutations",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "mutations": [
+            {
+              "age": 2,
+              "bounds": {
+                "height": 12,
+                "width": 48,
+                "x": 4,
+                "y": 8
+              },
+              "fade": 2,
+              "id": "m1",
+              "layerId": "@2",
+              "medium": "dry",
+              "patience": 45,
+              "settle": 1.5,
+              "state": "pending",
+              "strokeCount": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "read_mutation",
+      "arguments": {
+        "id": "m1"
+      },
+      "ignore": [
+        "/cropPng/data",
+        "/canvasPng/data"
+      ],
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 48,
+            "x": 4,
+            "y": 8
+          },
+          "canvasPng": {
+            "height": 48,
+            "width": 64
+          },
+          "cropPng": {
+            "height": 48,
+            "rect": {
+              "height": 48,
+              "width": 64,
+              "x": 0,
+              "y": 0
+            },
+            "width": 64
+          },
+          "fade": 2,
+          "id": "m1",
+          "layerId": "@2",
+          "medium": "dry",
+          "state": "claimed",
+          "strokes": [
+            {
+              "bounds": {
+                "height": 12,
+                "width": 48,
+                "x": 4,
+                "y": 8
+              },
+              "brushId": "mutation-ink",
+              "brushName": "Mutation ink",
+              "color": "#1e293b",
+              "id": "s1",
+              "points": [
+                {
+                  "pressure": 0.8,
+                  "x": 10,
+                  "y": 14
+                },
+                {
+                  "pressure": 0.8,
+                  "x": 46,
+                  "y": 14
+                }
+              ],
+              "size": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "seconds": 2.5
+      },
+      "expect": {
+        "result": {
+          "clock": 0,
+          "layers": [],
+          "steps": 0,
+          "stillWet": false
+        }
+      }
+    },
+    {
+      "tool": "answer_mutation",
+      "arguments": {
+        "id": "m1",
+        "note": "Answered with a crimson line",
+        "strokes": [
+          {
+            "brushId": "ink-pen",
+            "brush": {
+              "tip": {
+                "size": 6
+              }
+            },
+            "color": "#dc2626",
+            "points": [
+              {
+                "x": 12,
+                "y": 32,
+                "pressure": 0.85
+              },
+              {
+                "x": 52,
+                "y": 32,
+                "pressure": 0.85
+              }
+            ]
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 52,
+            "x": 6,
+            "y": 26
+          },
+          "dabs": 81,
+          "id": "m1",
+          "layerId": "@2",
+          "state": "answered",
+          "strokeIds": [
+            "s2"
+          ]
+        },
+        "pixels": {
+          "file": "png/mutation.7.png",
+          "width": 64,
+          "height": 48,
+          "sha256": "42d9e730f6959c762c74485f9740121b84055adbc9273cc8be09afa3921c8edf",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "mutation-ink"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.25,
+              "smoothing": 0.35
+            },
+            "id": "mutation-ink",
+            "kind": "mark",
+            "medium": "ink",
+            "mutation": {},
+            "name": "Mutation ink",
+            "tip": {
+              "hardness": 0.9,
+              "shape": "round",
+              "size": 6,
+              "spacing": 0.06
+            },
+            "variety": "pen"
+          },
+          "engine": "dab",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "color": "#2563eb",
+        "points": [
+          {
+            "x": 12,
+            "y": 22,
+            "pressure": 0.8
+          },
+          {
+            "x": 48,
+            "y": 22,
+            "pressure": 0.8
+          }
+        ],
+        "seed": 11
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 48,
+            "x": 6,
+            "y": 16
+          },
+          "dabs": 73,
+          "layerId": "@3",
+          "strokeId": "s3"
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "seconds": 2
+      },
+      "expect": {
+        "result": {
+          "clock": 0,
+          "layers": [],
+          "steps": 0,
+          "stillWet": false
+        }
+      }
+    },
+    {
+      "tool": "decline_mutation",
+      "arguments": {
+        "id": "m2",
+        "reason": "Keep as drawn"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "age": 2,
+          "bounds": {
+            "height": 12,
+            "width": 48,
+            "x": 6,
+            "y": 16
+          },
+          "declineReason": "Keep as drawn",
+          "fade": 2,
+          "id": "m2",
+          "layerId": "@2",
+          "medium": "dry",
+          "patience": 45,
+          "settle": 1.5,
+          "state": "declined",
+          "strokeCount": 1
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@2": "pixerate-asset:em-4duas1bv2k"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 24
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 48,
+            "layers": [
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 7,
+                "y": 18
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#dc2626",
+                "id": "s2",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 0.85,
+                    "x": 12,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 0.85,
+                    "x": 52,
+                    "y": 32
+                  }
+                ],
+                "seed": 301794027
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.25,
+                    "smoothing": 0.35
+                  },
+                  "id": "mutation-ink",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "mutation": {},
+                  "name": "Mutation ink",
+                  "tip": {
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#2563eb",
+                "id": "s3",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 12,
+                    "y": 22
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 48,
+                    "y": 22
+                  }
+                ],
+                "seed": 11
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    }
+  ]
+}

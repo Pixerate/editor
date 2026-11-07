@@ -52,6 +52,8 @@ struct StrokeSessionInit {
     var wet: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
     /// Impasto brushes: the layer's thick-paint channels before the stroke.
     var thick: ThickChannels? = nil
+    /// Non-impasto brushes with `iridescence` (or an eraser on a layer with film): the layer's film before the stroke.
+    var film: TiledSurface? = nil
     /// The art of image sources, for stamp tips and tip grain.
     var stampArt: StampArtLookup? = nil
 }
@@ -97,6 +99,7 @@ final class PaintStrokeSession: PaintTileTarget {
     private var spray: StickerSpray?
     private var wetDriver: WetStrokeDriver?
     private var thickDriver: ThickStrokeDriver?
+    private var filmBuffer: FilmBuffer?
     private let apply: StrokeApply
     private(set) var bounds: RasterRect?
     private var closed = false
@@ -173,6 +176,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.thermo = nil
             t.thick = nil
             t.stickerNextId = nil
+            t.film = nil
             lightTwin = try PaintStrokeSession(t)
         }
         if let fluor = i.fluor, i.wet == nil, i.brush.engine != "sticker" {
@@ -219,6 +223,9 @@ final class PaintStrokeSession: PaintTileTarget {
             return
         }
         let copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
+        if let f = i.film {
+            filmBuffer = FilmBuffer(f, i.offset, i.selection)
+        }
         if let w = i.wet {
             dry = nil
             wetDriver = w.driver
@@ -252,6 +259,10 @@ final class PaintStrokeSession: PaintTileTarget {
         }
         if dabByDab {
             wet = PaintDabStroke(brush, target: self, load: i.mixerLoad, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels, stampArt: i.stampArt)
+        }
+        if let fb = filmBuffer {
+            dry?.film = fb
+            wet?.film = fb
         }
     }
 
@@ -287,6 +298,9 @@ final class PaintStrokeSession: PaintTileTarget {
 
     /// Impasto strokes: the layer's thick-paint channels with the stroke so far.
     func thickChannels() -> ThickChannels? { thickDriver?.channels() }
+
+    /// Non-impasto strokes that write or erase thin film: the layer's film surface so far.
+    func filmChannel() -> TiledSurface? { filmBuffer?.surface() }
 
     /// Adds raw pen samples (document pixels); returns the rectangles they painted.
     @discardableResult

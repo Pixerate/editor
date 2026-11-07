@@ -1,0 +1,945 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "ghost",
+  "description": "Ghost paint mixes and flows while wet, then fades without leaving its own colour, leaving only a smear in the paint it touched.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "set_wet_engine",
+      "arguments": {
+        "gpu": "off"
+      },
+      "ignore": [
+        "/engine"
+      ],
+      "expect": {
+        "result": {}
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "preset": "ghost-wash",
+        "ghost": {
+          "linger": 2,
+          "smear": 0.4
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Unknown property \"preset\". Allowed: id, name, description, tags, kind, medium, variety, tool, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, motion, colour, unset.",
+                "path": "/preset"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__set_brush\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 8,
+            "y": 8,
+            "pressure": 0.6
+          },
+          {
+            "x": 40,
+            "y": 8,
+            "pressure": 0.8
+          }
+        ],
+        "color": "#aa2288",
+        "seed": 41
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 44,
+            "x": 2,
+            "y": 2
+          },
+          "dabs": 65,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "get_wet_paint",
+      "ignore": [
+        "/backend",
+        "/engine",
+        "/layers/*/engine"
+      ],
+      "expect": {
+        "result": {
+          "clock": 0,
+          "gpu": "off",
+          "gpuActive": false,
+          "instantDry": false,
+          "layerIds": [],
+          "layers": [],
+          "message": null,
+          "overlay": false,
+          "paused": false,
+          "speed": 120,
+          "tilt": {
+            "angle": 0,
+            "direction": 0
+          },
+          "wet": false
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "steps": 120
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "clock": 0,
+          "layers": [],
+          "steps": 0,
+          "stillWet": false
+        },
+        "pixels": {
+          "file": "png/ghost.5.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "74919ae4d9547db03200809cc416fae179fd39fe17fff6c12f1e4475446f5c21",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_wet_paint",
+      "ignore": [
+        "/backend",
+        "/engine",
+        "/layers/*/engine"
+      ],
+      "expect": {
+        "result": {
+          "clock": 0,
+          "gpu": "off",
+          "gpuActive": false,
+          "instantDry": false,
+          "layerIds": [],
+          "layers": [],
+          "message": null,
+          "overlay": false,
+          "paused": false,
+          "speed": 120,
+          "tilt": {
+            "angle": 0,
+            "direction": 0
+          },
+          "wet": false
+        }
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "pixels": true,
+      "expect": {
+        "result": {
+          "dried": [],
+          "stillWet": false
+        },
+        "pixels": {
+          "file": "png/ghost.7.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "74919ae4d9547db03200809cc416fae179fd39fe17fff6c12f1e4475446f5c21",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 8,
+            "y": 16,
+            "pressure": 0.7
+          },
+          {
+            "x": 40,
+            "y": 16,
+            "pressure": 0.7
+          }
+        ],
+        "brushId": "watercolor-round",
+        "color": "#2255aa",
+        "seed": 42
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 34,
+            "width": 64,
+            "x": -9,
+            "y": -1
+          },
+          "dabs": 12,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#2255aa"
+          },
+          "strokeId": "s2",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 24,
+            "y": 4,
+            "pressure": 0.8
+          },
+          {
+            "x": 24,
+            "y": 28,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "ghost-gouache",
+        "color": "#ee2222",
+        "seed": 43
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 57,
+            "width": 34,
+            "x": 7,
+            "y": -13
+          },
+          "dabs": 11,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#ee2222"
+          },
+          "strokeId": "s3",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "steps": 10
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "clock": 10,
+          "layers": [
+            {
+              "activeTiles": 1,
+              "flow": {
+                "angle": 0,
+                "clockwise": true,
+                "kind": "none",
+                "scale": 120,
+                "seed": 1,
+                "strength": 0.5
+              },
+              "ghost": {
+                "remaining": 5.07
+              },
+              "layerId": "@1",
+              "params": {
+                "bleed": 0.3,
+                "bloom": 0.4,
+                "edgeDarkening": 0.5,
+                "evaporation": 0.45,
+                "fixture": 0.2,
+                "granulation": 0.4,
+                "pickup": 0.2,
+                "pigmentWeight": 0.3,
+                "viscosity": 0.3
+              },
+              "wet": true,
+              "wetBounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "wetCells": 1372
+            }
+          ],
+          "steps": 10,
+          "stillWet": true
+        },
+        "pixels": {
+          "file": "png/ghost.10.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ff66f93affe9f1e5ea9284240916e8fbffd3aa47ffabcd7cdc9dbf71a280c453",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "dried": [
+            {
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "layerId": "@1"
+            }
+          ],
+          "stillWet": false
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:36q-o17zwyl483"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.7
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.2,
+                    "tiltOpacity": 0.35,
+                    "tiltRoundness": 0.75,
+                    "tiltSize": 1
+                  },
+                  "id": "pencil-6b",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "6B pencil",
+                  "tip": {
+                    "flow": 0.75,
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 7,
+                    "spacing": 0.07
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#aa2288",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 8,
+                    "y": 8
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 40,
+                    "y": 8
+                  }
+                ],
+                "seed": 41
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#2255aa",
+                "id": "s2",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.13333333333333333,
+                    0.3333333333333333,
+                    0.6666666666666666
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.7,
+                    "x": 8,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.7,
+                    "x": 40,
+                    "y": 16
+                  }
+                ],
+                "seed": 42,
+                "steps": [
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "surface": "wet",
+                    "wet": {
+                      "body": 1,
+                      "pigment": 0.85,
+                      "rewet": 0.3,
+                      "water": 0.35
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "smoothing": 0.25
+                  },
+                  "ghost": {
+                    "linger": 5,
+                    "smear": 0.4
+                  },
+                  "id": "ghost-gouache",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Ghost gouache",
+                  "tip": {
+                    "hardness": 0.7,
+                    "shape": "round",
+                    "size": 26
+                  },
+                  "variety": "gouache"
+                },
+                "color": "#ee2222",
+                "id": "s3",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.9333333333333333,
+                    0.13333333333333333,
+                    0.13333333333333333
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 28
+                  }
+                ],
+                "seed": 43,
+                "steps": [
+                  0,
+                  0
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "@1": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.45,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "wetEvents": [
+              {
+                "at": 3,
+                "clock": 10,
+                "kind": "dry"
+              }
+            ],
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/ghost.11.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ff66f93affe9f1e5ea9284240916e8fbffd3aa47ffabcd7cdc9dbf71a280c453",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 16,
+            "y": 4,
+            "pressure": 0.8
+          },
+          {
+            "x": 16,
+            "y": 28,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "invisible-ink",
+        "seed": 44
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 55,
+            "width": 32,
+            "x": 0,
+            "y": -12
+          },
+          "dabs": 12,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#1f2937"
+          },
+          "strokeId": "s4",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "get_wet_paint",
+      "ignore": [
+        "/backend",
+        "/engine",
+        "/layers/*/engine"
+      ],
+      "expect": {
+        "result": {
+          "clock": 10,
+          "gpu": "off",
+          "gpuActive": false,
+          "instantDry": false,
+          "layerIds": [
+            "@1"
+          ],
+          "layers": [
+            {
+              "activeTiles": 1,
+              "flow": {
+                "angle": 0,
+                "clockwise": true,
+                "kind": "none",
+                "scale": 120,
+                "seed": 1,
+                "strength": 0.5
+              },
+              "layerId": "@1",
+              "params": {
+                "bleed": 0.3,
+                "bloom": 0.4,
+                "edgeDarkening": 0.5,
+                "evaporation": 0.45,
+                "fixture": 0.2,
+                "granulation": 0.4,
+                "pickup": 0.2,
+                "pigmentWeight": 0.3,
+                "viscosity": 0.3
+              },
+              "wet": true,
+              "wetBounds": {
+                "height": 32,
+                "width": 26,
+                "x": 3,
+                "y": 0
+              },
+              "wetCells": 818
+            }
+          ],
+          "message": "Wet paint runs in plain JavaScript until the WebAssembly kernel has loaded.",
+          "overlay": false,
+          "paused": false,
+          "speed": 120,
+          "tilt": {
+            "angle": 0,
+            "direction": 0
+          },
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "pixels": true,
+      "expect": {
+        "result": {
+          "dried": [
+            {
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "layerId": "@1"
+            }
+          ],
+          "stillWet": false
+        },
+        "pixels": {
+          "file": "png/ghost.14.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ab9f351d9d221e6f082c1182952595826d9e7dee875c4bdcf05efbee60a705a5",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 10,
+            "y": 10,
+            "pressure": 0.7
+          },
+          {
+            "x": 30,
+            "y": 10,
+            "pressure": 0.7
+          }
+        ],
+        "brushId": "ghost-oil",
+        "color": "#ff8800",
+        "seed": 45
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 30,
+            "width": 49,
+            "x": -5,
+            "y": -5
+          },
+          "dabs": 13,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#ff8800"
+          },
+          "strokeId": "s5",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 10,
+            "y": 12,
+            "pressure": 0.7
+          },
+          {
+            "x": 30,
+            "y": 12,
+            "pressure": 0.7
+          }
+        ],
+        "brushId": "neon-tube",
+        "color": "#00ffff",
+        "seed": 46
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown brush \"neon-tube\". Closest: neon-marker, neon-strand, paint-tube. Call list_brush_presets for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "expect": {
+        "result": {
+          "dried": [
+            {
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "layerId": "@1"
+            }
+          ],
+          "stillWet": false
+        }
+      }
+    },
+    {
+      "tool": "set_paint",
+      "arguments": {
+        "paint": {
+          "type": "gradient",
+          "stops": [
+            {
+              "offset": 0,
+              "color": "#ff0000"
+            },
+            {
+              "offset": 1,
+              "color": "#0000ff"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "color": "#1f2937",
+          "paint": {
+            "map": {
+              "by": "distance",
+              "length": 300,
+              "repeat": "mirror",
+              "unit": "px"
+            },
+            "space": "pigment",
+            "stops": [
+              {
+                "color": "#ff0000",
+                "offset": 0
+              },
+              {
+                "color": "#0000ff",
+                "offset": 1
+              }
+            ],
+            "type": "gradient"
+          },
+          "secondaryColor": "#ffffff"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 10,
+            "y": 20,
+            "pressure": 0.7
+          },
+          {
+            "x": 30,
+            "y": 20,
+            "pressure": 0.7
+          }
+        ],
+        "brushId": "ghost-wash",
+        "seed": 47
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Ghost paint (Ghost wash) needs a single colour to subtract as it fades, so it can't paint a gradient; set a solid colour (set_color) or pass color to paint_stroke."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

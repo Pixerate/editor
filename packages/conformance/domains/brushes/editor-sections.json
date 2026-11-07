@@ -636,6 +636,13 @@
             "max": 0.95,
             "step": 0.01,
             "value": 0.5
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -2571,6 +2578,13 @@
             "max": 0.95,
             "step": 0.01,
             "value": 0.5
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -4407,6 +4421,13 @@
             "max": 0.95,
             "step": 0.01,
             "value": 0.5
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -5973,6 +5994,13 @@
             "max": 0.95,
             "step": 0.01,
             "value": 0.5
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -7389,6 +7417,13 @@
             "max": 0.95,
             "step": 0.01,
             "value": 0.5
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },
@@ -10068,6 +10103,13 @@
             "max": 0.95,
             "step": 0.01,
             "value": 0.5
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
           }
         ]
       },

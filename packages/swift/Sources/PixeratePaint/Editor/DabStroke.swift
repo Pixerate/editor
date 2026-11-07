@@ -53,6 +53,8 @@ final class PaintDabStroke {
     private let stamp: StampSampler?
     /// The tip's own grain, or nil.
     private let tipGrain: TipGrain?
+    /// Thin-film coat buffer for iridescent dab and Mixer Brush strokes.
+    var film: FilmBuffer? = nil
 
     init(_ brush: PaintBrush, target: PaintTileTarget, load: MixerLoad, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?, effect: EffectPaintPixels? = nil, stampArt: StampArtLookup? = nil) {
         self.brush = brush
@@ -193,6 +195,9 @@ final class PaintDabStroke {
             } else {
                 let dep = Swift.min(1, total) * d.dab.alpha * brush.tip.opacity * d.dab.opacity * flow
                 if dep > 0 { medium.deposit(rect, laid, dep, paintColor, ex.paintPigment, fieldArg) }
+            }
+            if let film, let ir = brush.iridescence {
+                film.deposit(rect, laid, Swift.min(1, total) * d.dab.alpha * brush.tip.opacity * d.dab.opacity * flow, d.pressure, ir)
             }
         }
         // 3. Drain.

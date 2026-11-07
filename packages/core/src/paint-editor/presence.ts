@@ -15,7 +15,7 @@ import {
 } from '../animation/presence';
 import type { MixerLoad } from '../paint/mixer';
 import type { RasterRect } from '../raster/surface';
-import { PaintEditorError, type FillLayerOptions, type PaintEditorController, type PaintStrokeInit, type ReplayOptions } from './controller';
+import { PaintEditorError, type FillLayerOptions, type FillRegionOptions, type PaintEditorController, type PaintStrokeInit, type ReplayOptions } from './controller';
 import type { PenPoint } from './engine';
 import type { PaintStrokeResult } from './stroke';
 
@@ -40,6 +40,7 @@ export type PaintAgentCommand =
   | { kind: 'stroke'; stroke: PaintStrokeInit & { points: readonly PenPoint[] }; note?: string }
   | { kind: 'strokes'; strokes: ReadonlyArray<PaintStrokeInit & { points: readonly PenPoint[] }>; label?: string; note?: string }
   | { kind: 'fill'; fill: FillLayerOptions; note?: string }
+  | { kind: 'fill-region'; fill: FillRegionOptions; note?: string }
   | { kind: 'replay'; replay: ReplayOptions; note?: string }
   | { kind: 'point'; at: { x: number; y: number }; note?: string }
   | { kind: 'say'; text: string };
@@ -114,6 +115,8 @@ const centre = (r: RasterRect) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2
 export class PaintDirector {
   private readonly clock: PresenceClock;
   private readonly queue: PerformanceQueue;
+  private readonly cancelled = new Set<string>();
+  private currentRun: { actorId: string; key: string; cancelSession?: () => void } | null = null;
 
   constructor(
     private readonly controller: PaintEditorController,
@@ -124,16 +127,41 @@ export class PaintDirector {
     this.queue = new PerformanceQueue(presence, { clock: this.clock, linger: options.linger });
   }
 
+  /** Cancels any queued or running performance with `key` (e.g. a mutation that was undone). */
+  cancel(key: string): void {
+    this.cancelled.add(key);
+    if (this.currentRun?.key === key) {
+      const { actorId, cancelSession } = this.currentRun;
+      this.currentRun = null;
+      cancelSession?.();
+      this.presence.remove(actorId);
+    }
+  }
+
   /** Acts out `commands` in order for `actor`. Resolves with one result per command. */
-  perform(actor: PresenceActorInfo, commands: readonly PaintAgentCommand[]): Promise<PaintPerformanceResult[]> {
+  perform(actor: PresenceActorInfo, commands: readonly PaintAgentCommand[], options?: { key?: string }): Promise<PaintPerformanceResult[]> {
+    const key = options?.key;
+    if (key) this.cancelled.delete(key);
     return this.queue.run(actor, async () => {
+      if (key && this.cancelled.has(key)) {
+        return commands.map((command) => ({ ok: false as const, command, message: 'The mutation was cancelled.' }));
+      }
+      if (key) this.currentRun = { actorId: actor.id, key };
       const results: PaintPerformanceResult[] = [];
-      for (const command of commands) {
-        try {
-          results.push({ ok: true, command, result: await this.performOne(actor.id, command) });
-        } catch (error) {
-          results.push({ ok: false, command, message: error instanceof Error ? error.message : String(error) });
+      try {
+        for (const command of commands) {
+          if (key && this.cancelled.has(key)) {
+            results.push({ ok: false, command, message: 'The mutation was cancelled.' });
+            continue;
+          }
+          try {
+            results.push({ ok: true, command, result: await this.performOne(actor.id, command, key) });
+          } catch (error) {
+            results.push({ ok: false, command, message: error instanceof Error ? error.message : String(error) });
+          }
         }
+      } finally {
+        if (this.currentRun?.key === key) this.currentRun = null;
       }
       return results;
     });
@@ -164,7 +192,7 @@ export class PaintDirector {
     await this.clock.wait(this.ms(ms));
   }
 
-  private async performOne(id: string, command: PaintAgentCommand): Promise<unknown> {
+  private async performOne(id: string, command: PaintAgentCommand, key?: string): Promise<unknown> {
     const c = this.controller;
     switch (command.kind) {
       case 'say':
@@ -179,10 +207,10 @@ export class PaintDirector {
         return undefined;
       case 'stroke':
         await this.say(id, command.note, 500);
-        return this.stroke(id, command.stroke);
+        return this.stroke(id, command.stroke, undefined, key);
       case 'strokes':
         await this.say(id, command.note, 500);
-        return this.strokes(id, command.strokes, command.label);
+        return this.strokes(id, command.strokes, command.label, key);
       case 'fill': {
         await this.say(id, command.note, 500);
         const { width, height } = c.getState().document.canvas;
@@ -195,6 +223,21 @@ export class PaintDirector {
           this.presence.set({ id, pressed: false });
         }
         return c.fillLayer(command.fill);
+      }
+      case 'fill-region': {
+        await this.say(id, command.note, 500);
+        const pts = command.fill.points?.length
+          ? command.fill.points
+          : command.fill.x !== undefined && command.fill.y !== undefined
+            ? [{ x: command.fill.x, y: command.fill.y }]
+            : [];
+        for (const p of pts) {
+          await this.glide(id, p, 240);
+          this.presence.set({ id, pressed: true });
+          await this.clock.wait(this.ms(90));
+          this.presence.set({ id, pressed: false });
+        }
+        return c.fillRegion(command.fill);
       }
       case 'replay': {
         await this.say(id, command.note, 500);
@@ -209,20 +252,27 @@ export class PaintDirector {
   }
 
   /** Paints a stroke live: begins it, pushes its points frame by frame as the cursor reaches them, then ends it (one undo step). */
-  private async stroke(id: string, init: PaintStrokeInit & { points: readonly PenPoint[] }, within: <U>(step: () => U) => U = (step) => step()): Promise<PaintStrokeResult> {
+  private async stroke(id: string, init: PaintStrokeInit & { points: readonly PenPoint[] }, within: <U>(step: () => U) => U = (step) => step(), key?: string): Promise<PaintStrokeResult> {
     const c = this.controller;
     const points = c.checkPoints(init.points);
     const { points: _points, ...rest } = init;
     // Validate the layer and brush (and that nothing else is painting) before moving at all.
     const session = within(() => c.beginStroke({ snapToPerspective: false, start: points[0], ...rest }));
+    if (key && this.currentRun?.key === key) {
+      this.currentRun.cancelSession = () => {
+        if (c.activeStroke === session) session.cancel();
+      };
+    }
     try {
       await this.glide(id, points[0]!);
+      if (key && this.cancelled.has(key)) throw new PaintEditorError('The mutation was cancelled.');
       this.presence.set({ id, pressed: true });
       const at = strokeSchedule(points);
       const duration = this.ms(strokeDuration(points, this.options.maxStrokeMs));
       let next = 0;
       const frames = Math.max(1, Math.round(duration / FRAME));
       for (let f = 1; f <= frames; f++) {
+        if (key && this.cancelled.has(key)) throw new PaintEditorError('The mutation was cancelled.');
         const t = f / frames;
         const from = next;
         while (next < points.length && at[next]! <= t + 1e-9) next++;
@@ -233,6 +283,7 @@ export class PaintDirector {
         }
         if (f < frames) await this.clock.wait(duration / frames);
       }
+      if (key && this.cancelled.has(key)) throw new PaintEditorError('The mutation was cancelled.');
       if (next < points.length) session.push(points.slice(next));
       this.presence.set({ id, pressed: false });
       return session.end();
@@ -240,6 +291,8 @@ export class PaintDirector {
       if (c.activeStroke === session) session.cancel();
       this.presence.set({ id, pressed: false });
       throw error;
+    } finally {
+      if (key && this.currentRun?.key === key) delete this.currentRun.cancelSession;
     }
   }
 
@@ -247,7 +300,8 @@ export class PaintDirector {
   private async strokes(
     id: string,
     inits: ReadonlyArray<PaintStrokeInit & { points: readonly PenPoint[] }>,
-    label?: string
+    label?: string,
+    key?: string
   ): Promise<PaintStrokesResult> {
     const c = this.controller;
     if (!Array.isArray(inits) || !inits.length) throw new PaintEditorError('strokes is empty; give at least one stroke.');
@@ -263,7 +317,8 @@ export class PaintDirector {
       const strokeIds: string[] = [];
       let last: PaintStrokeResult | null = null;
       for (const s of checked) {
-        const r = await this.stroke(id, s, within);
+        if (key && this.cancelled.has(key)) throw new PaintEditorError('The mutation was cancelled.');
+        const r = await this.stroke(id, s, within, key);
         layerId = r.layerId;
         bounds = unionRect(bounds, r.bounds);
         dabs += r.dabs;

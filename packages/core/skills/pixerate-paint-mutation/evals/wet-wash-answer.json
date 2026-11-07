@@ -1,0 +1,76 @@
+{
+  "prompt": "Claim the pending wet mutation stroke on the canvas, let it fade away, and paint a warm amber (#d97706) watercolour-round answer stroke across the canvas.",
+  "fixture": {
+    "editor": "paint",
+    "width": 200,
+    "height": 200,
+    "setup": [
+      { "tool": "set_brush", "args": { "id": "mutation-wash" } },
+      {
+        "tool": "paint_stroke",
+        "args": {
+          "color": "#2563eb",
+          "points": [
+            { "x": 40, "y": 100, "pressure": 0.8 },
+            { "x": 120, "y": 100, "pressure": 0.8 }
+          ]
+        }
+      },
+      { "tool": "advance_wet_paint", "args": { "seconds": 2 } }
+    ]
+  },
+  "checks": [
+    {
+      "tool": "list_mutations",
+      "expect": { "mutations": { "$length": 0 } },
+      "why": "No pending mutations remain"
+    },
+    {
+      "tool": "list_mutations",
+      "args": { "includeAll": true },
+      "expect": {
+        "mutations": [
+          {
+            "id": "m1",
+            "state": "answered",
+            "answerStrokeIds": { "$length": { "$min": 1 } }
+          }
+        ]
+      },
+      "why": "Mutation m1 was claimed and answered"
+    },
+    {
+      "tool": "list_strokes",
+      "expect": {
+        "strokes": {
+          "$some": { "color": "#d97706" }
+        }
+      },
+      "why": "The warm amber answer stroke is recorded on the canvas"
+    }
+  ],
+  "solution": [
+    { "tool": "list_mutations" },
+    { "tool": "read_mutation", "args": { "id": "m1" } },
+    {
+      "tool": "answer_mutation",
+      "args": {
+        "id": "m1",
+        "note": "Warm amber arc answering the blue wash",
+        "strokes": [
+          {
+            "brushId": "watercolor-round",
+            "brush": { "tip": { "size": 18 } },
+            "color": "#d97706",
+            "points": [
+              { "x": 70, "y": 50, "pressure": 0.6 },
+              { "x": 110, "y": 100, "pressure": 0.85 },
+              { "x": 150, "y": 150, "pressure": 0.6 }
+            ]
+          }
+        ]
+      }
+    },
+    { "tool": "advance_wet_paint", "args": { "seconds": 3 } }
+  ]
+}

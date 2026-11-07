@@ -12,10 +12,13 @@ public struct PaintEditorView: View {
     private let model: PaintEditorModel
     /// Width of each side column in points.
     private let sideWidth: CGFloat
+    /// Follow device tilt (gyroscope on iPhone / iPad) to shift `viewTilt` for thin-film iridescence.
+    private let deviceTilt: Bool
 
-    public init(model: PaintEditorModel, sideWidth: CGFloat = 250) {
+    public init(model: PaintEditorModel, sideWidth: CGFloat = 250, deviceTilt: Bool = false) {
         self.model = model
         self.sideWidth = sideWidth
+        self.deviceTilt = deviceTilt
     }
 
     public var body: some View {
@@ -29,7 +32,7 @@ public struct PaintEditorView: View {
                 .frame(width: sideWidth)
                 Divider()
                 VStack(spacing: 0) {
-                    PaintCanvasView(model: model)
+                    PaintCanvasView(model: model, deviceTilt: deviceTilt)
                     if let error = model.error {
                         Text(error)
                             .font(.caption)

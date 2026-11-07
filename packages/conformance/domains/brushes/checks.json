@@ -2788,5 +2788,381 @@
         ]
       }
     }
+  },
+  {
+    "id": "scarab-lacquer",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "soap-film",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "pearl-glaze",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "iridescence",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "ghost-wash",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "ghost-gouache",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "ghost-oil",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "invisible-ink",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "ghost",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "mutation-wash",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "mutation-ink",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "mutation",
+            "severity": "error"
+          }
+        ]
+      }
+    }
   }
 ]

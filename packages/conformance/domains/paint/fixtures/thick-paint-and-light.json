@@ -261,6 +261,89 @@
           }
         }
       }
+    },
+    {
+      "tool": "get_view_tilt",
+      "expect": {
+        "result": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 8,
+            "y": 16,
+            "pressure": 0.4
+          },
+          {
+            "x": 24,
+            "y": 16,
+            "pressure": 0.9
+          },
+          {
+            "x": 40,
+            "y": 16,
+            "pressure": 0.5
+          }
+        ],
+        "brushId": "scarab-lacquer",
+        "color": "#1a3c28",
+        "seed": 83
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 30,
+            "width": 52,
+            "x": -2,
+            "y": 1
+          },
+          "dabs": 33,
+          "layerId": "@2",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#1a3c28"
+          },
+          "strokeId": "s3"
+        },
+        "pixels": {
+          "file": "png/thick-paint-and-light.13.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "f32a3be182a2828dc954209821d709a5f8a31e663c5ca83cbee0d1a6a47a2166",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_view_tilt",
+      "arguments": {
+        "x": 0.6,
+        "y": -0.4
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "x": 0.6,
+          "y": -0.4
+        },
+        "pixels": {
+          "file": "png/thick-paint-and-light.14.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "2afc5d918c6031c6465d394808184524fadd599fa2ded3fc838966c77aeb716b",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

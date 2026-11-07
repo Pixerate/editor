@@ -221,7 +221,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|iridescence)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
   const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
@@ -245,6 +245,14 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       toggle('fluorescence.invisible', 'Invisible in daylight'),
       withNote({ kind: 'colour', path: 'thermochromic.hotColor', label: 'Hot colour', ariaLabel: 'Brush thermochromic hot colour', value: brush.thermochromic?.hotColor ?? null, dark: null, gradient: false }),
       withNote({ kind: 'slider', path: 'thermochromic.threshold', label: 'Heat threshold', ariaLabel: 'Brush thermochromic threshold', min: 0.05, max: 0.95, step: 0.01, value: brush.thermochromic?.threshold ?? 0.5 }),
+      full(profile.iridescence ?? 'none') && marks !== 'objects' && withNote({ kind: 'toggle', path: 'iridescence', label: 'Thin-film iridescence', ariaLabel: 'Brush thin-film iridescence', value: Boolean(brush.iridescence) }),
+      ...(brush.iridescence && full(profile.iridescence ?? 'none')
+        ? [
+            slider({ path: 'iridescence.thickness', label: 'Film (nm)', min: 100, max: 1000, step: 5 }),
+            slider({ path: 'iridescence.pressureToThickness', label: 'Pressure → film', min: 0, max: 1, step: 0.01 }),
+            slider({ path: 'iridescence.ior', label: 'Film IOR', min: 1.2, max: 2, step: 0.01 }),
+          ]
+        : []),
     ]);
   }
 
@@ -313,6 +321,12 @@ function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
       return 'UV-fluorescent ink';
     case 'thermochromic':
       return 'thermochromic ink';
+    case 'iridescence':
+      return 'iridescence';
+    case 'ghost':
+      return 'ghost paint';
+    case 'mutation':
+      return 'mutation paint';
     case 'motion':
       return 'motion';
     case 'dynamics.velocity':
@@ -430,6 +444,9 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
       delete next.light;
       delete next.fluorescence;
       delete next.thermochromic;
+      delete next.iridescence;
+      delete next.ghost;
+      delete next.mutation;
       delete next.colour;
       next.tool = next.tool ?? 'eraser';
       if (next.tip.shape === 'stamp') next.tip = { shape: 'round', ...(next.tip.size !== undefined ? { size: next.tip.size } : {}) };
@@ -439,6 +456,9 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
     next.marks = value === 'continuous' ? undefined : ({ kind: value } as Brush['marks']);
     if (value !== 'continuous' && next.tip.shape === 'bristle') next.tip = { ...next.tip, shape: 'round', bristle: undefined };
     if (value === 'objects') next.tip = { ...next.tip, shape: 'stamp' };
+  } else if (path === 'iridescence') {
+    if (value) next.iridescence = next.iridescence ?? { thickness: 400 };
+    else delete next.iridescence;
   } else if (path === 'tip.grain.source' && (value === undefined || value === '')) {
     delete next.tip.grain;
   } else if (path === 'tip.shape' && value !== 'stamp') {

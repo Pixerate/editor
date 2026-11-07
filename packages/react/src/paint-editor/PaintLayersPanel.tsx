@@ -25,7 +25,7 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
   usePaintEditorState(controller);
   const [error, attempt] = useAttempt();
   const [renaming, setRenaming] = useState<string | null>(null);
-  const layers = controller.listLayers();
+  const layers = controller.listLayers().filter((l) => !l.temporary);
   const active = layers.find((l) => l.active) ?? null;
   const light = active?.type === 'pixel' ? controller.lightOf(active.id) : null;
   const move = (delta: number) => {

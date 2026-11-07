@@ -35,34 +35,36 @@ function tipShape(b: ResolvedBrush): BrushTipShape {
 
 /** The facet brush's identity and the facets that pick its engine, with nothing else set. */
 function skeleton(b: ResolvedBrush): Brush {
-  const brush: Brush = { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) } };
-  if (b.engine === 'eraser' || b.engine === 'blender' || b.engine === 'smudge') return { ...brush, kind: 'tool', tool: b.engine };
+  const irid = b.iridescence ? { iridescence: {} } : {};
+  const brush: Brush = { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) }, ...irid };
+  if (b.engine === 'eraser' || b.engine === 'blender' || b.engine === 'smudge') return { id: b.id, name: b.name, kind: 'tool', tool: b.engine, tip: { shape: tipShape(b) } };
   if (b.engine === 'wet' && b.wet.tool !== 'paint') {
     const tool = (Object.keys(WET_TOOL_OF) as BrushTool[]).find((t) => WET_TOOL_OF[t] === b.wet.tool)!;
-    return { ...brush, kind: 'tool', tool };
+    return { id: b.id, name: b.name, kind: 'tool', tool, tip: { shape: tipShape(b) } };
   }
+  const mut = b.mutation ? { mutation: {} } : {};
   switch (b.engine) {
     case 'wet':
-      return { ...brush, medium: 'paint', variety: b.wet.medium, behaviour: { surface: 'wet' } };
+      return { ...brush, medium: 'paint', variety: b.wet.medium, behaviour: { surface: 'wet' }, ...(b.ghost && !b.mutation ? { ghost: {} } : {}), ...mut };
     case 'impasto':
-      return { ...brush, medium: 'paint', behaviour: { surface: 'thick' } };
+      return { ...brush, medium: 'paint', behaviour: { surface: 'thick' }, ...mut };
     case 'mixer':
-      return { ...brush, medium: 'paint', variety: 'mixer', behaviour: { exchange: { reservoir: {} } } };
+      return { ...brush, medium: 'paint', variety: 'mixer', behaviour: { exchange: { reservoir: {} } }, ...mut };
     case 'bristle':
-      return { ...brush, medium: 'paint' };
+      return { ...brush, medium: 'paint', ...mut };
     case 'particle':
-      return { ...brush, marks: { kind: 'particles' } };
+      return { ...brush, marks: { kind: 'particles' }, ...mut };
     case 'sticker':
-      return { ...brush, marks: { kind: 'objects' } };
+      return { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) }, marks: { kind: 'objects' }, ...mut };
     default: {
       const [medium, variety] = CATEGORY_MEDIUM[b.category] ?? [];
-      return { ...brush, ...(medium ? { medium } : {}), ...(variety ? { variety } : {}), ...(b.engine === 'dab' && b.spray ? { marks: { kind: 'scatter' } } : {}) };
+      return { ...brush, ...(medium ? { medium } : {}), ...(variety ? { variety } : {}), ...(b.engine === 'dab' && b.spray ? { marks: { kind: 'scatter' } } : {}), ...mut };
     }
   }
 }
 
 /** Key order of a hand-written brush. */
-const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'motion', 'colour'];
+const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'motion', 'colour'];
 
 /**
  * The facet brush a v1 brush (any `PaintBrush`, or the JSON of one) amounts to: its engine's
