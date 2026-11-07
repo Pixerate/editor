@@ -430,6 +430,18 @@ extension PaintEditorController {
     /// Renders an effect paint into the cache (nothing when it is there already).
     func renderEffectPaint(_ p: PaintEffectPaint) async throws -> EffectPaintPixels {
         if let have = effectPaintImage(p) { return have }
+        return cacheEffectPaintImage(p, try await renderEffectPaintPixels(p))
+    }
+
+    @discardableResult
+    func cacheEffectPaintImage(_ p: PaintEffectPaint, _ img: EffectPaintPixels) -> EffectPaintPixels {
+        effectPaintPixels.set(p.key, img)
+        trimEffectPaints()
+        return img
+    }
+
+    /// Renders an effect paint at the canvas size without keeping it.
+    func renderEffectPaintPixels(_ p: PaintEffectPaint) async throws -> EffectPaintPixels {
         let what = "the effect \"\(p.effect)\"\(p.provider.isEmpty ? "" : " from provider \"\(p.provider)\"")"
         guard let provider = effectsProvider else { throw PaintEditorError("Effect paint needs \(what), but no effects provider is registered; register it (setEffectsProvider) and try again.") }
         if !p.provider.isEmpty && provider.id != p.provider { throw PaintEditorError("Effect paint needs \(what), but the registered provider is \"\(provider.id)\"; register \"\(p.provider)\" (setEffectsProvider) and try again.") }
@@ -438,10 +450,7 @@ extension PaintEditorController {
         do { pixels = try await renderEffect(provider, p.effect, size.width, size.height, EffectRenderRequest(time: p.time, values: p.values)) } catch {
             throw PaintEditorError("Effect paint could not render \(what): \(error.localizedDescription)")
         }
-        let img = EffectPaintPixels(width: size.width, height: size.height, data: pixels.data, map: p.map?.by == "stroke" ? p.map : nil)
-        effectPaintPixels.set(p.key, img)
-        trimEffectPaints()
-        return img
+        return EffectPaintPixels(width: size.width, height: size.height, data: pixels.data, map: p.map?.by == "stroke" ? p.map : nil)
     }
 
     /// Renders an effect paint synchronously when its provider supports synchronous rendering (`SyncEffectRenderer`).

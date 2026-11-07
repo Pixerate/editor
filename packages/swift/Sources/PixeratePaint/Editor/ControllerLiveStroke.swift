@@ -16,6 +16,15 @@ public final class PaintLiveStroke {
     public let layerId: String
     /// The document when the stroke began (a wet stroke changes the layer's pixels as it goes).
     private let beforeDoc: PaintDocumentState
+    /// A path-mapped effect's preview: the stroke so far painted from the effect rendered along the
+    /// path drawn so far (`renderPreview()`), shown instead of `session` once a render has landed.
+    private var preview: PaintStrokeSession?
+    /// The path render the preview last asked for, and the one it got.
+    private var previewKey: String?
+    private var previewRendering = false
+    private var previewLanded: (key: String, pixels: EffectPaintPixels)?
+    /// What the editor shows while the stroke is open.
+    var shown: PaintStrokeSession { preview ?? session }
 
     init(_ controller: PaintEditorController, _ session: PaintStrokeSession, before: PaintDocumentState) {
         self.controller = controller
@@ -39,7 +48,9 @@ public final class PaintLiveStroke {
     public func push(_ points: [PenPoint]) {
         guard open, !points.isEmpty else { return }
         // A push that fails part way may have painted anywhere it reached.
+        let had = session.points.count
         let rects = try? session.push(points)
+        if let preview { _ = try? preview.push(Array(session.points[had...])) }
         if isWet {
             // The wet layer's display is the layer's pixels: show it (not an undo step).
             let beforeVersion = controller?.version
@@ -53,9 +64,9 @@ public final class PaintLiveStroke {
         }
     }
 
-    /// The paint `end()` paints the stroke again with: a path-mapped effect's path isn't known
-    /// until now, so the live stroke was a preview from its render without one. Nil when it
-    /// already painted with its path.
+    /// The paint `end()` paints the stroke again with: a path-mapped effect's whole path isn't
+    /// known until now, so the live stroke was a preview (`renderPreview()`). Nil when it already
+    /// painted with its path.
     private var pathPaint: PaintEffectPaint? {
         guard let c = controller, !isWet, let e = session.initValues.effect?.source, e.map?.by == "path", !session.points.isEmpty else { return nil }
         let p = c.strokeEffectWithPath(e, session.points)
@@ -66,13 +77,56 @@ public final class PaintLiveStroke {
     /// and its renderer can't draw it synchronously.
     public var needsPathRender: Bool {
         guard let c = controller, let p = pathPaint else { return false }
+        if previewLanded?.key == p.key { return false }
         return (c.effectPaintImage(p) ?? c.renderEffectPaintSync(p)) == nil
     }
 
     /// Renders the stroke's path so `end()` can paint with it. The stroke stays open until then.
     public func renderPath() async throws {
         guard let c = controller, let p = pathPaint else { return }
+        if let landed = previewLanded, landed.key == p.key {
+            c.cacheEffectPaintImage(p, landed.pixels)
+            return
+        }
         try await c.prepareEffectPaints([p])
+    }
+
+    /// Whether the effect shown while drawing is behind the path drawn so far (a path-mapped effect,
+    /// `map: { by: 'path' }`): `renderPreview()` brings it up to date. False while one renders.
+    public var needsPathPreview: Bool {
+        guard open, !previewRendering, let p = pathPaint else { return false }
+        return p.key != previewKey
+    }
+
+    /**
+     * Renders the effect along the path drawn so far and paints the stroke again with it, so the
+     * effect follows the pen while it draws (`previewPathStroke` in `controller.ts`). One at a time:
+     * call it again when it returns while `needsPathPreview`. A failed render leaves the preview as
+     * it was; `renderPath()` (or `end()`) reports it.
+     */
+    public func renderPreview() async {
+        guard needsPathPreview, let c = controller, let p = pathPaint, let source = session.initValues.effect?.source else { return }
+        let key = p.key
+        previewKey = key
+        previewRendering = true
+        defer { previewRendering = false }
+        let pixels: EffectPaintPixels
+        if let have = c.effectPaintImage(p) { pixels = have } else {
+            guard let made = try? await c.renderEffectPaintPixels(p) else { return }
+            pixels = made
+        }
+        previewLanded = (key, pixels)
+        guard open else { return }
+        var reInit = session.initValues
+        reInit.effect = (source, pixels)
+        // The samples are snapped already.
+        reInit.inputFilter = nil
+        guard let re = try? PaintStrokeSession(reInit) else { return }
+        re.maskStencils = session.maskStencils
+        let rects = (try? re.push(session.points)) ?? []
+        let was = shown.bounds
+        preview = re
+        c.emit(was.map { rects + [$0] } ?? rects)
     }
 
     /// Ends the stroke: one undo step (none when no pixel changed). Throws, leaving the stroke open,
@@ -82,6 +136,7 @@ public final class PaintLiveStroke {
         guard let c = controller, c.liveStroke === self else { throw PaintEditorError("This stroke has already ended.") }
         var pathEffect: (source: PaintEffectPaint, pixels: EffectPaintPixels)?
         if let p = pathPaint {
+            if let landed = previewLanded, landed.key == p.key { c.cacheEffectPaintImage(p, landed.pixels) }
             guard let pixels = c.effectPaintImage(p) ?? c.renderEffectPaintSync(p) else {
                 throw PaintEditorError("The effect paint \"\(p.effect)\" is not rendered along this stroke; await renderPath() before ending it.")
             }

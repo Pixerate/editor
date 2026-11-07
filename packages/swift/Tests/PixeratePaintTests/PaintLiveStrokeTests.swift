@@ -241,6 +241,42 @@ final class PaintLiveStrokeTests: XCTestCase {
         }
     }
 
+    func testAHandPaintedPathStrokeShowsTheEffectAlongThePathSoFarWhileItIsDrawn() async throws {
+        var renders = 0
+        let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+        c.setEffectsProvider(AsyncOnlyProvider { renders += 1 })
+        _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+        _ = try c.setBrushFacets(["tip": ["size": 24, "hardness": 1, "opacity": 1, "flow": 1], "behaviour": ["grain": 0]])
+        let s = try c.beginStroke()
+        // The live layer's alpha at a point.
+        func shown(_ x: Int, _ y: Int) -> Int {
+            guard let l = findLayer(c.currentLayers(), s.layerId)?.layer else { return -1 }
+            return readPixel(l.pixelSurface, x, y)[3]
+        }
+        s.push([PenPoint(x: 20, y: 4, pressure: 1), PenPoint(x: 20, y: 30, pressure: 1)])
+        // Until a render along the path lands, the stroke shows the no-path picture.
+        XCTAssertEqual(shown(20, 10), 0)
+        XCTAssertTrue(s.needsPathPreview)
+        await s.renderPreview()
+        XCTAssertFalse(s.needsPathPreview)
+        XCTAssertEqual(shown(20, 10), 255)
+        XCTAssertEqual(c.doc.strokes.count, 0)
+        // New samples paint into the preview, and the next render takes the longer path.
+        s.push([PenPoint(x: 20, y: 60, pressure: 1), PenPoint(x: 70, y: 60, pressure: 1)])
+        XCTAssertTrue(s.needsPathPreview)
+        await s.renderPreview()
+        XCTAssertEqual(shown(20, 50), 255)
+        // The preview rendered the whole path: the stroke ends without another render.
+        let before = renders
+        XCTAssertFalse(s.needsPathRender)
+        let r = try s.end()
+        XCTAssertEqual(renders, before)
+        XCTAssertEqual(try c.pickColor(20, 10, layerId: r.layerId)["color"], "#ff0000")
+        XCTAssertEqual(try c.pickColor(50, 60, layerId: r.layerId)["color"], "#ff0000")
+        XCTAssertEqual(try c.pickColor(40, 32, layerId: r.layerId)["alpha"], 0)
+        XCTAssertEqual(c.doc.strokes.count, 1)
+    }
+
     func testPathStrokesRefuseAMissingRenderAndWetBrushesByHand() async throws {
         let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
         c.setEffectsProvider(AsyncOnlyProvider())
@@ -270,6 +306,8 @@ final class PaintLiveStrokeTests: XCTestCase {
 /// Renders like a GPU provider: results only ever arrive later, and there is no `renderSync`.
 private final class AsyncOnlyProvider: EffectProvider {
     private let fake = FakeEffectProvider()
+    private let onRender: () -> Void
+    init(onRender: @escaping () -> Void = {}) { self.onRender = onRender }
     var id: String { fake.id }
     var name: String { fake.name }
     var capabilities: JSONObject { fake.capabilities }
@@ -277,18 +315,23 @@ private final class AsyncOnlyProvider: EffectProvider {
     func search(_ query: String, _ options: EffectSearchOptions) async throws -> [EffectDescription] { try await fake.search(query, options) }
     func describe(_ id: String) async throws -> EffectDescription { try await fake.describe(id) }
     func createRenderer(_ id: String, width: Int, height: Int) throws -> EffectRenderer {
-        AsyncOnlyRenderer(try fake.createRenderer(id, width: width, height: height))
+        AsyncOnlyRenderer(try fake.createRenderer(id, width: width, height: height), onRender)
     }
 }
 
 private final class AsyncOnlyRenderer: EffectRenderer {
     private let inner: EffectRenderer
-    init(_ inner: EffectRenderer) { self.inner = inner }
+    private let onRender: () -> Void
+    init(_ inner: EffectRenderer, _ onRender: @escaping () -> Void) {
+        self.inner = inner
+        self.onRender = onRender
+    }
     var effectId: String { inner.effectId }
     var width: Int { inner.width }
     var height: Int { inner.height }
     func render(_ request: EffectRenderRequest) async throws -> EffectPixels {
         await Task.yield()
+        onRender()
         return try await inner.render(request)
     }
     func dispose() { inner.dispose() }

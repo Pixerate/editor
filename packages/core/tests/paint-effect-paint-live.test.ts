@@ -190,6 +190,49 @@ describe('path-mapped effect paint on a provider that only renders asynchronousl
     }
   });
 
+  it('shows the effect along the path drawn so far while the pen is down, and keeps up as it moves', async () => {
+    let renders = 0;
+    const c = new PaintEditorController({ width: W, height: H, paper: 'smooth' });
+    c.setEffectsProvider(gpuLike(() => (renders++, false)));
+    await c.setEffectPaint(TRAIL);
+    const shown = (x: number, y: number) => {
+      const d = c.compositePixels().data;
+      const i = (y * W + x) * 4;
+      return d[i] - d[i + 2] > 100;
+    };
+    const s = c.beginStroke({ brushId: 'ink-pen', brush: HARD, start: DOWN[0] });
+    s.push([DOWN[0], { x: 20, y: 30 }]);
+    // Until the first render along the path lands, the preview is the no-path picture.
+    expect(shown(20, 10)).toBe(false);
+    await vi.waitFor(() => expect(shown(20, 10)).toBe(true));
+    expect(c.getStrokes()).toHaveLength(0);
+    // The pen moves on: the next render takes the longer path, and the stroke is repainted with it.
+    s.push([{ x: 20, y: 60 }, { x: 70, y: 60 }]);
+    await vi.waitFor(() => expect(shown(50, 60)).toBe(true));
+    const before = renders;
+    s.end();
+    // The preview already rendered the whole path: the stroke lands at once, without another render.
+    expect(c.strokeRendering).toBeNull();
+    expect(renders).toBe(before);
+    expect(c.getStrokes()).toHaveLength(1);
+    expect(px(c, 20, 10)[3]).toBe(255);
+    expect(px(c, 50, 60)[3]).toBe(255);
+    expect(px(c, 40, 32)[3]).toBe(0);
+  });
+
+  it('waits for a preview render already on its way for the whole path instead of starting another', async () => {
+    let renders = 0;
+    const c = new PaintEditorController({ width: W, height: H, paper: 'smooth' });
+    c.setEffectsProvider(gpuLike(() => (renders++, false)));
+    await c.setEffectPaint(TRAIL);
+    const before = renders;
+    pointer(c);
+    expect(c.strokeRendering).not.toBeNull();
+    await c.strokeRendering;
+    expect(renders - before).toBe(1);
+    followsPath(c);
+  });
+
   it('keeps a stroke whose preview laid nothing (an effect that is empty without a path)', async () => {
     const c = new PaintEditorController({ width: W, height: H, paper: 'smooth' });
     c.setEffectsProvider(gpuLike());

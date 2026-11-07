@@ -10,10 +10,12 @@
   `by: "path"` over `by: "stroke"` whenever the effect has a path control** (`accepts: ["path"]`);
   `set_effect_paint` refuses `by: "path"` on effects without a path control and tells you to use
   `by: "stroke"` or `by: "canvas"`. Each stroke is a render of its own at the canvas size, so:
-  - A stroke painted by hand shows the effect without a path while it is drawn (possibly nothing),
-    and is painted again along its path when the pen lifts. On a slow provider the editor is busy
-    until that lands (`effectPaintRendering`). `paint_stroke` and `stroke_path` know the path up
-    front and paint it at once.
+  - A stroke painted by hand shows the effect along the path drawn so far while it is drawn,
+    re-rendered one render at a time, so it trails the pen by about one render. It is painted
+    again along its whole path when the pen lifts, as one undo step; if the preview already
+    rendered the whole path, at once. On a slow provider the editor is busy until that lands
+    (`effectPaintRendering`). `paint_stroke` and `stroke_path` know the path up front and paint
+    it at once.
   - Wet brushes can't be painted by hand this way, as the simulation can't run twice; give them
     the points through `paint_stroke`, or use `by: "stroke"`.
   - With `live: true`, every stroke is a live source of its own, so at most 8 can play.

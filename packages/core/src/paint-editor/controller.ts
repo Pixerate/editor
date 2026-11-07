@@ -537,6 +537,11 @@ export class PaintEditorController {
   private effectPaintBatch = 0;
   /** The hand-painted stroke waiting for its path render (`finishPathStroke`), or `null`. */
   private pathStroke: { effect: string; done: Promise<void> } | null = null;
+  /**
+   * The hand-painted path stroke's live preview: the effect rendered along the path drawn so far
+   * (one render at a time; the newest path when it lands), repainted into the stroke as it lands.
+   */
+  private pathPreview: { session: PaintStrokeSession; key: string; pending: Promise<EffectPaintPixels> | null; landed: { key: string; pixels: EffectPaintPixels } | null } | null = null;
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
   private view: PaintView = { ...DEFAULT_VIEW, pan: { ...DEFAULT_VIEW.pan } };
   private hand: Hand;
@@ -1968,7 +1973,10 @@ export class PaintEditorController {
   }
 
   private cacheEffectPaintPixels(p: PaintEffectPaint, pixels: EffectPixels): EffectPaintPixels {
-    const img: EffectPaintPixels = { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>), ...(p.map?.by === 'stroke' ? { map: p.map } : {}) };
+    return this.cacheEffectPaintImage(p, toEffectPaintPixels(p, pixels));
+  }
+
+  private cacheEffectPaintImage(p: PaintEffectPaint, img: EffectPaintPixels): EffectPaintPixels {
     this.effectPaintPixels.set(effectPaintKey(p), img);
     this.trimEffectPaints();
     return img;
@@ -1997,6 +2005,11 @@ export class PaintEditorController {
   private async renderEffectPaint(p: PaintEffectPaint): Promise<EffectPaintPixels> {
     const have = this.effectPaintImage(p);
     if (have) return have;
+    return this.cacheEffectPaintImage(p, await this.renderEffectPaintPixels(p));
+  }
+
+  /** Renders an effect paint at the canvas size without keeping it. */
+  private async renderEffectPaintPixels(p: PaintEffectPaint): Promise<EffectPaintPixels> {
     const provider = this.effects.provider;
     const what = `the effect "${p.effect}"${p.provider ? ` from provider "${p.provider}"` : ''}`;
     if (!provider) throw new PaintEditorError(`Effect paint needs ${what}, but no effects provider is registered; register it (setEffectsProvider) and try again.`);
@@ -2008,7 +2021,7 @@ export class PaintEditorController {
     } catch (e) {
       throw new PaintEditorError(`Effect paint could not render ${what}: ${e instanceof Error ? e.message : String(e)}`);
     }
-    return this.cacheEffectPaintPixels(p, pixels);
+    return toEffectPaintPixels(p, pixels);
   }
 
   /**
@@ -2783,13 +2796,18 @@ export class PaintEditorController {
         this.liveThick = ch ? { layerId, channels: ch } : null;
         this.emit(rects);
       },
-      sampled: (s, points) => this.notifySample('points', s, points),
+      sampled: (s, points) => {
+        this.notifySample('points', s, points);
+        this.previewPathStroke(s);
+      },
       commit: (s, surface, cancelled) => {
         this.session = null;
+        const preview = this.pathPreview?.session === s ? this.pathPreview : null;
+        this.pathPreview = null;
         // Before the check for changed pixels: what the preview laid may be nothing at all.
         const pathPaint = cancelled ? null : this.pathStrokePaint(s);
         if (pathPaint) {
-          this.finishPathStroke(s, pathPaint);
+          this.finishPathStroke(s, pathPaint, preview);
           return;
         }
         this.live = null;
@@ -2843,9 +2861,41 @@ export class PaintEditorController {
       throw e;
     }
     this.session = session;
+    if (session.init.effect?.source.map?.by === 'path' && !session.init.wet) this.pathPreview = { session, key: '', pending: null, landed: null };
     this.emit([]);
     this.notifySample('begin', session);
     return session;
+  }
+
+  /**
+   * Renders a hand-painted path stroke's effect along the path drawn so far and paints the stroke
+   * again with it when it lands, so the effect follows the pen while it draws. One render at a
+   * time: when one lands, the next takes the newest path. A failed render leaves the preview as it
+   * was; the render on release reports it.
+   */
+  private previewPathStroke(s: PaintStrokeSession): void {
+    const pv = this.pathPreview;
+    if (!pv || pv.session !== s || pv.pending || !s.open) return;
+    const paint = this.pathStrokePaint(s);
+    if (!paint) return;
+    const key = effectPaintKey(paint);
+    if (key === pv.key) return;
+    pv.key = key;
+    const cached = this.effectPaintImage(paint);
+    const pending = cached ? Promise.resolve(cached) : this.renderEffectPaintPixels(paint);
+    pv.pending = pending;
+    pending.then(
+      (pixels) => {
+        pv.pending = null;
+        pv.landed = { key, pixels };
+        if (this.pathPreview !== pv || !s.open) return;
+        s.repaintEffect(pixels);
+        this.previewPathStroke(s);
+      },
+      () => {
+        pv.pending = null;
+      },
+    );
   }
 
   /** The current live stroke, if any. */
@@ -2871,12 +2921,12 @@ export class PaintEditorController {
   }
 
   /**
-   * Ends a hand-painted stroke with a path-mapped effect. Its path isn't known until now, so the
-   * live stroke was only a preview from the effect's render without one: nothing of it was
-   * committed. Paints it again with the path's own render, as one stroke and one undo step, at
+   * Ends a hand-painted stroke with a path-mapped effect. Its whole path isn't known until now, so
+   * the live stroke was only a preview from renders along the path so far (`previewPathStroke`):
+   * nothing of it was committed. Paints it again with the path's own render, as one stroke and one undo step, at
    * once if that can render synchronously and when the render lands if not.
    */
-  private finishPathStroke(s: PaintStrokeSession, paint: PaintEffectPaint): void {
+  private finishPathStroke(s: PaintStrokeSession, paint: PaintEffectPaint, preview: PaintEditorController['pathPreview']): void {
     const finish = () => {
       this.pathStroke = null;
       this.live = null;
@@ -2889,11 +2939,15 @@ export class PaintEditorController {
       // After the commit, so a listener that paints in reply finds the editor idle.
       this.notifySample('end', s, [], result.strokeId);
     };
+    const key = effectPaintKey(paint);
+    // The preview's render of the whole path, when it got there.
+    if (preview?.landed?.key === key) this.cacheEffectPaintImage(paint, preview.landed.pixels);
     if (this.effectPaintImage(paint) || this.renderEffectPaintSync(paint)) {
       finish();
       return;
     }
-    const done = this.renderEffectPaint(paint).then(finish, (e) => {
+    const render = preview?.pending && preview.key === key ? preview.pending.then((img) => this.cacheEffectPaintImage(paint, img)) : this.renderEffectPaint(paint);
+    const done = render.then(finish, (e) => {
       this.pathStroke = null;
       this.live = null;
       this.liveLayers = null;
@@ -5317,4 +5371,9 @@ function clipToCanvas(rect: RasterRect, canvas: { width: number; height: number 
   const x1 = Math.min(canvas.width, rect.x + rect.width);
   const y1 = Math.min(canvas.height, rect.y + rect.height);
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
+}
+
+/** Rendered effect pixels as effect paint (a copy; with its strip map when bent along the stroke). */
+function toEffectPaintPixels(p: PaintEffectPaint, pixels: EffectPixels): EffectPaintPixels {
+  return { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>), ...(p.map?.by === 'stroke' ? { map: p.map } : {}) };
 }

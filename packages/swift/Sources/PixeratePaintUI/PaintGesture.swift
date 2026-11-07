@@ -193,6 +193,14 @@ public final class PaintGesture {
             guard let stroke = controller.activeStroke else { return }
             stroke.push((e.coalesced.isEmpty ? [e] : e.coalesced).map(pen))
             predicted = e.predicted.map(pen)
+            if stroke.needsPathPreview { previewPath(stroke) }
+        }
+    }
+
+    /// Renders a path-mapped effect along the path drawn so far, one render at a time, until it catches up with the pen.
+    private func previewPath(_ stroke: PaintLiveStroke) {
+        Task { @MainActor in
+            while stroke.needsPathPreview { await stroke.renderPreview() }
         }
     }
 

@@ -1349,13 +1349,13 @@ public final class PaintEditorController {
     /// The layers with the live stroke's surface in place (a wet stroke's layer already shows the simulation).
     func currentLayers() -> [PaintLayer] {
         guard let live = liveStroke, live.open, !live.isWet else { return doc.layers }
-        return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.session.currentSurface()) }
+        return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.shown.currentSurface()) }
     }
 
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
     func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display") -> [ViewLayer] {
         let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
-        let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in l.open ? l.session.thickChannels().map { (l.layerId, $0) } : nil }
+        let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in l.open ? l.shown.thickChannels().map { (l.layerId, $0) } : nil }
         var layers = lightLayers(litLayers(base, liveThick: live), liveThick: live)
         // Backlit paper shines through everything: its light goes on top.
         let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)

@@ -130,14 +130,14 @@ export class PaintStrokeSession {
   /** The raw input so far (what a replay feeds back in). */
   readonly points: PenPoint[] = [];
   private readonly base: TiledSurface;
-  private readonly live: Map<TileKey, Tile>;
+  private live: Map<TileKey, Tile>;
   private readonly touched = new Set<TileKey>();
   private readonly fresh = new Set<TileKey>();
-  private readonly dry: CoverageStroke | null = null;
-  private readonly wet: PaintDabStroke | null = null;
+  private dry: CoverageStroke | null = null;
+  private wet: PaintDabStroke | null = null;
   private readonly wetDriver: WetStrokeDriver | null = null;
-  private readonly thickDriver: ThickStrokeDriver | null = null;
-  private readonly stickerSpray: StickerSpray | null = null;
+  private thickDriver: ThickStrokeDriver | null = null;
+  private stickerSpray: StickerSpray | null = null;
   /** Light paint: the stroke's twin over the light channel, and what it left there. */
   private readonly lightTwin: PaintStrokeSession | null = null;
   private lightResult: TiledSurface | null = null;
@@ -160,7 +160,6 @@ export class PaintStrokeSession {
     const brush = init.brush;
     if (init.wet) this.wetDriver = init.wet.driver;
     if (init.light && !init.wet && !init.sticker) this.lightTwin = this.makeLightTwin(init.light.surface);
-    const effect = init.effect?.pixels ?? null;
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -171,9 +170,15 @@ export class PaintStrokeSession {
       selection: init.selection ?? null,
       offset: init.offset,
     };
-    if (this.wetDriver) {
-      // the wet layer paints; nothing else to set up
-    } else if (init.sticker) {
+    if (!this.wetDriver) this.build(init.effect?.pixels ?? null);
+  }
+
+  /** Sets up the marks' engine (every kind but wet, which the wet layer paints), sampling `effect` for effect paint. */
+  private build(effect: EffectPaintPixels | null): void {
+    const init = this.init;
+    const brush = init.brush;
+    this.dry = this.wet = this.thickDriver = this.stickerSpray = null;
+    if (init.sticker) {
       this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect, art: init.sticker.art, variant: init.sticker.variant });
     } else if (init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
@@ -197,6 +202,23 @@ export class PaintStrokeSession {
       const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect, stampArt: init.stampArt };
       this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
     }
+  }
+
+  /**
+   * Paints the stroke so far again, sampling new effect pixels: a path-mapped effect rendered
+   * along the path drawn so far (`map: { by: 'path' }`). Only the live preview changes; the stroke
+   * keeps recording its own paint. Nothing for wet strokes or once the stroke has ended.
+   */
+  repaintEffect(pixels: EffectPaintPixels): void {
+    if (this.closed || this.wetDriver || !this.init.effect) return;
+    const was = this.bounds;
+    this.live = new Map(this.base.tiles);
+    this.touched.clear();
+    this.fresh.clear();
+    this.bounds = null;
+    this.build(pixels);
+    const rects = this.points.length ? (this.dry ? this.dry.push(this.points) : this.thickDriver ? this.thickDriver.push(this.points) : this.stickerSpray ? this.stickerSpray.push(this.points) : this.wet!.push(this.points)) : [];
+    this.update(was ? [...rects, was] : rects);
   }
 
   /** The stroke's twin over the light channel: the same marks in grey at the brush's light amount (see `light.ts`). */
