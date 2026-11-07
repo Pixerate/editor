@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.204.0
+
+### Minor Changes
+
+- 0a20011: feat(paint): Evolutionary strokes: breed and mutate stroke variants (`RecordedStroke` genomes) as pending paint proposals with smoothed point jitter, OKLCH colour drift, brush facet drift, seed reroll, crossover, agent tools (`breed_strokes`, `breed_proposal`, `get_proposal_genome`), React/Svelte `EvolutionPanel` UI, contact-sheet export, and Swift parity.
+
+### Patch Changes
+
+- Updated dependencies [0a20011]
+  - @pixerate/editor@0.274.0
+
 ## 0.203.0
 
 ### Minor Changes
