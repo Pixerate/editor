@@ -1,18 +1,33 @@
 <script lang="ts">
-  import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, quickStencil, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
+  import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, quickStencil, timeLapseZip, type FillRegionOptions, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
   import { attempt, button, chip, paintEditorState } from './paintEditorRune.svelte.js';
+
+  type FillToolbarOptions = Omit<FillRegionOptions, 'x' | 'y' | 'points'>;
 
   interface Props {
     controller: PaintEditorController;
     tool: PaintTool;
     ontoolchange: (tool: PaintTool) => void;
+    fillOptions?: FillToolbarOptions;
+    onfilloptionschange?: (options: FillToolbarOptions) => void;
     /** Base name of saved and exported files (default `painting`). */
     fileName?: string;
     class?: string;
   }
-  let { controller, tool, ontoolchange, fileName = 'painting', class: className = '' }: Props = $props();
+  let { controller, tool, ontoolchange, fillOptions: controlledFill, onfilloptionschange, fileName = 'painting', class: className = '' }: Props = $props();
   const editor = paintEditorState(() => controller);
   const snap = $derived(editor.current);
+  let localFill = $state<FillToolbarOptions>({ reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true });
+  const fill = $derived(controlledFill ?? localFill);
+  const updateFill = (patch: Partial<FillToolbarOptions>) => {
+    const next = { ...fill, ...patch };
+    localFill = next;
+    onfilloptionschange?.(next);
+  };
+  const layers = $derived.by(() => {
+    void snap;
+    return controller.listLayers().filter((l) => l.type === 'pixel');
+  });
   const symmetry = $derived(snap.guides.symmetry);
   const perspective = $derived(snap.guides.perspective);
   const tracing = $derived(snap.guides.tracing);
@@ -63,6 +78,33 @@
   {#each PAINT_TOOLS as t (t.id)}
     <button type="button" aria-pressed={tool === t.id} title={`${t.label} (${t.key.toUpperCase()})`} class={chip(tool === t.id)} onclick={() => ontoolchange(t.id)}>{t.label}</button>
   {/each}
+  {#if tool === 'fill'}
+    <div class="flex items-center gap-1.5 rounded border border-slate-700/80 bg-slate-900/60 px-2 py-0.5 text-[11px] text-slate-300" data-testid="paint-fill-options">
+      <label class="flex items-center gap-1">
+        <span>Ref</span>
+        <select aria-label="Fill reference" class="rounded bg-slate-800 px-1 py-0.5 text-[11px]" value={fill.reference ?? 'all'} onchange={(e) => updateFill({ reference: e.currentTarget.value })}>
+          <option value="all">All layers</option>
+          <option value="layer">Active layer</option>
+          {#each layers as l (l.id)}
+            <option value={l.id}>{l.name}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="flex items-center gap-1">
+        <span>Tol</span>
+        <input type="number" aria-label="Fill tolerance" min="0" max="255" value={fill.tolerance ?? 32} oninput={(e) => updateFill({ tolerance: Math.max(0, Math.min(255, Number(e.currentTarget.value) || 0)) })} class="w-11 rounded bg-slate-800 px-1 py-0.5 text-[11px]" />
+      </label>
+      <label class="flex items-center gap-1">
+        <span>Gap</span>
+        <input type="number" aria-label="Close gap" min="0" max="32" value={fill.closeGap ?? 4} oninput={(e) => updateFill({ closeGap: Math.max(0, Math.min(32, Number(e.currentTarget.value) || 0)) })} class="w-10 rounded bg-slate-800 px-1 py-0.5 text-[11px]" />
+      </label>
+      <label class="flex items-center gap-1">
+        <span>Expand</span>
+        <input type="number" aria-label="Expand fill" min="-16" max="16" value={fill.expand ?? 1} oninput={(e) => updateFill({ expand: Math.max(-16, Math.min(16, Number(e.currentTarget.value) || 0)) })} class="w-10 rounded bg-slate-800 px-1 py-0.5 text-[11px]" />
+      </label>
+      <button type="button" class={chip(Boolean(fill.wet))} aria-pressed={Boolean(fill.wet)} onclick={() => updateFill({ wet: !fill.wet })}>Wet</button>
+    </div>
+  {/if}
   <span class="mx-1 h-4 w-px bg-slate-700"></span>
   <button type="button" class={button} disabled={!snap.canUndo} title={snap.undoLabel ? `Undo ${snap.undoLabel}` : 'Undo'} onclick={() => controller.undo()}>Undo</button>
   <button type="button" class={button} disabled={!snap.canRedo} title={snap.redoLabel ? `Redo ${snap.redoLabel}` : 'Redo'} onclick={() => controller.redo()}>Redo</button>

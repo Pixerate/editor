@@ -63,3 +63,14 @@ export * from './collaboration';
 export * from './collaboration-tools';
 export { samplePath, MAX_PATH_SAMPLES, type PathSampleOptions } from './path-samples';
 export { createPaintConformanceHost, paintContracts, PAINT_CONTRACT_FORMAT_VERSION, PAINT_DOCUMENT_JSON_SCHEMA } from './contract';
+export {
+  squaredDistanceTransform,
+  fillRegionMask,
+  findUnfilledRegionsMask,
+  type FillRegionPoint,
+  type FillRegionSummary,
+  type FillRegionMaskOptions,
+  type FillRegionMaskResult,
+  type UnfilledRegion,
+  type FindUnfilledRegionsMaskOptions,
+} from '../raster/fill';

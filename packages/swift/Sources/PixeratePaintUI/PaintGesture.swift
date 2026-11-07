@@ -40,7 +40,25 @@ public struct PaintPointerEvent: Sendable {
 }
 
 /// The paint tools this port's canvas handles (`PaintUITables.tools` rows it shows). Stickers are not ported yet.
-public let PAINT_UI_TOOLS: Set<String> = ["brush", "eyedropper", "stroke", "pan", "rotate"]
+public let PAINT_UI_TOOLS: Set<String> = ["brush", "fill", "eyedropper", "stroke", "pan", "rotate"]
+
+/// Options the Fill tool (`tool == "fill"`) passes to `fillRegion`.
+public struct PaintFillOptions: Equatable, Sendable {
+    public var reference: String = "all"
+    public var tolerance: Double = 32
+    public var closeGap: Double = 4
+    public var expand: Double = 1
+    public var antialias: Bool = true
+    public var wet: Bool = false
+    public init(reference: String = "all", tolerance: Double = 32, closeGap: Double = 4, expand: Double = 1, antialias: Bool = true, wet: Bool = false) {
+        self.reference = reference
+        self.tolerance = tolerance
+        self.closeGap = closeGap
+        self.expand = expand
+        self.antialias = antialias
+        self.wet = wet
+    }
+}
 
 /**
  * Turns pointer events into strokes (with coalesced samples and a predicted tail), colour picks,
@@ -51,6 +69,9 @@ public let PAINT_UI_TOOLS: Set<String> = ["brush", "eyedropper", "stroke", "pan"
 public final class PaintGesture {
     private enum Mode {
         case stroke(pointerId: Int)
+        /// Filling a region: dragging horizontally adjusts the tolerance live (one undo step).
+        /// `committed`: the last fill made an undo step (an empty or refused fill makes none, so there is nothing to undo).
+        case fill(pointerId: Int, startX: Double, p: Point2, baseTolerance: Double, lastTolerance: Double, committed: Bool)
         /// Dragging a stroke of a stroke layer: where the pointer went down and where it is now.
         case moveStroke(pointerId: Int, id: String, from: Point2, to: Point2)
         case pan(pointerId: Int, x: Double, y: Double, panX: Double, panY: Double)
@@ -58,12 +79,13 @@ public final class PaintGesture {
 
         var pointerId: Int {
             switch self {
-            case .stroke(let p), .moveStroke(let p, _, _, _), .pan(let p, _, _, _, _), .rotate(let p, _, _): return p
+            case .stroke(let p), .fill(let p, _, _, _, _, _), .moveStroke(let p, _, _, _), .pan(let p, _, _, _, _), .rotate(let p, _, _): return p
             }
         }
     }
 
     public var tool = "brush"
+    public var fillOptions = PaintFillOptions()
     /// The last refusal (a hidden or locked layer), for the editor to show.
     public var error: String?
     /// The predicted tail of the current stroke in document pixels (draw it as a thin preview).
@@ -118,6 +140,7 @@ public final class PaintGesture {
             pick(e)
             return false
         }
+        if tool == "fill" { return fillDown(e) }
         if !PAINT_UI_TOOLS.contains(tool) {
             error = "The \(tool) tool is not available in the Swift paint editor yet."
             return false
@@ -175,6 +198,28 @@ public final class PaintGesture {
         }
     }
 
+    private func fillDown(_ e: PaintPointerEvent) -> Bool {
+        let p = doc(e)
+        let baseTol = fillOptions.tolerance
+        do {
+            let filled = try controller.fillRegion(
+                x: p.x,
+                y: p.y,
+                reference: fillOptions.reference,
+                tolerance: baseTol,
+                closeGap: fillOptions.closeGap,
+                expand: fillOptions.expand,
+                antialias: fillOptions.antialias,
+                wet: fillOptions.wet
+            )
+            mode = .fill(pointerId: e.pointerId, startX: e.x, p: p, baseTolerance: baseTol, lastTolerance: baseTol, committed: !(filled["bounds"] ?? .null).isNull)
+            return true
+        } catch {
+            self.error = "\(error)"
+            return false
+        }
+    }
+
     public func move(_ e: PaintPointerEvent) {
         if e.sample.pointerType == "pen" { penAt = Point2(x: e.x, y: e.y) }
         guard let m = mode, m.pointerId == e.pointerId else { return }
@@ -189,6 +234,29 @@ public final class PaintGesture {
             _ = controller.setView(rotation: r)
         case let .moveStroke(p, id, from, _):
             mode = .moveStroke(pointerId: p, id: id, from: from, to: doc(e))
+        case let .fill(pointerId, startX, p, baseTolerance, lastTolerance, committed):
+            let dx = e.x - startX
+            if abs(dx) < 4 { return }
+            let nextTol = Swift.max(0, Swift.min(255, (baseTolerance + dx * 0.5).rounded()))
+            if nextTol == lastTolerance { return }
+            // Only take back this gesture's own fill: an empty fill made no undo step.
+            if committed { _ = controller.undo() }
+            mode = .fill(pointerId: pointerId, startX: startX, p: p, baseTolerance: baseTolerance, lastTolerance: nextTol, committed: false)
+            do {
+                let filled = try controller.fillRegion(
+                    x: p.x,
+                    y: p.y,
+                    reference: fillOptions.reference,
+                    tolerance: nextTol,
+                    closeGap: fillOptions.closeGap,
+                    expand: fillOptions.expand,
+                    antialias: fillOptions.antialias,
+                    wet: fillOptions.wet
+                )
+                mode = .fill(pointerId: pointerId, startX: startX, p: p, baseTolerance: baseTolerance, lastTolerance: nextTol, committed: !(filled["bounds"] ?? .null).isNull)
+            } catch {
+                self.error = "\(error)"
+            }
         case .stroke:
             guard let stroke = controller.activeStroke else { return }
             stroke.push((e.coalesced.isEmpty ? [e] : e.coalesced).map(pen))
@@ -253,6 +321,7 @@ public final class PaintGesture {
         penDown = false
         predicted = []
         if case .stroke? = mode { controller.activeStroke?.cancel() }
+        if case let .fill(_, _, _, _, _, committed)? = mode, committed { _ = controller.undo() }
         mode = nil
     }
 

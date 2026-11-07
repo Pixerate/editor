@@ -15,7 +15,7 @@ import {
 } from '../animation/presence';
 import type { MixerLoad } from '../paint/mixer';
 import type { RasterRect } from '../raster/surface';
-import { PaintEditorError, type FillLayerOptions, type PaintEditorController, type PaintStrokeInit, type ReplayOptions } from './controller';
+import { PaintEditorError, type FillLayerOptions, type FillRegionOptions, type PaintEditorController, type PaintStrokeInit, type ReplayOptions } from './controller';
 import type { PenPoint } from './engine';
 import type { PaintStrokeResult } from './stroke';
 
@@ -40,6 +40,7 @@ export type PaintAgentCommand =
   | { kind: 'stroke'; stroke: PaintStrokeInit & { points: readonly PenPoint[] }; note?: string }
   | { kind: 'strokes'; strokes: ReadonlyArray<PaintStrokeInit & { points: readonly PenPoint[] }>; label?: string; note?: string }
   | { kind: 'fill'; fill: FillLayerOptions; note?: string }
+  | { kind: 'fill-region'; fill: FillRegionOptions; note?: string }
   | { kind: 'replay'; replay: ReplayOptions; note?: string }
   | { kind: 'point'; at: { x: number; y: number }; note?: string }
   | { kind: 'say'; text: string };
@@ -195,6 +196,21 @@ export class PaintDirector {
           this.presence.set({ id, pressed: false });
         }
         return c.fillLayer(command.fill);
+      }
+      case 'fill-region': {
+        await this.say(id, command.note, 500);
+        const pts = command.fill.points?.length
+          ? command.fill.points
+          : command.fill.x !== undefined && command.fill.y !== undefined
+            ? [{ x: command.fill.x, y: command.fill.y }]
+            : [];
+        for (const p of pts) {
+          await this.glide(id, p, 240);
+          this.presence.set({ id, pressed: true });
+          await this.clock.wait(this.ms(90));
+          this.presence.set({ id, pressed: false });
+        }
+        return c.fillRegion(command.fill);
       }
       case 'replay': {
         await this.say(id, command.note, 500);

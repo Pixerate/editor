@@ -90,6 +90,8 @@ public final class PaintEditorModel {
     @ObservationIgnored private var isQuietFrameChange = false
     /// The active tool (`PaintUITables.tools` id).
     public var tool = "brush" { didSet { gesture.tool = tool } }
+    /// Options for the Fill tool (`tool == "fill"`).
+    public var fillOptions = PaintFillOptions() { didSet { gesture.fillOptions = fillOptions } }
     /// The last refusal or error, shown under the canvas.
     public var error: String?
     /// The picked stroke of the active stroke layer.
@@ -530,7 +532,7 @@ public final class PaintEditorModel {
         switch id {
         case .undo: undo()
         case .redo: redo()
-        case .toolBrush, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
+        case .toolBrush, .toolFill, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
             let t = String(command.id.dropFirst(5))
             guard PAINT_UI_TOOLS.contains(t) else { return false }
             tool = t
