@@ -165,7 +165,7 @@ describe('BrushLibrary', () => {
     expect(all).toHaveLength(BRUSH_PRESETS.length + 1);
     expect(all.at(-1)).toEqual({ brush: mine, builtin: false });
     expect(ids((await lib.list({ source: 'user' })).map((e) => e.brush))).toEqual(['my-ink']);
-    expect(ids((await lib.list({ variety: 'watercolor' })).map((e) => e.brush))).toEqual(['watercolor-round', 'watercolor-wash', 'gradient-wash', 'watercolor-detail', 'glow-wash', 'ghost-wash', 'invisible-ink']);
+    expect(ids((await lib.list({ variety: 'watercolor' })).map((e) => e.brush))).toEqual(['watercolor-round', 'watercolor-wash', 'gradient-wash', 'watercolor-detail', 'glow-wash', 'ghost-wash', 'invisible-ink', 'mutation-wash']);
     expect(ids((await lib.list({ tool: 'eraser' })).map((e) => e.brush))).toEqual(['eraser-soft', 'eraser-hard']);
     expect(ids((await lib.list({ text: 'oil pas' })).map((e) => e.brush))).toEqual(['oil-pastel']);
     expect((await lib.list({ profile: CANVAS_PROFILE })).length).toBe(listCanvasBrushes().length + 1);

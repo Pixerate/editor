@@ -4186,3 +4186,25 @@ All contributors and AI assistants should check this file before starting work a
   1. `world.rewet` accepts `suspend = true` for ghost strokes, placing 65% of lifted pigment directly into the suspended planes and seeding water to at least `WET_MASK_H * 4` so `world.drag` moves it immediately on the same dab.
   2. `normalizePaintBrush` and `resolveBrush` force `behavior.pickup = 0` whenever `brush.ghost` is set, and `sessionFor` refuses gradient, effect and multi-colour paint on ghost brushes.
   3. When `lane.ghost` is active, `world.paint` does not set `lane.lit`, `shadeSlot` / `bakedLight` / `lightDisplay` skip light shading, and `afterBatch` / `bakeKey` / `dry` run `fadeGhost` (clearing sub-`1e-4` float dust when the tracer reaches 0 so bare paper is byte-identical). Ghost and light strokes refuse to share a layer while either is active.
+
+### [core|swift/paint] Mutation Paint: Held Wet Evaporation, Temporary Dry Layers, and Undo Reconciliation
+- **Issue / Symptom**: Implementing mutation paint (#686) across wet and dry brushes exposes four lifecycle traps:
+  1. Model calls take seconds, while watercolour evaporates in seconds, baking a wet mutation stroke before `read_mutation` can claim and fade it.
+  2. Dry paint cannot be subtracted from a shared layer once other paint lands over it, but creating a temporary layer must not change `activeLayerId`, show in the layer panel, or add an extra undo entry when merged down on `decline_mutation` / `patience` timeout.
+  3. If an agent answers a mutation while the user's active brush is still a mutation brush (`mutation-ink` or `mutation-wash`) and omits `brushId` or passes a partial `brush` patch, `answer_mutation`'s own stroke would inherit `mutation` (and `ghost.trigger: "agent"`) and trigger an infinite mutation loop.
+  4. In `advanceWet(steps:seconds:)`, advancing mutation timers only when `wet.advance(n) > 0` skips dry mutations (`mutation-ink`) whenever no wet lanes exist on the canvas.
+- **Root Cause**:
+  1. `WetWorld` steps evaporation continuously unless `evaporation` is held at 0, and `afterBatch` fades ghost lanes immediately unless `lane.ghost.held` is set.
+  2. `mergeLayerDown` commits a new history step and changes `activeLayerId`, whereas temporary dry mutation layers (`layer.temporary = true`) are an internal staging detail that must fold cleanly into the target layer across `doc`, `undoStack`, and `redoStack`.
+  3. `normalizePaintBrush` inherits `base.mutation` and auto-derives `ghost: { trigger: 'agent' }` from `mutation` unless `mutation: null` (and `ghost: null` when auto-derived) are explicitly stripped.
+  4. `wet.advance(n)` returns `0` when `world` has no active wet lanes, even when `advance_wet_paint` was called with `seconds` to advance simulated time.
+- **Solution / Workaround**:
+  1. Wet mutation brushes set `ghost.trigger = 'agent'`, which starts `lane.ghost.held = true`; `recordMutationStroke` saves the layer's evaporation and holds it at `0` via `wet.setParams(layerId, { evaporation: 0 })` until `read_mutation` (`releaseGhost`) or `decline_mutation` / timeout (`keepGhost`) restores it.
+  2. Dry mutation strokes paint onto a `temporary: true` pixel layer directly above the target layer while keeping `doc.activeLayerId` on the target layer, filtering `temporary` layers from `getState().layers`, and reconciling `doc`, `undoStack`, and `redoStack` in-place when merging down or removing after fade.
+  3. `answerMutation` always injects `mutation: null` (and `ghost: null` when the base brush's ghost was `trigger: 'agent'` and the stroke did not explicitly set `ghost`), and sets `answeringMutation = true` so answer strokes never record a new mutation.
+  4. `advanceWet` advances mutation timers by `seconds ?? n / wet.speed` regardless of whether `wet.advance(n)` stepped any wet lanes.
+
+### [swift] `JSONValue: ExpressibleByNilLiteral` Turns `cond ? nil : jsonValue` Into `.some(.null)` Instead of `Optional.none`
+- **Issue / Symptom**: In a Swift function returning `JSONValue?` (such as `engineChanges`'s inner `diff(_:_:)`), writing `return a == b ? nil : b` where `b` has type `JSONValue` (non-optional) returns `.some(.null)` instead of `nil` (`Optional<JSONValue>.none`), populating every unchanged key of a diff object with `null`.
+- **Root Cause**: `JSONValue` conforms to `ExpressibleByNilLiteral` (`init(nilLiteral: ()) { self = .null }`). In a ternary expression `cond ? nil : b` where `b` is a non-optional `JSONValue`, Swift unifies both branches to the non-optional type `JSONValue` (turning `nil` into `JSONValue.null`) and then wraps the result in `Optional.some`, rather than typing the ternary as `Optional<JSONValue>`.
+- **Solution / Workaround**: Always write `.none` instead of `nil` in ternary expressions returning `JSONValue?` when the other branch is a non-optional `JSONValue` (e.g., `return a == b ? .none : b` and `return out.isEmpty ? .none : .object(out)`).

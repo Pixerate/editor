@@ -1,0 +1,58 @@
+{
+  "prompt": "Decline the pending mutation stroke so the user's dry ink mark stays on the active layer as ordinary paint without an agent answer.",
+  "fixture": {
+    "editor": "paint",
+    "width": 200,
+    "height": 200,
+    "setup": [
+      { "tool": "set_brush", "args": { "id": "mutation-ink" } },
+      {
+        "tool": "paint_stroke",
+        "args": {
+          "color": "#0f172a",
+          "points": [
+            { "x": 40, "y": 50, "pressure": 0.8 },
+            { "x": 150, "y": 150, "pressure": 0.8 }
+          ]
+        }
+      },
+      { "tool": "advance_wet_paint", "args": { "seconds": 2 } }
+    ]
+  },
+  "checks": [
+    {
+      "tool": "list_mutations",
+      "expect": { "mutations": { "$length": 0 } },
+      "why": "No pending mutations remain"
+    },
+    {
+      "tool": "list_mutations",
+      "args": { "includeAll": true },
+      "expect": {
+        "mutations": [
+          {
+            "id": "m1",
+            "state": "declined"
+          }
+        ]
+      },
+      "why": "Mutation m1 was declined"
+    },
+    {
+      "tool": "list_layers",
+      "expect": {
+        "layers": [
+          {
+            "name": "Layer 1",
+            "bounds": { "width": { "$min": 50 } }
+          }
+        ]
+      },
+      "why": "The temporary mutation layer merged down into Layer 1 so the user's paint stayed"
+    }
+  ],
+  "solution": [
+    { "tool": "list_mutations" },
+    { "tool": "decline_mutation", "args": { "id": "m1", "reason": "Keep the user's mark as ordinary paint" } }
+  ]
+}

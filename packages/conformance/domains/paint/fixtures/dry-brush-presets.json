@@ -1088,10 +1088,38 @@
               "surface": "wet",
               "tip": "round",
               "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "mutation-wash",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Mutation wash",
+              "size": 28,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "mutation-ink",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Mutation ink",
+              "size": 6,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "pen"
             }
           ],
           "host": "paint",
-          "total": 77
+          "total": 79
         }
       }
     },

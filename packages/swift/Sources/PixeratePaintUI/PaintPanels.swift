@@ -256,6 +256,14 @@ public struct PaintBrushPanel: View {
                     PaintSliderRow(label: item.label, value: model.ghostValue(item.path), range: item.min...item.max, step: item.step) { model.setGhostValue(item.path, $0) }
                 }
             }
+            if brush.mutation != nil {
+                ForEach(model.mutationSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.mutationValue(item.path), range: item.min...item.max, step: item.step) { model.setMutationValue(item.path, $0) }
+                }
+                Text(model.hasMutationAgent ? "Agent connected" : "No agent connected — mutation paint will stay as ordinary paint")
+                    .font(.caption2)
+                    .foregroundStyle(model.hasMutationAgent ? Color.secondary : Color.orange)
+            }
             if brush.engine == "mixer" || brush.behavior.dirty {
                 HStack(spacing: 6) {
                     Text("Carries").foregroundStyle(.secondary)
@@ -487,6 +495,9 @@ public struct PaintLayersPanel: View {
                         if l.type == "group" { Image(systemName: "folder") }
                         if l.liveStrokes != nil { Image(systemName: "scribble").help("Stroke layer: \(l.liveStrokes!) editable strokes") }
                         Text(l.name).lineLimit(1)
+                        if l.temporary == true {
+                            Text("Temporary").font(.caption2).foregroundStyle(.secondary)
+                        }
                         Spacer()
                         if l.locks["pixels"] == .bool(true) || l.locks["all"] == .bool(true) { Image(systemName: "lock.fill").help("Locked") }
                     }

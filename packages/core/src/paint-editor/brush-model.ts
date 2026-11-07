@@ -128,20 +128,48 @@ export function normalizeLight(raw: Partial<LightSettings> = {}, base: LightSett
   return { amount: unit(raw.amount, base.amount), pressure: typeof raw.pressure === 'boolean' ? raw.pressure : base.pressure };
 }
 
+/** When a ghost brush's fade starts: immediately (`immediate`, default) or once claimed by an agent (`agent`). */
+export type GhostTrigger = 'immediate' | 'agent';
+export const GHOST_TRIGGERS: readonly GhostTrigger[] = ['immediate', 'agent'];
+
 /** Ghost paint: wet paint whose colour vanishes after `linger` seconds, leaving only what it smeared. */
 export interface GhostSettings {
   /** Seconds of simulated time before the ghost paint has fully faded, 0.5..60 (default 4). */
   linger: number;
   /** How much the ghost paint drags and lifts the paint it passes through, 0..1 (default 0.3). */
   smear: number;
+  /** When the fade starts: `immediate` (default, omitted) or `agent` (waits until claimed by `read_mutation`). */
+  trigger?: GhostTrigger;
 }
 
 export const DEFAULT_GHOST: Readonly<GhostSettings> = { linger: 4, smear: 0.3 };
 
 export function normalizeGhost(raw: Partial<GhostSettings> = {}, base: GhostSettings = DEFAULT_GHOST): GhostSettings {
+  const trigger = raw.trigger === 'agent' || raw.trigger === 'immediate' ? raw.trigger : base.trigger;
   return {
     linger: range(raw.linger, 0.5, 60, base.linger),
     smear: unit(raw.smear, base.smear),
+    ...(trigger === 'agent' ? { trigger: 'agent' } : {}),
+  };
+}
+
+/** Mutation paint: your stroke sinks away once claimed by an agent, which paints its own answer. */
+export interface MutationSettings {
+  /** Seconds after the last stroke before it counts as finished, 0.5..10 (default 1.5). */
+  settle: number;
+  /** Seconds to wait for an agent before giving up and keeping the paint, 5..300 (default 45). */
+  patience: number;
+  /** Seconds the paint takes to sink away once claimed, 0.5..10 (default 2). */
+  fade: number;
+}
+
+export const DEFAULT_MUTATION: Readonly<MutationSettings> = { settle: 1.5, patience: 45, fade: 2 };
+
+export function normalizeMutation(raw: Partial<MutationSettings> = {}, base: MutationSettings = DEFAULT_MUTATION): MutationSettings {
+  return {
+    settle: range(raw.settle, 0.5, 10, base.settle),
+    patience: range(raw.patience, 5, 300, base.patience),
+    fade: range(raw.fade, 0.5, 10, base.fade),
   };
 }
 
@@ -310,6 +338,8 @@ export interface PaintBrush {
   light: LightSettings;
   /** Wet engine: ghost paint settings (missing when not a ghost brush). */
   ghost?: GhostSettings;
+  /** Mutation paint settings (missing when not a mutation brush). */
+  mutation?: MutationSettings;
   /**
    * Dab engine: a stamp tip. Each dab (and each spray droplet) is this sticker's shape, an editor
    * stamp (`editor:star`) or any sticker ref from the sticker library, laid in the paint colour;
@@ -432,12 +462,14 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'ghost' | 'spray' | 'tipGrain'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'ghost' | 'mutation' | 'spray' | 'tipGrain'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
   /** Ghost paint (`null` removes it). */
   ghost?: Partial<GhostSettings> | null;
+  /** Mutation paint (`null` removes it). */
+  mutation?: Partial<MutationSettings> | null;
   light?: Partial<LightSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
@@ -566,11 +598,18 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
   behavior = { ...behavior, multicolor: paintToMultiColor(paint) ?? { ...DEFAULT_MULTI_COLOR, colors: [] } };
   const wet = normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH);
   const wantsLight = typeof raw.light?.amount === 'number' && raw.light.amount > 0;
-  const ghost =
-    engine === 'wet' && wet.tool === 'paint' && (raw.ghost !== undefined ? raw.ghost !== null : !wantsLight && Boolean(b.ghost))
-      ? normalizeGhost(raw.ghost ?? {}, b.ghost ?? DEFAULT_GHOST)
+  const canMutate = engine === 'dab' || (engine === 'wet' && wet.tool === 'paint') || engine === 'impasto' || engine === 'particle' || engine === 'bristle';
+  const mutation =
+    canMutate && (raw.mutation !== undefined ? raw.mutation !== null : Boolean(b.mutation))
+      ? normalizeMutation(raw.mutation ?? {}, b.mutation ?? DEFAULT_MUTATION)
       : undefined;
-  if (ghost) behavior = { ...behavior, pickup: 0, dirty: false };
+  const hadAutoGhost = Boolean(b.mutation && raw.mutation === null && raw.ghost === undefined);
+  const ghostBase: GhostSettings = mutation ? { ...(b.ghost ?? DEFAULT_GHOST), linger: mutation.fade, trigger: 'agent' } : (b.ghost ?? DEFAULT_GHOST);
+  const ghost =
+    engine === 'wet' && wet.tool === 'paint' && !hadAutoGhost && (raw.ghost !== undefined ? raw.ghost !== null : Boolean(mutation) || (!wantsLight && Boolean(b.ghost)))
+      ? normalizeGhost(raw.ghost ?? {}, ghostBase)
+      : undefined;
+  if (ghost || mutation) behavior = { ...behavior, pickup: 0, dirty: false };
   return {
     id,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : b.name,
@@ -593,6 +632,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     ...(ghost ? { ghost } : {}),
+    ...(mutation ? { mutation } : {}),
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
     ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),

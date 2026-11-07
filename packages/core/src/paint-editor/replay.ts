@@ -207,6 +207,15 @@ export async function replayPainting(
             if (e.layerId && target.getLayer(e.layerId)) target.wetPaper({ layerId: e.layerId, rect: sr(d.rect), amount: d.amount });
             break;
           }
+          case 'ghost-release': {
+            const d = e.data as { linger?: number } | undefined;
+            if (e.layerId && target.getLayer(e.layerId)) target.wet.releaseGhost(e.layerId, d?.linger);
+            break;
+          }
+          case 'ghost-keep': {
+            if (e.layerId && target.getLayer(e.layerId)) target.wet.keepGhost(e.layerId);
+            break;
+          }
         }
       } catch {
         // An event that no longer applies (its layer went away) is skipped.

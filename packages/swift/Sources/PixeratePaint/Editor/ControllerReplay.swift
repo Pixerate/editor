@@ -64,7 +64,16 @@ extension PaintEditorController {
             if let id = run.result.strokeId { strokeIds.append(id) }
         }
         if let run = last, let load = run.result.mixerLoad { keepLoad(run.brush, load) }
-        if d !== before || wetOp != nil { commit("\(last?.brush.name ?? "Brush") path stroke", withWetEvents(d), before: before) } else { emit() }
+        if d !== before || wetOp != nil {
+            commit("\(last?.brush.name ?? "Brush") path stroke", withWetEvents(d), before: before)
+            for sid in strokeIds {
+                if let recorded = doc.strokes.first(where: { $0.id == sid }) {
+                    recordMutationStroke(recorded, paintedBounds[recorded.key] ?? nil)
+                }
+            }
+        } else {
+            emit()
+        }
         let layerId = last?.result.layerId ?? i.layerId ?? doc.activeLayerId ?? ""
         var out: JSONObject = ["layerId": .string(layerId), "bounds": rectJSON(bounds), "dabs": .number(Double(dabs)), "strokeIds": .array(strokeIds.map { .string($0) })]
         if let load = last?.result.mixerLoad { out["mixerLoad"] = loadResult(load) }

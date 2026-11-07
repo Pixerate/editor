@@ -489,7 +489,7 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
   return out;
 }
 
-export { BRUSH_SLIDERS, brushEngineControls, GHOST_SLIDERS, multiColorSliders, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
+export { BRUSH_SLIDERS, brushEngineControls, GHOST_SLIDERS, multiColorSliders, MUTATION_SLIDERS, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
 import type { SliderControl } from './brush-controls';
 
 export const PAPER_SLIDERS: readonly SliderControl[] = [

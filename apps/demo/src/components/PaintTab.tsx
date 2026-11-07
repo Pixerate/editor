@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
-import { PaintEditor, usePaintDirector, usePaintEditor, usePaintEffectsTools, usePaintProposals } from '@pixerate/editor-react/paint-editor';
+import { PaintEditor, useMutationRequests, usePaintDirector, usePaintEditor, usePaintEffectsTools, usePaintProposals } from '@pixerate/editor-react/paint-editor';
 import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, createPaintProposalToolProvider } from '@pixerate/editor/paint-editor';
 import { createOriginMiddleware } from '@pixerate/editor/tools';
 import { demoBrushLibrary } from '../demoBrushes';
@@ -37,6 +37,38 @@ function PaintView() {
   const proposals = usePaintProposals(editor.controller);
   const proposalTools = useMemo(() => createPaintProposalToolProvider(proposals.store, { id: 'paint-proposals', namespace: 'paint' }), [proposals.store]);
   useAgentToolProvider(demoToolRegistry, proposalTools);
+  // Mutation paint: when a stroke settles, the demo's built-in responder claims it and paints an answer back.
+  useMutationRequests(editor.controller, (req) => {
+    void (async () => {
+      try {
+        const read = editor.controller.readMutation(req.id);
+        const b = read.bounds ?? { x: 200, y: 200, width: 200, height: 200 };
+        const cx = b.x + b.width * 0.5;
+        const cy = b.y + b.height * 0.5;
+        const r = Math.max(28, Math.min(b.width, b.height) * 0.55);
+        await editor.controller.answerMutation(
+          req.id,
+          {
+            note: 'Echoed in answer to your mark.',
+            strokes: [
+              {
+                brushId: read.medium === 'wet' ? 'watercolor-round' : 'ink-pen',
+                brush: { tip: { size: Math.max(6, Math.round((read.strokes[0]?.size ?? 16) * 0.85)) } },
+                color: read.strokes[0]?.color === '#1f3a5f' ? '#b85d19' : '#1f3a5f',
+                points: Array.from({ length: 12 }, (_, i) => {
+                  const a = (i / 11) * Math.PI * 1.4 - Math.PI * 0.2;
+                  return { x: Math.round(cx + Math.cos(a) * r), y: Math.round(cy + Math.sin(a) * r), pressure: 0.4 + 0.4 * Math.sin((i / 11) * Math.PI) };
+                }),
+              },
+            ],
+          },
+          { director, actor: { id: 'agent', name: 'Agent' } }
+        );
+      } catch {
+        // Ignore if already claimed by an external agent or undone.
+      }
+    })();
+  });
   // Steps the paint tools make are recorded as the calling agent's (agent:<id>), not the user's.
   useEffect(
     () => demoToolRegistry.use(createOriginMiddleware({ histories: (call) => (call.provider.id.startsWith('paint') ? editor.controller : undefined) })),

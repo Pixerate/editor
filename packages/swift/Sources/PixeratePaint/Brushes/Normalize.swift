@@ -161,7 +161,7 @@ private func readPaint(_ value: JSONValue, _ path: String, _ problems: inout [St
 }
 
 /// The facet order of a hand-written brush.
-let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "light", "motion", "colour"]
+let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "motion", "colour"]
 
 func orderedBrush(_ brush: JSONObject) -> Brush {
     var out = Brush()
@@ -363,13 +363,31 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             }
         }
     }
+    if brush["mutation"] != nil {
+        let marksKind = brush.path("marks.kind")?.stringValue
+        if kind == "tool" || marksKind == "objects" || behaviour?["exchange"]?.objectValue?["reservoir"] != nil {
+            drop("mutation", "it needs a wet or dry mark brush (not a tool, sticker or Mixer Brush)")
+            brush["mutation"] = nil
+        } else {
+            if behaviour?["surface"]?.stringValue == "wet" && brush["light"] != nil {
+                drop("light", "mutation wet paint uses ghost paint, which uses the wet light channel as its tracer")
+                brush["light"] = nil
+            }
+            if var b = behaviour, b["exchange"] != nil {
+                drop("behaviour.exchange", "mutation paint does not pick paint up")
+                b["exchange"] = nil
+                behaviour = b
+                brush["behaviour"] = .object(b)
+            }
+        }
+    }
     return orderedBrush(brush)
 }
 
 // MARK: - Patches (`brushes/patch.ts`)
 
 /// The facets a patch can remove (`unset`), back to the engine's defaults.
-public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "light", "motion", "colour"]
+public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "motion", "colour"]
 
 /// `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks.
 public func mergeBrushPatch(_ base: JSONObject, _ patch: JSONObject, _ path: String = "") -> JSONObject {

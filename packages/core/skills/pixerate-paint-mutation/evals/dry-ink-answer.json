@@ -1,0 +1,74 @@
+{
+  "prompt": "Claim the pending dry ink mutation on the canvas, let its temporary layer fade out, and answer with a crimson (#dc2626) ink stroke.",
+  "fixture": {
+    "editor": "paint",
+    "width": 200,
+    "height": 200,
+    "setup": [
+      { "tool": "set_brush", "args": { "id": "mutation-ink" } },
+      {
+        "tool": "paint_stroke",
+        "args": {
+          "color": "#1e293b",
+          "points": [
+            { "x": 30, "y": 80, "pressure": 0.8 },
+            { "x": 110, "y": 80, "pressure": 0.8 }
+          ]
+        }
+      },
+      { "tool": "advance_wet_paint", "args": { "seconds": 2 } }
+    ]
+  },
+  "checks": [
+    {
+      "tool": "list_mutations",
+      "expect": { "mutations": { "$length": 0 } },
+      "why": "No pending mutations remain"
+    },
+    {
+      "tool": "list_mutations",
+      "args": { "includeAll": true },
+      "expect": {
+        "mutations": [
+          {
+            "id": "m1",
+            "state": "answered"
+          }
+        ]
+      },
+      "why": "Mutation m1 was claimed and answered"
+    },
+    {
+      "tool": "list_strokes",
+      "expect": {
+        "strokes": {
+          "$length": 1,
+          "$every": { "color": "#dc2626" }
+        }
+      },
+      "why": "The temporary mutation stroke faded away and only the crimson answer stroke remains"
+    }
+  ],
+  "solution": [
+    { "tool": "list_mutations" },
+    { "tool": "read_mutation", "args": { "id": "m1" } },
+    {
+      "tool": "answer_mutation",
+      "args": {
+        "id": "m1",
+        "strokes": [
+          {
+            "brushId": "ink-pen",
+            "brush": { "tip": { "size": 8 } },
+            "color": "#dc2626",
+            "points": [
+              { "x": 60, "y": 40, "pressure": 0.7 },
+              { "x": 140, "y": 140, "pressure": 0.8 }
+            ]
+          }
+        ]
+      }
+    },
+    { "tool": "advance_wet_paint", "args": { "seconds": 3 } }
+  ]
+}

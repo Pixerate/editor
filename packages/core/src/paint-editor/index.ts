@@ -61,6 +61,8 @@ export type { StickerProvider, StickerRef, StickerSummary } from '../stickers/ty
 export * from './sticker-art';
 export * from './collaboration';
 export * from './collaboration-tools';
+export * from './mutation';
+export * from './mutation-tools';
 export * from './evolution';
 export * from './evolution-tools';
 export { samplePath, MAX_PATH_SAMPLES, type PathSampleOptions } from './path-samples';

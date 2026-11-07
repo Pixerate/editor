@@ -333,12 +333,28 @@ export interface BrushLight {
   glow?: boolean;
 }
 
+/** When a ghost brush's fade starts: immediately (`immediate`, default) or once claimed by an agent (`agent`). */
+export type GhostTrigger = 'immediate' | 'agent';
+export const GHOST_TRIGGERS: readonly GhostTrigger[] = ['immediate', 'agent'];
+
 /** Ghost paint: wet paint whose colour fades away after `linger` seconds, leaving only what it smeared. */
 export interface BrushGhost {
   /** Seconds of simulated time before the ghost paint has fully faded, 0.5..60 (default 4). */
   linger?: number;
   /** How much the ghost paint drags and lifts the paint it passes through, 0..1 (default 0.3). */
   smear?: number;
+  /** When the fade starts: `immediate` (default) or `agent` (waits until claimed by `read_mutation`). */
+  trigger?: GhostTrigger;
+}
+
+/** Mutation paint: your stroke sinks away once claimed by an agent, which paints its own answer. */
+export interface BrushMutation {
+  /** Seconds after the last stroke before it counts as finished, 0.5..10 (default 1.5). */
+  settle?: number;
+  /** Seconds to wait for an agent before giving up and keeping the paint, 5..300 (default 45). */
+  patience?: number;
+  /** Seconds the paint takes to sink away once claimed, 0.5..10 (default 2). */
+  fade?: number;
 }
 
 /** Animation after painting. */
@@ -391,6 +407,7 @@ export interface Brush {
   behaviour?: BrushBehaviour;
   light?: BrushLight;
   ghost?: BrushGhost;
+  mutation?: BrushMutation;
   motion?: BrushMotion;
   colour?: BrushColour;
 }

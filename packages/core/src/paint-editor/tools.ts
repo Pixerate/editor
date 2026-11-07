@@ -30,6 +30,7 @@ import { createLayerEffectTools } from '../image-editor/effect-tools';
 import { createPaintWetTools } from './wet-tools';
 import { createPaintThickTools } from './thick-tools';
 import { createPaintReplayTools } from './replay-tools';
+import { createMutationTools } from './mutation-tools';
 import { createPaintEvolutionTools } from './evolution-tools';
 import { samplePath } from './path-samples';
 import type { PaintAgentCommand, PaintDirector } from './presence';
@@ -1122,6 +1123,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   tools.push(...createPaintReplayTools(c));
   tools.push(...createPaintEvolutionTools(c));
   tools.push(...createPaintStickerTools(c));
+  tools.push(...createMutationTools(c, { director: options.director, actor: options.actor }));
   tools.push(...createPigmentTools());
   // The sticker library (the editor's own stamps unless the host set one): refs for sticker brushes and add_stickers.
   tools.push(...createStickerTools({ provider: () => c.stickersProvider }));

@@ -604,6 +604,7 @@ public struct SetBrushArguments: Sendable {
         case behaviour
         case light
         case ghost
+        case mutation
         case motion
         case colour
     }
@@ -636,6 +637,8 @@ public struct SetBrushArguments: Sendable {
     public var light: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
     public var ghost: JSONValue?
+    /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
+    public var mutation: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -659,6 +662,7 @@ public struct SetBrushArguments: Sendable {
         behaviour = args.argument("behaviour")
         light = args.argument("light")
         ghost = args.argument("ghost")
+        mutation = args.argument("mutation")
         motion = args.argument("motion")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
@@ -2143,6 +2147,68 @@ public struct RemoveStickersArguments: Sendable {
     }
 }
 
+/// Arguments of `list_mutations`.
+public struct ListMutationsArguments: Sendable {
+    /// Include settling, claimed, answered and declined mutations as well as pending ones (default false).
+    public var includeAll: Bool?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        includeAll = try args.bool("includeAll")
+    }
+}
+
+/// Arguments of `read_mutation`.
+public struct ReadMutationArguments: Sendable {
+    /// Mutation id from list_mutations (e.g.
+    public var id: String
+    /// Padding around the mutation bounds for cropPng, in document pixels (default 32).
+    public var padding: Int?
+    /// Longest side of the canvasPng preview in pixels (default 512).
+    public var maxSide: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        id = try args.required(try args.string("id"), "id")
+        padding = try args.integer("padding")
+        maxSide = try args.integer("maxSide")
+    }
+}
+
+/// Arguments of `answer_mutation`.
+public struct AnswerMutationArguments: Sendable {
+    /// Claimed mutation id from read_mutation (e.g.
+    public var id: String
+    /// The strokes that form the answer, painted in order as one undo step.
+    public var strokes: [JSONValue]
+    /// Default pixel layer id from list_layers for the answer strokes (default the mutation’s layerId).
+    public var layerId: String?
+    /// Short note shown next to the agent cursor while painting (optional).
+    public var note: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        id = try args.required(try args.string("id"), "id")
+        strokes = try args.required(try args.array("strokes"), "strokes")
+        layerId = try args.string("layerId")
+        note = try args.string("note")
+    }
+}
+
+/// Arguments of `decline_mutation`.
+public struct DeclineMutationArguments: Sendable {
+    /// Mutation id from list_mutations (e.g.
+    public var id: String
+    /// Why the mutation was declined (optional).
+    public var reason: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        id = try args.required(try args.string("id"), "id")
+        reason = try args.string("reason")
+    }
+}
+
 /// Arguments of `mix_colors`.
 public struct MixColorsArguments: Sendable {
     /// pigment (default): mix like paint (Kubelka-Munk), as the pigment blend mode, Mixer Brush and mixing pad do; rgb: average the RGB values, as normal blending and rgb mixing brushes do (strength is ignored).
@@ -2815,6 +2881,8 @@ public struct CreateBrushArguments: Sendable {
     public var light: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
     public var ghost: JSONValue?
+    /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
+    public var mutation: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -2837,6 +2905,7 @@ public struct CreateBrushArguments: Sendable {
         behaviour = args.argument("behaviour")
         light = args.argument("light")
         ghost = args.argument("ghost")
+        mutation = args.argument("mutation")
         motion = args.argument("motion")
         colour = args.argument("colour")
     }
@@ -2882,6 +2951,7 @@ public struct UpdateBrushArguments: Sendable {
         case behaviour
         case light
         case ghost
+        case mutation
         case motion
         case colour
     }
@@ -2914,6 +2984,8 @@ public struct UpdateBrushArguments: Sendable {
     public var light: JSONValue?
     /// Ghost paint: wet paint that flows and mixes visibly while wet, then fades away without leaving its colour, keeping only the smear it made in the paint it touched (needs behaviour.surface "wet").
     public var ghost: JSONValue?
+    /// Mutation paint: you paint something and pause; once an agent claims it with read_mutation, your paint sinks away and the agent paints its own answer (any wet or dry paint brush that lays its own colour without reading paint beneath).
+    public var mutation: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
     /// The brush's colours.
@@ -2937,6 +3009,7 @@ public struct UpdateBrushArguments: Sendable {
         behaviour = args.argument("behaviour")
         light = args.argument("light")
         ghost = args.argument("ghost")
+        mutation = args.argument("mutation")
         motion = args.argument("motion")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
@@ -3225,6 +3298,10 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .updateSticker: try UpdateStickerArguments(args)
     case .arrangeStickers: try ArrangeStickersArguments(args)
     case .removeStickers: try RemoveStickersArguments(args)
+    case .listMutations: try ListMutationsArguments(args)
+    case .readMutation: try ReadMutationArguments(args)
+    case .answerMutation: try AnswerMutationArguments(args)
+    case .declineMutation: try DeclineMutationArguments(args)
     case .mixColors: try MixColorsArguments(args)
     case .findStickers: try FindStickersArguments(args)
     case .describeSticker: try DescribeStickerArguments(args)

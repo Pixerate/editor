@@ -12,7 +12,7 @@
   const editor = paintEditorState(() => controller);
   const layers = $derived.by(() => {
     void editor.current;
-    return untrack(() => controller.listLayers());
+    return untrack(() => controller.listLayers().filter((l) => !l.temporary));
   });
   const active = $derived(layers.find((l) => l.active) ?? null);
   const light = $derived.by(() => {
