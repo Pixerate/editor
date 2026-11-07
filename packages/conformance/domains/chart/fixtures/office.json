@@ -1,0 +1,1384 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "office",
+  "description": "Listing and reading charts from open .xlsx and .docx files, loading one into the editor, and OOXML round-trip.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "files": {
+      "report.xlsx": "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",
+      "memo.docx": "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"
+    }
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Initial"
+        ],
+        "series": [
+          {
+            "name": "Placeholder",
+            "values": [
+              1
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Placeholder"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Placeholder"
+            ],
+            [
+              "Initial",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_open_files",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "files": [
+            {
+              "bytes": 3046,
+              "name": "report.xlsx"
+            },
+            {
+              "bytes": 2106,
+              "name": "memo.docx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_file_charts",
+      "arguments": {
+        "file": "report.xlsx"
+      },
+      "expect": {
+        "result": {
+          "charts": [
+            {
+              "anchor": "B2",
+              "categories": 2,
+              "id": "chart-1",
+              "issues": [],
+              "lossless": true,
+              "name": "Chart 1",
+              "partKind": "chart",
+              "path": "xl/charts/chart1.xml",
+              "place": "Data!B2",
+              "range": "B2:H18",
+              "series": [
+                "North"
+              ],
+              "sheet": "Data",
+              "title": "Revenue",
+              "type": "bar",
+              "unsupported": []
+            }
+          ],
+          "format": "xlsx"
+        }
+      }
+    },
+    {
+      "tool": "get_file_chart",
+      "arguments": {
+        "file": "memo.docx",
+        "chartId": "chart-1"
+      },
+      "expect": {
+        "result": {
+          "categories": 3,
+          "id": "chart-1",
+          "issues": [],
+          "lossless": true,
+          "partKind": "chart",
+          "path": "word/charts/chart1.xml",
+          "place": "Document",
+          "series": [
+            "S"
+          ],
+          "spec": {
+            "bins": null,
+            "categories": [
+              "a",
+              "b",
+              "c"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "S",
+                "values": [
+                  1,
+                  2,
+                  3
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Trend",
+            "tree": [],
+            "type": "line",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "title": "Trend",
+          "type": "line",
+          "unsupported": []
+        }
+      }
+    },
+    {
+      "tool": "load_file_chart",
+      "arguments": {
+        "file": "report.xlsx",
+        "chartId": "chart-1"
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "id": "chart-1",
+          "issues": [],
+          "lossless": true,
+          "place": "Data!B2",
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "North",
+                "values": [
+                  3,
+                  5
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Revenue",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "unsupported": []
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "North",
+                "values": [
+                  3,
+                  5
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Revenue",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 2,
+            "length": 593.84,
+            "reverse": false,
+            "start": 26.16
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 26.16,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 26.16,
+              "x2": 620,
+              "y1": 305.46999999999997,
+              "y2": 305.46999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 26.16,
+              "x2": 620,
+              "y1": 240.54,
+              "y2": 240.54
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 26.16,
+              "x2": 620,
+              "y1": 175.60999999999999,
+              "y2": 175.60999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 26.16,
+              "x2": 620,
+              "y1": 110.68,
+              "y2": 110.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 26.16,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 18.16,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "1",
+              "x": 18.16,
+              "y": 305.46999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "2",
+              "x": 18.16,
+              "y": 240.54
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "3",
+              "x": 18.16,
+              "y": 175.60999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "4",
+              "x": 18.16,
+              "y": 110.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "5",
+              "x": 18.16,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 26.16,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Q1",
+              "x": 174.62,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Q2",
+              "x": 471.54,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 194.79,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 213.7824,
+              "x": 67.7288,
+              "y": 175.60999999999999
+            },
+            {
+              "fill": "#4269d0",
+              "height": 324.65,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 213.7824,
+              "x": 364.64880000000005,
+              "y": 45.75
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 593.84,
+            "x": 26.16,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              5
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "export_chart_ooxml",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "issues": [],
+          "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><c:chartSpace xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><c:roundedCorners val=\"0\"/><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Revenue</a:t></a:r></a:p></c:rich></c:tx><c:overlay val=\"0\"/></c:title><c:autoTitleDeleted val=\"0\"/><c:plotArea><c:layout/><c:barChart><c:barDir val=\"col\"/><c:grouping val=\"clustered\"/><c:varyColors val=\"0\"/><c:ser><c:idx val=\"0\"/><c:order val=\"0\"/><c:tx><c:v>North</c:v></c:tx><c:invertIfNegative val=\"0\"/><c:cat><c:strLit><c:ptCount val=\"2\"/><c:pt idx=\"0\"><c:v>Q1</c:v></c:pt><c:pt idx=\"1\"><c:v>Q2</c:v></c:pt></c:strLit></c:cat><c:val><c:numLit><c:formatCode>General</c:formatCode><c:ptCount val=\"2\"/><c:pt idx=\"0\"><c:v>3</c:v></c:pt><c:pt idx=\"1\"><c:v>5</c:v></c:pt></c:numLit></c:val></c:ser><c:dLbls><c:showLegendKey val=\"0\"/><c:showVal val=\"0\"/><c:showCatName val=\"0\"/><c:showSerName val=\"0\"/><c:showPercent val=\"0\"/><c:showBubbleSize val=\"0\"/></c:dLbls><c:gapWidth val=\"39\"/><c:overlap val=\"-12\"/><c:axId val=\"500000001\"/><c:axId val=\"500000002\"/></c:barChart><c:catAx><c:axId val=\"500000001\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:numFmt formatCode=\"General\" sourceLinked=\"1\"/><c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"500000002\"/><c:crosses val=\"autoZero\"/><c:auto val=\"1\"/><c:lblAlgn val=\"ctr\"/><c:lblOffset val=\"100\"/><c:noMultiLvlLbl val=\"0\"/></c:catAx><c:valAx><c:axId val=\"500000002\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:majorGridlines/><c:numFmt formatCode=\"General\" sourceLinked=\"1\"/><c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"500000001\"/><c:crosses val=\"autoZero\"/><c:crossBetween val=\"between\"/></c:valAx></c:plotArea><c:legend><c:legendPos val=\"b\"/><c:overlay val=\"0\"/></c:legend><c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz=\"1000\"/></a:pPr><a:endParaRPr lang=\"en-US\"/></a:p></c:txPr></c:chartSpace>"
+        }
+      }
+    },
+    {
+      "tool": "import_chart_ooxml",
+      "arguments": {
+        "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><c:chartSpace xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><c:roundedCorners val=\"0\"/><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Trend</a:t></a:r></a:p></c:rich></c:tx><c:overlay val=\"0\"/></c:title><c:autoTitleDeleted val=\"0\"/><c:plotArea><c:layout/><c:lineChart><c:grouping val=\"standard\"/><c:varyColors val=\"0\"/><c:ser><c:idx val=\"0\"/><c:order val=\"0\"/><c:tx><c:v>S</c:v></c:tx><c:marker><c:symbol val=\"circle\"/><c:size val=\"5\"/></c:marker><c:cat><c:strLit><c:ptCount val=\"3\"/><c:pt idx=\"0\"><c:v>a</c:v></c:pt><c:pt idx=\"1\"><c:v>b</c:v></c:pt><c:pt idx=\"2\"><c:v>c</c:v></c:pt></c:strLit></c:cat><c:val><c:numLit><c:formatCode>General</c:formatCode><c:ptCount val=\"3\"/><c:pt idx=\"0\"><c:v>1</c:v></c:pt><c:pt idx=\"1\"><c:v>2</c:v></c:pt><c:pt idx=\"2\"><c:v>3</c:v></c:pt></c:numLit></c:val><c:smooth val=\"0\"/></c:ser><c:dLbls><c:showLegendKey val=\"0\"/><c:showVal val=\"0\"/><c:showCatName val=\"0\"/><c:showSerName val=\"0\"/><c:showPercent val=\"0\"/><c:showBubbleSize val=\"0\"/></c:dLbls><c:marker val=\"1\"/><c:axId val=\"500000001\"/><c:axId val=\"500000002\"/></c:lineChart><c:catAx><c:axId val=\"500000001\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:numFmt formatCode=\"General\" sourceLinked=\"1\"/><c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"500000002\"/><c:crosses val=\"autoZero\"/><c:auto val=\"1\"/><c:lblAlgn val=\"ctr\"/><c:lblOffset val=\"100\"/><c:noMultiLvlLbl val=\"0\"/></c:catAx><c:valAx><c:axId val=\"500000002\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:majorGridlines/><c:numFmt formatCode=\"General\" sourceLinked=\"1\"/><c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"500000001\"/><c:crosses val=\"autoZero\"/><c:crossBetween val=\"between\"/></c:valAx></c:plotArea><c:legend><c:legendPos val=\"b\"/><c:overlay val=\"0\"/></c:legend><c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz=\"1000\"/></a:pPr><a:endParaRPr lang=\"en-US\"/></a:p></c:txPr></c:chartSpace>"
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "issues": [],
+          "lossless": true,
+          "spec": {
+            "bins": null,
+            "categories": [
+              "a",
+              "b",
+              "c"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "S",
+                "values": [
+                  1,
+                  2,
+                  3
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Trend",
+            "tree": [],
+            "type": "line",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "unsupported": []
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "a",
+              "b",
+              "c"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "S",
+                "values": [
+                  1,
+                  2,
+                  3
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Trend",
+            "tree": [],
+            "type": "line",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Trend",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 305.46999999999997,
+              "y2": 305.46999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 240.54,
+              "y2": 240.54
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 175.60999999999999,
+              "y2": 175.60999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 110.68,
+              "y2": 110.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "1.0",
+              "x": 30.480000000000004,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "1.5",
+              "x": 30.480000000000004,
+              "y": 305.46999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "2.0",
+              "x": 30.480000000000004,
+              "y": 240.54
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "2.5",
+              "x": 30.480000000000004,
+              "y": 175.60999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "3.0",
+              "x": 30.480000000000004,
+              "y": 110.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "3.5",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "a",
+              "x": 135.4,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "b",
+              "x": 329.24,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "c",
+              "x": 523.08,
+              "y": 376.4
+            },
+            {
+              "d": "M135.4,370.4L329.24,240.54L523.08,110.68",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 135.4,
+              "cy": 370.4,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 329.24,
+              "cy": 240.54,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 523.08,
+              "cy": 110.68,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              1,
+              3.5
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              1,
+              1.5,
+              2,
+              2.5,
+              3,
+              3.5
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "chart.exportOoxml"
+      },
+      "expect": {
+        "result": {
+          "id": "chart.exportOoxml",
+          "ok": true,
+          "result": {
+            "issues": [],
+            "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><c:chartSpace xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><c:roundedCorners val=\"0\"/><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Trend</a:t></a:r></a:p></c:rich></c:tx><c:overlay val=\"0\"/></c:title><c:autoTitleDeleted val=\"0\"/><c:plotArea><c:layout/><c:lineChart><c:grouping val=\"standard\"/><c:varyColors val=\"0\"/><c:ser><c:idx val=\"0\"/><c:order val=\"0\"/><c:tx><c:v>S</c:v></c:tx><c:marker><c:symbol val=\"circle\"/><c:size val=\"5\"/></c:marker><c:cat><c:strLit><c:ptCount val=\"3\"/><c:pt idx=\"0\"><c:v>a</c:v></c:pt><c:pt idx=\"1\"><c:v>b</c:v></c:pt><c:pt idx=\"2\"><c:v>c</c:v></c:pt></c:strLit></c:cat><c:val><c:numLit><c:formatCode>General</c:formatCode><c:ptCount val=\"3\"/><c:pt idx=\"0\"><c:v>1</c:v></c:pt><c:pt idx=\"1\"><c:v>2</c:v></c:pt><c:pt idx=\"2\"><c:v>3</c:v></c:pt></c:numLit></c:val><c:smooth val=\"0\"/></c:ser><c:dLbls><c:showLegendKey val=\"0\"/><c:showVal val=\"0\"/><c:showCatName val=\"0\"/><c:showSerName val=\"0\"/><c:showPercent val=\"0\"/><c:showBubbleSize val=\"0\"/></c:dLbls><c:marker val=\"1\"/><c:axId val=\"500000001\"/><c:axId val=\"500000002\"/></c:lineChart><c:catAx><c:axId val=\"500000001\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:numFmt formatCode=\"General\" sourceLinked=\"1\"/><c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"500000002\"/><c:crosses val=\"autoZero\"/><c:auto val=\"1\"/><c:lblAlgn val=\"ctr\"/><c:lblOffset val=\"100\"/><c:noMultiLvlLbl val=\"0\"/></c:catAx><c:valAx><c:axId val=\"500000002\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:majorGridlines/><c:numFmt formatCode=\"General\" sourceLinked=\"1\"/><c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"500000001\"/><c:crosses val=\"autoZero\"/><c:crossBetween val=\"between\"/></c:valAx></c:plotArea><c:legend><c:legendPos val=\"b\"/><c:overlay val=\"0\"/></c:legend><c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz=\"1000\"/></a:pPr><a:endParaRPr lang=\"en-US\"/></a:p></c:txPr></c:chartSpace>"
+          }
+        }
+      }
+    }
+  ]
+}

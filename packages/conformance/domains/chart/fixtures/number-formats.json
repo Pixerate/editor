@@ -1,0 +1,1718 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "number-formats",
+  "description": "Axis and series number formats including currency, percent, compact, and custom Excel format codes.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Jan",
+          "Feb",
+          "Mar"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              1250000,
+              1480000,
+              980000
+            ]
+          },
+          {
+            "name": "Margin",
+            "values": [
+              0.185,
+              0.214,
+              -0.042
+            ],
+            "axis": "secondary",
+            "type": "line"
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Revenue"
+            },
+            {
+              "id": "series-2",
+              "name": "Margin"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Revenue",
+              "Margin"
+            ],
+            [
+              "Jan",
+              1250000,
+              0.185
+            ],
+            [
+              "Feb",
+              1480000,
+              0.214
+            ],
+            [
+              "Mar",
+              980000,
+              -0.042
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "title": "Financial Format Codes",
+        "dataLabels": true,
+        "yAxis": {
+          "title": "Revenue",
+          "format": {
+            "code": "$#,##0.0,,\"M\""
+          }
+        },
+        "yAxis2": {
+          "show": true,
+          "title": "Margin",
+          "format": {
+            "code": "0.0%;(0.0%);\"-\""
+          }
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Jan",
+              "Feb",
+              "Mar"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Revenue",
+                "values": [
+                  1250000,
+                  1480000,
+                  980000
+                ]
+              },
+              {
+                "axis": "secondary",
+                "id": "series-2",
+                "name": "Margin",
+                "type": "line",
+                "values": [
+                  0.185,
+                  0.214,
+                  -0.042
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Financial Format Codes",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {
+                "code": "$#,##0.0,,\"M\""
+              },
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Revenue"
+            },
+            "yAxis2": {
+              "format": {
+                "code": "0.0%;(0.0%);\"-\""
+              },
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Margin"
+            }
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 491.64,
+            "reverse": false,
+            "start": 71.10000000000001
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Financial Format Codes",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "width": 10,
+              "x": 256.96,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Revenue",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Margin",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 245.71666666666667,
+              "y2": 245.71666666666667
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 145.73333333333335,
+              "y2": 145.73333333333335
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$0.0M",
+              "x": 63.10000000000001,
+              "y": 345.7
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$0.5M",
+              "x": 63.10000000000001,
+              "y": 245.71666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$1.0M",
+              "x": 63.10000000000001,
+              "y": 145.73333333333335
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$1.5M",
+              "x": 63.10000000000001,
+              "y": 45.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "(10.0%)",
+              "x": 570.74,
+              "y": 345.7
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "-",
+              "x": 570.74,
+              "y": 270.7125
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "10.0%",
+              "x": 570.74,
+              "y": 195.725
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "20.0%",
+              "x": 570.74,
+              "y": 120.73749999999995
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "30.0%",
+              "x": 570.74,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan",
+              "x": 153.04000000000002,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 316.92,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 480.8,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "axis-title-y",
+              "kind": "text",
+              "role": "axis-title",
+              "rotate": -90,
+              "size": 12,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "Revenue",
+              "weight": 500,
+              "x": 12,
+              "y": 195.725
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "axis-title-y2",
+              "kind": "text",
+              "role": "axis-title",
+              "rotate": 90,
+              "size": 12,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "Margin",
+              "weight": 500,
+              "x": 628,
+              "y": 195.725
+            },
+            {
+              "fill": "#4269d0",
+              "height": 249.95833333333334,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 117.99359999999999,
+              "x": 94.04320000000003,
+              "y": 95.74166666666665
+            },
+            {
+              "fill": "#4269d0",
+              "height": 295.9506666666667,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 117.99359999999999,
+              "x": 257.9232,
+              "y": 49.74933333333331
+            },
+            {
+              "fill": "#4269d0",
+              "height": 195.96733333333333,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 117.99359999999999,
+              "x": 421.8032,
+              "y": 149.73266666666666
+            },
+            {
+              "d": "M153.04,131.99L316.92,110.24L480.8,302.21",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 153.04000000000002,
+              "cy": 131.985625,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 316.92,
+              "cy": 110.23925000000003,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 480.8,
+              "cy": 302.20725,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "$1.3M",
+              "x": 153.04000000000002,
+              "y": 91.74166666666665
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-series-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "$1.5M",
+              "x": 316.92,
+              "y": 52.74933333333331
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "$1.0M",
+              "x": 480.8,
+              "y": 145.73266666666666
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "18.5%",
+              "x": 153.04000000000002,
+              "y": 123.985625
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "21.4%",
+              "x": 316.92,
+              "y": 102.23925000000003
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "(4.2%)",
+              "x": 480.8,
+              "y": 294.20725
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 299.95,
+            "width": 491.64,
+            "x": 71.10000000000001,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              1500000
+            ],
+            "range": [
+              345.7,
+              45.75
+            ],
+            "ticks": [
+              0,
+              500000,
+              1000000,
+              1500000
+            ]
+          },
+          "valueScale2": {
+            "axis": "y",
+            "domain": [
+              -0.1,
+              0.3
+            ],
+            "range": [
+              345.7,
+              45.75
+            ],
+            "ticks": [
+              -0.1,
+              0,
+              0.1,
+              0.2,
+              0.3
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "update_chart_series",
+      "arguments": {
+        "series": "Revenue",
+        "format": {
+          "style": "currency",
+          "currency": "EUR",
+          "decimals": 0
+        }
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "series": {
+            "format": {
+              "currency": "EUR",
+              "decimals": 0,
+              "style": "currency"
+            },
+            "id": "series-1",
+            "name": "Revenue",
+            "values": [
+              1250000,
+              1480000,
+              980000
+            ]
+          }
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Jan",
+              "Feb",
+              "Mar"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "format": {
+                  "currency": "EUR",
+                  "decimals": 0,
+                  "style": "currency"
+                },
+                "id": "series-1",
+                "name": "Revenue",
+                "values": [
+                  1250000,
+                  1480000,
+                  980000
+                ]
+              },
+              {
+                "axis": "secondary",
+                "id": "series-2",
+                "name": "Margin",
+                "type": "line",
+                "values": [
+                  0.185,
+                  0.214,
+                  -0.042
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Financial Format Codes",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {
+                "code": "$#,##0.0,,\"M\""
+              },
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Revenue"
+            },
+            "yAxis2": {
+              "format": {
+                "code": "0.0%;(0.0%);\"-\""
+              },
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Margin"
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 491.64,
+            "reverse": false,
+            "start": 71.10000000000001
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Financial Format Codes",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "width": 10,
+              "x": 256.96,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Revenue",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Margin",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 245.71666666666667,
+              "y2": 245.71666666666667
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 145.73333333333335,
+              "y2": 145.73333333333335
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$0.0M",
+              "x": 63.10000000000001,
+              "y": 345.7
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$0.5M",
+              "x": 63.10000000000001,
+              "y": 245.71666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$1.0M",
+              "x": 63.10000000000001,
+              "y": 145.73333333333335
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "$1.5M",
+              "x": 63.10000000000001,
+              "y": 45.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "(10.0%)",
+              "x": 570.74,
+              "y": 345.7
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "-",
+              "x": 570.74,
+              "y": 270.7125
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "10.0%",
+              "x": 570.74,
+              "y": 195.725
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "20.0%",
+              "x": 570.74,
+              "y": 120.73749999999995
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y2-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "30.0%",
+              "x": 570.74,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 71.10000000000001,
+              "x2": 562.74,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan",
+              "x": 153.04000000000002,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 316.92,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 480.8,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "axis-title-y",
+              "kind": "text",
+              "role": "axis-title",
+              "rotate": -90,
+              "size": 12,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "Revenue",
+              "weight": 500,
+              "x": 12,
+              "y": 195.725
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "axis-title-y2",
+              "kind": "text",
+              "role": "axis-title",
+              "rotate": 90,
+              "size": 12,
+              "target": {
+                "axis": "y2",
+                "kind": "axis"
+              },
+              "text": "Margin",
+              "weight": 500,
+              "x": 628,
+              "y": 195.725
+            },
+            {
+              "fill": "#4269d0",
+              "height": 249.95833333333334,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 117.99359999999999,
+              "x": 94.04320000000003,
+              "y": 95.74166666666665
+            },
+            {
+              "fill": "#4269d0",
+              "height": 295.9506666666667,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 117.99359999999999,
+              "x": 257.9232,
+              "y": 49.74933333333331
+            },
+            {
+              "fill": "#4269d0",
+              "height": 195.96733333333333,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 117.99359999999999,
+              "x": 421.8032,
+              "y": 149.73266666666666
+            },
+            {
+              "d": "M153.04,131.99L316.92,110.24L480.8,302.21",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 153.04000000000002,
+              "cy": 131.985625,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 316.92,
+              "cy": 110.23925000000003,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 480.8,
+              "cy": 302.20725,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "€1,250,000",
+              "x": 153.04000000000002,
+              "y": 91.74166666666665
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-series-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "€1,480,000",
+              "x": 316.92,
+              "y": 52.74933333333331
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "€980,000",
+              "x": 480.8,
+              "y": 145.73266666666666
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "18.5%",
+              "x": 153.04000000000002,
+              "y": 123.985625
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "21.4%",
+              "x": 316.92,
+              "y": 102.23925000000003
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "(4.2%)",
+              "x": 480.8,
+              "y": 294.20725
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 299.95,
+            "width": 491.64,
+            "x": 71.10000000000001,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              1500000
+            ],
+            "range": [
+              345.7,
+              45.75
+            ],
+            "ticks": [
+              0,
+              500000,
+              1000000,
+              1500000
+            ]
+          },
+          "valueScale2": {
+            "axis": "y",
+            "domain": [
+              -0.1,
+              0.3
+            ],
+            "range": [
+              345.7,
+              45.75
+            ],
+            "ticks": [
+              -0.1,
+              0,
+              0.1,
+              0.2,
+              0.3
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}

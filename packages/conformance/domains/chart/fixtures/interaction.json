@@ -1,0 +1,1670 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "interaction",
+  "description": "Selecting chart elements, dragging points, keyboard nudging, and tooltips.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Mon",
+          "Tue",
+          "Wed"
+        ],
+        "series": [
+          {
+            "name": "Orders",
+            "values": [
+              20,
+              35,
+              50
+            ]
+          }
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Orders"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Orders"
+            ],
+            [
+              "Mon",
+              20
+            ],
+            [
+              "Tue",
+              35
+            ],
+            [
+              "Wed",
+              50
+            ]
+          ]
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 300.21999999999997,
+              "y2": 300.21999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 230.04,
+              "y2": 230.04
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 159.85999999999999,
+              "y2": 159.85999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 89.68,
+              "y2": 89.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 19.5,
+              "y2": 19.5
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 300.21999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 230.04
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 159.85999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 89.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 24.32,
+              "y": 19.5
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Mon",
+              "x": 130.26666666666665,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Tue",
+              "x": 326.15999999999997,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Wed",
+              "x": 522.0533333333333,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 140.35999999999999,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 59.74506666666666,
+              "y": 230.04
+            },
+            {
+              "fill": "#4269d0",
+              "height": 245.62999999999997,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 255.6384,
+              "y": 124.77000000000001
+            },
+            {
+              "fill": "#4269d0",
+              "height": 350.9,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 451.5317333333333,
+              "y": 19.5
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 350.9,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 19.5
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              50
+            ],
+            "range": [
+              370.4,
+              19.5
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "select_chart_element",
+      "arguments": {
+        "kind": "point",
+        "series": "Orders",
+        "category": "Tue"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "selection": {
+            "index": 1,
+            "kind": "point",
+            "seriesId": "series-1"
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 300.21999999999997,
+              "y2": 300.21999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 230.04,
+              "y2": 230.04
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 159.85999999999999,
+              "y2": 159.85999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 89.68,
+              "y2": 89.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 19.5,
+              "y2": 19.5
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 300.21999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 230.04
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 159.85999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 89.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 24.32,
+              "y": 19.5
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Mon",
+              "x": 130.26666666666665,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Tue",
+              "x": 326.15999999999997,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Wed",
+              "x": 522.0533333333333,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 140.35999999999999,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 59.74506666666666,
+              "y": 230.04
+            },
+            {
+              "fill": "#4269d0",
+              "height": 245.62999999999997,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": true,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 255.6384,
+              "y": 124.77000000000001
+            },
+            {
+              "fill": "none",
+              "height": 249.62999999999997,
+              "key": "bar-series-1-1-selection",
+              "kind": "rect",
+              "radius": 3,
+              "role": "selection",
+              "stroke": "#2563eb",
+              "strokeWidth": 1,
+              "width": 145.04319999999998,
+              "x": 253.6384,
+              "y": 122.77000000000001
+            },
+            {
+              "fill": "#4269d0",
+              "height": 350.9,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 451.5317333333333,
+              "y": 19.5
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 350.9,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 19.5
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              50
+            ],
+            "range": [
+              370.4,
+              19.5
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "get_chart_tooltip",
+      "arguments": {
+        "series": "Orders",
+        "category": "Tue"
+      },
+      "expect": {
+        "result": {
+          "index": 1,
+          "items": [
+            {
+              "color": "#4269d0",
+              "name": "Orders",
+              "seriesId": "series-1",
+              "text": "35",
+              "value": 35
+            }
+          ],
+          "title": "Tue"
+        }
+      }
+    },
+    {
+      "tool": "drag_chart_point",
+      "arguments": {
+        "from": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "to": {
+          "x": 0.5,
+          "y": 0.35
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "after": 44,
+          "before": 35,
+          "category": "Tue",
+          "index": 1,
+          "series": "series-1"
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 300.21999999999997,
+              "y2": 300.21999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 230.04,
+              "y2": 230.04
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 159.85999999999999,
+              "y2": 159.85999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 89.68,
+              "y2": 89.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 19.5,
+              "y2": 19.5
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 300.21999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 230.04
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 159.85999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 89.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 24.32,
+              "y": 19.5
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Mon",
+              "x": 130.26666666666665,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Tue",
+              "x": 326.15999999999997,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Wed",
+              "x": 522.0533333333333,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 140.35999999999999,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 59.74506666666666,
+              "y": 230.04
+            },
+            {
+              "fill": "#4269d0",
+              "height": 308.792,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": true,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 255.6384,
+              "y": 61.608000000000004
+            },
+            {
+              "fill": "none",
+              "height": 312.792,
+              "key": "bar-series-1-1-selection",
+              "kind": "rect",
+              "radius": 3,
+              "role": "selection",
+              "stroke": "#2563eb",
+              "strokeWidth": 1,
+              "width": 145.04319999999998,
+              "x": 253.6384,
+              "y": 59.608000000000004
+            },
+            {
+              "fill": "#4269d0",
+              "height": 350.9,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 451.5317333333333,
+              "y": 19.5
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 350.9,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 19.5
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              50
+            ],
+            "range": [
+              370.4,
+              19.5
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "press_chart_key",
+      "arguments": {
+        "key": "ArrowUp"
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "selection": {
+            "index": 1,
+            "kind": "point",
+            "seriesId": "series-1"
+          },
+          "used": true,
+          "value": 45
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Mon",
+              "Tue",
+              "Wed"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Orders",
+                "values": [
+                  20,
+                  45,
+                  50
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 300.21999999999997,
+              "y2": 300.21999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 230.04,
+              "y2": 230.04
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 159.85999999999999,
+              "y2": 159.85999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 89.68,
+              "y2": 89.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 19.5,
+              "y2": 19.5
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 300.21999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 230.04
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 159.85999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 89.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 24.32,
+              "y": 19.5
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Mon",
+              "x": 130.26666666666665,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Tue",
+              "x": 326.15999999999997,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Wed",
+              "x": 522.0533333333333,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 140.35999999999999,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 59.74506666666666,
+              "y": 230.04
+            },
+            {
+              "fill": "#4269d0",
+              "height": 315.81,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": true,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 255.6384,
+              "y": 54.589999999999975
+            },
+            {
+              "fill": "none",
+              "height": 319.81,
+              "key": "bar-series-1-1-selection",
+              "kind": "rect",
+              "radius": 3,
+              "role": "selection",
+              "stroke": "#2563eb",
+              "strokeWidth": 1,
+              "width": 145.04319999999998,
+              "x": 253.6384,
+              "y": 52.589999999999975
+            },
+            {
+              "fill": "#4269d0",
+              "height": 350.9,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 451.5317333333333,
+              "y": 19.5
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 350.9,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 19.5
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              50
+            ],
+            "range": [
+              370.4,
+              19.5
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}

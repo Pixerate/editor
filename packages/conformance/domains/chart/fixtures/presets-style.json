@@ -1,0 +1,1743 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "presets-style",
+  "description": "Layout presets, colour schemes, chart recommendations, colour checks, and house-style checks.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "style": {
+      "palette": [
+        "#4269d0",
+        "#efb118",
+        "#ff725c",
+        "#6cc5b0"
+      ],
+      "checks": [
+        "palette-only",
+        "distinguishable",
+        "min-contrast",
+        {
+          "id": "allowed-type",
+          "types": [
+            "bar",
+            "line"
+          ]
+        }
+      ]
+    }
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4"
+        ],
+        "series": [
+          {
+            "name": "Plan",
+            "values": [
+              100,
+              120,
+              140,
+              160
+            ]
+          },
+          {
+            "name": "Actual",
+            "values": [
+              95,
+              125,
+              150,
+              175
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Plan"
+            },
+            {
+              "id": "series-2",
+              "name": "Actual"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Plan",
+              "Actual"
+            ],
+            [
+              "Q1",
+              100,
+              95
+            ],
+            [
+              "Q2",
+              120,
+              125
+            ],
+            [
+              "Q3",
+              140,
+              150
+            ],
+            [
+              "Q4",
+              160,
+              175
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_chart_presets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "colorSchemes": [
+            {
+              "description": "Ten distinct colours, readable on light and dark backgrounds.",
+              "id": "default",
+              "label": "Default",
+              "palette": [
+                "#4269d0",
+                "#efb118",
+                "#ff725c",
+                "#6cc5b0",
+                "#3ca951",
+                "#ff8ab7",
+                "#a463f2",
+                "#97bbf5",
+                "#9c6b4e",
+                "#9498a0"
+              ]
+            },
+            {
+              "description": "Eight colours chosen to stay distinct with colour-blindness.",
+              "id": "okabe-ito",
+              "label": "Okabe–Ito",
+              "palette": [
+                "#e69f00",
+                "#56b4e9",
+                "#009e73",
+                "#f0e442",
+                "#0072b2",
+                "#d55e00",
+                "#cc79a7",
+                "#000000"
+              ]
+            },
+            {
+              "description": "The six accent colours of the default Office theme.",
+              "id": "office",
+              "label": "Office",
+              "palette": [
+                "#4472c4",
+                "#ed7d31",
+                "#a5a5a5",
+                "#ffc000",
+                "#5b9bd5",
+                "#70ad47"
+              ]
+            },
+            {
+              "description": "Reds, oranges and yellows.",
+              "id": "warm",
+              "label": "Warm",
+              "palette": [
+                "#b2182b",
+                "#d6604d",
+                "#f4a582",
+                "#e08214",
+                "#fdb863",
+                "#8c510a"
+              ]
+            },
+            {
+              "description": "Blues, teals and purples.",
+              "id": "cool",
+              "label": "Cool",
+              "palette": [
+                "#2166ac",
+                "#4393c3",
+                "#35978f",
+                "#80cdc1",
+                "#762a83",
+                "#9970ab"
+              ]
+            },
+            {
+              "description": "Shades of one blue.",
+              "id": "monochrome-blue",
+              "label": "Monochrome blue",
+              "palette": [
+                "#243a72",
+                "#32509e",
+                "#4066ca",
+                "#6484d8",
+                "#8ca4e2",
+                "#b3c3ec"
+              ]
+            },
+            {
+              "description": "Shades of one green.",
+              "id": "monochrome-green",
+              "label": "Monochrome green",
+              "palette": [
+                "#215d2d",
+                "#2e803e",
+                "#3aa44f",
+                "#5fb870",
+                "#88cb95",
+                "#b1ddb9"
+              ]
+            },
+            {
+              "description": "Shades of one orange.",
+              "id": "monochrome-orange",
+              "label": "Monochrome orange",
+              "palette": [
+                "#803e06",
+                "#b05608",
+                "#e16e0a",
+                "#ec8b36",
+                "#f1a86a",
+                "#f6c69d"
+              ]
+            },
+            {
+              "description": "Shades of grey.",
+              "id": "monochrome-gray",
+              "label": "Monochrome grey",
+              "palette": [
+                "#3b3f46",
+                "#515761",
+                "#686f7c",
+                "#868b97",
+                "#a5a9b2",
+                "#c4c7cc"
+              ]
+            }
+          ],
+          "layouts": [
+            {
+              "description": "Legend at the bottom, value grid lines, no data labels.",
+              "id": "standard",
+              "label": "Standard"
+            },
+            {
+              "description": "No legend, grid lines or axis titles; the data speaks.",
+              "id": "minimal",
+              "label": "Minimal"
+            },
+            {
+              "description": "Values written on the marks, no value axis or grid lines.",
+              "id": "labelled",
+              "label": "Labelled"
+            },
+            {
+              "description": "Legend beside the plot, value grid lines.",
+              "id": "legend-right",
+              "label": "Legend on the right"
+            },
+            {
+              "description": "Legend on top, data labels, light grid.",
+              "id": "presentation",
+              "label": "Presentation"
+            },
+            {
+              "description": "Grid lines on both axes, point markers, legend at the bottom.",
+              "id": "analysis",
+              "label": "Analysis"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "apply_chart_preset",
+      "arguments": {
+        "layout": "presentation",
+        "colors": "default"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2",
+              "Q3",
+              "Q4"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "top",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Plan",
+                "values": [
+                  100,
+                  120,
+                  140,
+                  160
+                ]
+              },
+              {
+                "id": "series-2",
+                "name": "Actual",
+                "values": [
+                  95,
+                  125,
+                  150,
+                  175
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 4,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "width": 10,
+              "x": 266.2,
+              "y": 16.35
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Plan",
+              "x": 282.2,
+              "y": 21.35
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "width": 10,
+              "x": 320.84,
+              "y": 16.35
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Actual",
+              "x": 336.84,
+              "y": 21.35
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 288.84999999999997,
+              "y2": 288.84999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 207.29999999999998,
+              "y2": 207.29999999999998
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 125.75,
+              "y2": 125.75
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 44.19999999999999,
+              "y2": 44.19999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 288.84999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 207.29999999999998
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 125.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 44.19999999999999
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Q1",
+              "x": 111.17,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Q2",
+              "x": 256.55,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Q3",
+              "x": 401.93,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Q4",
+              "x": 547.31,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 163.1,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 58.833200000000005,
+              "y": 207.29999999999998
+            },
+            {
+              "fill": "#4269d0",
+              "height": 195.72,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 204.21320000000003,
+              "y": 174.67999999999998
+            },
+            {
+              "fill": "#4269d0",
+              "height": 228.33999999999997,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 349.5932,
+              "y": 142.06
+            },
+            {
+              "fill": "#4269d0",
+              "height": 260.96,
+              "key": "bar-series-1-3",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 494.97319999999996,
+              "y": 109.44
+            },
+            {
+              "fill": "#efb118",
+              "height": 154.945,
+              "key": "bar-series-2-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 114.1324603773585,
+              "y": 215.45499999999998
+            },
+            {
+              "fill": "#efb118",
+              "height": 203.875,
+              "key": "bar-series-2-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 259.51246037735854,
+              "y": 166.52499999999998
+            },
+            {
+              "fill": "#efb118",
+              "height": 244.64999999999998,
+              "key": "bar-series-2-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 404.89246037735853,
+              "y": 125.75
+            },
+            {
+              "fill": "#efb118",
+              "height": 285.425,
+              "key": "bar-series-2-3",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 550.2724603773585,
+              "y": 84.97499999999997
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "100",
+              "x": 83.52036981132076,
+              "y": 203.29999999999998
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "120",
+              "x": 228.9003698113208,
+              "y": 170.67999999999998
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "140",
+              "x": 374.2803698113208,
+              "y": 138.06
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-3",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "160",
+              "x": 519.6603698113207,
+              "y": 105.44
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "95",
+              "x": 138.81963018867924,
+              "y": 211.45499999999998
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "125",
+              "x": 284.1996301886793,
+              "y": 162.52499999999998
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "150",
+              "x": 429.5796301886793,
+              "y": 121.75
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-2-3",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "text": "175",
+              "x": 574.9596301886792,
+              "y": 80.97499999999997
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 326.2,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 44.2
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              200
+            ],
+            "range": [
+              370.4,
+              44.2
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "recommend_chart",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "recommendations": [
+            {
+              "label": "Slope",
+              "reason": "Two columns per item: shows what rose and what fell between them.",
+              "type": "slope"
+            },
+            {
+              "label": "Column",
+              "reason": "Several series: clustered columns compare them per category.",
+              "type": "bar"
+            },
+            {
+              "label": "Bar",
+              "reason": "Horizontal bars fit long category names.",
+              "type": "bar"
+            },
+            {
+              "label": "Stacked column",
+              "reason": "Shows how the series add up.",
+              "stacking": "stacked",
+              "type": "bar"
+            },
+            {
+              "label": "Line",
+              "reason": "Shows the series in order.",
+              "type": "line"
+            },
+            {
+              "label": "Radar",
+              "reason": "Compares several measures across the series.",
+              "type": "radar"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "check_chart_colors",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "closest": {
+            "deuteranopia": {
+              "a": 0,
+              "b": 1,
+              "colors": [
+                "#4269d0",
+                "#efb118"
+              ],
+              "distance": 0.432
+            },
+            "normal": {
+              "a": 0,
+              "b": 1,
+              "colors": [
+                "#4269d0",
+                "#efb118"
+              ],
+              "distance": 0.409
+            },
+            "protanopia": {
+              "a": 0,
+              "b": 1,
+              "colors": [
+                "#4269d0",
+                "#efb118"
+              ],
+              "distance": 0.367
+            },
+            "tritanopia": {
+              "a": 0,
+              "b": 1,
+              "colors": [
+                "#4269d0",
+                "#efb118"
+              ],
+              "distance": 0.323
+            }
+          },
+          "colors": [
+            "#4269d0",
+            "#efb118"
+          ],
+          "contrast": [
+            5.04,
+            1.91
+          ],
+          "issues": [],
+          "ok": true,
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Series \"Actual\" (#efb118) has contrast 1.91:1 against the background #ffffff; want at least 3:1, so use a darker or lighter palette colour.",
+              "severity": "warning",
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "palette-only",
+            "distinguishable",
+            "min-contrast",
+            "allowed-type"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.applyPreset",
+            "params": {
+              "layout": "minimal",
+              "colors": "okabe-ito"
+            }
+          },
+          {
+            "id": "chart.recommend",
+            "params": {}
+          },
+          {
+            "id": "chart.checkColors"
+          }
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 3,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.applyPreset",
+              "ok": true,
+              "result": {
+                "spec": {
+                  "bins": null,
+                  "categories": [
+                    "Q1",
+                    "Q2",
+                    "Q3",
+                    "Q4"
+                  ],
+                  "curve": "linear",
+                  "dataLabels": false,
+                  "gapWidth": 0.28,
+                  "highlight": [],
+                  "innerRadius": 0.55,
+                  "labelPosition": "auto",
+                  "legend": {
+                    "position": "top",
+                    "show": false
+                  },
+                  "likertNeutral": "split",
+                  "likertSort": "none",
+                  "links": [],
+                  "map": "europe",
+                  "mapSteps": 5,
+                  "mapThresholds": [],
+                  "note": "",
+                  "orientation": "vertical",
+                  "overlap": -0.12,
+                  "palette": [
+                    "#e69f00",
+                    "#56b4e9",
+                    "#009e73",
+                    "#f0e442",
+                    "#0072b2",
+                    "#d55e00",
+                    "#cc79a7",
+                    "#000000"
+                  ],
+                  "parliamentArc": 180,
+                  "parliamentLabel": "",
+                  "parliamentMajority": null,
+                  "points": true,
+                  "raceTopN": 10,
+                  "radarGraticule": "polygon",
+                  "radarTicks": null,
+                  "referenceBands": [],
+                  "referenceLines": [],
+                  "sankeyLinkColor": "source",
+                  "sankeyNodes": [],
+                  "series": [
+                    {
+                      "id": "series-1",
+                      "name": "Plan",
+                      "values": [
+                        100,
+                        120,
+                        140,
+                        160
+                      ]
+                    },
+                    {
+                      "id": "series-2",
+                      "name": "Actual",
+                      "values": [
+                        95,
+                        125,
+                        150,
+                        175
+                      ]
+                    }
+                  ],
+                  "showTotal": true,
+                  "stacking": "none",
+                  "subtitle": "",
+                  "sunburstLabel": "",
+                  "title": "",
+                  "tree": [],
+                  "type": "bar",
+                  "varyColors": false,
+                  "version": 1,
+                  "xAxis": {
+                    "format": {},
+                    "gridlines": false,
+                    "max": null,
+                    "min": null,
+                    "show": true,
+                    "step": null,
+                    "title": ""
+                  },
+                  "yAxis": {
+                    "format": {},
+                    "gridlines": false,
+                    "max": null,
+                    "min": null,
+                    "show": true,
+                    "step": null,
+                    "title": ""
+                  },
+                  "yAxis2": {
+                    "format": {},
+                    "gridlines": false,
+                    "max": null,
+                    "min": null,
+                    "show": true,
+                    "step": null,
+                    "title": ""
+                  }
+                }
+              }
+            },
+            {
+              "id": "chart.recommend",
+              "ok": true,
+              "result": {
+                "recommendations": [
+                  {
+                    "label": "Slope",
+                    "reason": "Two columns per item: shows what rose and what fell between them.",
+                    "type": "slope"
+                  },
+                  {
+                    "label": "Column",
+                    "reason": "Several series: clustered columns compare them per category.",
+                    "type": "bar"
+                  },
+                  {
+                    "label": "Bar",
+                    "reason": "Horizontal bars fit long category names.",
+                    "type": "bar"
+                  },
+                  {
+                    "label": "Stacked column",
+                    "reason": "Shows how the series add up.",
+                    "stacking": "stacked",
+                    "type": "bar"
+                  },
+                  {
+                    "label": "Line",
+                    "reason": "Shows the series in order.",
+                    "type": "line"
+                  },
+                  {
+                    "label": "Radar",
+                    "reason": "Compares several measures across the series.",
+                    "type": "radar"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "chart.checkColors",
+              "ok": true,
+              "result": {
+                "closest": {
+                  "deuteranopia": {
+                    "a": 0,
+                    "b": 1,
+                    "colors": [
+                      "#e69f00",
+                      "#56b4e9"
+                    ],
+                    "distance": 0.263
+                  },
+                  "normal": {
+                    "a": 0,
+                    "b": 1,
+                    "colors": [
+                      "#e69f00",
+                      "#56b4e9"
+                    ],
+                    "distance": 0.271
+                  },
+                  "protanopia": {
+                    "a": 0,
+                    "b": 1,
+                    "colors": [
+                      "#e69f00",
+                      "#56b4e9"
+                    ],
+                    "distance": 0.239
+                  },
+                  "tritanopia": {
+                    "a": 0,
+                    "b": 1,
+                    "colors": [
+                      "#e69f00",
+                      "#56b4e9"
+                    ],
+                    "distance": 0.262
+                  }
+                },
+                "colors": [
+                  "#e69f00",
+                  "#56b4e9"
+                ],
+                "contrast": [
+                  2.25,
+                  2.31
+                ],
+                "issues": [],
+                "ok": true,
+                "skipped": []
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 4,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 282.67499999999995
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 194.95
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 107.22500000000002
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 19.5
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Q1",
+              "x": 111.17,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Q2",
+              "x": 256.55,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Q3",
+              "x": 401.93,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Q4",
+              "x": 547.31,
+              "y": 376.4
+            },
+            {
+              "fill": "#e69f00",
+              "height": 175.45,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 58.833200000000005,
+              "y": 194.95
+            },
+            {
+              "fill": "#e69f00",
+              "height": 210.54,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 204.21320000000003,
+              "y": 159.85999999999999
+            },
+            {
+              "fill": "#e69f00",
+              "height": 245.62999999999997,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 349.5932,
+              "y": 124.77000000000001
+            },
+            {
+              "fill": "#e69f00",
+              "height": 280.71999999999997,
+              "key": "bar-series-1-3",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 49.37433962264151,
+              "x": 494.97319999999996,
+              "y": 89.68
+            },
+            {
+              "fill": "#56b4e9",
+              "height": 166.67749999999998,
+              "key": "bar-series-2-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 114.1324603773585,
+              "y": 203.7225
+            },
+            {
+              "fill": "#56b4e9",
+              "height": 219.3125,
+              "key": "bar-series-2-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 259.51246037735854,
+              "y": 151.08749999999998
+            },
+            {
+              "fill": "#56b4e9",
+              "height": 263.17499999999995,
+              "key": "bar-series-2-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 404.89246037735853,
+              "y": 107.22500000000002
+            },
+            {
+              "fill": "#56b4e9",
+              "height": 307.03749999999997,
+              "key": "bar-series-2-3",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              },
+              "width": 49.37433962264151,
+              "x": 550.2724603773585,
+              "y": 63.36250000000001
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 350.9,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 19.5
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              200
+            ],
+            "range": [
+              370.4,
+              19.5
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}

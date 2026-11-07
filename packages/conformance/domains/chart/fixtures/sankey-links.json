@@ -1,0 +1,2023 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "sankey-links",
+  "description": "Sankey diagram flows: set_chart_links, import_chart_links_csv, and link CRUD.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_links",
+      "arguments": {
+        "links": [
+          {
+            "source": "Visitors",
+            "target": "Signup",
+            "value": 60
+          },
+          {
+            "source": "Visitors",
+            "target": "Bounce",
+            "value": 40
+          },
+          {
+            "source": "Signup",
+            "target": "Paid",
+            "value": 25
+          }
+        ]
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "links": [
+            {
+              "source": "Visitors",
+              "target": "Signup",
+              "value": 60
+            },
+            {
+              "source": "Visitors",
+              "target": "Bounce",
+              "value": 40
+            },
+            {
+              "source": "Signup",
+              "target": "Paid",
+              "value": 25
+            }
+          ],
+          "nodes": [
+            {
+              "name": "Visitors",
+              "value": 100
+            },
+            {
+              "name": "Signup",
+              "value": 60
+            },
+            {
+              "name": "Bounce",
+              "value": 40
+            },
+            {
+              "name": "Paid",
+              "value": 25
+            }
+          ]
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Visitors",
+              "Signup",
+              "Bounce",
+              "Paid"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [
+              {
+                "source": "Visitors",
+                "target": "Signup",
+                "value": 60
+              },
+              {
+                "source": "Visitors",
+                "target": "Bounce",
+                "value": 40
+              },
+              {
+                "source": "Signup",
+                "target": "Paid",
+                "value": 25
+              }
+            ],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [
+              "Visitors",
+              "Signup",
+              "Bounce",
+              "Paid"
+            ],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  100,
+                  60,
+                  40,
+                  25
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "sankey",
+        "title": "Conversion Funnel",
+        "sankeyLinkColor": "source"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Visitors",
+              "Signup",
+              "Bounce",
+              "Paid"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [
+              {
+                "source": "Visitors",
+                "target": "Signup",
+                "value": 60
+              },
+              {
+                "source": "Visitors",
+                "target": "Bounce",
+                "value": 40
+              },
+              {
+                "source": "Signup",
+                "target": "Paid",
+                "value": 25
+              }
+            ],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [
+              "Visitors",
+              "Signup",
+              "Bounce",
+              "Paid"
+            ],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  100,
+                  60,
+                  40,
+                  25
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Conversion Funnel",
+            "tree": [],
+            "type": "sankey",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Conversion Funnel",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "d": "M24.32,178.15C169.08,178.15 169.08,108.2 313.84,108.2L313.84,318.05C169.08,318.05 169.08,388 24.32,388Z",
+              "fill": "#4269d0",
+              "key": "link-0",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M24.32,38.25C320,38.25 320,92.86 615.68,92.86L615.68,232.76C320,232.76 320,178.15 24.32,178.15Z",
+              "fill": "#4269d0",
+              "key": "link-1",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,108.2C470.92,108.2 470.92,245.96 615.68,245.96L615.68,333.39C470.92,333.39 470.92,195.64 326.16,195.64Z",
+              "fill": "#efb118",
+              "key": "link-2",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "fill": "#4269d0",
+              "height": 349.75,
+              "key": "node-0",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-0",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Visitors",
+              "x": 29.32,
+              "y": 213.125
+            },
+            {
+              "fill": "#efb118",
+              "height": 209.85,
+              "key": "node-1",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 313.84,
+              "y": 108.2
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-1",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Signup",
+              "x": 331.15999999999997,
+              "y": 213.125
+            },
+            {
+              "fill": "#ff725c",
+              "height": 139.9,
+              "key": "node-2",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 92.85625
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-2",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Bounce",
+              "x": 610.68,
+              "y": 162.80625
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 87.4375,
+              "key": "node-3",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 245.95625
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-3",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Paid",
+              "x": 610.68,
+              "y": 289.675
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 349.75,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "add_chart_link",
+      "arguments": {
+        "source": "Signup",
+        "target": "Free",
+        "value": 35
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "index": 3,
+          "link": {
+            "source": "Signup",
+            "target": "Free",
+            "value": 35
+          },
+          "nodes": [
+            {
+              "name": "Signup",
+              "value": 60
+            },
+            {
+              "name": "Free",
+              "value": 35
+            }
+          ]
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Conversion Funnel",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "d": "M24.32,180.79C169.08,180.79 169.08,116.12 313.84,116.12L313.84,310.13C169.08,310.13 169.08,374.8 24.32,374.8Z",
+              "fill": "#4269d0",
+              "key": "link-0",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M24.32,51.45C320,51.45 320,38.25 615.68,38.25L615.68,167.59C320,167.59 320,180.79 24.32,180.79Z",
+              "fill": "#4269d0",
+              "key": "link-1",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,116.12C470.92,116.12 470.92,180.79 615.68,180.79L615.68,261.63C470.92,261.63 470.92,196.96 326.16,196.96Z",
+              "fill": "#efb118",
+              "key": "link-2",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,196.96C470.92,196.96 470.92,274.83 615.68,274.83L615.68,388C470.92,388 470.92,310.13 326.16,310.13Z",
+              "fill": "#efb118",
+              "key": "link-3",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "fill": "#4269d0",
+              "height": 323.35,
+              "key": "node-0",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 51.44999999999999
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-0",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Visitors",
+              "x": 29.32,
+              "y": 213.125
+            },
+            {
+              "fill": "#efb118",
+              "height": 194.01000000000002,
+              "key": "node-1",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 313.84,
+              "y": 116.11999999999999
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-1",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Signup",
+              "x": 331.15999999999997,
+              "y": 213.125
+            },
+            {
+              "fill": "#ff725c",
+              "height": 129.34,
+              "key": "node-2",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 38.25
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-2",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Bounce",
+              "x": 610.68,
+              "y": 102.92
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 80.8375,
+              "key": "node-3",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 180.79
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-3",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Paid",
+              "x": 610.68,
+              "y": 221.20875
+            },
+            {
+              "fill": "#3ca951",
+              "height": 113.17250000000001,
+              "key": "node-4",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 274.8275
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-4",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "Free",
+              "x": 610.68,
+              "y": 331.41375
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 349.75,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "update_chart_link",
+      "arguments": {
+        "index": 2,
+        "value": 30,
+        "color": "#3ca951"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "index": 2,
+          "link": {
+            "color": "#3ca951",
+            "source": "Signup",
+            "target": "Paid",
+            "value": 30
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Conversion Funnel",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "d": "M24.32,182.33C169.08,182.33 169.08,113.04 313.84,113.04L313.84,297.81C169.08,297.81 169.08,367.1 24.32,367.1Z",
+              "fill": "#4269d0",
+              "key": "link-0",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M24.32,59.15C320,59.15 320,38.25 615.68,38.25L615.68,161.43C320,161.43 320,182.33 24.32,182.33Z",
+              "fill": "#4269d0",
+              "key": "link-1",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,113.04C470.92,113.04 470.92,174.63 615.68,174.63L615.68,267.02C470.92,267.02 470.92,205.43 326.16,205.43Z",
+              "fill": "#3ca951",
+              "key": "link-2",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,205.43C470.92,205.43 470.92,280.22 615.68,280.22L615.68,388C470.92,388 470.92,313.21 326.16,313.21Z",
+              "fill": "#efb118",
+              "key": "link-3",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "fill": "#4269d0",
+              "height": 307.95238095238096,
+              "key": "node-0",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 59.14880952380952
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-0",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Visitors",
+              "x": 29.32,
+              "y": 213.125
+            },
+            {
+              "fill": "#efb118",
+              "height": 200.16904761904763,
+              "key": "node-1",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 313.84,
+              "y": 113.04047619047618
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-1",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Signup",
+              "x": 331.15999999999997,
+              "y": 213.125
+            },
+            {
+              "fill": "#ff725c",
+              "height": 123.18095238095239,
+              "key": "node-2",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 38.25
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-2",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Bounce",
+              "x": 610.68,
+              "y": 99.8404761904762
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 92.3857142857143,
+              "key": "node-3",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 174.63095238095238
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-3",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Paid",
+              "x": 610.68,
+              "y": 220.82380952380953
+            },
+            {
+              "fill": "#3ca951",
+              "height": 107.78333333333335,
+              "key": "node-4",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 280.2166666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-4",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "Free",
+              "x": 610.68,
+              "y": 334.10833333333335
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 349.75,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "remove_chart_link",
+      "arguments": {
+        "index": 1
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "links": [
+            {
+              "source": "Visitors",
+              "target": "Signup",
+              "value": 60
+            },
+            {
+              "color": "#3ca951",
+              "source": "Signup",
+              "target": "Paid",
+              "value": 30
+            },
+            {
+              "source": "Signup",
+              "target": "Free",
+              "value": 35
+            }
+          ]
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Conversion Funnel",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "d": "M24.32,57.79C169.08,57.79 169.08,44.85 313.84,44.85L313.84,355.51C169.08,355.51 169.08,368.46 24.32,368.46Z",
+              "fill": "#4269d0",
+              "key": "link-0",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,44.85C470.92,44.85 470.92,38.25 615.68,38.25L615.68,193.58C470.92,193.58 470.92,200.18 326.16,200.18Z",
+              "fill": "#3ca951",
+              "key": "link-1",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,200.18C470.92,200.18 470.92,206.78 615.68,206.78L615.68,388C470.92,388 470.92,381.4 326.16,381.4Z",
+              "fill": "#efb118",
+              "key": "link-2",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "fill": "#4269d0",
+              "height": 310.66153846153844,
+              "key": "node-0",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 57.79423076923078
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-0",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Visitors",
+              "x": 29.32,
+              "y": 213.125
+            },
+            {
+              "fill": "#efb118",
+              "height": 336.55,
+              "key": "node-1",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 313.84,
+              "y": 44.849999999999994
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-1",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Signup",
+              "x": 331.15999999999997,
+              "y": 213.125
+            },
+            {
+              "fill": "#ff725c",
+              "height": 155.33076923076922,
+              "key": "node-2",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 38.25000000000003
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-2",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Paid",
+              "x": 610.68,
+              "y": 115.91538461538464
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 181.21923076923076,
+              "key": "node-3",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 206.78076923076924
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-3",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Free",
+              "x": 610.68,
+              "y": 297.3903846153846
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 349.75,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "import_chart_links_csv",
+      "arguments": {
+        "csv": "Source,Target,Flow\nSolar,Grid,50\nWind,Grid,30\nGrid,Homes,80"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "links": [
+            {
+              "source": "Solar",
+              "target": "Grid",
+              "value": 50
+            },
+            {
+              "source": "Wind",
+              "target": "Grid",
+              "value": 30
+            },
+            {
+              "source": "Grid",
+              "target": "Homes",
+              "value": 80
+            }
+          ],
+          "nodes": [
+            {
+              "name": "Solar",
+              "value": 50
+            },
+            {
+              "name": "Grid",
+              "value": 80
+            },
+            {
+              "name": "Wind",
+              "value": 30
+            },
+            {
+              "name": "Homes",
+              "value": 80
+            }
+          ]
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Conversion Funnel",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "d": "M24.32,38.25C169.08,38.25 169.08,44.85 313.84,44.85L313.84,255.19C169.08,255.19 169.08,248.59 24.32,248.59Z",
+              "fill": "#4269d0",
+              "key": "link-0",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M24.32,261.79C169.08,261.79 169.08,255.19 313.84,255.19L313.84,381.4C169.08,381.4 169.08,388 24.32,388Z",
+              "fill": "#ff725c",
+              "key": "link-1",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,44.85C470.92,44.85 470.92,44.85 615.68,44.85L615.68,381.4C470.92,381.4 470.92,381.4 326.16,381.4Z",
+              "fill": "#efb118",
+              "key": "link-2",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "fill": "#4269d0",
+              "height": 210.34375,
+              "key": "node-0",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-0",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Solar",
+              "x": 29.32,
+              "y": 143.421875
+            },
+            {
+              "fill": "#efb118",
+              "height": 336.55,
+              "key": "node-1",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 313.84,
+              "y": 44.849999999999994
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-1",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Grid",
+              "x": 331.15999999999997,
+              "y": 213.125
+            },
+            {
+              "fill": "#ff725c",
+              "height": 126.20625000000001,
+              "key": "node-2",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 261.79375
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-2",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Wind",
+              "x": 29.32,
+              "y": 324.896875
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 336.55,
+              "key": "node-3",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 44.849999999999994
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-3",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Homes",
+              "x": 610.68,
+              "y": 213.125
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 349.75,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.setLinks",
+            "params": {
+              "links": [
+                {
+                  "source": "A",
+                  "target": "B",
+                  "value": 10
+                }
+              ]
+            }
+          },
+          {
+            "id": "chart.addLink",
+            "params": {
+              "source": "B",
+              "target": "C",
+              "value": 8
+            }
+          },
+          {
+            "id": "chart.updateLink",
+            "params": {
+              "index": 1,
+              "value": 9
+            }
+          },
+          {
+            "id": "chart.removeLink",
+            "params": {
+              "index": 1
+            }
+          },
+          {
+            "id": "chart.importLinksCsv",
+            "params": {
+              "csv": "From,To,Amount\nRevenue,R&D,40\nRevenue,Ops,60"
+            }
+          }
+        ]
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 5,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.setLinks",
+              "ok": true,
+              "result": {
+                "links": [
+                  {
+                    "source": "A",
+                    "target": "B",
+                    "value": 10
+                  }
+                ],
+                "nodes": [
+                  "A",
+                  "B"
+                ]
+              }
+            },
+            {
+              "id": "chart.addLink",
+              "ok": true,
+              "result": {
+                "index": 1
+              }
+            },
+            {
+              "id": "chart.updateLink",
+              "ok": true,
+              "result": {
+                "link": {
+                  "source": "B",
+                  "target": "C",
+                  "value": 9
+                }
+              }
+            },
+            {
+              "id": "chart.removeLink",
+              "ok": true,
+              "result": {
+                "links": [
+                  {
+                    "source": "A",
+                    "target": "B",
+                    "value": 10
+                  }
+                ]
+              }
+            },
+            {
+              "id": "chart.importLinksCsv",
+              "ok": true,
+              "result": {
+                "links": [
+                  {
+                    "source": "Revenue",
+                    "target": "R&D",
+                    "value": 40
+                  },
+                  {
+                    "source": "Revenue",
+                    "target": "Ops",
+                    "value": 60
+                  }
+                ]
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Revenue",
+              "R&D",
+              "Ops"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [
+              {
+                "source": "Revenue",
+                "target": "R&D",
+                "value": 40
+              },
+              {
+                "source": "Revenue",
+                "target": "Ops",
+                "value": 60
+              }
+            ],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [
+              "Revenue",
+              "R&D",
+              "Ops"
+            ],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  100,
+                  40,
+                  60
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Conversion Funnel",
+            "tree": [],
+            "type": "sankey",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Conversion Funnel",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "d": "M24.32,44.85C320,44.85 320,38.25 615.68,38.25L615.68,172.87C320,172.87 320,179.47 24.32,179.47Z",
+              "fill": "#4269d0",
+              "key": "link-0",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M24.32,179.47C320,179.47 320,186.07 615.68,186.07L615.68,388C320,388 320,381.4 24.32,381.4Z",
+              "fill": "#4269d0",
+              "key": "link-1",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "fill": "#4269d0",
+              "height": 336.55,
+              "key": "node-0",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 44.849999999999994
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-0",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Revenue",
+              "x": 29.32,
+              "y": 213.125
+            },
+            {
+              "fill": "#efb118",
+              "height": 134.62,
+              "key": "node-1",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 38.25
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-1",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "R&D",
+              "x": 610.68,
+              "y": 105.56
+            },
+            {
+              "fill": "#ff725c",
+              "height": 201.93,
+              "key": "node-2",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 186.07
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-2",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Ops",
+              "x": 610.68,
+              "y": 287.03499999999997
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 349.75,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}
