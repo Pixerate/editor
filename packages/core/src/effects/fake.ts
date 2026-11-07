@@ -765,25 +765,23 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 				width,
 				height,
 				depth,
-				render(request) {
-					try {
-						if (disposed) throw new EffectDisposedError(id);
-						if (!Number.isFinite(request.time) || request.time < 0) {
-							throw new EffectUnsupportedError(`time must be a finite number of ms ≥ 0, got ${request.time}.`, id);
-						}
-						const values = resolveEffectValues(d, request.values);
-						options.onRender?.(id, request);
-						const out = renderPixels(d, values, request, width, height);
-						if (request.mask) {
-							if (!capabilities.supportsMask) throw new EffectUnsupportedError('This provider does not take masks.', id);
-							const source = d.uses.includes('filter') ? (request.inputs?.source as EffectPixels) : undefined;
-							maskResult(out, request.mask, source, id);
-						}
-						const res = depth > 8 && capabilities.supportsFloat ? toFloat(out) : out;
-						return Object.assign(Promise.resolve(res), { value: res });
-					} catch (e) {
-						return Promise.reject(e);
+				async render(request) {
+					return this.renderSync!(request);
+				},
+				renderSync(request) {
+					if (disposed) throw new EffectDisposedError(id);
+					if (!Number.isFinite(request.time) || request.time < 0) {
+						throw new EffectUnsupportedError(`time must be a finite number of ms ≥ 0, got ${request.time}.`, id);
 					}
+					const values = resolveEffectValues(d, request.values);
+					options.onRender?.(id, request);
+					const out = renderPixels(d, values, request, width, height);
+					if (request.mask) {
+						if (!capabilities.supportsMask) throw new EffectUnsupportedError('This provider does not take masks.', id);
+						const source = d.uses.includes('filter') ? (request.inputs?.source as EffectPixels) : undefined;
+						maskResult(out, request.mask, source, id);
+					}
+					return depth > 8 && capabilities.supportsFloat ? toFloat(out) : out;
 				},
 				dispose() {
 					disposed = true;

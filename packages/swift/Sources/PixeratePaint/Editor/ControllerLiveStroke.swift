@@ -53,29 +53,57 @@ public final class PaintLiveStroke {
         }
     }
 
-    /// Ends the stroke: one undo step (none when no pixel changed).
+    /// The paint `end()` paints the stroke again with: a path-mapped effect's path isn't known
+    /// until now, so the live stroke was a preview from its render without one. Nil when it
+    /// already painted with its path.
+    private var pathPaint: PaintEffectPaint? {
+        guard let c = controller, !isWet, let e = session.initValues.effect?.source, e.map?.by == "path", !session.points.isEmpty else { return nil }
+        let p = c.strokeEffectWithPath(e, session.points)
+        return p.key == e.key ? nil : p
+    }
+
+    /// Whether `renderPath()` has to be awaited before `end()`: the stroke's path render isn't there,
+    /// and its renderer can't draw it synchronously.
+    public var needsPathRender: Bool {
+        guard let c = controller, let p = pathPaint else { return false }
+        return (c.effectPaintImage(p) ?? c.renderEffectPaintSync(p)) == nil
+    }
+
+    /// Renders the stroke's path so `end()` can paint with it. The stroke stays open until then.
+    public func renderPath() async throws {
+        guard let c = controller, let p = pathPaint else { return }
+        try await c.prepareEffectPaints([p])
+    }
+
+    /// Ends the stroke: one undo step (none when no pixel changed). Throws, leaving the stroke open,
+    /// when `needsPathRender`.
     @discardableResult
     public func end() throws -> PaintStrokeResult {
         guard let c = controller, c.liveStroke === self else { throw PaintEditorError("This stroke has already ended.") }
+        var pathEffect: (source: PaintEffectPaint, pixels: EffectPaintPixels)?
+        if let p = pathPaint {
+            guard let pixels = c.effectPaintImage(p) ?? c.renderEffectPaintSync(p) else {
+                throw PaintEditorError("The effect paint \"\(p.effect)\" is not rendered along this stroke; await renderPath() before ending it.")
+            }
+            pathEffect = (p, pixels)
+        }
         c.liveStroke = nil
         let current = c.doc
         let before = isWet ? beforeDoc : current
-        var finalSession = session
-        if !isWet, let e = session.initValues.effect?.source, e.map?.by == "path", !session.points.isEmpty {
-            let pathSource = c.strokeEffectWithPath(e, session.points)
-            if let pixels = c.effectPaintImage(pathSource) ?? c.renderEffectPaintSync(pathSource) {
-                var reInit = session.initValues
-                reInit.effect = (pathSource, pixels)
-                reInit.inputFilter = nil
-                if let re = try? PaintStrokeSession(reInit) {
-                    re.maskStencils = session.maskStencils
-                    _ = try? re.push(session.points)
-                    finalSession = re
-                }
-            }
-        }
         let run: (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush)
-        do { run = try c.endStroke(current, finalSession) } catch {
+        do {
+            var finalSession = session
+            if let pathEffect {
+                var reInit = session.initValues
+                reInit.effect = pathEffect
+                reInit.inputFilter = nil
+                let re = try PaintStrokeSession(reInit)
+                re.maskStencils = session.maskStencils
+                _ = try re.push(session.points)
+                finalSession = re
+            }
+            run = try c.endStroke(current, finalSession)
+        } catch {
             c.wetOp = nil
             c.wet.driver = nil
             c.emit()

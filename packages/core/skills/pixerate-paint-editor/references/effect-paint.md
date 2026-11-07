@@ -9,7 +9,16 @@
   with more than 256 points are evenly resampled to 256 points rather than refused. **Prefer
   `by: "path"` over `by: "stroke"` whenever the effect has a path control** (`accepts: ["path"]`);
   `set_effect_paint` refuses `by: "path"` on effects without a path control and tells you to use
-  `by: "stroke"` or `by: "canvas"`.
+  `by: "stroke"` or `by: "canvas"`. Each stroke is a render of its own at the canvas size, so:
+  - A stroke painted by hand shows the effect without a path while it is drawn (possibly nothing),
+    and is painted again along its path when the pen lifts. On a slow provider the editor is busy
+    until that lands (`effectPaintRendering`). `paint_stroke` and `stroke_path` know the path up
+    front and paint it at once.
+  - Wet brushes can't be painted by hand this way, as the simulation can't run twice; give them
+    the points through `paint_stroke`, or use `by: "stroke"`.
+  - With `live: true`, every stroke is a live source of its own, so at most 8 can play.
+  - Symmetry copies sample the same render, which only follows the original stroke: paint each
+    copy as its own stroke if it should draw too.
 - **Along the stroke (strip)** (`set_effect_paint` `map: { by: "stroke", length, repeat }`): for
   effects without a path control, the effect is rendered as a strip `length` px long (16..4096,
   default 300) and 256 px across. Each pixel takes

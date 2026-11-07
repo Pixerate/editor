@@ -150,10 +150,6 @@ export class PaintEffectsRenderer {
     return out;
   }
 
-  hasRenderer(providerId: string, id: string, size: { width: number; height: number }): boolean {
-    return this.pool.hasResolved(providerId, id, { ...size, depth: 8 });
-  }
-
   renderSync(provider: EffectProvider, id: string, size: { width: number; height: number }, request: EffectRenderRequest): EffectPixels | null {
     this.follow(provider);
     const out = this.pool.renderSync(provider, id, { ...size, depth: 8 }, request);

@@ -35,31 +35,18 @@ export class EffectRendererPool {
 		return this.entries.size;
 	}
 
-	/** Whether a warm renderer is ready for this provider, effect, size and depth. */
-	hasResolved(providerId: string, id: string, size: { width: number; height: number; depth?: 8 | 16 | 32 }): boolean {
-		const depth = size.depth ?? 8;
-		return Boolean(this.entries.get(`${providerId}:${id}@${size.width}x${size.height}x${depth}`)?.resolved);
-	}
-
-	/** Renders `request` synchronously when a warm renderer is idle and finishes immediately (`createFakeEffectProvider`). */
+	/**
+	 * Renders `request` on the caller's stack when this size's renderer is warm, idle and has
+	 * `renderSync`; otherwise `null`, and nothing is rendered (an asynchronous provider never pays for it).
+	 */
 	renderSync(provider: EffectProvider, id: string, size: { width: number; height: number; depth?: 8 | 16 | 32 }, request: EffectRenderRequest): EffectPixels | null {
 		const depth = size.depth ?? 8;
 		const key = `${provider.id}:${id}@${size.width}x${size.height}x${depth}`;
 		const entry = this.entries.get(key);
-		if (!entry?.resolved || entry.busy > 0) return null;
+		if (!entry?.resolved?.renderSync || entry.busy > 0) return null;
 		this.entries.delete(key);
 		this.entries.set(key, entry);
-		const p = entry.resolved.render(request) as Promise<EffectPixels> & { value?: EffectPixels };
-		if (p && typeof p === 'object' && 'value' in p && p.value) {
-			entry.queue = p.catch(() => undefined);
-			return p.value;
-		}
-		entry.busy++;
-		const tracked = p.finally(() => {
-			entry.busy--;
-		});
-		entry.queue = tracked.catch(() => undefined);
-		return null;
+		return entry.resolved.renderSync(request);
 	}
 
 	/** Renders `request` with the provider's renderer for this effect, size and depth (made on first use). */

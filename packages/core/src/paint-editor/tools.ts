@@ -825,7 +825,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     },
     annotations: { title: 'Move or reshape a stroke', ...WRITE },
     coordinates: { in: ['points[]', 'transform.origin'], out: ['bounds', 'stroke.bounds', 'stroke.points[]'] },
-    handler: ({ id, points, transform }) => {
+    handler: async ({ id, points, transform }) => {
+      await c.prepareStrokeEdit(id, { points, transform });
       const r = c.editStrokePoints(id, { points, transform });
       return { stroke: strokeSummary(r.stroke, true, true), bounds: r.bounds };
     },

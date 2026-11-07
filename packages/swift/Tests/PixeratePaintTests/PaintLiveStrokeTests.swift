@@ -216,4 +216,80 @@ final class PaintLiveStrokeTests: XCTestCase {
         XCTAssertEqual(pathArr[pathArr.count - 2], 76)
         XCTAssertEqual(pathArr[pathArr.count - 1], 30)
     }
+
+    func testHandPaintedPathStrokesPaintAlongTheirPathOnEitherKindOfProvider() async throws {
+        for provider: EffectProvider in [FakeEffectProvider(), AsyncOnlyProvider()] {
+            let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+            c.setEffectsProvider(provider)
+            _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+            _ = try c.setBrushFacets(["tip": ["size": 24, "hardness": 1, "opacity": 1, "flow": 1], "behaviour": ["grain": 0]])
+            let s = try c.beginStroke()
+            s.push([PenPoint(x: 20, y: 4, pressure: 1), PenPoint(x: 20, y: 60, pressure: 1)])
+            if provider is AsyncOnlyProvider {
+                XCTAssertTrue(s.needsPathRender)
+                XCTAssertThrowsError(try s.end()) { XCTAssertTrue("\($0)".contains("await renderPath()")) }
+                XCTAssertTrue(s.open)
+                try await s.renderPath()
+            }
+            XCTAssertFalse(s.needsPathRender)
+            let r = try s.end()
+            // On the path, away from the line across the middle (y = 32) that fake.trail draws with no path.
+            XCTAssertEqual(try c.pickColor(20, 10, layerId: r.layerId)["color"], "#ff0000")
+            XCTAssertEqual(try c.pickColor(30, 32, layerId: r.layerId)["alpha"], 0)
+            XCTAssertEqual(c.doc.strokes.count, 1)
+            XCTAssertEqual(c.doc.strokes[0].effect?.values["path"], [20, 4, 20, 60])
+        }
+    }
+
+    func testPathStrokesRefuseAMissingRenderAndWetBrushesByHand() async throws {
+        let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+        c.setEffectsProvider(AsyncOnlyProvider())
+        _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+        let points = [PenPoint(x: 20, y: 4, pressure: 1), PenPoint(x: 20, y: 60, pressure: 1)]
+        XCTAssertThrowsError(try c.paintStroke(PaintStrokeInit(seed: 1), points: points)) { XCTAssertTrue("\($0)".contains("prepareStrokePathEffect")) }
+        XCTAssertThrowsError(try c.beginStroke(PaintStrokeInit(brushId: "watercolor-round"))) { XCTAssertTrue("\($0)".contains("wet media")) }
+    }
+
+    func testAStrokeLayerKeepsARenderForEveryPathStroke() async throws {
+        var renders = 0
+        let c = try PaintEditorController(width: 96, height: 64, brushId: "ink-pen")
+        c.setEffectsProvider(FakeEffectProvider { _, _, _, _ in renders += 1 })
+        _ = try await c.setEffectPaint("fake.trail", values: ["color": "#ff0000", "width": 12], map: ["by": "path"])
+        _ = try c.addLayer(type: "strokes")
+        var ids: [String] = []
+        for i in 0..<10 {
+            let x = Double(8 + i * 8)
+            ids.append(try c.paintStroke(PaintStrokeInit(seed: i), points: [PenPoint(x: x, y: 4, pressure: 1), PenPoint(x: x, y: 60, pressure: 1)]).strokeId!)
+        }
+        let painted = renders
+        _ = try c.updateStroke(ids[0], brushId: nil, brushChanges: nil, color: nil, paint: nil, seed: 7)
+        XCTAssertEqual(renders, painted)
+    }
+}
+
+/// Renders like a GPU provider: results only ever arrive later, and there is no `renderSync`.
+private final class AsyncOnlyProvider: EffectProvider {
+    private let fake = FakeEffectProvider()
+    var id: String { fake.id }
+    var name: String { fake.name }
+    var capabilities: JSONObject { fake.capabilities }
+    func list(_ options: EffectSearchOptions) async throws -> [EffectDescription] { try await fake.list(options) }
+    func search(_ query: String, _ options: EffectSearchOptions) async throws -> [EffectDescription] { try await fake.search(query, options) }
+    func describe(_ id: String) async throws -> EffectDescription { try await fake.describe(id) }
+    func createRenderer(_ id: String, width: Int, height: Int) throws -> EffectRenderer {
+        AsyncOnlyRenderer(try fake.createRenderer(id, width: width, height: height))
+    }
+}
+
+private final class AsyncOnlyRenderer: EffectRenderer {
+    private let inner: EffectRenderer
+    init(_ inner: EffectRenderer) { self.inner = inner }
+    var effectId: String { inner.effectId }
+    var width: Int { inner.width }
+    var height: Int { inner.height }
+    func render(_ request: EffectRenderRequest) async throws -> EffectPixels {
+        await Task.yield()
+        return try await inner.render(request)
+    }
+    func dispose() { inner.dispose() }
 }

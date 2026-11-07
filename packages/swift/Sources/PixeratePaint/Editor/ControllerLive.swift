@@ -232,19 +232,27 @@ extension PaintEditorController {
         return nil
     }
 
-    func prepareEditStrokePointsEffect(_ id: String, points: [PenPoint]?, transform: JSONObject?) async throws {
-        guard let stroke = liveStrokeById(id), let e = stroke.effect, e.map?.by == "path" else { return }
-        if let points, !points.isEmpty {
-            try await prepareEffectPaints([strokeEffectWithPath(e, points)])
-        } else if let t = transform {
-            let b = strokeBounds(stroke.points)
-            let o = t["origin"]?.objectValue
-            let origin: (Double, Double) = o.map { ($0["x"]?.numberValue ?? 0, $0["y"]?.numberValue ?? 0) } ?? (b.x + b.width / 2, b.y + b.height / 2)
-            let v = ReplayOptions(strokeIds: [], dx: t["dx"]?.numberValue, dy: t["dy"]?.numberValue, scale: t["scale"]?.numberValue, rotate: t["rotate"]?.numberValue, flipX: t["flipX"]?.boolValue)
-            if let varied = varyStroke(stroke, variationAffine(v, origin)).effect {
-                try await prepareEffectPaints([varied])
-            }
-        }
+    /// The path-mapped paint a point edit of a stroke will paint with, or nil.
+    private func editStrokePointsEffect(_ id: String, points: [PenPoint]?, transform: JSONObject?) -> PaintEffectPaint? {
+        guard let stroke = liveStrokeById(id), let e = stroke.effect, e.map?.by == "path" else { return nil }
+        if let points, !points.isEmpty { return strokeEffectWithPath(e, points) }
+        guard let t = transform else { return nil }
+        let b = strokeBounds(stroke.points)
+        let o = t["origin"]?.objectValue
+        let origin: (Double, Double) = o.map { ($0["x"]?.numberValue ?? 0, $0["y"]?.numberValue ?? 0) } ?? (b.x + b.width / 2, b.y + b.height / 2)
+        let v = ReplayOptions(strokeIds: [], dx: t["dx"]?.numberValue, dy: t["dy"]?.numberValue, scale: t["scale"]?.numberValue, rotate: t["rotate"]?.numberValue, flipX: t["flipX"]?.boolValue)
+        return varyStroke(stroke, variationAffine(v, origin)).effect
+    }
+
+    /// Renders a path-mapped stroke's new path, which `editStrokePoints` needs (it is synchronous).
+    public func prepareEditStrokePointsEffect(_ id: String, points: [PenPoint]?, transform: JSONObject?) async throws {
+        if let p = editStrokePointsEffect(id, points: points, transform: transform) { try await prepareEffectPaints([p]) }
+    }
+
+    /// Whether `prepareEditStrokePointsEffect` has to be awaited before this edit can run.
+    public func strokeEditNeedsRender(_ id: String, points: [PenPoint]?, transform: JSONObject?) -> Bool {
+        guard let p = editStrokePointsEffect(id, points: points, transform: transform) else { return false }
+        return (effectPaintImage(p) ?? renderEffectPaintSync(p)) == nil
     }
 
     private func withLiveStrokes(_ d: PaintDocumentState, _ layer: PaintLayer, _ list: [RecordedStroke]) throws -> PaintDocumentState {
@@ -282,7 +290,6 @@ extension PaintEditorController {
         i.snapToPerspective = false
         i.stencils = false
         i.maskStencils = st.stencils ?? []
-        i.points = st.points
         let session = try sessionFor(d.with { $0.layers = mapLayer(d.layers, plain.id) { _ in plain.withSurface(surface) } }, i)
         try session.push(st.points)
         let result = try session.end()

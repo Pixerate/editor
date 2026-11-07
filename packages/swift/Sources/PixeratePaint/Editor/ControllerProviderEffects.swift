@@ -359,8 +359,18 @@ extension PaintEditorController {
 
     // MARK: - Effect paint
 
-    /// At most this many rendered effect paints are kept.
+    /// At most this many rendered effect paints are kept (each is canvas-sized), more only while
+    /// something needs them all: a replay's batch, and the path-mapped strokes on stroke layers,
+    /// which each have a render of their own and are redrawn synchronously.
     static var effectPaintCacheSize: Int { 6 }
+
+    func trimEffectPaints() {
+        var live = 0
+        for list in (doc.liveStrokes ?? OrderedMap()).values { live += list.filter { $0.effect?.map?.by == "path" }.count }
+        // One more than the live strokes, for the editor's own paint.
+        let limit = Swift.max(Self.effectPaintCacheSize, effectPaintBatch, live + 1)
+        while effectPaintPixels.count > limit, let first = effectPaintPixels.keys.first { _ = effectPaintPixels.delete(first) }
+    }
 
     func clearEffectPaint() {
         effectPaint = nil
@@ -430,7 +440,7 @@ extension PaintEditorController {
         }
         let img = EffectPaintPixels(width: size.width, height: size.height, data: pixels.data, map: p.map?.by == "stroke" ? p.map : nil)
         effectPaintPixels.set(p.key, img)
-        while effectPaintPixels.count > Self.effectPaintCacheSize, let first = effectPaintPixels.keys.first { _ = effectPaintPixels.delete(first) }
+        trimEffectPaints()
         return img
     }
 
@@ -439,13 +449,14 @@ extension PaintEditorController {
         if let have = effectPaintImage(p) { return have }
         guard let provider = effectsProvider, p.provider.isEmpty || provider.id == p.provider else { return nil }
         let size = p.size(doc.canvas)
-        guard let r = (try? provider.createRenderer(p.effect, width: size.width, height: size.height)) as? SyncEffectRenderer else { return nil }
-        defer { r.dispose() }
+        guard let made = try? provider.createRenderer(p.effect, width: size.width, height: size.height) else { return nil }
+        defer { made.dispose() }
+        guard let r = made as? SyncEffectRenderer else { return nil }
         guard let pixels = try? r.renderSync(EffectRenderRequest(time: p.time, values: p.values)),
               pixels.width == size.width, pixels.height == size.height, pixels.data.count == size.width * size.height * 4 else { return nil }
         let img = EffectPaintPixels(width: size.width, height: size.height, data: pixels.data, map: p.map?.by == "stroke" ? p.map : nil)
         effectPaintPixels.set(p.key, img)
-        while effectPaintPixels.count > Self.effectPaintCacheSize, let first = effectPaintPixels.keys.first { _ = effectPaintPixels.delete(first) }
+        trimEffectPaints()
         return img
     }
 
@@ -476,6 +487,7 @@ extension PaintEditorController {
 
     /// Renders effect paints that are not rendered yet (strokes and replays need them first).
     public func prepareEffectPaints(_ paints: [PaintEffectPaint]) async throws {
+        effectPaintBatch = Set(paints.map(\.key)).count
         var seen = Set<String>()
         for p in paints where seen.insert(p.key).inserted { _ = try await renderEffectPaint(p) }
     }
@@ -495,7 +507,7 @@ extension PaintEditorController {
         guard var source else { return nil }
         source = strokeEffectWithPath(source, i.points)
         guard let pixels = effectPaintImage(source) ?? renderEffectPaintSync(source) else {
-            throw PaintEditorError("The effect paint \"\(source.effect)\"\(source.provider.isEmpty ? "" : " from provider \"\(source.provider)\"") is not rendered at this canvas size; call set_effect_paint (or prepareEffectPaints) first.")
+            throw PaintEditorError("The effect paint \"\(source.effect)\"\(source.provider.isEmpty ? "" : " from provider \"\(source.provider)\"") is not rendered at this canvas size; call \(source.map?.by == "path" ? "prepareStrokePathEffect (the paint_stroke tool does this) or prepareEditStrokePointsEffect" : "set_effect_paint (or prepareEffectPaints)") first.")
         }
         return (source, pixels)
     }

@@ -237,15 +237,29 @@ export class PaintGesture {
     if (!m || m.pointerId !== e.pointerId) return;
     this.mode = null;
     this.predicted = [];
-    if (m.kind === 'stroke') this.controller.activeStroke?.end();
+    if (m.kind === 'stroke') {
+      this.controller.activeStroke?.end();
+      this.controller.strokeRendering?.catch((err) => {
+        this.error = err instanceof Error ? err.message : String(err);
+      });
+    }
     if (m.kind === 'move-stroke') {
       const dx = Math.round((this.doc(e).x - m.from.x) * 100) / 100;
       const dy = Math.round((this.doc(e).y - m.from.y) * 100) / 100;
       if (dx || dy) {
-        try {
-          this.controller.editStrokePoints(m.id, { transform: { dx, dy } });
-        } catch (err) {
+        const edit = { transform: { dx, dy } };
+        const failed = (err: unknown) => {
           this.error = err instanceof Error ? err.message : String(err);
+        };
+        // A path-mapped stroke has to render its moved path first.
+        if (this.controller.strokeEditNeedsRender(m.id, edit)) {
+          this.controller.prepareStrokeEdit(m.id, edit).then(() => this.controller.editStrokePoints(m.id, edit)).catch(failed);
+        } else {
+          try {
+            this.controller.editStrokePoints(m.id, edit);
+          } catch (err) {
+            failed(err);
+          }
         }
       }
     }

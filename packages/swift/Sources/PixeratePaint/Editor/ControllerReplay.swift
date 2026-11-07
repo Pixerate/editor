@@ -133,6 +133,8 @@ extension PaintEditorController {
             }
         }
         if d !== doc { commit(strokes.count == 1 && repeatCount == 1 ? "Replay stroke" : "Replay strokes", d) }
+        effectPaintBatch = 0
+        trimEffectPaints()
         return ["strokeIds": .array(ids.map { .string($0) }), "bounds": rectJSON(bounds), "layerIds": .array(layerIds.map { .string($0) })]
     }
 

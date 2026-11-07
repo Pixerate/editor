@@ -533,7 +533,10 @@ export class PaintEditorController {
   private readonly effectPaintPixels = new Map<string, EffectPaintPixels>();
   /** Primary path control name (`format: 'svg-path'`) per effect id, learned from `describeEffect`. */
   private readonly effectPathControls = new Map<string, string>();
-  private minEffectPaintCache = 24;
+  /** How many renders the running batch needs together (`prepareEffectPaints`; a synchronous replay reads them all). */
+  private effectPaintBatch = 0;
+  /** The hand-painted stroke waiting for its path render (`finishPathStroke`), or `null`. */
+  private pathStroke: { effect: string; done: Promise<void> } | null = null;
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
   private view: PaintView = { ...DEFAULT_VIEW, pan: { ...DEFAULT_VIEW.pan } };
   private hand: Hand;
@@ -886,7 +889,7 @@ export class PaintEditorController {
       secondaryColor: this.secondaryColor,
       paint: this.gradient ?? { type: 'color', color: this.color },
       effectPaint: this.effectPaintPending ?? this.effectPaint,
-      effectPaintRendering: Boolean(this.effectPaintPending),
+      effectPaintRendering: Boolean(this.effectPaintPending || this.pathStroke),
       mixerLoad: this.mixerLoad,
       view: this.view,
       hand: this.hand,
@@ -955,6 +958,7 @@ export class PaintEditorController {
 
   private requireIdle(what: string): void {
     if (this.session) throw new PaintEditorError(`A stroke is in progress; end or cancel it before ${what}.`);
+    if (this.pathStroke) throw new PaintEditorError(`The last stroke is still rendering the effect "${this.pathStroke.effect}" along its path; wait for it (strokeRendering) before ${what}.`);
     if (this.grouping?.pending && !this.grouping.inside) throw new PaintEditorError(`"${this.grouping.label}" is still being painted (one undo step); wait for it to finish before ${what}.`);
   }
 
@@ -1891,8 +1895,12 @@ export class PaintEditorController {
 
   // --- Effect paint ----------------------------------------------------------------
 
-  /** At most this many rendered effect paints are kept (each is canvas-sized). */
-  private static readonly EFFECT_PAINT_CACHE = 24;
+  /**
+   * At most this many rendered effect paints are kept (each is canvas-sized), more only while
+   * something needs them all: a replay's batch, and the path-mapped strokes on stroke layers,
+   * which each have a render of their own and are redrawn synchronously.
+   */
+  private static readonly EFFECT_PAINT_CACHE = 6;
 
   /** The effect paint strokes use (or the one rendering), or `null`. */
   getEffectPaint(): PaintEffectPaint | null {
@@ -1962,12 +1970,19 @@ export class PaintEditorController {
   private cacheEffectPaintPixels(p: PaintEffectPaint, pixels: EffectPixels): EffectPaintPixels {
     const img: EffectPaintPixels = { width: pixels.width, height: pixels.height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>), ...(p.map?.by === 'stroke' ? { map: p.map } : {}) };
     this.effectPaintPixels.set(effectPaintKey(p), img);
-    const limit = Math.max(PaintEditorController.EFFECT_PAINT_CACHE, this.minEffectPaintCache);
-    while (this.effectPaintPixels.size > limit) this.effectPaintPixels.delete(this.effectPaintPixels.keys().next().value!);
+    this.trimEffectPaints();
     return img;
   }
 
-  /** Renders an effect paint synchronously when its renderer in the pool is already warm and synchronous (`createFakeEffectProvider`). */
+  private trimEffectPaints(): void {
+    let live = 0;
+    for (const list of Object.values(this.doc.liveStrokes ?? {})) for (const s of list) if (s.paint?.type === 'effect' && s.paint.map?.by === 'path') live++;
+    // One more than the live strokes, for the editor's own paint.
+    const limit = Math.max(PaintEditorController.EFFECT_PAINT_CACHE, this.effectPaintBatch, live + 1);
+    while (this.effectPaintPixels.size > limit) this.effectPaintPixels.delete(this.effectPaintPixels.keys().next().value!);
+  }
+
+  /** Renders an effect paint on the caller's stack when its renderer is warm and has `renderSync`; otherwise `null`. */
   private renderEffectPaintSync(p: PaintEffectPaint): EffectPaintPixels | null {
     const have = this.effectPaintImage(p);
     if (have) return have;
@@ -2002,7 +2017,7 @@ export class PaintEditorController {
    */
   async prepareEffectPaints(paints: Iterable<PaintEffectPaint>): Promise<void> {
     const list = [...paints];
-    this.minEffectPaintCache = Math.max(this.minEffectPaintCache, list.length + 4);
+    this.effectPaintBatch = new Set(list.map(effectPaintKey)).size;
     const seen = new Set<string>();
     for (const p of list) {
       const key = effectPaintKey(p);
@@ -2014,7 +2029,8 @@ export class PaintEditorController {
 
   /**
    * Renders the path-mapped effect paint for one or more strokes' points before a synchronous
-   * stroke call runs (used by `paint_stroke`, `stroke_path`, `update_stroke` and `edit_stroke_points`).
+   * stroke call runs (`paint_stroke` and `stroke_path` do; `paintStroke` throws without it on a
+   * provider that can't render synchronously). For a stroke layer edit, see `prepareStrokeEdit`.
    */
   async prepareStrokePathEffect(init: PaintStrokeInit, pointsList: readonly (readonly PenPoint[])[]): Promise<void> {
     const brush = this.strokeBrush(init);
@@ -2027,9 +2043,55 @@ export class PaintEditorController {
       source = this.effectPaint;
     }
     if (!source || source.map?.by !== 'path') return;
+    if (!this.effectPathControls.has(source.effect)) await this.describeEffect(source.effect);
     const control = this.effectPathControls.get(source.effect);
     const paints = pointsList.filter((pts) => pts.length > 0).map((pts) => withStrokePath(source!, pts, control));
     if (paints.length) await this.prepareEffectPaints(paints);
+  }
+
+  /**
+   * Renders what an edit of a stroke layer's stroke paints with (`updateStroke`, `editStrokePoints`):
+   * a new effect paint, or a path-mapped stroke's new path. Those calls are synchronous, and throw
+   * without it on a provider that can't render synchronously. Bad edits are left for them to refuse.
+   */
+  async prepareStrokeEdit(id: string, edit: { paint?: unknown; points?: readonly PenPoint[]; transform?: StrokeVariation }): Promise<void> {
+    const p = this.strokeEditPaint(id, edit);
+    if (!p) return;
+    if (p.map?.by === 'path' && !this.effectPathControls.has(p.effect)) await this.describeEffect(p.effect);
+    await this.prepareEffectPaints([this.strokeEditPaint(id, edit) ?? p]);
+  }
+
+  /** Whether `prepareStrokeEdit` has to be awaited before this edit can run. */
+  strokeEditNeedsRender(id: string, edit: { paint?: unknown; points?: readonly PenPoint[]; transform?: StrokeVariation }): boolean {
+    const p = this.strokeEditPaint(id, edit);
+    return Boolean(p && !this.effectPaintImage(p) && !this.renderEffectPaintSync(p));
+  }
+
+  private strokeEditPaint(id: string, edit: { paint?: unknown; points?: readonly PenPoint[]; transform?: StrokeVariation }): PaintEffectPaint | null {
+    const was = Object.values(this.doc.liveStrokes ?? {}).flat().find((s) => s.id === id);
+    if (!was) return null;
+    try {
+      if (edit.paint !== undefined) {
+        if (!isPaintEffectPaint(edit.paint)) return null;
+        const p = readPaintEffectPaint(edit.paint);
+        return p && withStrokePath(p, was.points, this.effectPathControls.get(p.effect));
+      }
+      if (was.paint?.type !== 'effect' || was.paint.map?.by !== 'path') return null;
+      if (edit.points !== undefined) return withStrokePath(was.paint, this.checkPoints(edit.points), this.effectPathControls.get(was.paint.effect));
+      if (!edit.transform) return null;
+      const varied = varyStroke(was, this.strokeTransform(was, edit.transform), {}).paint;
+      return varied?.type === 'effect' ? varied : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** A stroke edit's transform as an affine map, checked. */
+  private strokeTransform(stroke: RecordedStroke, t: StrokeVariation): Affine {
+    if (t.scale !== undefined && !(t.scale > 0 && t.scale <= 20)) throw new PaintEditorError(`scale ${t.scale} is out of range; use above 0 up to 20.`);
+    for (const k of ['dx', 'dy', 'rotate'] as const) if (t[k] !== undefined && !Number.isFinite(t[k])) throw new PaintEditorError(`${k} must be a number.`);
+    const b = strokeBounds(stroke.points);
+    return variationAffine(t, t.origin ?? { x: b.x + b.width / 2, y: b.y + b.height / 2 });
   }
 
   /** Renders the effect paints of recorded strokes (default all of them) before a replay. */
@@ -2095,23 +2157,10 @@ export class PaintEditorController {
       source = this.effectPaint;
     }
     if (!source) return null;
-    const baseSource = source;
-    if (source.map?.by === 'path' && points?.length) {
-      source = withStrokePath(source, points, this.effectPathControls.get(source.effect));
-    }
-    let pixels = this.effectPaintImage(source);
-    if (!pixels && source.map?.by === 'path') {
-      const providerId = source.provider || this.effects.provider?.id || '';
-      const baseReady = Boolean(
-        this.effectPaintImage(baseSource) ||
-          (this.effectPaint?.effect === source.effect && this.effectPaintImage(this.effectPaint)) ||
-          (providerId && this.effectsRenderer.hasRenderer(providerId, source.effect, effectPaintSize(source, this.doc.canvas)))
-      );
-      if (baseReady) {
-        pixels = this.renderEffectPaintSync(source) ?? this.effectPaintImage(baseSource) ?? (this.effectPaint ? this.effectPaintImage(this.effectPaint) : null);
-      }
-    }
-    if (!pixels) throw new PaintEditorError(`The effect paint "${source.effect}"${source.provider ? ` from provider "${source.provider}"` : ''} is not rendered at this canvas size; call set_effect_paint (or prepareEffectPaints) first.`);
+    const path = source.map?.by === 'path';
+    if (path && points?.length) source = withStrokePath(source, points, this.effectPathControls.get(source.effect));
+    const pixels = this.effectPaintImage(source) ?? (path ? this.renderEffectPaintSync(source) : null);
+    if (!pixels) throw new PaintEditorError(`The effect paint "${source.effect}"${source.provider ? ` from provider "${source.provider}"` : ''} is not rendered at this canvas size; call ${path ? 'prepareStrokePathEffect (the paint_stroke tool does this) or prepareStrokeEdit' : 'set_effect_paint (or prepareEffectPaints)'} first.`);
     return { source, pixels };
   }
 
@@ -2573,6 +2622,10 @@ export class PaintEditorController {
     // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
     if (this.previewing && isWetBrush(brush)) throw new PaintEditorError(`Wet paint can't be previewed; the ${brush.name} brush paints wet media. Suggest it with a dry brush.`);
     const effect = this.strokeEffect(init, brush, points);
+    // A hand-painted path stroke is painted again from its path at the end, and the wet simulation can't be.
+    if (!points && init.paint === undefined && effect?.source.map?.by === 'path' && isWetBrush(brush)) {
+      throw new PaintEditorError(`The ${brush.name} brush paints wet media, which can't follow a path that isn't known until the stroke ends; paint with a dry brush, set_effect_paint with by: "stroke", or give the points to paint_stroke.`);
+    }
     if (brush.light.amount > 0) {
       if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).`);
     }
@@ -2733,6 +2786,12 @@ export class PaintEditorController {
       sampled: (s, points) => this.notifySample('points', s, points),
       commit: (s, surface, cancelled) => {
         this.session = null;
+        // Before the check for changed pixels: what the preview laid may be nothing at all.
+        const pathPaint = cancelled ? null : this.pathStrokePaint(s);
+        if (pathPaint) {
+          this.finishPathStroke(s, pathPaint);
+          return;
+        }
         this.live = null;
         this.liveLayers = null;
         this.liveThick = null;
@@ -2755,9 +2814,6 @@ export class PaintEditorController {
           return;
         }
         const stroke = this.record(s);
-        if (s.init.effect?.source.map?.by === 'path' && s.points.length > 0) {
-          stroke.paint = JSON.parse(JSON.stringify(withStrokePath(s.init.effect.source, s.points, this.effectPathControls.get(s.init.effect.source.effect))));
-        }
         s.result!.strokeId = stroke.id;
         this.paintedBounds.set(stroke, s.result?.bounds ?? null);
         if (wetStroke && this.wet.instantDry) {
@@ -2797,6 +2853,61 @@ export class PaintEditorController {
     return this.session;
   }
 
+  /**
+   * While a hand-painted stroke waits for its path render (`map: { by: 'path' }`), settles when it
+   * has landed and rejects if it could not (the stroke is dropped); `null` otherwise. Until then
+   * the editor is busy, as during a stroke, and shows the stroke as it was painted.
+   */
+  get strokeRendering(): Promise<void> | null {
+    return this.pathStroke?.done ?? null;
+  }
+
+  /** The paint a finished hand-painted stroke must be painted again with, or `null` when it already painted with it. */
+  private pathStrokePaint(s: PaintStrokeSession): PaintEffectPaint | null {
+    const source = s.init.effect?.source;
+    if (source?.map?.by !== 'path' || !s.points.length) return null;
+    const paint = withStrokePath(source, s.points, this.effectPathControls.get(source.effect));
+    return effectPaintKey(paint) === effectPaintKey(source) ? null : paint;
+  }
+
+  /**
+   * Ends a hand-painted stroke with a path-mapped effect. Its path isn't known until now, so the
+   * live stroke was only a preview from the effect's render without one: nothing of it was
+   * committed. Paints it again with the path's own render, as one stroke and one undo step, at
+   * once if that can render synchronously and when the render lands if not.
+   */
+  private finishPathStroke(s: PaintStrokeSession, paint: PaintEffectPaint): void {
+    const finish = () => {
+      this.pathStroke = null;
+      this.live = null;
+      this.liveLayers = null;
+      this.liveThick = null;
+      const masks = s.init.selection ? (s.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask') : [];
+      const load = s.init.mixerLoad;
+      const result = this.paintStroke({ layerId: s.layerId, points: s.points, color: s.init.colorHex, brush: brushToJSON(s.init.brush) as PaintBrush, seed: s.init.seed, copies: s.init.affineCopies as Affine[], ...(load.reservoir || load.pickup ? { load } : {}), paint, snapToPerspective: false, stencils: false, maskStencils: masks });
+      Object.assign(s.result!, result);
+      // After the commit, so a listener that paints in reply finds the editor idle.
+      this.notifySample('end', s, [], result.strokeId);
+    };
+    if (this.effectPaintImage(paint) || this.renderEffectPaintSync(paint)) {
+      finish();
+      return;
+    }
+    const done = this.renderEffectPaint(paint).then(finish, (e) => {
+      this.pathStroke = null;
+      this.live = null;
+      this.liveLayers = null;
+      this.liveThick = null;
+      this.emit();
+      this.notifySample('cancel', s, []);
+      throw e;
+    });
+    // Whoever watches `strokeRendering` hears the failure; nobody has to.
+    done.catch(() => {});
+    this.pathStroke = { effect: paint.effect, done };
+    this.emit([]);
+  }
+
   /** Runs a whole stroke against `doc` without touching the editor; returns the new document. */
   private runStroke(doc: PaintDocumentState, init: PaintStrokeInit, points: readonly PenPoint[]): { doc: PaintDocumentState; result: PaintStrokeResult; brush: PaintBrush } {
     let out = doc;
@@ -2805,9 +2916,6 @@ export class PaintEditorController {
       commit: (s, surface, cancelled) => {
         if (cancelled || !surface) return;
         const stroke = this.record(s);
-        if (s.init.effect?.source.map?.by === 'path' && s.points.length > 0) {
-          stroke.paint = JSON.parse(JSON.stringify(withStrokePath(s.init.effect.source, s.points, this.effectPathControls.get(s.init.effect.source.effect))));
-        }
         s.result!.strokeId = stroke.id;
         this.paintedBounds.set(stroke, s.result?.bounds ?? null);
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
@@ -2982,6 +3090,8 @@ export class PaintEditorController {
       }
     }
     if (doc !== this.doc) this.commit(strokes.length === 1 && repeat === 1 ? 'Replay stroke' : 'Replay strokes', doc);
+    this.effectPaintBatch = 0;
+    this.trimEffectPaints();
     return { strokeIds: ids, bounds, layerIds: [...layerIds] };
   }
 
@@ -4457,12 +4567,7 @@ export class PaintEditorController {
         next.paint = withStrokePath(next.paint, next.points, this.effectPathControls.get(next.paint.effect));
       }
     } else {
-      const t = edit.transform!;
-      if (t.scale !== undefined && !(t.scale > 0 && t.scale <= 20)) throw new PaintEditorError(`scale ${t.scale} is out of range; use above 0 up to 20.`);
-      for (const k of ['dx', 'dy', 'rotate'] as const) if (t[k] !== undefined && !Number.isFinite(t[k])) throw new PaintEditorError(`${k} must be a number.`);
-      const b = strokeBounds(was.points);
-      const m = variationAffine(t, t.origin ?? { x: b.x + b.width / 2, y: b.y + b.height / 2 });
-      next = varyStroke(was, m, {});
+      next = varyStroke(was, this.strokeTransform(was, edit.transform!), {});
       if (was.stencils) next.stencils = was.stencils;
     }
     const list = strokes.map((x, i) => (i === index ? next : x));
@@ -4591,7 +4696,7 @@ export class PaintEditorController {
     };
     const paint = st.paint && this.liveEffectAt !== null && isLiveEffect(st) ? framePaint(st.paint as PaintEffectPaint, this.liveEffectAt) : st.paint;
     const init: PaintStrokeInit = { layerId: plain.id, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(paint ? { paint } : {}), snapToPerspective: false, stencils: false, maskStencils: st.stencils ?? [] };
-    const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })) }, init, host, st.points);
+    const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })) }, init, host);
     session.push(st.points);
     const result = session.end();
     // Only ever grown: a live effect's frames can paint more or less of a stroke (its alpha moves).

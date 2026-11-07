@@ -257,6 +257,8 @@ public final class PaintEditorController {
     var effectPaintPixels = OrderedMap<String, EffectPaintPixels>()
     /// Each described effect's path control name (`format: "svg-path"`), when it has one.
     var effectPathControls: [String: String] = [:]
+    /// How many renders the running batch needs together (`prepareEffectPaints`; a synchronous replay reads them all).
+    var effectPaintBatch = 0
     /// Bumped whenever the paint changes, so a slow `setEffectPaint` can tell it was overtaken.
     var paintEpoch = 0
     /// Live effect paint playback (`setEffectPlayback`) and the time the view shows.
@@ -1128,6 +1130,10 @@ public final class PaintEditorController {
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
         let brush = try strokeBrush(i)
         let effect = try strokeEffect(i, brush)
+        // A hand-painted path stroke is painted again from its path at the end, and the wet simulation can't be.
+        if i.points == nil, i.paint == nil, effect?.source.map?.by == "path", isWetBrush(brush) {
+            throw PaintEditorError("The \(brush.name) brush paints wet media, which can't follow a path that isn't known until the stroke ends; paint with a dry brush, set_effect_paint with by: \"stroke\", or give the points to paint_stroke.")
+        }
         if brush.light.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).") }
         if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         if d.liveStrokes?.get(layer.id) != nil, let e = effect?.source, e.live {
