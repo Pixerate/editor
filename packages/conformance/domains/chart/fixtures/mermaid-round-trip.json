@@ -1,0 +1,2048 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "mermaid-round-trip",
+  "description": "Exporting and importing Mermaid xychart-beta, pie, sankey-beta, and treemap-beta charts.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Q1",
+          "Q2",
+          "Q3"
+        ],
+        "series": [
+          {
+            "name": "Sales",
+            "values": [
+              30,
+              45,
+              60
+            ]
+          },
+          {
+            "name": "Trend",
+            "values": [
+              28,
+              44,
+              62
+            ],
+            "type": "line"
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Sales"
+            },
+            {
+              "id": "series-2",
+              "name": "Trend"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Sales",
+              "Trend"
+            ],
+            [
+              "Q1",
+              30,
+              28
+            ],
+            [
+              "Q2",
+              45,
+              44
+            ],
+            [
+              "Q3",
+              60,
+              62
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "export_chart_mermaid",
+      "arguments": {
+        "meta": true
+      },
+      "expect": {
+        "result": {
+          "mermaid": "xychart-beta\n    x-axis [Q1, Q2, Q3]\n    bar \"Sales\" [30, 45, 60]\n    line \"Trend\" [28, 44, 62]\n"
+        }
+      }
+    },
+    {
+      "tool": "import_chart_mermaid",
+      "arguments": {
+        "mermaid": "xychart-beta\n    title \"Revenue\"\n    x-axis [Q1, Q2, Q3]\n    bar [10, 20, 30]\n    line [12, 18, 28]"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "issues": [],
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2",
+              "Q3"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Bar 1",
+                "values": [
+                  10,
+                  20,
+                  30
+                ]
+              },
+              {
+                "id": "series-2",
+                "name": "Line 1",
+                "type": "line",
+                "values": [
+                  12,
+                  18,
+                  28
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Revenue",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "width": 10,
+              "x": 263.12,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Bar 1",
+              "x": 279.12,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 323.92,
+              "x2": 333.92,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Line 1",
+              "x": 339.92,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 270.7125,
+              "y2": 270.7125
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 195.725,
+              "y2": 195.725
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 120.73750000000001,
+              "y2": 120.73750000000001
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 345.7
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 270.7125
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 195.725
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 120.73750000000001
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Q1",
+              "x": 130.26666666666665,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Q2",
+              "x": 326.15999999999997,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Q3",
+              "x": 522.0533333333333,
+              "y": 351.7
+            },
+            {
+              "fill": "#4269d0",
+              "height": 74.98750000000001,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 59.74506666666666,
+              "y": 270.7125
+            },
+            {
+              "fill": "#4269d0",
+              "height": 149.975,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 255.6384,
+              "y": 195.725
+            },
+            {
+              "fill": "#4269d0",
+              "height": 224.96249999999998,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 141.04319999999998,
+              "x": 451.5317333333333,
+              "y": 120.73750000000001
+            },
+            {
+              "d": "M130.27,255.71L326.16,210.72L522.05,135.74",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 130.26666666666665,
+              "cy": 255.71499999999997,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 326.15999999999997,
+              "cy": 210.7225,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 522.0533333333333,
+              "cy": 135.735,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 299.95,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              40
+            ],
+            "range": [
+              345.7,
+              45.75
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "import_chart_mermaid",
+      "arguments": {
+        "mermaid": "pie title Pets\n    \"Dogs\" : 45\n    \"Cats\" : 35\n    \"Birds\" : 20"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "issues": [],
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Dogs",
+              "Cats",
+              "Birds"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Pets",
+                "values": [
+                  45,
+                  35,
+                  20
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Pets",
+            "tree": [],
+            "type": "pie",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Pets",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 241.95999999999998,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Dogs",
+              "x": 257.96,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 296.59999999999997,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Cats",
+              "x": 312.59999999999997,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#ff725c",
+              "height": 10,
+              "key": "legend-swatch-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 351.23999999999995,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-2",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Birds",
+              "x": 367.23999999999995,
+              "y": 378.65000000000003
+            },
+            {
+              "d": "M320,42.25A158.53,158.53 0 0 1 368.99,351.54L320,200.78Z",
+              "fill": "#4269d0",
+              "key": "slice-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M368.99,351.54A158.53,158.53 0 0 1 169.23,151.79L320,200.78Z",
+              "fill": "#efb118",
+              "key": "slice-1",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M169.23,151.79A158.53,158.53 0 0 1 320,42.25L320,200.78Z",
+              "fill": "#ff725c",
+              "key": "slice-2",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 317.05,
+            "width": 317.05,
+            "x": 161.475,
+            "y": 42.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "import_chart_mermaid",
+      "arguments": {
+        "mermaid": "sankey-beta\nSolar,Grid,40\nWind,Grid,25\nGrid,Homes,65"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "issues": [],
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Solar",
+              "Grid",
+              "Wind",
+              "Homes"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [
+              {
+                "source": "Solar",
+                "target": "Grid",
+                "value": 40
+              },
+              {
+                "source": "Wind",
+                "target": "Grid",
+                "value": 25
+              },
+              {
+                "source": "Grid",
+                "target": "Homes",
+                "value": 65
+              }
+            ],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [
+              "Solar",
+              "Grid",
+              "Wind",
+              "Homes"
+            ],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  40,
+                  65,
+                  25,
+                  65
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "sankey",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "d": "M24.32,12C169.08,12 169.08,18.6 313.84,18.6L313.84,241.86C169.08,241.86 169.08,235.26 24.32,235.26Z",
+              "fill": "#4269d0",
+              "key": "link-0",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M24.32,248.46C169.08,248.46 169.08,241.86 313.84,241.86L313.84,381.4C169.08,381.4 169.08,388 24.32,388Z",
+              "fill": "#ff725c",
+              "key": "link-1",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "d": "M326.16,18.6C470.92,18.6 470.92,18.6 615.68,18.6L615.68,381.4C470.92,381.4 470.92,381.4 326.16,381.4Z",
+              "fill": "#efb118",
+              "key": "link-2",
+              "kind": "path",
+              "opacity": 0.35,
+              "role": "link"
+            },
+            {
+              "fill": "#4269d0",
+              "height": 223.26153846153846,
+              "key": "node-0",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 12
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-0",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Solar",
+              "x": 29.32,
+              "y": 123.63076923076923
+            },
+            {
+              "fill": "#efb118",
+              "height": 362.8,
+              "key": "node-1",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 313.84,
+              "y": 18.599999999999994
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-1",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Grid",
+              "x": 331.15999999999997,
+              "y": 200
+            },
+            {
+              "fill": "#ff725c",
+              "height": 139.53846153846155,
+              "key": "node-2",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 12,
+              "y": 248.46153846153845
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-2",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Wind",
+              "x": 29.32,
+              "y": 318.2307692307692
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 362.8,
+              "key": "node-3",
+              "kind": "rect",
+              "radius": 1,
+              "role": "node",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 12.32,
+              "x": 615.68,
+              "y": 18.599999999999994
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-node-3",
+              "kind": "text",
+              "role": "data-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Homes",
+              "x": 610.68,
+              "y": 200
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 376,
+            "width": 616,
+            "x": 12,
+            "y": 12
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "import_chart_mermaid",
+      "arguments": {
+        "mermaid": "treemap-beta\n\"Engineering\"\n    \"Frontend\": 30\n    \"Backend\": 45"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "issues": [],
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Frontend",
+              "Backend"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  30,
+                  45
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Engineering",
+            "tree": [
+              {
+                "name": "Frontend",
+                "value": 30
+              },
+              {
+                "name": "Backend",
+                "value": 45
+              }
+            ],
+            "type": "treemap",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Engineering",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 250.8,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Frontend",
+              "x": 266.8,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 330.08000000000004,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Backend",
+              "x": 346.08000000000004,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#4269d0",
+              "height": 325.05000000000007,
+              "key": "cell-n-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 246.39999999999998,
+              "x": 381.6,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Frontend",
+              "weight": 600,
+              "x": 385.6,
+              "y": 42.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "30",
+              "x": 385.6,
+              "y": 57.45
+            },
+            {
+              "fill": "#efb118",
+              "height": 325.05,
+              "key": "cell-n-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 369.6,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Backend",
+              "weight": 600,
+              "x": 16,
+              "y": 42.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "45",
+              "x": 16,
+              "y": 57.45
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 325.05,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.exportMermaid",
+            "params": {
+              "meta": false
+            }
+          },
+          {
+            "id": "chart.importMermaid",
+            "params": {
+              "mermaid": "pie title Share\n    \"A\" : 60\n    \"B\" : 40"
+            }
+          }
+        ]
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 2,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.exportMermaid",
+              "ok": true,
+              "result": {
+                "mermaid": "treemap-beta\ntitle Engineering\n    \"Frontend\": 30\n    \"Backend\": 45\n"
+              }
+            },
+            {
+              "id": "chart.importMermaid",
+              "ok": true,
+              "result": {
+                "issues": [],
+                "spec": {
+                  "bins": null,
+                  "categories": [
+                    "A",
+                    "B"
+                  ],
+                  "curve": "linear",
+                  "dataLabels": false,
+                  "gapWidth": 0.28,
+                  "highlight": [],
+                  "innerRadius": 0.55,
+                  "labelPosition": "auto",
+                  "legend": {
+                    "position": "bottom",
+                    "show": true
+                  },
+                  "likertNeutral": "split",
+                  "likertSort": "none",
+                  "links": [],
+                  "map": "europe",
+                  "mapSteps": 5,
+                  "mapThresholds": [],
+                  "note": "",
+                  "orientation": "vertical",
+                  "overlap": -0.12,
+                  "palette": [
+                    "#4269d0",
+                    "#efb118",
+                    "#ff725c",
+                    "#6cc5b0",
+                    "#3ca951",
+                    "#ff8ab7",
+                    "#a463f2",
+                    "#97bbf5",
+                    "#9c6b4e",
+                    "#9498a0"
+                  ],
+                  "parliamentArc": 180,
+                  "parliamentLabel": "",
+                  "parliamentMajority": null,
+                  "points": true,
+                  "raceTopN": 10,
+                  "radarGraticule": "polygon",
+                  "radarTicks": null,
+                  "referenceBands": [],
+                  "referenceLines": [],
+                  "sankeyLinkColor": "source",
+                  "sankeyNodes": [],
+                  "series": [
+                    {
+                      "id": "series-1",
+                      "name": "Share",
+                      "values": [
+                        60,
+                        40
+                      ]
+                    }
+                  ],
+                  "showTotal": true,
+                  "stacking": "none",
+                  "subtitle": "",
+                  "sunburstLabel": "",
+                  "title": "Share",
+                  "tree": [],
+                  "type": "pie",
+                  "varyColors": false,
+                  "version": 1,
+                  "xAxis": {
+                    "format": {},
+                    "gridlines": false,
+                    "max": null,
+                    "min": null,
+                    "show": true,
+                    "step": null,
+                    "title": ""
+                  },
+                  "yAxis": {
+                    "format": {},
+                    "gridlines": true,
+                    "max": null,
+                    "min": null,
+                    "show": true,
+                    "step": null,
+                    "title": ""
+                  },
+                  "yAxis2": {
+                    "format": {},
+                    "gridlines": false,
+                    "max": null,
+                    "min": null,
+                    "show": true,
+                    "step": null,
+                    "title": ""
+                  }
+                }
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "A",
+              "B"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Share",
+                "values": [
+                  60,
+                  40
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Share",
+            "tree": [],
+            "type": "pie",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Share",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 290.84000000000003,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "A",
+              "x": 306.84000000000003,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 327,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "B",
+              "x": 343,
+              "y": 378.65000000000003
+            },
+            {
+              "d": "M320,42.25A158.53,158.53 0 1 1 226.82,329.02L320,200.78Z",
+              "fill": "#4269d0",
+              "key": "slice-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M226.82,329.02A158.53,158.53 0 0 1 320,42.25L320,200.78Z",
+              "fill": "#efb118",
+              "key": "slice-1",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 317.05,
+            "width": 317.05,
+            "x": 161.475,
+            "y": 42.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}

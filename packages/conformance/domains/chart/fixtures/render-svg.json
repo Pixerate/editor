@@ -1,0 +1,626 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "render-svg",
+  "description": "Inspecting the chart summary, rendering to SVG, SVG export command, and deterministic PNG error.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Alpha",
+          "Beta",
+          "Gamma"
+        ],
+        "series": [
+          {
+            "name": "Score",
+            "values": [
+              88,
+              92,
+              79
+            ]
+          }
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Score"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Score"
+            ],
+            [
+              "Alpha",
+              88
+            ],
+            [
+              "Beta",
+              92
+            ],
+            [
+              "Gamma",
+              79
+            ]
+          ]
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 300.21999999999997,
+              "y2": 300.21999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 230.04,
+              "y2": 230.04
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 159.85999999999999,
+              "y2": 159.85999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 89.68,
+              "y2": 89.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 19.5,
+              "y2": 19.5
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 30.480000000000004,
+              "y": 300.21999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 30.480000000000004,
+              "y": 230.04
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "60",
+              "x": 30.480000000000004,
+              "y": 159.85999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "80",
+              "x": 30.480000000000004,
+              "y": 89.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 19.5
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Alpha",
+              "x": 135.4,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Beta",
+              "x": 329.24,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Gamma",
+              "x": 523.08,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 308.792,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 139.5648,
+              "x": 65.61760000000001,
+              "y": 61.608000000000004
+            },
+            {
+              "fill": "#4269d0",
+              "height": 322.828,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 139.5648,
+              "x": 259.4576,
+              "y": 47.572
+            },
+            {
+              "fill": "#4269d0",
+              "height": 277.211,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 139.5648,
+              "x": 453.29760000000005,
+              "y": 93.18899999999996
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 350.9,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 19.5
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              100
+            ],
+            "range": [
+              370.4,
+              19.5
+            ],
+            "ticks": [
+              0,
+              20,
+              40,
+              60,
+              80,
+              100
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "get_chart",
+      "arguments": {
+        "width": 640,
+        "height": 400
+      },
+      "expect": {
+        "result": {
+          "issues": [],
+          "selection": null,
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Alpha",
+              "Beta",
+              "Gamma"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Score",
+                "values": [
+                  88,
+                  92,
+                  79
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "summary": {
+            "categories": 3,
+            "colors": {
+              "issues": [],
+              "ok": true
+            },
+            "description": "A bar chart showing 1 series over 3 categories (Alpha to Gamma). Score ranges from 79 (Gamma) to 92 (Beta), falling, down 10% from first to last.",
+            "series": [
+              {
+                "change": -0.102273,
+                "count": 3,
+                "gaps": 0,
+                "id": "series-1",
+                "max": 92,
+                "maxAt": "Beta",
+                "mean": 86.3333,
+                "min": 79,
+                "minAt": "Gamma",
+                "name": "Score",
+                "sum": 259,
+                "trend": "falling"
+              }
+            ],
+            "title": "",
+            "type": "bar",
+            "valueAxis": {
+              "max": 100,
+              "min": 0,
+              "ticks": [
+                0,
+                20,
+                40,
+                60,
+                80,
+                100
+              ]
+            },
+            "warnings": []
+          },
+          "table": [
+            [
+              "",
+              "Score"
+            ],
+            [
+              "Alpha",
+              88
+            ],
+            [
+              "Beta",
+              92
+            ],
+            [
+              "Gamma",
+              79
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "render_chart",
+      "arguments": {
+        "format": "svg",
+        "width": 480,
+        "height": 320
+      },
+      "expect": {
+        "result": {
+          "height": 320,
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"320\" viewBox=\"0 0 480 320\" role=\"img\" aria-labelledby=\"chart-desc\"><desc id=\"chart-desc\">A bar chart showing 1 series over 3 categories (Alpha to Gamma). Score ranges from 79 (Gamma) to 92 (Beta), falling, down 10% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"320\" fill=\"#ffffff\" data-role=\"background\"/><line x1=\"38.480000000000004\" y1=\"290.4\" x2=\"460\" y2=\"290.4\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"236.21999999999997\" x2=\"460\" y2=\"236.21999999999997\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"182.03999999999996\" x2=\"460\" y2=\"182.03999999999996\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"127.85999999999999\" x2=\"460\" y2=\"127.85999999999999\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"73.67999999999998\" x2=\"460\" y2=\"73.67999999999998\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"19.5\" x2=\"460\" y2=\"19.5\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"290.4\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">0</text><text x=\"30.480000000000004\" y=\"236.21999999999997\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">20</text><text x=\"30.480000000000004\" y=\"182.03999999999996\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">40</text><text x=\"30.480000000000004\" y=\"127.85999999999999\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">60</text><text x=\"30.480000000000004\" y=\"73.67999999999998\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">80</text><text x=\"30.480000000000004\" y=\"19.5\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">100</text><line x1=\"38.480000000000004\" y1=\"290.4\" x2=\"460\" y2=\"290.4\" stroke=\"#94a3b8\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"108.73333333333333\" y=\"296.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Alpha</text><text x=\"249.24\" y=\"296.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Beta</text><text x=\"389.74666666666667\" y=\"296.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Gamma</text><rect x=\"58.15093333333334\" y=\"52.00800000000001\" width=\"101.16479999999999\" height=\"238.39199999999997\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"198.6576\" y=\"41.172\" width=\"101.16479999999999\" height=\"249.22799999999998\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"339.16426666666666\" y=\"76.38899999999998\" width=\"101.16479999999999\" height=\"214.011\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/></svg>",
+          "warnings": [],
+          "width": 480
+        }
+      }
+    },
+    {
+      "tool": "render_chart",
+      "arguments": {
+        "format": "png"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "This host cannot rasterize charts; call render_chart with format \"svg\", or get_chart for the layout warnings."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "chart.exportSvg",
+        "params": {
+          "width": 480,
+          "height": 320
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "chart.exportSvg",
+          "ok": true,
+          "result": {
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"320\" viewBox=\"0 0 480 320\" role=\"img\" aria-labelledby=\"chart-desc\"><desc id=\"chart-desc\">A bar chart showing 1 series over 3 categories (Alpha to Gamma). Score ranges from 79 (Gamma) to 92 (Beta), falling, down 10% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"320\" fill=\"#ffffff\" data-role=\"background\"/><line x1=\"38.480000000000004\" y1=\"290.4\" x2=\"460\" y2=\"290.4\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"236.21999999999997\" x2=\"460\" y2=\"236.21999999999997\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"182.03999999999996\" x2=\"460\" y2=\"182.03999999999996\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"127.85999999999999\" x2=\"460\" y2=\"127.85999999999999\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"73.67999999999998\" x2=\"460\" y2=\"73.67999999999998\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"19.5\" x2=\"460\" y2=\"19.5\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"290.4\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">0</text><text x=\"30.480000000000004\" y=\"236.21999999999997\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">20</text><text x=\"30.480000000000004\" y=\"182.03999999999996\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">40</text><text x=\"30.480000000000004\" y=\"127.85999999999999\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">60</text><text x=\"30.480000000000004\" y=\"73.67999999999998\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">80</text><text x=\"30.480000000000004\" y=\"19.5\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">100</text><line x1=\"38.480000000000004\" y1=\"290.4\" x2=\"460\" y2=\"290.4\" stroke=\"#94a3b8\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"108.73333333333333\" y=\"296.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Alpha</text><text x=\"249.24\" y=\"296.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Beta</text><text x=\"389.74666666666667\" y=\"296.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Gamma</text><rect x=\"58.15093333333334\" y=\"52.00800000000001\" width=\"101.16479999999999\" height=\"238.39199999999997\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"198.6576\" y=\"41.172\" width=\"101.16479999999999\" height=\"249.22799999999998\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"339.16426666666666\" y=\"76.38899999999998\" width=\"101.16479999999999\" height=\"214.011\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/></svg>"
+          }
+        }
+      }
+    }
+  ]
+}

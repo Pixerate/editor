@@ -1,0 +1,3166 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "tree-treemap",
+  "description": "Hierarchical tree data for treemap and sunburst charts: set_chart_tree, import_chart_tree_csv, and node CRUD.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_tree",
+      "arguments": {
+        "tree": [
+          {
+            "name": "Europe",
+            "children": [
+              {
+                "name": "France",
+                "value": 40
+              },
+              {
+                "name": "Germany",
+                "value": 55
+              }
+            ]
+          },
+          {
+            "name": "Asia",
+            "children": [
+              {
+                "name": "Japan",
+                "value": 50
+              }
+            ]
+          }
+        ]
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "depth": 2,
+          "groups": [
+            {
+              "name": "Europe",
+              "total": 95
+            },
+            {
+              "name": "Asia",
+              "total": 50
+            }
+          ],
+          "tree": [
+            {
+              "children": [
+                {
+                  "name": "France",
+                  "value": 40
+                },
+                {
+                  "name": "Germany",
+                  "value": 55
+                }
+              ],
+              "name": "Europe"
+            },
+            {
+              "children": [
+                {
+                  "name": "Japan",
+                  "value": 50
+                }
+              ],
+              "name": "Asia"
+            }
+          ]
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Europe",
+              "Asia"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  95,
+                  50
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [
+              {
+                "children": [
+                  {
+                    "name": "France",
+                    "value": 40
+                  },
+                  {
+                    "name": "Germany",
+                    "value": 55
+                  }
+                ],
+                "name": "Europe"
+              },
+              {
+                "children": [
+                  {
+                    "name": "Japan",
+                    "value": 50
+                  }
+                ],
+                "name": "Asia"
+              }
+            ],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "treemap",
+        "title": "Regional Revenue"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Europe",
+              "Asia"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  95,
+                  50
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Regional Revenue",
+            "tree": [
+              {
+                "children": [
+                  {
+                    "name": "France",
+                    "value": 40
+                  },
+                  {
+                    "name": "Germany",
+                    "value": 55
+                  }
+                ],
+                "name": "Europe"
+              },
+              {
+                "children": [
+                  {
+                    "name": "Japan",
+                    "value": 50
+                  }
+                ],
+                "name": "Asia"
+              }
+            ],
+            "type": "treemap",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Regional Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 266.2,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "x": 282.2,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 333.15999999999997,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "x": 349.15999999999997,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#4269d0",
+              "height": 325.05,
+              "key": "group-n-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 403.5862068965518,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-group-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "weight": 700,
+              "x": 17,
+              "y": 42.25
+            },
+            {
+              "fill": "#3453a4",
+              "height": 306.5500000000001,
+              "key": "cell-n-0-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 168.2468239564428,
+              "x": 245.33938294010898,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "France",
+              "weight": 600,
+              "x": 249.33938294010898,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "40",
+              "x": 249.33938294010898,
+              "y": 73.95
+            },
+            {
+              "fill": "#3d62c1",
+              "height": 306.55,
+              "key": "cell-n-0-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 231.33938294010898,
+              "x": 14,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Germany",
+              "weight": 600,
+              "x": 18,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "55",
+              "x": 18,
+              "y": 73.95
+            },
+            {
+              "fill": "#efb118",
+              "height": 325.0500000000001,
+              "key": "group-n-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 212.41379310344823,
+              "x": 415.5862068965518,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-group-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "weight": 700,
+              "x": 420.5862068965518,
+              "y": 42.25
+            },
+            {
+              "fill": "#bd8c13",
+              "height": 306.5500000000002,
+              "key": "cell-n-1-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 208.41379310344823,
+              "x": 417.5862068965518,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Japan",
+              "weight": 600,
+              "x": 421.5862068965518,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "50",
+              "x": 421.5862068965518,
+              "y": 73.95
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 325.05,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "add_chart_tree_node",
+      "arguments": {
+        "parent": [
+          "Asia"
+        ],
+        "node": {
+          "name": "Korea",
+          "value": 30
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "parentTotal": 80,
+          "path": [
+            "Asia",
+            "Korea"
+          ]
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Regional Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 266.2,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "x": 282.2,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 333.15999999999997,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "x": 349.15999999999997,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#4269d0",
+              "height": 325.05,
+              "key": "group-n-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 334.40000000000003,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-group-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "weight": 700,
+              "x": 17,
+              "y": 42.25
+            },
+            {
+              "fill": "#3453a4",
+              "height": 306.55,
+              "key": "cell-n-0-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 139.11578947368423,
+              "x": 205.2842105263158,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "France",
+              "weight": 600,
+              "x": 209.2842105263158,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "40",
+              "x": 209.2842105263158,
+              "y": 73.95
+            },
+            {
+              "fill": "#3d62c1",
+              "height": 306.55,
+              "key": "cell-n-0-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 191.2842105263158,
+              "x": 14,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Germany",
+              "weight": 600,
+              "x": 18,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "55",
+              "x": 18,
+              "y": 73.95
+            },
+            {
+              "fill": "#efb118",
+              "height": 325.0500000000001,
+              "key": "group-n-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 281.59999999999997,
+              "x": 346.40000000000003,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-group-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "weight": 700,
+              "x": 351.40000000000003,
+              "y": 42.25
+            },
+            {
+              "fill": "#bd8c13",
+              "height": 191.59375000000009,
+              "key": "cell-n-1-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 277.59999999999997,
+              "x": 348.40000000000003,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Japan",
+              "weight": 600,
+              "x": 352.40000000000003,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "50",
+              "x": 352.40000000000003,
+              "y": 73.95
+            },
+            {
+              "fill": "#dea516",
+              "height": 114.95625000000003,
+              "key": "cell-n-1-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 277.6,
+              "x": 348.40000000000003,
+              "y": 246.34375000000009
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Korea",
+              "weight": 600,
+              "x": 352.40000000000003,
+              "y": 250.34375000000009
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "30",
+              "x": 352.40000000000003,
+              "y": 265.5437500000001
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 325.05,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "update_chart_tree_node",
+      "arguments": {
+        "path": [
+          "Asia",
+          "Korea"
+        ],
+        "name": "South Korea",
+        "value": 35,
+        "color": "#6cc5b0"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "node": {
+            "color": "#6cc5b0",
+            "name": "South Korea",
+            "value": 35
+          },
+          "path": [
+            "Asia",
+            "South Korea"
+          ]
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Regional Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 266.2,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "x": 282.2,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 333.15999999999997,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "x": 349.15999999999997,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#4269d0",
+              "height": 325.05,
+              "key": "group-n-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 325.1111111111111,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-group-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "weight": 700,
+              "x": 17,
+              "y": 42.25
+            },
+            {
+              "fill": "#3453a4",
+              "height": 306.55000000000007,
+              "key": "cell-n-0-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 135.20467836257308,
+              "x": 199.906432748538,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "France",
+              "weight": 600,
+              "x": 203.906432748538,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "40",
+              "x": 203.906432748538,
+              "y": 73.95
+            },
+            {
+              "fill": "#3d62c1",
+              "height": 306.55,
+              "key": "cell-n-0-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 185.906432748538,
+              "x": 14,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Germany",
+              "weight": 600,
+              "x": 18,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "55",
+              "x": 18,
+              "y": 73.95
+            },
+            {
+              "fill": "#efb118",
+              "height": 325.05,
+              "key": "group-n-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 290.8888888888889,
+              "x": 337.1111111111111,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-group-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "weight": 700,
+              "x": 342.1111111111111,
+              "y": 42.25
+            },
+            {
+              "fill": "#bd8c13",
+              "height": 180.3235294117647,
+              "key": "cell-n-1-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 286.8888888888889,
+              "x": 339.1111111111111,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Japan",
+              "weight": 600,
+              "x": 343.1111111111111,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "50",
+              "x": 343.1111111111111,
+              "y": 73.95
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 126.22647058823532,
+              "key": "cell-n-1-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 286.88888888888886,
+              "x": 339.1111111111111,
+              "y": 235.0735294117647
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "South Korea",
+              "weight": 600,
+              "x": 343.1111111111111,
+              "y": 239.0735294117647
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "35",
+              "x": 343.1111111111111,
+              "y": 254.27352941176468
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 325.05,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "remove_chart_tree_node",
+      "arguments": {
+        "path": [
+          "Europe",
+          "France"
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "groups": [
+            {
+              "name": "Europe",
+              "total": 55
+            },
+            {
+              "name": "Asia",
+              "total": 85
+            }
+          ]
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Regional Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 266.2,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "x": 282.2,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 333.15999999999997,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "x": 349.15999999999997,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#4269d0",
+              "height": 325.05,
+              "key": "group-n-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 242,
+              "x": 386,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-group-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "weight": 700,
+              "x": 391,
+              "y": 42.25
+            },
+            {
+              "fill": "#3453a4",
+              "height": 306.55,
+              "key": "cell-n-0-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 238.00000000000003,
+              "x": 388,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Germany",
+              "weight": 600,
+              "x": 392,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "55",
+              "x": 392,
+              "y": 73.95
+            },
+            {
+              "fill": "#efb118",
+              "height": 325.05,
+              "key": "group-n-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 374,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-group-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Asia",
+              "weight": 700,
+              "x": 17,
+              "y": 42.25
+            },
+            {
+              "fill": "#bd8c13",
+              "height": 306.55,
+              "key": "cell-n-1-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 217.64705882352945,
+              "x": 14,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Japan",
+              "weight": 600,
+              "x": 18,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "50",
+              "x": 18,
+              "y": 73.95
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 306.5500000000001,
+              "key": "cell-n-1-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 152.35294117647055,
+              "x": 231.64705882352945,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "South Korea",
+              "weight": 600,
+              "x": 235.64705882352945,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "35",
+              "x": 235.64705882352945,
+              "y": 73.95
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 325.05,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "import_chart_tree_csv",
+      "arguments": {
+        "csv": "Region,Country,Revenue\nAmericas,USA,90\nAmericas,Canada,35\nEurope,UK,45"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "depth": 2,
+          "groups": [
+            {
+              "name": "Americas",
+              "total": 125
+            },
+            {
+              "name": "Europe",
+              "total": 45
+            }
+          ],
+          "tree": [
+            {
+              "children": [
+                {
+                  "name": "USA",
+                  "value": 90
+                },
+                {
+                  "name": "Canada",
+                  "value": 35
+                }
+              ],
+              "name": "Americas"
+            },
+            {
+              "children": [
+                {
+                  "name": "UK",
+                  "value": 45
+                }
+              ],
+              "name": "Europe"
+            }
+          ]
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Regional Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 253.88,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Americas",
+              "x": 269.88,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 333.15999999999997,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "x": 349.15999999999997,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#4269d0",
+              "height": 325.05,
+              "key": "group-n-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 452.9411764705883,
+              "x": 12,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-group-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Americas",
+              "weight": 700,
+              "x": 17,
+              "y": 42.25
+            },
+            {
+              "fill": "#3453a4",
+              "height": 306.55,
+              "key": "cell-n-0-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 323.23764705882354,
+              "x": 14,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "USA",
+              "weight": 600,
+              "x": 18,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "90",
+              "x": 18,
+              "y": 73.95
+            },
+            {
+              "fill": "#3d62c1",
+              "height": 306.5499999999999,
+              "key": "cell-n-0-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 125.70352941176476,
+              "x": 337.23764705882354,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-cell-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Canada",
+              "weight": 600,
+              "x": 341.23764705882354,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#ffffff",
+              "key": "label-value-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "35",
+              "x": 341.23764705882354,
+              "y": 73.95
+            },
+            {
+              "fill": "#efb118",
+              "height": 325.0500000000002,
+              "key": "group-n-1",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 163.0588235294117,
+              "x": 464.9411764705883,
+              "y": 38.25
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-group-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "weight": 700,
+              "x": 469.9411764705883,
+              "y": 42.25
+            },
+            {
+              "fill": "#bd8c13",
+              "height": 306.5500000000002,
+              "key": "cell-n-1-0",
+              "kind": "rect",
+              "role": "cell",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 159.0588235294117,
+              "x": 466.9411764705883,
+              "y": 54.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-cell-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "UK",
+              "weight": 600,
+              "x": 470.9411764705883,
+              "y": 58.75
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "label-value-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "45",
+              "x": 470.9411764705883,
+              "y": 73.95
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 325.05,
+            "width": 616,
+            "x": 12,
+            "y": 38.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "sunburst",
+        "sunburstLabel": "Total"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Americas",
+              "Europe"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  125,
+                  45
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "Total",
+            "title": "Regional Revenue",
+            "tree": [
+              {
+                "children": [
+                  {
+                    "name": "USA",
+                    "value": 90
+                  },
+                  {
+                    "name": "Canada",
+                    "value": 35
+                  }
+                ],
+                "name": "Americas"
+              },
+              {
+                "children": [
+                  {
+                    "name": "UK",
+                    "value": 45
+                  }
+                ],
+                "name": "Europe"
+              }
+            ],
+            "type": "sunburst",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Regional Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 253.88,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Americas",
+              "x": 269.88,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 333.15999999999997,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "x": 349.15999999999997,
+              "y": 378.65000000000003
+            },
+            {
+              "d": "M320,99.32A101.46,101.46 0 1 1 218.98,210.14L275.8,204.87A44.39,44.39 0 1 0 320,156.39Z",
+              "fill": "#4269d0",
+              "key": "slice-n-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#ffffff",
+              "key": "label-slice-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Americas",
+              "weight": 600,
+              "x": 373.88963875710635,
+              "y": 249.9018968781724
+            },
+            {
+              "d": "M320,42.25A158.53,158.53 0 1 1 290.87,356.6L301.36,300.5A101.46,101.46 0 1 0 320,99.32Z",
+              "fill": "#6c8ada",
+              "key": "slice-n-0-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "USA",
+              "x": 449.43598344367973,
+              "y": 212.76901018081432
+            },
+            {
+              "d": "M290.87,356.6A158.53,158.53 0 0 1 162.15,215.4L218.98,210.14A101.46,101.46 0 0 0 301.36,300.5Z",
+              "fill": "#6c8ada",
+              "key": "slice-n-0-1",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Canada",
+              "x": 223.93586134602793,
+              "y": 288.3490335654379
+            },
+            {
+              "d": "M218.98,210.14A101.46,101.46 0 0 1 320,99.32L320,156.39A44.39,44.39 0 0 0 275.8,204.87Z",
+              "fill": "#efb118",
+              "key": "slice-n-1",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-n-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Europe",
+              "weight": 600,
+              "x": 266.11036124289365,
+              "y": 151.6481031218276
+            },
+            {
+              "d": "M162.15,215.4A158.53,158.53 0 0 1 320,42.25L320,99.32A101.46,101.46 0 0 0 218.98,210.14Z",
+              "fill": "#f3c24b",
+              "key": "slice-n-1-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-n-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "UK",
+              "x": 223.93586134602785,
+              "y": 113.20096643456223
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "sunburst-total",
+              "kind": "text",
+              "role": "data-label",
+              "size": 19,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "170",
+              "weight": 700,
+              "x": 320,
+              "y": 198.775
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "sunburst-caption",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Total",
+              "x": 320,
+              "y": 202.775
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 317.05,
+            "width": 317.05,
+            "x": 161.475,
+            "y": 42.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.setTree",
+            "params": {
+              "tree": [
+                {
+                  "name": "Group A",
+                  "children": [
+                    {
+                      "name": "Item 1",
+                      "value": 20
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": "chart.addTreeNode",
+            "params": {
+              "parent": [
+                "Group A"
+              ],
+              "node": {
+                "name": "Item 2",
+                "value": 30
+              }
+            }
+          },
+          {
+            "id": "chart.updateTreeNode",
+            "params": {
+              "path": [
+                "Group A",
+                "Item 2"
+              ],
+              "value": 35
+            }
+          },
+          {
+            "id": "chart.removeTreeNode",
+            "params": {
+              "path": [
+                "Group A",
+                "Item 1"
+              ]
+            }
+          },
+          {
+            "id": "chart.importTreeCsv",
+            "params": {
+              "csv": "Dept,Team,Headcount\nEng,Core,12\nEng,UI,8"
+            }
+          }
+        ]
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 5,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.setTree",
+              "ok": true,
+              "result": {
+                "groups": [
+                  {
+                    "name": "Group A",
+                    "total": 20
+                  }
+                ]
+              }
+            },
+            {
+              "id": "chart.addTreeNode",
+              "ok": true,
+              "result": {
+                "path": [
+                  "Group A",
+                  "Item 2"
+                ]
+              }
+            },
+            {
+              "id": "chart.updateTreeNode",
+              "ok": true,
+              "result": {
+                "path": [
+                  "Group A",
+                  "Item 2"
+                ]
+              }
+            },
+            {
+              "id": "chart.removeTreeNode",
+              "ok": true,
+              "result": {
+                "groups": [
+                  {
+                    "name": "Group A",
+                    "total": 35
+                  }
+                ]
+              }
+            },
+            {
+              "id": "chart.importTreeCsv",
+              "ok": true,
+              "result": {
+                "tree": [
+                  {
+                    "children": [
+                      {
+                        "name": "Core",
+                        "value": 12
+                      },
+                      {
+                        "name": "UI",
+                        "value": 8
+                      }
+                    ],
+                    "name": "Eng"
+                  }
+                ]
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Eng"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Values",
+                "values": [
+                  20
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "Total",
+            "title": "Regional Revenue",
+            "tree": [
+              {
+                "children": [
+                  {
+                    "name": "Core",
+                    "value": 12
+                  },
+                  {
+                    "name": "UI",
+                    "value": 8
+                  }
+                ],
+                "name": "Eng"
+              }
+            ],
+            "type": "sunburst",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Regional Revenue",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 302.76,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Eng",
+              "x": 318.76,
+              "y": 378.65000000000003
+            },
+            {
+              "d": "M320,99.32A101.46,101.46 0 1 1 319.99,99.32L320,156.39A44.39,44.39 0 1 0 320,156.39Z",
+              "fill": "#4269d0",
+              "key": "slice-n-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#ffffff",
+              "key": "label-slice-n-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Eng",
+              "weight": 600,
+              "x": 320,
+              "y": 273.6965
+            },
+            {
+              "d": "M320,42.25A158.53,158.53 0 1 1 226.82,329.02L260.37,282.85A101.46,101.46 0 1 0 320,99.32Z",
+              "fill": "#6c8ada",
+              "key": "slice-n-0-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-n-0-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Core",
+              "x": 443.6283120814652,
+              "y": 240.94427360729662
+            },
+            {
+              "d": "M226.82,329.02A158.53,158.53 0 0 1 320,42.25L320,99.32A101.46,101.46 0 0 0 260.37,282.85Z",
+              "fill": "#6c8ada",
+              "key": "slice-n-0-1",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              }
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-n-0-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "UI",
+              "x": 196.3716879185348,
+              "y": 160.60572639270342
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "sunburst-total",
+              "kind": "text",
+              "role": "data-label",
+              "size": 19,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "20",
+              "weight": 700,
+              "x": 320,
+              "y": 198.775
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "sunburst-caption",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Total",
+              "x": 320,
+              "y": 202.775
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 317.05,
+            "width": 317.05,
+            "x": 161.475,
+            "y": 42.25
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}

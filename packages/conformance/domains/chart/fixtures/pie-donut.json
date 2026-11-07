@@ -1,0 +1,2763 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "pie-donut",
+  "description": "Pie and donut charts, data labels, highlights, and point callouts.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "Direct",
+          "Search",
+          "Social",
+          "Referral"
+        ],
+        "series": [
+          {
+            "name": "Traffic",
+            "values": [
+              42,
+              31,
+              18,
+              9
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Traffic"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Traffic"
+            ],
+            [
+              "Direct",
+              42
+            ],
+            [
+              "Search",
+              31
+            ],
+            [
+              "Social",
+              18
+            ],
+            [
+              "Referral",
+              9
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "donut",
+        "title": "Traffic Share",
+        "innerRadius": 0.55,
+        "dataLabels": true
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Direct",
+              "Search",
+              "Social",
+              "Referral"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Traffic",
+                "values": [
+                  42,
+                  31,
+                  18,
+                  9
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Traffic Share",
+            "tree": [],
+            "type": "donut",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Traffic Share",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 186.92,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Direct",
+              "x": 202.92,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 253.88,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Search",
+              "x": 269.88,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#ff725c",
+              "height": 10,
+              "key": "legend-swatch-2",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 320.84000000000003,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-2",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Social",
+              "x": 336.84000000000003,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 10,
+              "key": "legend-swatch-3",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 387.80000000000007,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-3",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Referral",
+              "x": 403.80000000000007,
+              "y": 378.65000000000003
+            },
+            {
+              "d": "M320,62.45A138.32,138.32 0 0 1 386.64,321.99L356.65,267.44A76.08,76.08 0 0 0 320,124.7Z",
+              "fill": "#4269d0",
+              "key": "slice-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "42%",
+              "x": 465.6991220127743,
+              "y": 163.3658237232267
+            },
+            {
+              "d": "M386.64,321.99A138.32,138.32 0 0 1 182.77,218.11L244.52,210.31A76.08,76.08 0 0 0 356.65,267.44Z",
+              "fill": "#efb118",
+              "key": "slice-1",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "31%",
+              "x": 251.7084790766787,
+              "y": 334.80465640103523
+            },
+            {
+              "d": "M182.77,218.11A138.32,138.32 0 0 1 245.88,83.98L279.23,136.54A76.08,76.08 0 0 0 244.52,210.31Z",
+              "fill": "#ff725c",
+              "key": "slice-2",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-2",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "18%",
+              "x": 183.89139063279896,
+              "y": 136.7271500663241
+            },
+            {
+              "d": "M245.88,83.98A138.32,138.32 0 0 1 320,62.45L320,124.7A76.08,76.08 0 0 0 279.23,136.54Z",
+              "fill": "#6cc5b0",
+              "key": "slice-3",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-3",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "9%",
+              "x": 278.0327628740489,
+              "y": 56.32282233204589
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "donut-total",
+              "kind": "text",
+              "role": "data-label",
+              "size": 19,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "100",
+              "weight": 600,
+              "x": 320,
+              "y": 200.775
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 276.65,
+            "width": 276.65,
+            "x": 181.675,
+            "y": 62.45000000000002
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "highlight_chart",
+      "arguments": {
+        "names": [
+          "Direct",
+          "Search"
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "categories": [
+            {
+              "index": 0,
+              "label": "Direct"
+            },
+            {
+              "index": 1,
+              "label": "Search"
+            }
+          ],
+          "highlight": [
+            "Direct",
+            "Search"
+          ],
+          "series": []
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Traffic Share",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 186.92,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Direct",
+              "x": 202.92,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#efb118",
+              "height": 10,
+              "key": "legend-swatch-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 253.88,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Search",
+              "x": 269.88,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#ff725c",
+              "height": 10,
+              "key": "legend-swatch-2",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 320.84000000000003,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-2",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Social",
+              "x": 336.84000000000003,
+              "y": 378.65000000000003
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 10,
+              "key": "legend-swatch-3",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "width": 10,
+              "x": 387.80000000000007,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-3",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Referral",
+              "x": 403.80000000000007,
+              "y": 378.65000000000003
+            },
+            {
+              "d": "M320,62.45A138.32,138.32 0 0 1 386.64,321.99L356.65,267.44A76.08,76.08 0 0 0 320,124.7Z",
+              "fill": "#4269d0",
+              "key": "slice-0",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "42%",
+              "x": 465.6991220127743,
+              "y": 163.3658237232267
+            },
+            {
+              "d": "M386.64,321.99A138.32,138.32 0 0 1 182.77,218.11L244.52,210.31A76.08,76.08 0 0 0 356.65,267.44Z",
+              "fill": "#efb118",
+              "key": "slice-1",
+              "kind": "path",
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "31%",
+              "x": 251.7084790766787,
+              "y": 334.80465640103523
+            },
+            {
+              "d": "M182.77,218.11A138.32,138.32 0 0 1 245.88,83.98L279.23,136.54A76.08,76.08 0 0 0 244.52,210.31Z",
+              "fill": "#ff725c",
+              "key": "slice-2",
+              "kind": "path",
+              "opacity": 0.25,
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-2",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "18%",
+              "x": 183.89139063279896,
+              "y": 136.7271500663241
+            },
+            {
+              "d": "M245.88,83.98A138.32,138.32 0 0 1 320,62.45L320,124.7A76.08,76.08 0 0 0 279.23,136.54Z",
+              "fill": "#6cc5b0",
+              "key": "slice-3",
+              "kind": "path",
+              "opacity": 0.25,
+              "role": "slice",
+              "selected": false,
+              "stroke": "#ffffff",
+              "strokeWidth": 1,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "label-slice-3",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "9%",
+              "x": 278.0327628740489,
+              "y": 56.32282233204589
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "donut-total",
+              "kind": "text",
+              "role": "data-label",
+              "size": 19,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "100",
+              "weight": 600,
+              "x": 320,
+              "y": 200.775
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 276.65,
+            "width": 276.65,
+            "x": 181.675,
+            "y": 62.45000000000002
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "bar",
+        "dataLabels": true
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Direct",
+              "Search",
+              "Social",
+              "Referral"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [
+              "Direct",
+              "Search"
+            ],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Traffic",
+                "values": [
+                  42,
+                  31,
+                  18,
+                  9
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Traffic Share",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 4,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Traffic Share",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 305.46999999999997,
+              "y2": 305.46999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 240.54,
+              "y2": 240.54
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 175.60999999999999,
+              "y2": 175.60999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 110.68,
+              "y2": 110.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 305.46999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 240.54
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 175.60999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 110.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Direct",
+              "x": 105.78,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Search",
+              "x": 252.7,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Social",
+              "x": 399.61999999999995,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Referral",
+              "x": 546.54,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 272.70599999999996,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 52.88880000000001,
+              "y": 97.69400000000002
+            },
+            {
+              "fill": "#4269d0",
+              "height": 201.283,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 199.8088,
+              "y": 169.117
+            },
+            {
+              "fill": "#4269d0",
+              "height": 116.87399999999997,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 346.7288,
+              "y": 253.526
+            },
+            {
+              "fill": "#4269d0",
+              "height": 58.43700000000001,
+              "key": "bar-series-1-3",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 493.6488,
+              "y": 311.96299999999997
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "42",
+              "x": 105.78,
+              "y": 93.69400000000002
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "31",
+              "x": 252.7,
+              "y": 165.117
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-2",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "18",
+              "x": 399.61999999999995,
+              "y": 249.526
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-3",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "9",
+              "x": 546.54,
+              "y": 307.96299999999997
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              50
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "set_chart_callout",
+      "arguments": {
+        "series": "Traffic",
+        "category": "Direct",
+        "label": "Top channel"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "category": "Direct",
+          "index": 0,
+          "label": "Top channel",
+          "series": "series-1"
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 4,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Traffic Share",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 305.46999999999997,
+              "y2": 305.46999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 240.54,
+              "y2": 240.54
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 175.60999999999999,
+              "y2": 175.60999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 110.68,
+              "y2": 110.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 305.46999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 240.54
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 175.60999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 110.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Direct",
+              "x": 105.78,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Search",
+              "x": 252.7,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Social",
+              "x": 399.61999999999995,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Referral",
+              "x": 546.54,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 272.70599999999996,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": true,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 52.88880000000001,
+              "y": 97.69400000000002
+            },
+            {
+              "fill": "none",
+              "height": 276.70599999999996,
+              "key": "bar-series-1-0-selection",
+              "kind": "rect",
+              "radius": 3,
+              "role": "selection",
+              "stroke": "#2563eb",
+              "strokeWidth": 1,
+              "width": 109.78239999999998,
+              "x": 50.88880000000001,
+              "y": 95.69400000000002
+            },
+            {
+              "fill": "#4269d0",
+              "height": 201.283,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 199.8088,
+              "y": 169.117
+            },
+            {
+              "fill": "#4269d0",
+              "height": 116.87399999999997,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 346.7288,
+              "y": 253.526
+            },
+            {
+              "fill": "#4269d0",
+              "height": 58.43700000000001,
+              "key": "bar-series-1-3",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 493.6488,
+              "y": 311.96299999999997
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "42",
+              "x": 105.78,
+              "y": 93.69400000000002
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-1",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "31",
+              "x": 252.7,
+              "y": 165.117
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-2",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "18",
+              "x": 399.61999999999995,
+              "y": 249.526
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-3",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "9",
+              "x": 546.54,
+              "y": 307.96299999999997
+            },
+            {
+              "key": "callout-leader-series-1-0",
+              "kind": "line",
+              "role": "callout",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 105.78,
+              "x2": 105.78,
+              "y1": 97.69400000000002,
+              "y2": 83.69400000000002
+            },
+            {
+              "fill": "#ffffff",
+              "height": 18,
+              "key": "callout-box-series-1-0",
+              "kind": "rect",
+              "radius": 3,
+              "role": "callout",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 76,
+              "x": 67.78,
+              "y": 65.69400000000002
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "callout-series-1-0",
+              "kind": "text",
+              "role": "callout",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "Top channel",
+              "weight": 600,
+              "x": 105.78,
+              "y": 74.69400000000002
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              50
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.setCallout",
+            "params": {
+              "series": "Traffic",
+              "category": "Search",
+              "label": "Runner-up"
+            }
+          },
+          {
+            "id": "chart.highlight",
+            "params": {
+              "names": [
+                "Direct"
+              ]
+            }
+          }
+        ]
+      },
+      "document": true,
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 2,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.setCallout",
+              "ok": true,
+              "result": {
+                "index": 1,
+                "label": "Runner-up",
+                "series": "series-1"
+              }
+            },
+            {
+              "id": "chart.highlight",
+              "ok": true,
+              "result": {
+                "categories": [
+                  0
+                ],
+                "highlight": [
+                  "Direct"
+                ],
+                "series": []
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Direct",
+              "Search",
+              "Social",
+              "Referral"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [
+              "Direct"
+            ],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "callouts": [
+                  "Top channel",
+                  "Runner-up",
+                  null,
+                  null
+                ],
+                "id": "series-1",
+                "name": "Traffic",
+                "values": [
+                  42,
+                  31,
+                  18,
+                  9
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Traffic Share",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 4,
+            "length": 587.68,
+            "reverse": false,
+            "start": 32.32
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Traffic Share",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 305.46999999999997,
+              "y2": 305.46999999999997
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 240.54,
+              "y2": 240.54
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 175.60999999999999,
+              "y2": 175.60999999999999
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 110.68,
+              "y2": 110.68
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 305.46999999999997
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "20",
+              "x": 24.32,
+              "y": 240.54
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "30",
+              "x": 24.32,
+              "y": 175.60999999999999
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "40",
+              "x": 24.32,
+              "y": 110.68
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 620,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Direct",
+              "x": 105.78,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Search",
+              "x": 252.7,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Social",
+              "x": 399.61999999999995,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Referral",
+              "x": 546.54,
+              "y": 376.4
+            },
+            {
+              "fill": "#4269d0",
+              "height": 272.70599999999996,
+              "key": "bar-series-1-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 52.88880000000001,
+              "y": 97.69400000000002
+            },
+            {
+              "fill": "#4269d0",
+              "height": 201.283,
+              "key": "bar-series-1-1",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "bar",
+              "selected": true,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 199.8088,
+              "y": 169.117
+            },
+            {
+              "fill": "none",
+              "height": 205.283,
+              "key": "bar-series-1-1-selection",
+              "kind": "rect",
+              "radius": 3,
+              "role": "selection",
+              "stroke": "#2563eb",
+              "strokeWidth": 1,
+              "width": 109.78239999999998,
+              "x": 197.8088,
+              "y": 167.117
+            },
+            {
+              "fill": "#4269d0",
+              "height": 116.87399999999997,
+              "key": "bar-series-1-2",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 346.7288,
+              "y": 253.526
+            },
+            {
+              "fill": "#4269d0",
+              "height": 58.43700000000001,
+              "key": "bar-series-1-3",
+              "kind": "rect",
+              "opacity": 0.25,
+              "radius": 2,
+              "role": "bar",
+              "selected": false,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 105.78239999999998,
+              "x": 493.6488,
+              "y": 311.96299999999997
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-0",
+              "kind": "text",
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "42",
+              "x": 105.78,
+              "y": 93.69400000000002
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-1",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "31",
+              "x": 252.7,
+              "y": 165.117
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-2",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "18",
+              "x": 399.61999999999995,
+              "y": 249.526
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "label-series-1-3",
+              "kind": "text",
+              "opacity": 0.25,
+              "role": "data-label",
+              "size": 10,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "9",
+              "x": 546.54,
+              "y": 307.96299999999997
+            },
+            {
+              "key": "callout-leader-series-1-0",
+              "kind": "line",
+              "role": "callout",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 105.78,
+              "x2": 105.78,
+              "y1": 97.69400000000002,
+              "y2": 83.69400000000002
+            },
+            {
+              "fill": "#ffffff",
+              "height": 18,
+              "key": "callout-box-series-1-0",
+              "kind": "rect",
+              "radius": 3,
+              "role": "callout",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 76,
+              "x": 67.78,
+              "y": 65.69400000000002
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "callout-series-1-0",
+              "kind": "text",
+              "role": "callout",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "Top channel",
+              "weight": 600,
+              "x": 105.78,
+              "y": 74.69400000000002
+            },
+            {
+              "key": "callout-leader-series-1-1",
+              "kind": "line",
+              "role": "callout",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 252.7,
+              "x2": 252.7,
+              "y1": 169.117,
+              "y2": 155.117
+            },
+            {
+              "fill": "#ffffff",
+              "height": 18,
+              "key": "callout-box-series-1-1",
+              "kind": "rect",
+              "radius": 3,
+              "role": "callout",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "width": 64,
+              "x": 220.7,
+              "y": 137.117
+            },
+            {
+              "anchor": "middle",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "callout-series-1-1",
+              "kind": "text",
+              "role": "callout",
+              "size": 10,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              },
+              "text": "Runner-up",
+              "weight": 600,
+              "x": 252.7,
+              "y": 146.117
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 587.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              50
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}

@@ -473,7 +473,7 @@ export interface ChartConformanceSetup {
 	 */
 	files?: ReadonlyArray<{ name: string; data: string | Uint8Array }> | Record<string, string | Uint8Array>;
 	/** Optional house-style profile for `check_chart_style`. */
-	style?: ChartStyleProfile;
+	style?: ChartStyleProfile & { checks?: ReadonlyArray<string | Record<string, unknown>> };
 	/** Extra map geometries to register alongside `EUROPE_CHART_MAP`. */
 	maps?: ReadonlyArray<ChartMapGeometry>;
 }

@@ -1,0 +1,3424 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "scatter-trend",
+  "description": "Numeric x scatter chart, trendline fitting and removal, and error bars.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "set_chart_data",
+      "arguments": {
+        "categories": [
+          "P1",
+          "P2",
+          "P3",
+          "P4",
+          "P5"
+        ],
+        "series": [
+          {
+            "name": "Experiment",
+            "x": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "values": [
+              2.1,
+              3.9,
+              6.2,
+              8,
+              9.9
+            ],
+            "errorBars": {
+              "type": "fixed",
+              "value": 0.5,
+              "direction": "both",
+              "cap": true
+            },
+            "xErrorBars": {
+              "type": "percent",
+              "value": 10
+            }
+          }
+        ]
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "series": [
+            {
+              "id": "series-1",
+              "name": "Experiment"
+            }
+          ],
+          "table": [
+            [
+              "",
+              "Experiment"
+            ],
+            [
+              "P1",
+              2.1
+            ],
+            [
+              "P2",
+              3.9
+            ],
+            [
+              "P3",
+              6.2
+            ],
+            [
+              "P4",
+              8
+            ],
+            [
+              "P5",
+              9.9
+            ]
+          ]
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "P1",
+              "P2",
+              "P3",
+              "P4",
+              "P5"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "errorBars": {
+                  "type": "fixed",
+                  "value": 0.5
+                },
+                "id": "series-1",
+                "name": "Experiment",
+                "values": [
+                  2.1,
+                  3.9,
+                  6.2,
+                  8,
+                  9.9
+                ],
+                "x": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "xErrorBars": {
+                  "type": "percent",
+                  "value": 10
+                }
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "scatter",
+        "title": "Linear Response"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "P1",
+              "P2",
+              "P3",
+              "P4",
+              "P5"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "errorBars": {
+                  "type": "fixed",
+                  "value": 0.5
+                },
+                "id": "series-1",
+                "name": "Experiment",
+                "values": [
+                  2.1,
+                  3.9,
+                  6.2,
+                  8,
+                  9.9
+                ],
+                "x": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "xErrorBars": {
+                  "type": "percent",
+                  "value": 10
+                }
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Linear Response",
+            "tree": [],
+            "type": "scatter",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Linear Response",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 316.29166666666663,
+              "y2": 316.29166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 262.18333333333334,
+              "y2": 262.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 208.075,
+              "y2": 208.075
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 153.96666666666667,
+              "y2": 153.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 99.85833333333329,
+              "y2": 99.85833333333329
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "2",
+              "x": 24.32,
+              "y": 316.29166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "4",
+              "x": 24.32,
+              "y": 262.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "6",
+              "x": 24.32,
+              "y": 208.075
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "8",
+              "x": 24.32,
+              "y": 153.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 99.85833333333329
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "12",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "0.5",
+              "x": 32.32,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "1.0",
+              "x": 85.38181818181818,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "1.5",
+              "x": 138.44363636363636,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "2.0",
+              "x": 191.5054545454545,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "2.5",
+              "x": 244.5672727272727,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "3.0",
+              "x": 297.62909090909085,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "3.5",
+              "x": 350.69090909090903,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-7",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "4.0",
+              "x": 403.7527272727272,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-8",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "4.5",
+              "x": 456.8145454545454,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-9",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "5.0",
+              "x": 509.87636363636364,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-10",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "5.5",
+              "x": 562.9381818181818,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-11",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "6.0",
+              "x": 616,
+              "y": 376.4
+            },
+            {
+              "cx": 85.38181818181818,
+              "cy": 313.58624999999995,
+              "fill": "#4269d0",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 191.5054545454545,
+              "cy": 264.88874999999996,
+              "fill": "#4269d0",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 297.62909090909085,
+              "cy": 202.66416666666663,
+              "fill": "#4269d0",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 403.7527272727272,
+              "cy": 153.96666666666667,
+              "fill": "#4269d0",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 509.87636363636364,
+              "cy": 102.56374999999997,
+              "fill": "#4269d0",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M85.38,327.11L85.38,300.06M81.38,327.11L89.38,327.11M81.38,300.06L89.38,300.06",
+              "fill": "none",
+              "key": "error-bar-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M74.77,313.59L95.99,313.59M74.77,309.59L74.77,317.59M95.99,309.59L95.99,317.59",
+              "fill": "none",
+              "key": "error-bar-x-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M191.51,278.42L191.51,251.36M187.51,278.42L195.51,278.42M187.51,251.36L195.51,251.36",
+              "fill": "none",
+              "key": "error-bar-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M170.28,264.89L212.73,264.89M170.28,260.89L170.28,268.89M212.73,260.89L212.73,268.89",
+              "fill": "none",
+              "key": "error-bar-x-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M297.63,216.19L297.63,189.14M293.63,216.19L301.63,216.19M293.63,189.14L301.63,189.14",
+              "fill": "none",
+              "key": "error-bar-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M265.79,202.66L329.47,202.66M265.79,198.66L265.79,206.66M329.47,198.66L329.47,206.66",
+              "fill": "none",
+              "key": "error-bar-x-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M403.75,167.49L403.75,140.44M399.75,167.49L407.75,167.49M399.75,140.44L407.75,140.44",
+              "fill": "none",
+              "key": "error-bar-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M361.3,153.97L446.2,153.97M361.3,149.97L361.3,157.97M446.2,149.97L446.2,157.97",
+              "fill": "none",
+              "key": "error-bar-x-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M509.88,116.09L509.88,89.04M505.88,116.09L513.88,116.09M505.88,89.04L513.88,89.04",
+              "fill": "none",
+              "key": "error-bar-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M456.81,102.56L562.94,102.56M456.81,98.56L456.81,106.56M562.94,98.56L562.94,106.56",
+              "fill": "none",
+              "key": "error-bar-x-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 583.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              12
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              2,
+              4,
+              6,
+              8,
+              10,
+              12
+            ]
+          },
+          "warnings": [],
+          "width": 640,
+          "xScale": {
+            "axis": "x",
+            "domain": [
+              0.5,
+              6
+            ],
+            "range": [
+              32.32,
+              616
+            ],
+            "ticks": [
+              0.5,
+              1,
+              1.5,
+              2,
+              2.5,
+              3,
+              3.5,
+              4,
+              4.5,
+              5,
+              5.5,
+              6
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "add_chart_trendline",
+      "arguments": {
+        "series": "Experiment",
+        "type": "linear",
+        "showEquation": true,
+        "showR2": true,
+        "forward": 1
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "coefficients": [
+            0.11000000000000032,
+            1.9700000000000002
+          ],
+          "equation": "y = 1.97x + 0.11",
+          "index": 0,
+          "r2": 0.9984820417824432,
+          "series": "series-1"
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Linear Response",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "fill": "#4269d0",
+              "height": 10,
+              "key": "legend-swatch-0",
+              "kind": "rect",
+              "radius": 2,
+              "role": "legend-swatch",
+              "selected": false,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "width": 10,
+              "x": 207.67999999999998,
+              "y": 373.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Experiment",
+              "x": 223.67999999999998,
+              "y": 378.65000000000003
+            },
+            {
+              "dash": "3 2",
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": true,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.5,
+              "target": {
+                "index": 0,
+                "kind": "trendline",
+                "seriesId": "series-1"
+              },
+              "x1": 299.28,
+              "x2": 309.28,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#2563eb",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": true,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "trendline",
+                "seriesId": "series-1"
+              },
+              "text": "Linear (Experiment)",
+              "weight": 600,
+              "x": 315.28,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 295.7083333333333,
+              "y2": 295.7083333333333
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 245.71666666666667,
+              "y2": 245.71666666666667
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 195.725,
+              "y2": 195.725
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 145.73333333333335,
+              "y2": 145.73333333333335
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 95.74166666666665,
+              "y2": 95.74166666666665
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 345.7
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "2",
+              "x": 24.32,
+              "y": 295.7083333333333
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "4",
+              "x": 24.32,
+              "y": 245.71666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "6",
+              "x": 24.32,
+              "y": 195.725
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "8",
+              "x": 24.32,
+              "y": 145.73333333333335
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 95.74166666666665
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "12",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 345.7,
+              "y2": 345.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 32.32,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "1",
+              "x": 115.70285714285714,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "2",
+              "x": 199.08571428571426,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "3",
+              "x": 282.4685714285714,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "4",
+              "x": 365.8514285714285,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "5",
+              "x": 449.2342857142857,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "6",
+              "x": 532.6171428571428,
+              "y": 351.7
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-7",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "7",
+              "x": 616,
+              "y": 351.7
+            },
+            {
+              "cx": 115.70285714285714,
+              "cy": 293.20875,
+              "fill": "#4269d0",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 199.08571428571426,
+              "cy": 248.21625,
+              "fill": "#4269d0",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 282.4685714285714,
+              "cy": 190.7258333333333,
+              "fill": "#4269d0",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 365.8514285714285,
+              "cy": 145.73333333333335,
+              "fill": "#4269d0",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 449.2342857142857,
+              "cy": 98.24124999999998,
+              "fill": "#4269d0",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M115.7,293.71L532.62,47.5",
+              "dash": "6 4",
+              "fill": "none",
+              "key": "trendline-series-1-0",
+              "kind": "path",
+              "role": "trendline",
+              "selected": true,
+              "stroke": "#4269d0",
+              "strokeWidth": 3,
+              "target": {
+                "index": 0,
+                "kind": "trendline",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M115.7,305.71L115.7,280.71M111.7,305.71L119.7,305.71M111.7,280.71L119.7,280.71",
+              "fill": "none",
+              "key": "error-bar-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M107.36,293.21L124.04,293.21M107.36,289.21L107.36,297.21M124.04,289.21L124.04,297.21",
+              "fill": "none",
+              "key": "error-bar-x-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M199.09,260.71L199.09,235.72M195.09,260.71L203.09,260.71M195.09,235.72L203.09,235.72",
+              "fill": "none",
+              "key": "error-bar-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M182.41,248.22L215.76,248.22M182.41,244.22L182.41,252.22M215.76,244.22L215.76,252.22",
+              "fill": "none",
+              "key": "error-bar-x-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M282.47,203.22L282.47,178.23M278.47,203.22L286.47,203.22M278.47,178.23L286.47,178.23",
+              "fill": "none",
+              "key": "error-bar-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M257.45,190.73L307.48,190.73M257.45,186.73L257.45,194.73M307.48,186.73L307.48,194.73",
+              "fill": "none",
+              "key": "error-bar-x-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M365.85,158.23L365.85,133.24M361.85,158.23L369.85,158.23M361.85,133.24L369.85,133.24",
+              "fill": "none",
+              "key": "error-bar-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M332.5,145.73L399.2,145.73M332.5,141.73L332.5,149.73M399.2,141.73L399.2,149.73",
+              "fill": "none",
+              "key": "error-bar-x-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M449.23,110.74L449.23,85.74M445.23,110.74L453.23,110.74M445.23,85.74L453.23,85.74",
+              "fill": "none",
+              "key": "error-bar-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M407.54,98.24L490.93,98.24M407.54,94.24L407.54,102.24M490.93,94.24L490.93,102.24",
+              "fill": "none",
+              "key": "error-bar-x-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "anchor": "end",
+              "baseline": "top",
+              "fill": "#4269d0",
+              "key": "trendline-label-0",
+              "kind": "text",
+              "role": "trendline-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "trendline",
+                "seriesId": "series-1"
+              },
+              "text": "y = 1.97x + 0.11",
+              "x": 612,
+              "y": 49.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "top",
+              "fill": "#4269d0",
+              "key": "trendline-label-1",
+              "kind": "text",
+              "role": "trendline-label",
+              "size": 10,
+              "target": {
+                "index": 0,
+                "kind": "trendline",
+                "seriesId": "series-1"
+              },
+              "text": "R² = 0.9985",
+              "x": 612,
+              "y": 63.75
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 299.95,
+            "width": 583.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              12
+            ],
+            "range": [
+              345.7,
+              45.75
+            ],
+            "ticks": [
+              0,
+              2,
+              4,
+              6,
+              8,
+              10,
+              12
+            ]
+          },
+          "warnings": [],
+          "width": 640,
+          "xScale": {
+            "axis": "x",
+            "domain": [
+              0,
+              7
+            ],
+            "range": [
+              32.32,
+              616
+            ],
+            "ticks": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "get_chart_trendline",
+      "arguments": {
+        "series": "Experiment",
+        "index": 0
+      },
+      "expect": {
+        "result": {
+          "coefficients": [
+            0.11000000000000032,
+            1.9700000000000002
+          ],
+          "equation": "y = 1.97x + 0.11",
+          "points": 5,
+          "r2": 0.9984820417824432,
+          "trendline": {
+            "forward": 1,
+            "showEquation": true,
+            "showR2": true,
+            "type": "linear"
+          }
+        }
+      }
+    },
+    {
+      "tool": "remove_chart_trendline",
+      "arguments": {
+        "series": "Experiment",
+        "index": 0
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "series": "series-1",
+          "trendlines": []
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Linear Response",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 316.29166666666663,
+              "y2": 316.29166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 262.18333333333334,
+              "y2": 262.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 208.075,
+              "y2": 208.075
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 153.96666666666667,
+              "y2": 153.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 99.85833333333329,
+              "y2": 99.85833333333329
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "2",
+              "x": 24.32,
+              "y": 316.29166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "4",
+              "x": 24.32,
+              "y": 262.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "6",
+              "x": 24.32,
+              "y": 208.075
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "8",
+              "x": 24.32,
+              "y": 153.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 99.85833333333329
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "12",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "0.5",
+              "x": 32.32,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "1.0",
+              "x": 85.38181818181818,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "1.5",
+              "x": 138.44363636363636,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "2.0",
+              "x": 191.5054545454545,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "2.5",
+              "x": 244.5672727272727,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "3.0",
+              "x": 297.62909090909085,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "3.5",
+              "x": 350.69090909090903,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-7",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "4.0",
+              "x": 403.7527272727272,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-8",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "4.5",
+              "x": 456.8145454545454,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-9",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "5.0",
+              "x": 509.87636363636364,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-10",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "5.5",
+              "x": 562.9381818181818,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-11",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "6.0",
+              "x": 616,
+              "y": 376.4
+            },
+            {
+              "cx": 85.38181818181818,
+              "cy": 313.58624999999995,
+              "fill": "#4269d0",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 191.5054545454545,
+              "cy": 264.88874999999996,
+              "fill": "#4269d0",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 297.62909090909085,
+              "cy": 202.66416666666663,
+              "fill": "#4269d0",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 403.7527272727272,
+              "cy": 153.96666666666667,
+              "fill": "#4269d0",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 509.87636363636364,
+              "cy": 102.56374999999997,
+              "fill": "#4269d0",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M85.38,327.11L85.38,300.06M81.38,327.11L89.38,327.11M81.38,300.06L89.38,300.06",
+              "fill": "none",
+              "key": "error-bar-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M74.77,313.59L95.99,313.59M74.77,309.59L74.77,317.59M95.99,309.59L95.99,317.59",
+              "fill": "none",
+              "key": "error-bar-x-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M191.51,278.42L191.51,251.36M187.51,278.42L195.51,278.42M187.51,251.36L195.51,251.36",
+              "fill": "none",
+              "key": "error-bar-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M170.28,264.89L212.73,264.89M170.28,260.89L170.28,268.89M212.73,260.89L212.73,268.89",
+              "fill": "none",
+              "key": "error-bar-x-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M297.63,216.19L297.63,189.14M293.63,216.19L301.63,216.19M293.63,189.14L301.63,189.14",
+              "fill": "none",
+              "key": "error-bar-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M265.79,202.66L329.47,202.66M265.79,198.66L265.79,206.66M329.47,198.66L329.47,206.66",
+              "fill": "none",
+              "key": "error-bar-x-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M403.75,167.49L403.75,140.44M399.75,167.49L407.75,167.49M399.75,140.44L407.75,140.44",
+              "fill": "none",
+              "key": "error-bar-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M361.3,153.97L446.2,153.97M361.3,149.97L361.3,157.97M446.2,149.97L446.2,157.97",
+              "fill": "none",
+              "key": "error-bar-x-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M509.88,116.09L509.88,89.04M505.88,116.09L513.88,116.09M505.88,89.04L513.88,89.04",
+              "fill": "none",
+              "key": "error-bar-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M456.81,102.56L562.94,102.56M456.81,98.56L456.81,106.56M562.94,98.56L562.94,106.56",
+              "fill": "none",
+              "key": "error-bar-x-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 583.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              12
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              2,
+              4,
+              6,
+              8,
+              10,
+              12
+            ]
+          },
+          "warnings": [],
+          "width": 640,
+          "xScale": {
+            "axis": "x",
+            "domain": [
+              0.5,
+              6
+            ],
+            "range": [
+              32.32,
+              616
+            ],
+            "ticks": [
+              0.5,
+              1,
+              1.5,
+              2,
+              2.5,
+              3,
+              3.5,
+              4,
+              4.5,
+              5,
+              5.5,
+              6
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.addTrendline",
+            "params": {
+              "series": "Experiment",
+              "type": "polynomial",
+              "order": 2,
+              "showR2": true
+            }
+          },
+          {
+            "id": "chart.removeTrendline",
+            "params": {
+              "series": "Experiment",
+              "index": 0
+            }
+          }
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 2,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.addTrendline",
+              "ok": true,
+              "result": {
+                "coefficients": [
+                  -0.03999999999999887,
+                  2.0985714285714274,
+                  -0.021428571428571224
+                ],
+                "equation": "y = -0.0214x² + 2.0986x - 0.04",
+                "index": 0,
+                "r2": 0.9986474367456152
+              }
+            },
+            {
+              "id": "chart.removeTrendline",
+              "ok": true,
+              "result": {
+                "trendlines": []
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "render": {
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Linear Response",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 316.29166666666663,
+              "y2": 316.29166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 262.18333333333334,
+              "y2": 262.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 208.075,
+              "y2": 208.075
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 153.96666666666667,
+              "y2": 153.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 99.85833333333329,
+              "y2": 99.85833333333329
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 24.32,
+              "y": 370.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "2",
+              "x": 24.32,
+              "y": 316.29166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "4",
+              "x": 24.32,
+              "y": 262.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "6",
+              "x": 24.32,
+              "y": 208.075
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "8",
+              "x": 24.32,
+              "y": 153.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "10",
+              "x": 24.32,
+              "y": 99.85833333333329
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "12",
+              "x": 24.32,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 32.32,
+              "x2": 616,
+              "y1": 370.4,
+              "y2": 370.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "0.5",
+              "x": 32.32,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "1.0",
+              "x": 85.38181818181818,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "1.5",
+              "x": 138.44363636363636,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "2.0",
+              "x": 191.5054545454545,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "2.5",
+              "x": 244.5672727272727,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "3.0",
+              "x": 297.62909090909085,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "3.5",
+              "x": 350.69090909090903,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-7",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "4.0",
+              "x": 403.7527272727272,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-8",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "4.5",
+              "x": 456.8145454545454,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-9",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "5.0",
+              "x": 509.87636363636364,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-10",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "5.5",
+              "x": 562.9381818181818,
+              "y": 376.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-11",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "6.0",
+              "x": 616,
+              "y": 376.4
+            },
+            {
+              "cx": 85.38181818181818,
+              "cy": 313.58624999999995,
+              "fill": "#4269d0",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 191.5054545454545,
+              "cy": 264.88874999999996,
+              "fill": "#4269d0",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 297.62909090909085,
+              "cy": 202.66416666666663,
+              "fill": "#4269d0",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 403.7527272727272,
+              "cy": 153.96666666666667,
+              "fill": "#4269d0",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 509.87636363636364,
+              "cy": 102.56374999999997,
+              "fill": "#4269d0",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "opacity": 0.85,
+              "r": 4.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M85.38,327.11L85.38,300.06M81.38,327.11L89.38,327.11M81.38,300.06L89.38,300.06",
+              "fill": "none",
+              "key": "error-bar-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M74.77,313.59L95.99,313.59M74.77,309.59L74.77,317.59M95.99,309.59L95.99,317.59",
+              "fill": "none",
+              "key": "error-bar-x-series-1-0",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M191.51,278.42L191.51,251.36M187.51,278.42L195.51,278.42M187.51,251.36L195.51,251.36",
+              "fill": "none",
+              "key": "error-bar-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M170.28,264.89L212.73,264.89M170.28,260.89L170.28,268.89M212.73,260.89L212.73,268.89",
+              "fill": "none",
+              "key": "error-bar-x-series-1-1",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M297.63,216.19L297.63,189.14M293.63,216.19L301.63,216.19M293.63,189.14L301.63,189.14",
+              "fill": "none",
+              "key": "error-bar-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M265.79,202.66L329.47,202.66M265.79,198.66L265.79,206.66M329.47,198.66L329.47,206.66",
+              "fill": "none",
+              "key": "error-bar-x-series-1-2",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M403.75,167.49L403.75,140.44M399.75,167.49L407.75,167.49M399.75,140.44L407.75,140.44",
+              "fill": "none",
+              "key": "error-bar-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M361.3,153.97L446.2,153.97M361.3,149.97L361.3,157.97M446.2,149.97L446.2,157.97",
+              "fill": "none",
+              "key": "error-bar-x-series-1-3",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M509.88,116.09L509.88,89.04M505.88,116.09L513.88,116.09M505.88,89.04L513.88,89.04",
+              "fill": "none",
+              "key": "error-bar-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M456.81,102.56L562.94,102.56M456.81,98.56L456.81,106.56M562.94,98.56L562.94,106.56",
+              "fill": "none",
+              "key": "error-bar-x-series-1-4",
+              "kind": "path",
+              "role": "error-bar",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 1.25,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 324.65,
+            "width": 583.68,
+            "x": 32.32,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              12
+            ],
+            "range": [
+              370.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              2,
+              4,
+              6,
+              8,
+              10,
+              12
+            ]
+          },
+          "warnings": [],
+          "width": 640,
+          "xScale": {
+            "axis": "x",
+            "domain": [
+              0.5,
+              6
+            ],
+            "range": [
+              32.32,
+              616
+            ],
+            "ticks": [
+              0.5,
+              1,
+              1.5,
+              2,
+              2.5,
+              3,
+              3.5,
+              4,
+              4.5,
+              5,
+              5.5,
+              6
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

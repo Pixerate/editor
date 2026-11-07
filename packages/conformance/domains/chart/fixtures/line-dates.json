@@ -1,0 +1,5821 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "line-dates",
+  "description": "Date categories, calendar steps, reference lines and bands, and CSV import.",
+  "setup": {
+    "width": 640,
+    "height": 400
+  },
+  "skip": {
+    "swift": "chart not ported yet (#697)"
+  },
+  "steps": [
+    {
+      "tool": "import_chart_csv",
+      "arguments": {
+        "csv": "Date,Signups,Active\n2024-01-01,120,80\n2024-02-01,145,95\n2024-03-01,160,110\n2024-04-01,190,130\n2024-05-01,220,150\n2024-06-01,250,175"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "issues": [],
+          "table": [
+            [
+              "",
+              "Signups",
+              "Active"
+            ],
+            [
+              "2024-01-01",
+              120,
+              80
+            ],
+            [
+              "2024-02-01",
+              145,
+              95
+            ],
+            [
+              "2024-03-01",
+              160,
+              110
+            ],
+            [
+              "2024-04-01",
+              190,
+              130
+            ],
+            [
+              "2024-05-01",
+              220,
+              150
+            ],
+            [
+              "2024-06-01",
+              250,
+              175
+            ]
+          ],
+          "type": "bar"
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "2024-01-01",
+              "2024-02-01",
+              "2024-03-01",
+              "2024-04-01",
+              "2024-05-01",
+              "2024-06-01"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Signups",
+                "values": [
+                  120,
+                  145,
+                  160,
+                  190,
+                  220,
+                  250
+                ]
+              },
+              {
+                "id": "series-2",
+                "name": "Active",
+                "values": [
+                  80,
+                  95,
+                  110,
+                  130,
+                  150,
+                  175
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "type": "line",
+        "title": "Monthly Growth",
+        "curve": "smooth",
+        "points": true,
+        "xAxis": {
+          "kind": "date",
+          "title": "Month"
+        },
+        "yAxis": {
+          "min": 0,
+          "max": 300,
+          "step": 50
+        }
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "2024-01-01",
+              "2024-02-01",
+              "2024-03-01",
+              "2024-04-01",
+              "2024-05-01",
+              "2024-06-01"
+            ],
+            "curve": "smooth",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Signups",
+                "values": [
+                  120,
+                  145,
+                  160,
+                  190,
+                  220,
+                  250
+                ]
+              },
+              {
+                "id": "series-2",
+                "name": "Active",
+                "values": [
+                  80,
+                  95,
+                  110,
+                  130,
+                  150,
+                  175
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Monthly Growth",
+            "tree": [],
+            "type": "line",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "kind": "date",
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Month"
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": 300,
+              "min": 0,
+              "show": true,
+              "step": 50,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 6,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Monthly Growth",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "legend-swatch-0",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "x1": 256.96,
+              "x2": 266.96,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Signups",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Active",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 278.79166666666663,
+              "y2": 278.79166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 232.18333333333334,
+              "y2": 232.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 185.575,
+              "y2": 185.575
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 138.96666666666667,
+              "y2": 138.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 92.35833333333332,
+              "y2": 92.35833333333332
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 325.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 278.79166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 232.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 185.575
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 138.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "250",
+              "x": 30.480000000000004,
+              "y": 92.35833333333332
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan 2024",
+              "x": 86.94,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 183.86,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 280.78000000000003,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Apr",
+              "x": 377.70000000000005,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "May",
+              "x": 474.62,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 5,
+                "kind": "category"
+              },
+              "text": "Jun",
+              "x": 571.5400000000001,
+              "y": 331.4
+            },
+            {
+              "key": "tick-mark-x-0",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 86.94,
+              "x2": 86.94,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-1",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 183.86,
+              "x2": 183.86,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-2",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 280.78000000000003,
+              "x2": 280.78000000000003,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-3",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 377.70000000000005,
+              "x2": 377.70000000000005,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-4",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 474.62,
+              "x2": 474.62,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-5",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 571.5400000000001,
+              "x2": 571.5400000000001,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "axis-title-x",
+              "kind": "text",
+              "role": "axis-title",
+              "size": 12,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "Month",
+              "weight": 500,
+              "x": 329.24,
+              "y": 363.3
+            },
+            {
+              "d": "M86.94,213.54C119.25,205.77 151.55,196.06 183.86,190.24C216.17,184.41 248.47,182.47 280.78,176.25C313.09,170.04 345.39,157.61 377.7,148.29C410.01,138.97 442.31,129.65 474.62,120.32C506.93,111 539.23,101.68 571.54,92.36",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 213.53999999999996,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 190.23583333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 176.25333333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 148.28833333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 120.32333333333335,
+              "fill": "#ffffff",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 92.35833333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M86.94,250.83C119.25,246.17 151.55,241.5 183.86,236.84C216.17,232.18 248.47,228.19 280.78,222.86C313.09,217.54 345.39,210.43 377.7,204.22C410.01,198 442.31,192.48 474.62,185.58C506.93,178.67 539.23,170.04 571.54,162.27",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 250.82666666666665,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 236.84416666666664,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 222.86166666666668,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 204.2183333333333,
+              "fill": "#ffffff",
+              "key": "point-series-2-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 185.575,
+              "fill": "#ffffff",
+              "key": "point-series-2-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 162.27083333333331,
+              "fill": "#ffffff",
+              "key": "point-series-2-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 279.65,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              300
+            ],
+            "range": [
+              325.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200,
+              250,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "add_chart_reference_line",
+      "arguments": {
+        "value": 200,
+        "label": "Target",
+        "color": "#2563eb"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "index": 0,
+          "referenceLines": [
+            {
+              "color": "#2563eb",
+              "label": "Target",
+              "value": 200
+            }
+          ]
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 6,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Monthly Growth",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "legend-swatch-0",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "x1": 256.96,
+              "x2": 266.96,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Signups",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Active",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 278.79166666666663,
+              "y2": 278.79166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 232.18333333333334,
+              "y2": 232.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 185.575,
+              "y2": 185.575
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 138.96666666666667,
+              "y2": 138.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 92.35833333333332,
+              "y2": 92.35833333333332
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 325.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 278.79166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 232.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 185.575
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 138.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "250",
+              "x": 30.480000000000004,
+              "y": 92.35833333333332
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan 2024",
+              "x": 86.94,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 183.86,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 280.78000000000003,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Apr",
+              "x": 377.70000000000005,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "May",
+              "x": 474.62,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 5,
+                "kind": "category"
+              },
+              "text": "Jun",
+              "x": 571.5400000000001,
+              "y": 331.4
+            },
+            {
+              "key": "tick-mark-x-0",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 86.94,
+              "x2": 86.94,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-1",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 183.86,
+              "x2": 183.86,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-2",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 280.78000000000003,
+              "x2": 280.78000000000003,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-3",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 377.70000000000005,
+              "x2": 377.70000000000005,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-4",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 474.62,
+              "x2": 474.62,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-5",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 571.5400000000001,
+              "x2": 571.5400000000001,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "axis-title-x",
+              "kind": "text",
+              "role": "axis-title",
+              "size": 12,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "Month",
+              "weight": 500,
+              "x": 329.24,
+              "y": 363.3
+            },
+            {
+              "d": "M86.94,213.54C119.25,205.77 151.55,196.06 183.86,190.24C216.17,184.41 248.47,182.47 280.78,176.25C313.09,170.04 345.39,157.61 377.7,148.29C410.01,138.97 442.31,129.65 474.62,120.32C506.93,111 539.23,101.68 571.54,92.36",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 213.53999999999996,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 190.23583333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 176.25333333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 148.28833333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 120.32333333333335,
+              "fill": "#ffffff",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 92.35833333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M86.94,250.83C119.25,246.17 151.55,241.5 183.86,236.84C216.17,232.18 248.47,228.19 280.78,222.86C313.09,217.54 345.39,210.43 377.7,204.22C410.01,198 442.31,192.48 474.62,185.58C506.93,178.67 539.23,170.04 571.54,162.27",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 250.82666666666665,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 236.84416666666664,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 222.86166666666668,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 204.2183333333333,
+              "fill": "#ffffff",
+              "key": "point-series-2-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 185.575,
+              "fill": "#ffffff",
+              "key": "point-series-2-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 162.27083333333331,
+              "fill": "#ffffff",
+              "key": "point-series-2-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "dash": "5 3",
+              "key": "reference-line-0",
+              "kind": "line",
+              "opacity": 0.8,
+              "role": "reference-line",
+              "stroke": "#2563eb",
+              "strokeWidth": 1.25,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 138.96666666666667,
+              "y2": 138.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#2563eb",
+              "key": "reference-label-line-0",
+              "kind": "text",
+              "role": "reference-label",
+              "size": 10,
+              "text": "Target",
+              "weight": 500,
+              "x": 616,
+              "y": 135.96666666666667
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 279.65,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              300
+            ],
+            "range": [
+              325.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200,
+              250,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "update_chart_reference_line",
+      "arguments": {
+        "index": 0,
+        "value": 210,
+        "label": "Revised Target"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "index": 0,
+          "referenceLine": {
+            "color": "#2563eb",
+            "label": "Revised Target",
+            "value": 210
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 6,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Monthly Growth",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "legend-swatch-0",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "x1": 256.96,
+              "x2": 266.96,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Signups",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Active",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 278.79166666666663,
+              "y2": 278.79166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 232.18333333333334,
+              "y2": 232.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 185.575,
+              "y2": 185.575
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 138.96666666666667,
+              "y2": 138.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 92.35833333333332,
+              "y2": 92.35833333333332
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 325.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 278.79166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 232.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 185.575
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 138.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "250",
+              "x": 30.480000000000004,
+              "y": 92.35833333333332
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan 2024",
+              "x": 86.94,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 183.86,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 280.78000000000003,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Apr",
+              "x": 377.70000000000005,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "May",
+              "x": 474.62,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 5,
+                "kind": "category"
+              },
+              "text": "Jun",
+              "x": 571.5400000000001,
+              "y": 331.4
+            },
+            {
+              "key": "tick-mark-x-0",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 86.94,
+              "x2": 86.94,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-1",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 183.86,
+              "x2": 183.86,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-2",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 280.78000000000003,
+              "x2": 280.78000000000003,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-3",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 377.70000000000005,
+              "x2": 377.70000000000005,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-4",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 474.62,
+              "x2": 474.62,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-5",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 571.5400000000001,
+              "x2": 571.5400000000001,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "axis-title-x",
+              "kind": "text",
+              "role": "axis-title",
+              "size": 12,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "Month",
+              "weight": 500,
+              "x": 329.24,
+              "y": 363.3
+            },
+            {
+              "d": "M86.94,213.54C119.25,205.77 151.55,196.06 183.86,190.24C216.17,184.41 248.47,182.47 280.78,176.25C313.09,170.04 345.39,157.61 377.7,148.29C410.01,138.97 442.31,129.65 474.62,120.32C506.93,111 539.23,101.68 571.54,92.36",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 213.53999999999996,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 190.23583333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 176.25333333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 148.28833333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 120.32333333333335,
+              "fill": "#ffffff",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 92.35833333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M86.94,250.83C119.25,246.17 151.55,241.5 183.86,236.84C216.17,232.18 248.47,228.19 280.78,222.86C313.09,217.54 345.39,210.43 377.7,204.22C410.01,198 442.31,192.48 474.62,185.58C506.93,178.67 539.23,170.04 571.54,162.27",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 250.82666666666665,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 236.84416666666664,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 222.86166666666668,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 204.2183333333333,
+              "fill": "#ffffff",
+              "key": "point-series-2-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 185.575,
+              "fill": "#ffffff",
+              "key": "point-series-2-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 162.27083333333331,
+              "fill": "#ffffff",
+              "key": "point-series-2-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "dash": "5 3",
+              "key": "reference-line-0",
+              "kind": "line",
+              "opacity": 0.8,
+              "role": "reference-line",
+              "stroke": "#2563eb",
+              "strokeWidth": 1.25,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 129.645,
+              "y2": 129.645
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#2563eb",
+              "key": "reference-label-line-0",
+              "kind": "text",
+              "role": "reference-label",
+              "size": 10,
+              "text": "Revised Target",
+              "weight": 500,
+              "x": 616,
+              "y": 126.64500000000001
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 279.65,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              300
+            ],
+            "range": [
+              325.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200,
+              250,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "add_chart_reference_band",
+      "arguments": {
+        "from": 100,
+        "to": 180,
+        "label": "Normal Band",
+        "color": "#6cc5b0"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "index": 0,
+          "referenceBands": [
+            {
+              "color": "#6cc5b0",
+              "from": 100,
+              "label": "Normal Band",
+              "to": 180
+            }
+          ]
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 6,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Monthly Growth",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "legend-swatch-0",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "x1": 256.96,
+              "x2": 266.96,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Signups",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Active",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 278.79166666666663,
+              "y2": 278.79166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 232.18333333333334,
+              "y2": 232.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 185.575,
+              "y2": 185.575
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 138.96666666666667,
+              "y2": 138.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 92.35833333333332,
+              "y2": 92.35833333333332
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 325.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 278.79166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 232.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 185.575
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 138.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "250",
+              "x": 30.480000000000004,
+              "y": 92.35833333333332
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan 2024",
+              "x": 86.94,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 183.86,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 280.78000000000003,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Apr",
+              "x": 377.70000000000005,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "May",
+              "x": 474.62,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 5,
+                "kind": "category"
+              },
+              "text": "Jun",
+              "x": 571.5400000000001,
+              "y": 331.4
+            },
+            {
+              "key": "tick-mark-x-0",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 86.94,
+              "x2": 86.94,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-1",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 183.86,
+              "x2": 183.86,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-2",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 280.78000000000003,
+              "x2": 280.78000000000003,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-3",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 377.70000000000005,
+              "x2": 377.70000000000005,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-4",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 474.62,
+              "x2": 474.62,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-5",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 571.5400000000001,
+              "x2": 571.5400000000001,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "axis-title-x",
+              "kind": "text",
+              "role": "axis-title",
+              "size": 12,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "Month",
+              "weight": 500,
+              "x": 329.24,
+              "y": 363.3
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 74.57333333333335,
+              "key": "reference-band-0",
+              "kind": "rect",
+              "opacity": 0.16,
+              "role": "reference-band",
+              "width": 581.52,
+              "x": 38.480000000000004,
+              "y": 157.60999999999999
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#6cc5b0",
+              "key": "reference-label-band-0",
+              "kind": "text",
+              "opacity": 0.85,
+              "role": "reference-label",
+              "size": 10,
+              "text": "Normal Band",
+              "x": 42.480000000000004,
+              "y": 160.60999999999999
+            },
+            {
+              "d": "M86.94,213.54C119.25,205.77 151.55,196.06 183.86,190.24C216.17,184.41 248.47,182.47 280.78,176.25C313.09,170.04 345.39,157.61 377.7,148.29C410.01,138.97 442.31,129.65 474.62,120.32C506.93,111 539.23,101.68 571.54,92.36",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 213.53999999999996,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 190.23583333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 176.25333333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 148.28833333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 120.32333333333335,
+              "fill": "#ffffff",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 92.35833333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M86.94,250.83C119.25,246.17 151.55,241.5 183.86,236.84C216.17,232.18 248.47,228.19 280.78,222.86C313.09,217.54 345.39,210.43 377.7,204.22C410.01,198 442.31,192.48 474.62,185.58C506.93,178.67 539.23,170.04 571.54,162.27",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 250.82666666666665,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 236.84416666666664,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 222.86166666666668,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 204.2183333333333,
+              "fill": "#ffffff",
+              "key": "point-series-2-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 185.575,
+              "fill": "#ffffff",
+              "key": "point-series-2-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 162.27083333333331,
+              "fill": "#ffffff",
+              "key": "point-series-2-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "dash": "5 3",
+              "key": "reference-line-0",
+              "kind": "line",
+              "opacity": 0.8,
+              "role": "reference-line",
+              "stroke": "#2563eb",
+              "strokeWidth": 1.25,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 129.645,
+              "y2": 129.645
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#2563eb",
+              "key": "reference-label-line-0",
+              "kind": "text",
+              "role": "reference-label",
+              "size": 10,
+              "text": "Revised Target",
+              "weight": 500,
+              "x": 616,
+              "y": 126.64500000000001
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 279.65,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              300
+            ],
+            "range": [
+              325.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200,
+              250,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "update_chart_reference_band",
+      "arguments": {
+        "index": 0,
+        "from": 110,
+        "to": 190,
+        "label": "Operating Range"
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "index": 0,
+          "referenceBand": {
+            "color": "#6cc5b0",
+            "from": 110,
+            "label": "Operating Range",
+            "to": 190
+          }
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 6,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Monthly Growth",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "legend-swatch-0",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "x1": 256.96,
+              "x2": 266.96,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Signups",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Active",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 278.79166666666663,
+              "y2": 278.79166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 232.18333333333334,
+              "y2": 232.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 185.575,
+              "y2": 185.575
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 138.96666666666667,
+              "y2": 138.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 92.35833333333332,
+              "y2": 92.35833333333332
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 325.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 278.79166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 232.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 185.575
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 138.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "250",
+              "x": 30.480000000000004,
+              "y": 92.35833333333332
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan 2024",
+              "x": 86.94,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 183.86,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 280.78000000000003,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Apr",
+              "x": 377.70000000000005,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "May",
+              "x": 474.62,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 5,
+                "kind": "category"
+              },
+              "text": "Jun",
+              "x": 571.5400000000001,
+              "y": 331.4
+            },
+            {
+              "key": "tick-mark-x-0",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 86.94,
+              "x2": 86.94,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-1",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 183.86,
+              "x2": 183.86,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-2",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 280.78000000000003,
+              "x2": 280.78000000000003,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-3",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 377.70000000000005,
+              "x2": 377.70000000000005,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-4",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 474.62,
+              "x2": 474.62,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-5",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 571.5400000000001,
+              "x2": 571.5400000000001,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "axis-title-x",
+              "kind": "text",
+              "role": "axis-title",
+              "size": 12,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "Month",
+              "weight": 500,
+              "x": 329.24,
+              "y": 363.3
+            },
+            {
+              "fill": "#6cc5b0",
+              "height": 74.57333333333335,
+              "key": "reference-band-0",
+              "kind": "rect",
+              "opacity": 0.16,
+              "role": "reference-band",
+              "width": 581.52,
+              "x": 38.480000000000004,
+              "y": 148.28833333333333
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#6cc5b0",
+              "key": "reference-label-band-0",
+              "kind": "text",
+              "opacity": 0.85,
+              "role": "reference-label",
+              "size": 10,
+              "text": "Operating Range",
+              "x": 42.480000000000004,
+              "y": 151.28833333333333
+            },
+            {
+              "d": "M86.94,213.54C119.25,205.77 151.55,196.06 183.86,190.24C216.17,184.41 248.47,182.47 280.78,176.25C313.09,170.04 345.39,157.61 377.7,148.29C410.01,138.97 442.31,129.65 474.62,120.32C506.93,111 539.23,101.68 571.54,92.36",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 213.53999999999996,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 190.23583333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 176.25333333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 148.28833333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 120.32333333333335,
+              "fill": "#ffffff",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 92.35833333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M86.94,250.83C119.25,246.17 151.55,241.5 183.86,236.84C216.17,232.18 248.47,228.19 280.78,222.86C313.09,217.54 345.39,210.43 377.7,204.22C410.01,198 442.31,192.48 474.62,185.58C506.93,178.67 539.23,170.04 571.54,162.27",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 250.82666666666665,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 236.84416666666664,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 222.86166666666668,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 204.2183333333333,
+              "fill": "#ffffff",
+              "key": "point-series-2-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 185.575,
+              "fill": "#ffffff",
+              "key": "point-series-2-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 162.27083333333331,
+              "fill": "#ffffff",
+              "key": "point-series-2-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "dash": "5 3",
+              "key": "reference-line-0",
+              "kind": "line",
+              "opacity": 0.8,
+              "role": "reference-line",
+              "stroke": "#2563eb",
+              "strokeWidth": 1.25,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 129.645,
+              "y2": 129.645
+            },
+            {
+              "anchor": "end",
+              "baseline": "bottom",
+              "fill": "#2563eb",
+              "key": "reference-label-line-0",
+              "kind": "text",
+              "role": "reference-label",
+              "size": 10,
+              "text": "Revised Target",
+              "weight": 500,
+              "x": 616,
+              "y": 126.64500000000001
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 279.65,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              300
+            ],
+            "range": [
+              325.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200,
+              250,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "remove_chart_reference_line",
+      "arguments": {
+        "index": 0
+      },
+      "expect": {
+        "result": {
+          "referenceLines": []
+        }
+      }
+    },
+    {
+      "tool": "remove_chart_reference_band",
+      "arguments": {
+        "index": 0
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "referenceBands": []
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 6,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Monthly Growth",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "legend-swatch-0",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "x1": 256.96,
+              "x2": 266.96,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-0",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              },
+              "text": "Signups",
+              "x": 272.96,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "legend-swatch-1",
+              "kind": "line",
+              "role": "legend-swatch",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2.5,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "x1": 330.08,
+              "x2": 340.08,
+              "y1": 378.65000000000003,
+              "y2": 378.65000000000003
+            },
+            {
+              "anchor": "start",
+              "baseline": "middle",
+              "fill": "#0f172a",
+              "key": "legend-label-1",
+              "kind": "text",
+              "role": "legend-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              },
+              "text": "Active",
+              "x": 346.08,
+              "y": 378.65000000000003
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 278.79166666666663,
+              "y2": 278.79166666666663
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 232.18333333333334,
+              "y2": 232.18333333333334
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 185.575,
+              "y2": 185.575
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 138.96666666666667,
+              "y2": 138.96666666666667
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 92.35833333333332,
+              "y2": 92.35833333333332
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 325.4
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 278.79166666666663
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 232.18333333333334
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 185.575
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 138.96666666666667
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "250",
+              "x": 30.480000000000004,
+              "y": 92.35833333333332
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 325.4,
+              "y2": 325.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan 2024",
+              "x": 86.94,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 183.86,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 280.78000000000003,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-3",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 3,
+                "kind": "category"
+              },
+              "text": "Apr",
+              "x": 377.70000000000005,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-4",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 4,
+                "kind": "category"
+              },
+              "text": "May",
+              "x": 474.62,
+              "y": 331.4
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-5",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 5,
+                "kind": "category"
+              },
+              "text": "Jun",
+              "x": 571.5400000000001,
+              "y": 331.4
+            },
+            {
+              "key": "tick-mark-x-0",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 86.94,
+              "x2": 86.94,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-1",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 183.86,
+              "x2": 183.86,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-2",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 280.78000000000003,
+              "x2": 280.78000000000003,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-3",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 377.70000000000005,
+              "x2": 377.70000000000005,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-4",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 474.62,
+              "x2": 474.62,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "key": "tick-mark-x-5",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 571.5400000000001,
+              "x2": 571.5400000000001,
+              "y1": 325.4,
+              "y2": 329.4
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "axis-title-x",
+              "kind": "text",
+              "role": "axis-title",
+              "size": 12,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "Month",
+              "weight": 500,
+              "x": 329.24,
+              "y": 363.3
+            },
+            {
+              "d": "M86.94,213.54C119.25,205.77 151.55,196.06 183.86,190.24C216.17,184.41 248.47,182.47 280.78,176.25C313.09,170.04 345.39,157.61 377.7,148.29C410.01,138.97 442.31,129.65 474.62,120.32C506.93,111 539.23,101.68 571.54,92.36",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 213.53999999999996,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 190.23583333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 176.25333333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 148.28833333333333,
+              "fill": "#ffffff",
+              "key": "point-series-1-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 120.32333333333335,
+              "fill": "#ffffff",
+              "key": "point-series-1-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 92.35833333333332,
+              "fill": "#ffffff",
+              "key": "point-series-1-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "d": "M86.94,250.83C119.25,246.17 151.55,241.5 183.86,236.84C216.17,232.18 248.47,228.19 280.78,222.86C313.09,217.54 345.39,210.43 377.7,204.22C410.01,198 442.31,192.48 474.62,185.58C506.93,178.67 539.23,170.04 571.54,162.27",
+              "fill": "none",
+              "key": "line-series-2",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 86.94,
+              "cy": 250.82666666666665,
+              "fill": "#ffffff",
+              "key": "point-series-2-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 183.86,
+              "cy": 236.84416666666664,
+              "fill": "#ffffff",
+              "key": "point-series-2-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 280.78000000000003,
+              "cy": 222.86166666666668,
+              "fill": "#ffffff",
+              "key": "point-series-2-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 377.70000000000005,
+              "cy": 204.2183333333333,
+              "fill": "#ffffff",
+              "key": "point-series-2-3",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 3,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 474.62,
+              "cy": 185.575,
+              "fill": "#ffffff",
+              "key": "point-series-2-4",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 4,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            },
+            {
+              "cx": 571.5400000000001,
+              "cy": 162.27083333333331,
+              "fill": "#ffffff",
+              "key": "point-series-2-5",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#efb118",
+              "strokeWidth": 2,
+              "target": {
+                "index": 5,
+                "kind": "point",
+                "seriesId": "series-2"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 279.65,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              300
+            ],
+            "range": [
+              325.4,
+              45.75
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200,
+              250,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    },
+    {
+      "tool": "run_commands",
+      "arguments": {
+        "steps": [
+          {
+            "id": "chart.importCsv",
+            "params": {
+              "csv": "Date,Users\n2024-01-01,100\n2024-02-01,150\n2024-03-01,210"
+            }
+          },
+          {
+            "id": "chart.addReferenceLine",
+            "params": {
+              "value": 160,
+              "label": "Goal"
+            }
+          },
+          {
+            "id": "chart.updateReferenceLine",
+            "params": {
+              "index": 0,
+              "value": 170
+            }
+          },
+          {
+            "id": "chart.removeReferenceLine",
+            "params": {
+              "index": 0
+            }
+          },
+          {
+            "id": "chart.addReferenceBand",
+            "params": {
+              "from": 120,
+              "to": 180,
+              "label": "Band"
+            }
+          },
+          {
+            "id": "chart.updateReferenceBand",
+            "params": {
+              "index": 0,
+              "from": 125,
+              "to": 185
+            }
+          },
+          {
+            "id": "chart.removeReferenceBand",
+            "params": {
+              "index": 0
+            }
+          }
+        ]
+      },
+      "render": true,
+      "expect": {
+        "result": {
+          "completed": 7,
+          "failed": 0,
+          "results": [
+            {
+              "id": "chart.importCsv",
+              "ok": true,
+              "result": {
+                "issues": [],
+                "table": [
+                  [
+                    "",
+                    "Users"
+                  ],
+                  [
+                    "2024-01-01",
+                    100
+                  ],
+                  [
+                    "2024-02-01",
+                    150
+                  ],
+                  [
+                    "2024-03-01",
+                    210
+                  ]
+                ]
+              }
+            },
+            {
+              "id": "chart.addReferenceLine",
+              "ok": true,
+              "result": {
+                "index": 0,
+                "referenceLines": [
+                  {
+                    "label": "Goal",
+                    "value": 160
+                  }
+                ]
+              }
+            },
+            {
+              "id": "chart.updateReferenceLine",
+              "ok": true,
+              "result": {
+                "referenceLine": {
+                  "label": "Goal",
+                  "value": 170
+                }
+              }
+            },
+            {
+              "id": "chart.removeReferenceLine",
+              "ok": true,
+              "result": {
+                "referenceLines": []
+              }
+            },
+            {
+              "id": "chart.addReferenceBand",
+              "ok": true,
+              "result": {
+                "index": 0,
+                "referenceBands": [
+                  {
+                    "from": 120,
+                    "label": "Band",
+                    "to": 180
+                  }
+                ]
+              }
+            },
+            {
+              "id": "chart.updateReferenceBand",
+              "ok": true,
+              "result": {
+                "referenceBand": {
+                  "from": 125,
+                  "label": "Band",
+                  "to": 185
+                }
+              }
+            },
+            {
+              "id": "chart.removeReferenceBand",
+              "ok": true,
+              "result": {
+                "referenceBands": []
+              }
+            }
+          ],
+          "skipped": 0
+        },
+        "render": {
+          "categoryScale": {
+            "axis": "x",
+            "count": 3,
+            "length": 581.52,
+            "reverse": false,
+            "start": 38.480000000000004
+          },
+          "height": 400,
+          "marks": [
+            {
+              "fill": "#ffffff",
+              "height": 400,
+              "key": "background",
+              "kind": "rect",
+              "role": "background",
+              "target": {
+                "kind": "chart"
+              },
+              "width": 640,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "anchor": "middle",
+              "baseline": "top",
+              "fill": "#0f172a",
+              "key": "title",
+              "kind": "text",
+              "role": "title",
+              "selected": false,
+              "size": 15,
+              "target": {
+                "kind": "title"
+              },
+              "text": "Monthly Growth",
+              "weight": 600,
+              "x": 320,
+              "y": 12
+            },
+            {
+              "key": "grid-y-0",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 350.1,
+              "y2": 350.1
+            },
+            {
+              "key": "grid-y-1",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 299.375,
+              "y2": 299.375
+            },
+            {
+              "key": "grid-y-2",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 248.65000000000003,
+              "y2": 248.65000000000003
+            },
+            {
+              "key": "grid-y-3",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 197.925,
+              "y2": 197.925
+            },
+            {
+              "key": "grid-y-4",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 147.20000000000002,
+              "y2": 147.20000000000002
+            },
+            {
+              "key": "grid-y-5",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 96.475,
+              "y2": 96.475
+            },
+            {
+              "key": "grid-y-6",
+              "kind": "line",
+              "role": "grid",
+              "stroke": "#e2e8f0",
+              "strokeWidth": 1,
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 45.75,
+              "y2": 45.75
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-0",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "0",
+              "x": 30.480000000000004,
+              "y": 350.1
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-1",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "50",
+              "x": 30.480000000000004,
+              "y": 299.375
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-2",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "100",
+              "x": 30.480000000000004,
+              "y": 248.65000000000003
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-3",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "150",
+              "x": 30.480000000000004,
+              "y": 197.925
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-4",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "200",
+              "x": 30.480000000000004,
+              "y": 147.20000000000002
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-5",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "250",
+              "x": 30.480000000000004,
+              "y": 96.475
+            },
+            {
+              "anchor": "end",
+              "baseline": "middle",
+              "fill": "#64748b",
+              "key": "tick-y-6",
+              "kind": "text",
+              "role": "tick-label",
+              "size": 11,
+              "target": {
+                "axis": "y",
+                "kind": "axis"
+              },
+              "text": "300",
+              "x": 30.480000000000004,
+              "y": 45.75
+            },
+            {
+              "key": "axis-x",
+              "kind": "line",
+              "role": "axis",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "x1": 38.480000000000004,
+              "x2": 620,
+              "y1": 350.1,
+              "y2": 350.1
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-0",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 0,
+                "kind": "category"
+              },
+              "text": "Jan 2024",
+              "x": 135.4,
+              "y": 356.1
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-1",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 1,
+                "kind": "category"
+              },
+              "text": "Feb",
+              "x": 329.24,
+              "y": 356.1
+            },
+            {
+              "anchor": "start",
+              "baseline": "top",
+              "fill": "#64748b",
+              "key": "tick-x-2",
+              "kind": "text",
+              "role": "tick-label",
+              "selected": false,
+              "size": 11,
+              "target": {
+                "index": 2,
+                "kind": "category"
+              },
+              "text": "Mar",
+              "x": 523.08,
+              "y": 356.1
+            },
+            {
+              "key": "tick-mark-x-0",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 135.4,
+              "x2": 135.4,
+              "y1": 350.1,
+              "y2": 354.1
+            },
+            {
+              "key": "tick-mark-x-1",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 329.24,
+              "x2": 329.24,
+              "y1": 350.1,
+              "y2": 354.1
+            },
+            {
+              "key": "tick-mark-x-2",
+              "kind": "line",
+              "role": "tick",
+              "stroke": "#94a3b8",
+              "strokeWidth": 1,
+              "x1": 523.08,
+              "x2": 523.08,
+              "y1": 350.1,
+              "y2": 354.1
+            },
+            {
+              "anchor": "middle",
+              "baseline": "bottom",
+              "fill": "#0f172a",
+              "key": "axis-title-x",
+              "kind": "text",
+              "role": "axis-title",
+              "size": 12,
+              "target": {
+                "axis": "x",
+                "kind": "axis"
+              },
+              "text": "Month",
+              "weight": 500,
+              "x": 329.24,
+              "y": 388
+            },
+            {
+              "d": "M135.4,248.65C200.01,231.74 264.63,216.37 329.24,197.93C393.85,179.48 458.47,157.35 523.08,137.06",
+              "fill": "none",
+              "key": "line-series-1",
+              "kind": "path",
+              "role": "line",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "kind": "series",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 135.4,
+              "cy": 248.65000000000003,
+              "fill": "#ffffff",
+              "key": "point-series-1-0",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 0,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 329.24,
+              "cy": 197.925,
+              "fill": "#ffffff",
+              "key": "point-series-1-1",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 1,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            },
+            {
+              "cx": 523.08,
+              "cy": 137.055,
+              "fill": "#ffffff",
+              "key": "point-series-1-2",
+              "kind": "circle",
+              "r": 3.5,
+              "role": "point",
+              "selected": false,
+              "stroke": "#4269d0",
+              "strokeWidth": 2,
+              "target": {
+                "index": 2,
+                "kind": "point",
+                "seriesId": "series-1"
+              }
+            }
+          ],
+          "percent": false,
+          "plot": {
+            "height": 304.35,
+            "width": 581.52,
+            "x": 38.480000000000004,
+            "y": 45.75
+          },
+          "theme": {
+            "axis": "#94a3b8",
+            "background": "#ffffff",
+            "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+            "fontSize": 11,
+            "grid": "#e2e8f0",
+            "mutedText": "#64748b",
+            "negative": "#e5484d",
+            "positive": "#3ca951",
+            "selection": "#2563eb",
+            "surface": "#ffffff",
+            "text": "#0f172a",
+            "titleSize": 15
+          },
+          "valueScale": {
+            "axis": "y",
+            "domain": [
+              0,
+              300
+            ],
+            "range": [
+              350.1,
+              45.75
+            ],
+            "ticks": [
+              0,
+              50,
+              100,
+              150,
+              200,
+              250,
+              300
+            ]
+          },
+          "warnings": [],
+          "width": 640
+        }
+      }
+    }
+  ]
+}
