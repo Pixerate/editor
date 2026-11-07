@@ -285,6 +285,7 @@ const FACTORIES: Record<string, string> = {
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
 	createPaintEffectsToolProvider: 'pixerate-paint-editor',
 	createPaintProposalToolProvider: 'pixerate-paint-editor',
+	createPaintEvolutionToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
 	createAnimationEffectsToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',

@@ -277,6 +277,17 @@ public final class PaintEditorController {
     let backlightCommitted = BacklightCache()
     /// Lit tiles of thick layers, per layer.
     var litCaches: [String: LitCache] = [:]
+    /// Pending paint proposals (`PaintProposals`), shared between proposal tools and evolutionary stroke tools.
+    private var attachedProposals: PaintProposals?
+    public var proposals: PaintProposals {
+        if let p = attachedProposals { return p }
+        let p = PaintProposals(controller: self)
+        attachedProposals = p
+        return p
+    }
+    public func attachProposals(_ proposals: PaintProposals) {
+        attachedProposals = proposals
+    }
 
     private final class LibraryCancellable {
         let c: Cancellable

@@ -27,6 +27,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The gesture called `undo()` before each refill on the assumption that the last fill made an undo step. `fillRegion` returns early without committing when its mask is empty (a negative `expand` can erase the whole region) or throws, so the blind `undo()` took back an unrelated step.
 - **Solution / Workaround**: Track whether the gesture's last call committed (`committed: result.bounds !== null` in `PaintGesture`, TS and Swift) and only undo when it did. Any gesture that re-applies an operation by undo-and-redo needs the same guard.
 
+### [core|swift/paint-editor] Evolutionary Stroke Mutation Keeps Geometry Scale Separate From Brush Size When `mutation.brush` Is 0
+
+- **Issue / Symptom**: Calling `breed_strokes` with `mutation: { geometry: 0.5, brush: 0 }` changed `brush.tip.size` on the child genome and reported a `tip.size` facet diff even though `mutation.brush` was explicitly set to `0`. Separately, when a host creates `createPaintProposals({ controller })` (`PaintProposals(controller:)` in Swift) alongside `createPaintEditorToolProvider(controller)`, `breed_strokes` and `accept_paint_proposal` would operate on different proposal stores unless linked.
+- **Root Cause**: `varyStroke` scales `brush.tip.size` by $\sqrt{|\det(m)|}$ when `scale !== 1`. In addition, `breed_strokes` / `breed_proposal` / `get_proposal_genome` live on `PaintEditorController`, while `accept_paint_proposal` / `reject_paint_proposal` live on `PaintProposals`.
+- **Solution / Workaround**: In `mutateStroke` (`evolution.ts` and `Evolution.swift`), restore `stroke.brush.tip.size` after `varyStroke` when `rates.brush === 0`, and round `tip.size` to `0.1` (`roundScale(..., 10)`) before `driftBrushFacets` when `rates.brush > 0`. In `createPaintProposals` and `PaintProposals.init`, call `controller.attachProposals(store)` so `controller.proposals` and the proposal tool provider always share the same pending proposal store.
+
 ### [svelte/canvas] `FloatingHorizontalScrollbar` Kept a Stale Position When Its Target Resized Quietly
 
 - **Issue / Symptom**: The bar stayed at its old `left` and `width` after the target changed size. In one host app it stayed 1022px wide while the board it tracks was 1313px wide.

@@ -14,6 +14,7 @@ import { WetPanel } from './WetPanel';
 import { StickerPanel } from './StickerPanel';
 import { StrokePanel } from './StrokePanel';
 import { PathStrokePanel } from './PathStrokePanel';
+import { EvolutionPanel } from './EvolutionPanel';
 import { PaintEffectsPanel, usePaintEffectsProvider } from './PaintEffectsPanel';
 import { chip } from './shared';
 
@@ -157,6 +158,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
             {tab === 'layers' && <PaintLayersPanel controller={controller} />}
             {tab === 'layers' && <StrokePanel controller={controller} />}
             {tab === 'layers' && <PathStrokePanel controller={controller} />}
+            {tab === 'layers' && <EvolutionPanel controller={controller} proposals={proposals} />}
             {tab === 'layers' && <StickerPanel controller={controller} />}
             {tab === 'effects' && effects && <PaintEffectsPanel controller={controller} />}
           </div>

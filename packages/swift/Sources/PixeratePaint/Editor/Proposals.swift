@@ -27,6 +27,7 @@ public struct PaintProposal {
     public var ghost: [UInt8]
     public var anchors: [String]
     public var createdAt: Date
+    public var strokeGenome: [RecordedStroke]? = nil
 }
 
 public final class PaintProposals {
@@ -40,6 +41,11 @@ public final class PaintProposals {
         self.controller = controller
         self.origin = origin
         self.maxPoints = maxPoints
+        controller.attachProposals(self)
+    }
+
+    public func get(_ id: String) -> PaintProposal? {
+        proposals.first { $0.id == id }
     }
 
     private func find(_ id: String) throws -> PaintProposal {
@@ -51,7 +57,7 @@ public final class PaintProposals {
 
     private func isHex(_ v: JSONValue?) -> Bool { v?.stringValue.map(isHexColor) ?? false }
 
-    private func validate(_ input: JSONObject) throws {
+    private func validate(_ input: JSONObject, _ strokeGenome: [RecordedStroke]? = nil) throws {
         if (input["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty { throw PaintEditorError("A proposal needs a title: what it adds, in a few words.") }
         guard let ops = input["ops"]?.arrayValue, !ops.isEmpty else { throw PaintEditorError("A proposal needs at least one op (stroke, wash or echo).") }
         let place = input["place"]?.stringValue ?? "top"
@@ -87,6 +93,14 @@ public final class PaintProposals {
                     if let refusal = suggestionBrushRefusal(stroke.brush) { throw PaintEditorError("\(at): stroke \"\(id)\": \(refusal)") }
                     points += stroke.points.count * Int(op["repeat"]?.numberValue ?? 1)
                 }
+            case "strokes":
+                guard let genome = strokeGenome, !genome.isEmpty else { throw PaintEditorError("\(at): strokes needs at least one recorded stroke.") }
+                for s in genome {
+                    if s.points.isEmpty { throw PaintEditorError("\(at): each stroke needs points in document pixels.") }
+                    points += s.points.count
+                    if !isHexColor(s.color) { throw PaintEditorError("\(at): color \"\(s.color)\" is not #rrggbb.") }
+                    if let refusal = liveStrokeRefusal(s.brush) ?? suggestionBrushRefusal(s.brush) { throw PaintEditorError("\(at): \(refusal)") }
+                }
             default:
                 throw PaintEditorError("\(at): unknown kind \"\(op["kind"]?.stringValue ?? "undefined")\"; use stroke, wash or echo.")
             }
@@ -94,7 +108,7 @@ public final class PaintProposals {
         if points > maxPoints { throw PaintEditorError("The proposal paints \(points) points; the most is \(maxPoints). Suggest less, or echo fewer strokes.") }
     }
 
-    private func paint(_ ops: [JSONObject], _ layerId: String) throws -> [String] {
+    private func paint(_ ops: [JSONObject], _ layerId: String, _ strokeGenome: [RecordedStroke]? = nil) throws -> [String] {
         let before = strokeIds()
         for op in ops {
             switch op["kind"]?.stringValue {
@@ -105,6 +119,16 @@ public final class PaintProposals {
                 _ = try controller.paintStroke(i, points: (op["points"]?.arrayValue ?? []).compactMap(PenPoint.init(json:)))
             case "wash":
                 _ = try controller.fillLayer(layerId: layerId, color: op["color"]?.stringValue, opacity: op["opacity"]?.numberValue ?? 0.35, grain: op["grain"]?.numberValue ?? 0.4)
+            case "strokes":
+                for s in strokeGenome ?? [] {
+                    var i = PaintStrokeInit(layerId: layerId, color: s.color, seed: s.seed, copies: s.copies ?? [], load: s.load)
+                    i.fixedBrush = s.brush
+                    i.paint = s.effect?.json ?? s.paint?.json
+                    i.snapToPerspective = false
+                    i.stencils = false
+                    i.maskStencils = s.stencils ?? []
+                    _ = try controller.paintStroke(i, points: s.points)
+                }
             default:
                 let o = op["origin"]?.objectValue
                 _ = try controller.replayStrokes(ReplayOptions(
@@ -127,15 +151,15 @@ public final class PaintProposals {
 
     private func topLayerId() -> String? { controller.listLayers().first { $0.parentId == nil }?.id }
 
-    public func propose(_ input: JSONObject) throws -> PaintProposal {
-        try validate(input)
+    public func propose(_ input: JSONObject, strokeGenome: [RecordedStroke]? = nil) throws -> PaintProposal {
+        try validate(input, strokeGenome)
         var placement: JSONObject = ["place": .string(input["place"]?.stringValue ?? "top")]
         if let l = input["layerId"]?.stringValue, !l.isEmpty { placement["layerId"] = .string(l) }
         if let n = input["layerName"]?.stringValue, !n.isEmpty { placement["layerName"] = .string(n) }
         let place = placement["place"]!.stringValue!
         let ops = (input["ops"]?.arrayValue ?? []).compactMap(\.objectValue)
         let preview = try controller.previewPaint(aboveId: place == "bottom" ? nil : place == "above" ? placement["layerId"]?.stringValue : topLayerId(), bottom: place == "bottom") { layerId in
-            _ = try paint(ops, layerId)
+            _ = try paint(ops, layerId, strokeGenome)
         }
         seq += 1
         var anchors: [String] = []
@@ -143,10 +167,20 @@ public final class PaintProposals {
         let p = PaintProposal(
             id: "paint-proposal-\(seq)", title: String(input["title"]!.stringValue!.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120)),
             rationale: input["rationale"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }, origin: input["origin"]?.stringValue ?? origin ?? "agent:anonymous",
-            ops: ops, placement: placement, bounds: preview.bounds, ghost: preview.composite, anchors: anchors, createdAt: Date()
+            ops: ops, placement: placement, bounds: preview.bounds, ghost: preview.composite, anchors: anchors, createdAt: Date(), strokeGenome: strokeGenome
         )
         proposals.append(p)
         return p
+    }
+
+    public func proposeStrokes(title: String, rationale: String?, origin: String? = nil, strokes: [RecordedStroke]) throws -> PaintProposal {
+        var input: JSONObject = [
+            "title": .string(title),
+            "ops": .array([.object(["kind": "strokes", "strokes": .array(strokes.map(strokeToJSON))])]),
+        ]
+        if let rationale, !rationale.isEmpty { input["rationale"] = .string(rationale) }
+        if let origin, !origin.isEmpty { input["origin"] = .string(origin) }
+        return try propose(input, strokeGenome: strokes)
     }
 
     public func accept(_ id: String) throws -> JSONObject {
@@ -162,7 +196,7 @@ public final class PaintProposals {
         let result = try controller.group(p.title) { () throws -> (String, [String]) in
             let layer = try controller.addLayer(name: p.placement["layerName"]?.stringValue ?? p.title, aboveId: place == "above" ? above : place == "top" ? topLayerId() : nil)
             if place == "bottom" { _ = try controller.moveLayer(layer.id, 0, parentId: .some(nil)) }
-            return (layer.id, try paint(p.ops, layer.id))
+            return (layer.id, try paint(p.ops, layer.id, p.strokeGenome))
         }
         // The suggestion's layer is the agent's; keep the user on the layer they were painting.
         if let active, controller.listLayers().contains(where: { $0.id == active }) { try controller.setActiveLayer(active) }

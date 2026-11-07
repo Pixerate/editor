@@ -1962,6 +1962,57 @@ public struct ExportHighResArguments: Sendable {
     }
 }
 
+/// Arguments of `breed_strokes`.
+public struct BreedStrokesArguments: Sendable {
+    /// 1..16 stroke ids from list_strokes to breed variants from.
+    public var strokeIds: [String]
+    /// How many mutated variants to propose, 2..12 (default 4).
+    public var count: Int?
+    /// How strongly each part of a stroke genome mutates (each 0..1; 0 keeps that part unchanged).
+    public var mutation: JSONValue?
+    /// Deterministic seed for the variants (default 1); the same seed gives the same genomes.
+    public var seed: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        strokeIds = try args.required(try args.strings("strokeIds"), "strokeIds")
+        count = try args.integer("count")
+        mutation = args.argument("mutation")
+        seed = try args.integer("seed")
+    }
+}
+
+/// Arguments of `breed_proposal`.
+public struct BreedProposalArguments: Sendable {
+    /// 1 proposal id to mutate it further, or 2 proposal ids to cross them over and mutate.
+    public var proposalIds: [String]
+    /// How many mutated variants to propose, 2..12 (default 4).
+    public var count: Int?
+    /// How strongly each part of a stroke genome mutates (each 0..1; 0 keeps that part unchanged).
+    public var mutation: JSONValue?
+    /// Deterministic seed for the variants (default 1); the same seed gives the same genomes.
+    public var seed: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        proposalIds = try args.required(try args.strings("proposalIds"), "proposalIds")
+        count = try args.integer("count")
+        mutation = args.argument("mutation")
+        seed = try args.integer("seed")
+    }
+}
+
+/// Arguments of `get_proposal_genome`.
+public struct GetProposalGenomeArguments: Sendable {
+    /// Pending proposal id from breed_strokes, breed_proposal or list_paint_proposals.
+    public var proposalId: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        proposalId = try args.required(try args.string("proposalId"), "proposalId")
+    }
+}
+
 /// Arguments of `list_stickers`.
 public struct ListStickersArguments: Sendable {
     /// Sticker layer id from list_layers (default the active layer).
@@ -3165,6 +3216,9 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .setInstantDry: try SetInstantDryArguments(args)
     case .exportTimeLapse: try ExportTimeLapseArguments(args)
     case .exportHighRes: try ExportHighResArguments(args)
+    case .breedStrokes: try BreedStrokesArguments(args)
+    case .breedProposal: try BreedProposalArguments(args)
+    case .getProposalGenome: try GetProposalGenomeArguments(args)
     case .listStickers: try ListStickersArguments(args)
     case .stickerAt: try StickerAtArguments(args)
     case .addStickers: try AddStickersArguments(args)

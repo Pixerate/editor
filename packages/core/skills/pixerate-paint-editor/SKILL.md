@@ -315,6 +315,9 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `convert_to_stroke_layer` | Make an empty pixel layer a stroke layer. Returns the layer. |
 | `rasterize_stroke_layer` | Turn a stroke layer into a plain pixel layer with the same pixels (strokes no longer editable). Do it before erasing, smudging or filling on it. |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
+| `breed_strokes` | Breed `count` (2..12, default 4) mutated variants from recorded `strokeIds` (1..16) as ghost paint proposals: `mutation` (`geometry`, `color`, `brush`, `seed`, each 0..1), `seed`. Returns `proposalIds` and each variant's `diff` and `bounds`. Read [references/evolution.md](references/evolution.md). |
+| `breed_proposal` | Breed `count` (2..12, default 4) next-generation variants from `proposalIds` (1 id mutates it; 2 ids cross their points and brush facets over, then mutate), with `mutation` and `seed`. Returns `proposalIds` and `proposals`. |
+| `get_proposal_genome` | Read a pending proposal's stroke genome (`proposalId`): `strokes` with full brush facets, points, colour and seed. |
 | `undo_paint` | Undo the last step (a wet stroke's undo puts the wet paint back as it was before it). Returns what was undone and what is next. |
 | `redo_paint` | Redo the step just undone. |
 
@@ -422,20 +425,13 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
 ## Pitfalls
 
 - With agent playback on, strokes, fills and replays are painted live by the director, and other writes open their panel (Colour, Wet, Paper, Layers, Effects) and point at the control. Results are unchanged.
-- **Stroke-by-stroke drawing is slow and expensive.** Do not draw a detailed picture point by
-  point. Block in with fills and big strokes, then replay and vary a few good strokes.
-- **A hidden or locked layer refuses paint**: show it (`update_layer visible true`) or unlock it.
-  `transparency` lock is not an error: paint only lands where the layer already has paint.
-- **Depth 0 means no grain** whatever the brush; grainy media then look smooth. Smooth bristol
-  has depth 0.
-- **Grain is fixed to the document**, not to the layer: moving content does not move the grain,
-  and two strokes on the same spot catch the same peaks.
-- **Blending tools need paint to blend.** Blender and smudge only move what is on the target
-  layer: blend on the layer you painted, not on an empty one above it.
-- **A dirty brush stays dirty** across strokes and colour changes until `clean_mixer_brush`.
-  Pick-up lifts only paint on the target layer: the paper and other layers lift nothing.
-- **Replays use the recorded load**: a replayed pick-up stroke starts with what the brush carried
-  when it was painted, not with the current load.
+- **Stroke-by-stroke drawing is slow and expensive.** Do not draw a detailed picture point by point. Block in with fills and big strokes, then replay and vary a few good strokes.
+- **A hidden or locked layer refuses paint**: show it (`update_layer visible true`) or unlock it. `transparency` lock is not an error: paint only lands where the layer already has paint.
+- **Depth 0 means no grain** whatever the brush; grainy media then look smooth. Smooth bristol has depth 0.
+- **Grain is fixed to the document**, not to the layer: moving content does not move the grain, and two strokes on the same spot catch the same peaks.
+- **Blending tools need paint to blend.** Blender and smudge only move what is on the target layer: blend on the layer you painted, not on an empty one above it.
+- **A dirty brush stays dirty** across strokes and colour changes until `clean_mixer_brush`. Pick-up lifts only paint on the target layer: the paper and other layers lift nothing.
+- **Replays use the recorded load**: a replayed pick-up stroke starts with what the brush carried when it was painted, not with the current load.
 - **Big soft brushes at full flow look flat.** Lower `flow` (airbrush 0.05..0.15) and build up.
 - **JPEG and WebP need a browser**; in Node use PNG. Exports never upscale (`scale` ≤ 1).
 - **Symmetry stays on until you turn it off.** Set `mode: "off"` after the symmetric part, or
