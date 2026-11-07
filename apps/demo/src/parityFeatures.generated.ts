@@ -2089,6 +2089,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "✅ Metal shading of the display: `WetMetalEngine` shades every stale tile at once from the core's WGSL shading kernel (translated by naga, `pnpm gen:msl`), reading the CPU engine's tiles in place on shared memory (`WetWorld` `attachGpu` / `displayGpu`), at 16 wet tiles; the GPU never steps (the CPU is the authority and runs every step), so there are no lead frames; `set_wet_engine` reports the engine (`WetEngineInfo`), and the engine picker in `PaintWetPanel` lists both"
       },
       {
+        "feature": "Live Patterns in Wet Paint (Gray-Scott reaction-diffusion patterns — spots, stripes, coral, maze and worms — that grow inside wet paint on a half-resolution tile field outside the wet kernel, gated by water coverage so the pattern freezes when the paint dries; `livePatterns` brush facet with Pearson presets, explicit `feed` / `kill`, `scale`, `contrast`, `secondColor` and `relief` that embosses ridges into the layer's thick height map; built-in presets Turing wash and Coral ink; undone, saved and replayed; `get_live_patterns`, `set_live_patterns`, `seed_live_patterns` agent tools)",
+        "core": "`LivePatternField`, `LIVE_PATTERN_PRESETS`, `LIVE_PATTERN_KINDS` (`/paint`) & `getLivePatterns`, `setLivePatterns`, `seedLivePatterns`, `LIVE_PATTERN_SLIDERS` (`/paint-editor`)",
+        "react": "Live patterns section in `<WetPanel>` & `<BrushEditor>`",
+        "svelte": "Live patterns section in `<WetPanel>` & `<BrushEditor>`",
+        "swift": "✅ `LivePatternField`, `LivePatternsSettings`, `BrushLivePatterns`, `PaintEditorController` `getLivePatterns`, `setLivePatterns`, `seedLivePatterns`, Live patterns section in `PaintWetPanel`"
+      },
+      {
         "feature": "Oils & Thick Paint (wet oil on the wet simulation: thick, slow-drying, blending into the wet paint it meets; a thick-paint layer channel set of height and material (gloss, metallic) lit at render time by a movable light, relit tile by tile; impasto brush with bristle ridges, paint tube, palette knife that scrapes and smears, roller, gloop pen, metallic paint; paint loading that runs out along a stroke, thinners, instant dry; metallic paper; relief and lighting saved with the document; `set_lighting`, `get_relief`, `flatten_relief`, `set_instant_dry` agent tools)",
         "core": "`ThickStrokeDriver`, `LitCache`, `lightTile`, `setLighting`, `flattenRelief`, `WET_MEDIUM_PARAMS`",
         "react": "`<BrushPanel>` impasto and medium menus, light section in `<PaperPanel>`, Instant dry in `<WetPanel>`",

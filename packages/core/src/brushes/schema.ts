@@ -7,7 +7,7 @@
 import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
-import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
+import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
@@ -260,6 +260,20 @@ const MOTION = object('Animation after painting.', {
   waveSpeed: unit('Particle waves: how fast they run by stroke time; 0 they stand still (default 0), 1 about four a second.'),
 });
 
+const LIVE_PATTERNS = object('Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.', {
+  pattern: oneOf(LIVE_PATTERN_KINDS, 'Named Pearson feed/kill preset: spots (default, dividing mitosis spots), stripes (labyrinthine stripes), coral (branching dendrites), maze (winding channels) or worms (vermicular tracks).'),
+  feed: num(0.01, 0.1, 'Gray-Scott feed rate F (0.01..0.1; default from pattern).'),
+  kill: num(0.03, 0.08, 'Gray-Scott kill rate k (0.03..0.08; default from pattern).'),
+  scale: num(0.5, 4, 'Spatial scale of the pattern (diffusion multiplier, 0.5..4, default 1).'),
+  contrast: num(0, 2, 'Visual contrast of the V concentration field (0..2, default 1).'),
+  secondColor: {
+    type: ['string', 'null'],
+    pattern: '^#[0-9a-fA-F]{6}$',
+    description: 'Optional second colour (#rrggbb) that V blends the wet paint towards; null or omitted modulates pigment density/contrast.',
+  },
+  relief: unit('Impasto relief height written to the layer thick map as patterns grow (0..1, default 0).'),
+});
+
 const SOLID: JsonSchema = {
   type: 'string',
   pattern: '^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$',
@@ -330,6 +344,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     ghost: GHOST,
     mutation: MUTATION,
     motion: MOTION,
+    livePatterns: LIVE_PATTERNS,
     colour: COLOUR,
   },
   ['id', 'name', 'kind', 'tip'],
@@ -349,6 +364,7 @@ export const BRUSH_FACET_SCHEMAS = {
   ghost: GHOST,
   mutation: MUTATION,
   motion: MOTION,
+  livePatterns: LIVE_PATTERNS,
   colour: COLOUR,
   paint: PAINT,
 } as const;

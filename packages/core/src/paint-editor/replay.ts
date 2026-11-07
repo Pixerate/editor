@@ -31,6 +31,7 @@ import { scaleStencil } from './stencils';
 import type { Sticker } from './stickers';
 import type { WetFlowSpec } from '../paint/wet/flow';
 import type { WetParams, WetTilt } from '../paint/wet/model';
+import type { LivePatternsInput, LivePatternsSettings } from '../paint/live-patterns';
 import { downsampleRgba } from './render';
 
 export interface PaintReplayOptions {
@@ -205,6 +206,31 @@ export async function replayPainting(
           case 'wet-paper': {
             const d = e.data as { rect: { x: number; y: number; width: number; height: number }; amount: number };
             if (e.layerId && target.getLayer(e.layerId)) target.wetPaper({ layerId: e.layerId, rect: sr(d.rect), amount: d.amount });
+            break;
+          }
+          case 'live-patterns': {
+            const d = e.data as LivePatternsSettings | null;
+            if (e.layerId && target.getLayer(e.layerId)) {
+              target.setLivePatterns(e.layerId, d ? { ...d, scale: Math.min(4, d.scale * s), enabled: true } : { enabled: false });
+            }
+            break;
+          }
+          case 'seed-live-patterns': {
+            const d = e.data as {
+              points: Array<{ x: number; y: number; strength?: number }>;
+              radius: number;
+              seed: number;
+              settings?: LivePatternsInput;
+            };
+            if (e.layerId && target.getLayer(e.layerId) && Array.isArray(d.points)) {
+              target.seedLivePatterns({
+                layerId: e.layerId,
+                points: d.points.map((p) => ({ ...p, x: p.x * s, y: p.y * s })),
+                radius: Math.min(512, d.radius * s),
+                seed: d.seed,
+                ...(d.settings ? { ...d.settings, ...(d.settings.scale ? { scale: Math.min(4, d.settings.scale * s) } : {}) } : {}),
+              });
+            }
             break;
           }
           case 'ghost-release': {

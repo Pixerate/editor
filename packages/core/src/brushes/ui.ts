@@ -10,7 +10,7 @@
  */
 
 import { BLEND_MODES } from '../raster/blend';
-import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
+import { BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { BRUSH_SLIDERS, brushEngineControls, type SliderControl } from '../paint-editor/brush-controls';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
 import { BrushLibraryError, type AddBrushSourceResult, type BrushLibrary, type BrushLibraryEntry, type SaveBrushResult } from './library';
@@ -102,6 +102,7 @@ const ARIA: Readonly<Record<string, string>> = {
   'light.pressure': 'Light follows pressure',
   'tip.grain.source': 'Tip grain',
   'dynamics.angleJitter': 'Brush rotation jitter',
+  'livePatterns.pattern': 'Live pattern',
 };
 const aria = (path: string, label: string) => ARIA[path] ?? `Brush ${label.toLowerCase()}`;
 
@@ -232,6 +233,10 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     engineOk && engineControls?.mixingPath && (engine === 'wet' || exchangeFull) && fieldOf('behaviour.mixing') && choice('behaviour.mixing', 'Mixing', options(['pigment', 'rgb'], { pigment: 'Pigment', rgb: 'RGB' })),
     engineOk && engineControls?.dirty && exchangeFull && fieldOf('behaviour.exchange.dirty') && toggle('behaviour.exchange.dirty', 'Dirty brush'),
     engine === 'mixer' && engineOk && full(profile.reservoir) && toggle('behaviour.exchange.reservoir.refill', 'Load each stroke'),
+    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && choice('livePatterns.pattern', 'Live pattern', [{ value: '', label: 'None' }, ...options(LIVE_PATTERN_KINDS)], ''),
+    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.scale', label: 'Pattern scale', ariaLabel: 'Brush pattern scale', min: 0.5, max: 4, step: 0.1, value: brush.livePatterns.scale ?? 1 }),
+    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.contrast', label: 'Pattern contrast', ariaLabel: 'Brush pattern contrast', min: 0, max: 2, step: 0.05, value: brush.livePatterns.contrast ?? 1 }),
+    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.relief', label: 'Pattern relief', ariaLabel: 'Brush pattern relief', min: 0, max: 1, step: 0.05, value: brush.livePatterns.relief ?? 0 }),
   ]);
 
   if (!isTool && full(profile.light) && engineOk && engineControls?.light) {
@@ -317,6 +322,8 @@ function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
       return 'several dabs per step';
     case 'light':
       return 'light';
+    case 'livePatterns':
+      return 'live patterns';
     case 'fluorescence':
       return 'UV-fluorescent ink';
     case 'thermochromic':
@@ -461,6 +468,8 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
     else delete next.iridescence;
   } else if (path === 'tip.grain.source' && (value === undefined || value === '')) {
     delete next.tip.grain;
+  } else if (path === 'livePatterns.pattern' && (value === undefined || value === '')) {
+    delete next.livePatterns;
   } else if (path === 'tip.shape' && value !== 'stamp') {
     next.tip = { ...next.tip, shape: value as Brush['tip']['shape'], stamps: undefined };
     if (value !== 'bristle') delete next.tip.bristle;

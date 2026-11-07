@@ -2809,6 +2809,29 @@
         "step": 0.5
       }
     ],
+    "livePatterns": [
+      {
+        "path": "scale",
+        "label": "Scale",
+        "min": 0.25,
+        "max": 4,
+        "step": 0.05
+      },
+      {
+        "path": "contrast",
+        "label": "Contrast",
+        "min": 0,
+        "max": 2,
+        "step": 0.05
+      },
+      {
+        "path": "relief",
+        "label": "Relief",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
     "stroke": [
       {
         "path": "tip.size",
@@ -2918,6 +2941,13 @@
       "watercolor": "Watercolour",
       "gouache": "Gouache",
       "oil": "Oil"
+    },
+    "livePatterns": {
+      "spots": "Spots",
+      "stripes": "Stripes",
+      "coral": "Coral",
+      "maze": "Maze",
+      "worms": "Worms"
     },
     "impastoTools": {
       "brush": "Brush",

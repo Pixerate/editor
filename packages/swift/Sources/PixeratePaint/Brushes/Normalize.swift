@@ -60,13 +60,16 @@ private func read(_ value: JSONValue, _ schema: JSONObject, _ path: String, _ pr
         problems.append("\(path) must be \(c.stringified()); dropped.")
         return nil
     }
-    switch schema["type"]?.stringValue {
+    let types = schema["type"]?.arrayValue?.compactMap(\.stringValue)
+    if types?.contains("null") == true && value == .null { return .null }
+    let schemaType = schema["type"]?.stringValue ?? types?.first { $0 != "null" }
+    switch schemaType {
     case "number", "integer":
         guard let raw = value.finite else {
             problems.append("\(path) must be a number; dropped.")
             return nil
         }
-        let integer = schema["type"]?.stringValue == "integer"
+        let integer = schemaType == "integer"
         var n = integer ? JS.round(raw) : raw
         let lo = schema["minimum"]?.numberValue, hi = schema["maximum"]?.numberValue
         if let lo, n < lo { n = lo }
@@ -87,6 +90,7 @@ private func read(_ value: JSONValue, _ schema: JSONObject, _ path: String, _ pr
             problems.append("\(path) \(value.stringified()) is not valid\(options.map { "; use one of \($0.joined(separator: ", "))" } ?? ""); dropped.")
             return nil
         }
+        if schema["pattern"]?.stringValue == "^#[0-9a-fA-F]{6}$" { return .string(value.stringValue!.lowercased()) }
         if let max = schema["maxLength"]?.numberValue { return .string(String(value.stringValue!.prefix(Int(max)))) }
         return value
     case "array":
@@ -161,7 +165,7 @@ private func readPaint(_ value: JSONValue, _ path: String, _ problems: inout [St
 }
 
 /// The facet order of a hand-written brush.
-let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour"]
+let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour", "livePatterns"]
 
 func orderedBrush(_ brush: JSONObject) -> Brush {
     var out = Brush()
@@ -359,6 +363,10 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
         behaviour = b
         brush["behaviour"] = .object(b)
     }
+    if brush["livePatterns"] != nil && (kind != "mark" || behaviour?["surface"] != "wet") {
+        drop("livePatterns", "it needs a wet mark brush (kind mark and behaviour.surface wet)")
+        brush["livePatterns"] = nil
+    }
     if brush["ghost"] != nil {
         if kind == "tool" || behaviour?["surface"]?.stringValue != "wet" {
             drop("ghost", "it needs a mark brush with behaviour.surface wet")
@@ -400,7 +408,7 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 // MARK: - Patches (`brushes/patch.ts`)
 
 /// The facets a patch can remove (`unset`), back to the engine's defaults.
-public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour"]
+public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "motion", "colour", "livePatterns"]
 
 /// `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks.
 public func mergeBrushPatch(_ base: JSONObject, _ patch: JSONObject, _ path: String = "") -> JSONObject {

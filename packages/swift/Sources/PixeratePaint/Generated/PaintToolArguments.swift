@@ -609,6 +609,7 @@ public struct SetBrushArguments: Sendable {
         case ghost
         case mutation
         case motion
+        case livePatterns
         case colour
     }
 
@@ -650,6 +651,8 @@ public struct SetBrushArguments: Sendable {
     public var mutation: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
+    /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
+    public var livePatterns: JSONValue?
     /// The brush's colours.
     public var colour: JSONValue?
     /// Facets to remove, back to their defaults (applied before the facets given).
@@ -676,6 +679,7 @@ public struct SetBrushArguments: Sendable {
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
         motion = args.argument("motion")
+        livePatterns = args.argument("livePatterns")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
     }
@@ -1849,6 +1853,111 @@ public struct SetWaterOverlayArguments: Sendable {
     }
 }
 
+/// Arguments of `get_live_patterns`.
+public struct GetLivePatternsArguments: Sendable {
+    /// Pixel layer id from list_layers (default the active layer).
+    public var layerId: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+    }
+}
+
+/// Arguments of `set_live_patterns`.
+public struct SetLivePatternsArguments: Sendable {
+    /// Pearson Gray-Scott preset: spots, stripes, coral, maze or worms (default spots).
+    public enum Pattern: String, CaseIterable, Sendable {
+        case spots
+        case stripes
+        case coral
+        case maze
+        case worms
+    }
+
+    /// Pixel layer id from list_layers (default the active layer).
+    public var layerId: String?
+    /// true (default) configures live patterns on the layer; false clears them.
+    public var enabled: Bool?
+    /// Pearson Gray-Scott preset: spots, stripes, coral, maze or worms (default spots).
+    public var pattern: Pattern?
+    /// Gray-Scott feed rate F, 0.005..0.1 (default: the pattern preset’s feed rate).
+    public var feed: Double?
+    /// Gray-Scott kill rate k, 0.02..0.08 (default: the pattern preset’s kill rate).
+    public var kill: Double?
+    /// Diffusion scale 0.25..4 (larger values grow broader pattern features; default 1).
+    public var scale: Double?
+    /// How strongly V modulates the wet pigment or blends toward secondColor, 0..2 (default 0.85).
+    public var contrast: Double?
+    /// Optional #rrggbb colour that high-V pattern ridges blend toward, or null to modulate pigment contrast (default null).
+    public var secondColor: JSONValue?
+    /// Impasto ridge height 0..1 written from V into the layer’s thick height map so light catches the pattern (default 0).
+    public var relief: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+        enabled = try args.bool("enabled")
+        pattern = try args.enumeration("pattern", as: Pattern.self)
+        feed = try args.number("feed")
+        kill = try args.number("kill")
+        scale = try args.number("scale")
+        contrast = try args.number("contrast")
+        secondColor = args.argument("secondColor")
+        relief = try args.number("relief")
+    }
+}
+
+/// Arguments of `seed_live_patterns`.
+public struct SeedLivePatternsArguments: Sendable {
+    /// Pearson Gray-Scott preset: spots, stripes, coral, maze or worms (default spots).
+    public enum Pattern: String, CaseIterable, Sendable {
+        case spots
+        case stripes
+        case coral
+        case maze
+        case worms
+    }
+
+    /// Pixel layer id from list_layers (default the active layer).
+    public var layerId: String?
+    /// Seed centres in document pixels where reaction-diffusion activator V is nucleated.
+    public var points: [JSONValue]
+    /// Seed disc radius in document pixels (default 16).
+    public var radius: Double?
+    /// Deterministic noise seed for the nucleated discs (default: next editor seed).
+    public var seed: Int?
+    /// Pearson Gray-Scott preset: spots, stripes, coral, maze or worms (default spots).
+    public var pattern: Pattern?
+    /// Gray-Scott feed rate F, 0.005..0.1 (default: the pattern preset’s feed rate).
+    public var feed: Double?
+    /// Gray-Scott kill rate k, 0.02..0.08 (default: the pattern preset’s kill rate).
+    public var kill: Double?
+    /// Diffusion scale 0.25..4 (larger values grow broader pattern features; default 1).
+    public var scale: Double?
+    /// How strongly V modulates the wet pigment or blends toward secondColor, 0..2 (default 0.85).
+    public var contrast: Double?
+    /// Optional #rrggbb colour that high-V pattern ridges blend toward, or null to modulate pigment contrast (default null).
+    public var secondColor: JSONValue?
+    /// Impasto ridge height 0..1 written from V into the layer’s thick height map so light catches the pattern (default 0).
+    public var relief: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+        points = try args.required(try args.array("points"), "points")
+        radius = try args.number("radius")
+        seed = try args.integer("seed")
+        pattern = try args.enumeration("pattern", as: Pattern.self)
+        feed = try args.number("feed")
+        kill = try args.number("kill")
+        scale = try args.number("scale")
+        contrast = try args.number("contrast")
+        secondColor = args.argument("secondColor")
+        relief = try args.number("relief")
+    }
+}
+
 /// Arguments of `get_light`.
 public struct GetLightArguments: Sendable {
     /// Pixel layer id from list_layers (default the active layer).
@@ -2994,6 +3103,8 @@ public struct CreateBrushArguments: Sendable {
     public var mutation: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
+    /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
+    public var livePatterns: JSONValue?
     /// The brush's colours.
     public var colour: JSONValue?
 
@@ -3019,6 +3130,7 @@ public struct CreateBrushArguments: Sendable {
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
         motion = args.argument("motion")
+        livePatterns = args.argument("livePatterns")
         colour = args.argument("colour")
     }
 }
@@ -3068,6 +3180,7 @@ public struct UpdateBrushArguments: Sendable {
         case ghost
         case mutation
         case motion
+        case livePatterns
         case colour
     }
 
@@ -3109,6 +3222,8 @@ public struct UpdateBrushArguments: Sendable {
     public var mutation: JSONValue?
     /// Animation after painting.
     public var motion: JSONValue?
+    /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
+    public var livePatterns: JSONValue?
     /// The brush's colours.
     public var colour: JSONValue?
     /// Facets to remove, back to their defaults (applied before the facets given).
@@ -3135,6 +3250,7 @@ public struct UpdateBrushArguments: Sendable {
         ghost = args.argument("ghost")
         mutation = args.argument("mutation")
         motion = args.argument("motion")
+        livePatterns = args.argument("livePatterns")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
     }
@@ -3404,6 +3520,9 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .pauseWetPaint: try PauseWetPaintArguments(args)
     case .setWetEngine: try SetWetEngineArguments(args)
     case .setWaterOverlay: try SetWaterOverlayArguments(args)
+    case .getLivePatterns: try GetLivePatternsArguments(args)
+    case .setLivePatterns: try SetLivePatternsArguments(args)
+    case .seedLivePatterns: try SeedLivePatternsArguments(args)
     case .getLight: try GetLightArguments(args)
     case .setLightSpill: try SetLightSpillArguments(args)
     case .clearLight: try ClearLightArguments(args)

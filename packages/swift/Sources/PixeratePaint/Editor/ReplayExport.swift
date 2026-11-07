@@ -202,6 +202,37 @@ extension PaintEditorController {
                 case "wet-paper":
                     let d = e.data?.objectValue ?? [:]
                     if let id = e.layerId, target.getLayer(id) != nil { _ = try? target.wetPaper(layerId: id, rect: sr(d["rect"]), amount: d["amount"]?.numberValue) }
+                case "live-patterns":
+                    if let id = e.layerId, target.getLayer(id) != nil {
+                        if var d = e.data?.objectValue {
+                            if let sc = d["scale"]?.numberValue { d["scale"] = .number(Swift.min(4, sc * s)) }
+                            d["enabled"] = .bool(true)
+                            _ = try? target.setLivePatterns(id, d)
+                        } else {
+                            _ = try? target.setLivePatterns(id, ["enabled": .bool(false)])
+                        }
+                    }
+                case "seed-live-patterns":
+                    let d = e.data?.objectValue ?? [:]
+                    if let id = e.layerId, target.getLayer(id) != nil, let pts = d["points"]?.arrayValue {
+                        let scaledPts: [JSONValue] = pts.compactMap { item in
+                            guard var o = item.objectValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue else { return nil }
+                            o["x"] = .number(x * s)
+                            o["y"] = .number(y * s)
+                            return .object(o)
+                        }
+                        var args: JSONObject = [
+                            "layerId": .string(id),
+                            "points": .array(scaledPts),
+                            "radius": .number(Swift.min(512, (d["radius"]?.numberValue ?? 16) * s)),
+                        ]
+                        if let seed = d["seed"] { args["seed"] = seed }
+                        if let st = d["settings"]?.objectValue {
+                            for (k, v) in st { args[k] = v }
+                            if let sc = st["scale"]?.numberValue { args["scale"] = .number(Swift.min(4, sc * s)) }
+                        }
+                        _ = try? target.seedLivePatterns(args)
+                    }
                 case "ghost-release":
                     let d = e.data?.objectValue ?? [:]
                     if let id = e.layerId, target.getLayer(id) != nil { target.wet.releaseGhost(id, linger: d["linger"]?.numberValue) }

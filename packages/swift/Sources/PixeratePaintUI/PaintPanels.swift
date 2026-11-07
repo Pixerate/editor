@@ -469,6 +469,23 @@ public struct PaintWetPanel: View {
                 if layer.flow.kind != "none" {
                     PaintSliderRow(label: "Flow strength", value: layer.flow.strength, range: 0...1, step: 0.01, onCommit: { model.setFlowStrength($0) })
                 }
+                let lp = model.livePatterns
+                Picker("Live patterns", selection: Binding(get: { lp?.pattern ?? "none" }, set: { model.setLivePatternKind($0) })) {
+                    ForEach(WET_LIVE_PATTERN_LABELS, id: \.kind) { Text($0.label).tag($0.kind) }
+                }
+                if let lp {
+                    ForEach(model.livePatternSliders, id: \.path) { c in
+                        PaintSliderRow(label: c.label, value: model.livePatternParam(c.path), range: c.min...c.max, step: c.step, onCommit: { model.setLivePatternParam(c.path, $0) })
+                    }
+                    HStack(spacing: 4) {
+                        HexColorPicker(label: "2nd colour", hex: lp.secondColor ?? "#2563eb", onChange: { model.setLivePatternSecondColor($0) })
+                        if lp.secondColor != nil {
+                            Button("Clear") { model.setLivePatternSecondColor(nil) }
+                        }
+                        Spacer()
+                        Button("Seed") { model.seedLivePattern() }
+                    }
+                }
             }
             Picker("Engine", selection: Binding(get: { wet.gpuMode }, set: { model.setWetEngine($0) })) {
                 ForEach(model.wetGpuOptions, id: \.value) { Text($0.label).tag($0.value) }

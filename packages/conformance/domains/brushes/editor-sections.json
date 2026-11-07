@@ -4345,6 +4345,39 @@
             "label": "Dirty brush",
             "ariaLabel": "Dirty brush",
             "value": false
+          },
+          {
+            "kind": "choice",
+            "path": "livePatterns.pattern",
+            "label": "Live pattern",
+            "ariaLabel": "Live pattern",
+            "options": [
+              {
+                "value": "",
+                "label": "None"
+              },
+              {
+                "value": "spots",
+                "label": "Spots"
+              },
+              {
+                "value": "stripes",
+                "label": "Stripes"
+              },
+              {
+                "value": "coral",
+                "label": "Coral"
+              },
+              {
+                "value": "maze",
+                "label": "Maze"
+              },
+              {
+                "value": "worms",
+                "label": "Worms"
+              }
+            ],
+            "value": ""
           }
         ]
       },

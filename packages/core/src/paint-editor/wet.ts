@@ -32,6 +32,15 @@ import { effectDabField, sampleEffectAt, type EffectPaintPixels } from './effect
 import { DEFAULT_WET_PARAMS, FLAT, FREE_INTERVAL, WET_TILE, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 import { createWetGpuEngine, findWebGpu, type WetGpuEngine, type WetGpuProvider, type WetGpuSupport } from '../paint/wet/gpu';
 import { moveWetSnapshot, WetWorld, type WetBackendInfo, type WetGhostState, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
+import {
+  LivePatternField,
+  moveLivePatternSnapshot,
+  normalizeLivePatterns,
+  type LivePatternFieldSnapshot,
+  type LivePatternStats,
+  type LivePatternsInput,
+  type LivePatternsSettings,
+} from '../paint/live-patterns';
 import { TILE, TiledSurface, translateSurface, type RasterRect } from '../raster/surface';
 import type { PaintBrush, WetMediumKind } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
@@ -313,6 +322,17 @@ export class WetStrokeDriver {
         } else world.paint(laneId, rect, cov, this.medium.options.water * k, null);
         ex.drain();
         if (wet.rewet > 0) world.rewet(laneId, rect, cov, wet.rewet * k * 0.15, this.init.paperColor);
+        if (brush.livePatterns) {
+          world.seedLivePatterns(
+            laneId,
+            d.x,
+            d.y,
+            Math.max(2, d.radius),
+            (this.init.seed + this.dabCount * 131 + copy * 997) | 0,
+            Math.max(0.65, d.pressure),
+            brush.livePatterns
+          );
+        }
         break;
       }
       case 'water': {
@@ -356,6 +376,7 @@ export const WET_MEDIUM_PARAMS: Readonly<Record<WetMediumKind, Partial<WetParams
 export interface WetLayerSettings {
   params: WetParams;
   flow: WetFlowSpec;
+  livePatterns?: LivePatternsSettings | null;
   ghost?: WetGhostState | null;
 }
 
@@ -372,6 +393,7 @@ export interface WetLayerInfo {
   activeTiles: number;
   params: WetParams;
   flow: WetFlowSpec;
+  livePatterns?: LivePatternsSettings | null;
   /** Active ghost fade on the layer (`remaining` seconds of simulated time), when one is fading. */
   ghost?: { remaining: number };
 }
@@ -381,7 +403,7 @@ export interface WetEvent {
   clock: number;
   /** How many strokes were recorded before it (where it falls between strokes in a replay). */
   at?: number;
-  kind: 'dry' | 'tilt' | 'params' | 'flow' | 'wet-paper' | 'ghost-release' | 'ghost-keep';
+  kind: 'dry' | 'tilt' | 'params' | 'flow' | 'wet-paper' | 'live-patterns' | 'seed-live-patterns' | 'ghost-release' | 'ghost-keep';
   layerId?: string;
   data?: unknown;
 }
@@ -397,6 +419,10 @@ export interface PaintWetHost {
   layerLight(id: string): TiledSurface | null;
   /** Shows new light paint for wet layers (not an undo step); the next `updateSurfaces` redraws. */
   updateLights(lights: ReadonlyMap<string, TiledSurface>): void;
+  /** The layer's thick height map (one channel), or `null` without any. */
+  layerHeight?(id: string): TiledSurface | null;
+  /** Shows new thick height maps for wet layers with live pattern relief (not an undo step). */
+  updateHeights?(heights: ReadonlyMap<string, TiledSurface>): void;
   /** The paint dried while time passed (the editor records nothing, it just redraws). */
   changed(): void;
 }
@@ -454,6 +480,7 @@ export class PaintWetLayers {
   world: WetWorld | null = null;
   tilt: WetTilt = { ...FLAT };
   readonly settings = new Map<string, WetLayerSettings>();
+  readonly patterns = new Map<string, LivePatternField>();
   paused = false;
   /** Wet strokes dry as soon as they end (one undo step with the stroke). */
   instantDry = false;
@@ -582,6 +609,14 @@ export class PaintWetLayers {
   extend(width: number, height: number, left: number, top: number, paper: PaperSettings): void {
     if (!this.canExtend(left, top)) throw new Error('Wet paint only moves by whole 256 px tiles, between strokes.');
     for (const [id, s] of this.settings) if (s.flow.center) this.settings.set(id, { ...s, flow: { ...s.flow, center: { x: s.flow.center.x + left, y: s.flow.center.y + top } } });
+    const tx0 = left / WET_TILE;
+    const ty0 = top / WET_TILE;
+    for (const [id, f] of this.patterns) {
+      const moved = moveLivePatternSnapshot(f.snapshot(), { width, height }, tx0, ty0);
+      const next = new LivePatternField(width, height);
+      next.restore(moved);
+      this.patterns.set(id, next);
+    }
     const old = this.world;
     const snap = old?.laneIds().length ? old.snapshot() : null;
     this.dropWorld();
@@ -598,6 +633,7 @@ export class PaintWetLayers {
     });
     this.world = this.makeWorld(width, height, paper);
     this.world.restore(moved);
+    for (const id of this.world.laneIds()) this.patterns.set(id, this.world.livePatternField(id));
   }
 
   /** Whether any layer (or `layerId`) has wet paint. */
@@ -626,19 +662,34 @@ export class PaintWetLayers {
   settingsOf(layerId: string, medium: WetMediumKind = 'watercolor'): WetLayerSettings {
     let s = this.settings.get(layerId);
     if (!s) {
-      s = { params: normalizeWetParams(WET_MEDIUM_PARAMS[medium], DEFAULT_WET_PARAMS), flow: { ...DEFAULT_FLOW } };
+      s = { params: normalizeWetParams(WET_MEDIUM_PARAMS[medium], DEFAULT_WET_PARAMS), flow: { ...DEFAULT_FLOW }, livePatterns: null };
       this.settings.set(layerId, s);
     }
     return s;
   }
 
+  patternFieldOf(layerId: string): LivePatternField {
+    const { width, height } = this.host.canvas();
+    let f = this.patterns.get(layerId);
+    if (!f) {
+      f = new LivePatternField(width, height);
+      const s = this.settings.get(layerId)?.livePatterns;
+      if (s) f.configure(s);
+      this.patterns.set(layerId, f);
+    } else if (f.width !== width || f.height !== height) {
+      f.resize(width, height);
+    }
+    return f;
+  }
+
   /** Puts a layer in the world (its current pixels become the base under the wet paint). */
   ensureLane(layerId: string, medium?: WetMediumKind): WetWorld {
     const w = this.ensureWorld();
+    const lp = this.patternFieldOf(layerId);
     if (!w.hasLane(layerId)) {
       const base = this.host.layerSurface(layerId) ?? new TiledSurface(4, new Map(), 0);
       const s = this.settingsOf(layerId, medium);
-      w.ensureLane(layerId, { params: s.params, base, light: this.host.layerLight(layerId), ghost: s.ghost });
+      w.ensureLane(layerId, { params: s.params, base, light: this.host.layerLight(layerId), ghost: s.ghost, livePatterns: lp });
       const { width, height } = this.host.canvas();
       if (s.flow.kind !== 'none') w.setFlow(layerId, flowField(s.flow, width, height), s.flow.strength);
     }
@@ -662,6 +713,74 @@ export class PaintWetLayers {
     return { ...s.flow };
   }
 
+  setLivePatterns(layerId: string, update: LivePatternsInput | null): LivePatternsSettings | null {
+    const s = this.settingsOf(layerId);
+    const f = this.patternFieldOf(layerId);
+    if (update === null) {
+      f.clear();
+      s.livePatterns = null;
+      if (this.world?.hasLane(layerId)) this.syncDisplays();
+      return null;
+    }
+    const next = this.world?.hasLane(layerId) ? this.world.setLivePatterns(layerId, update) : f.configure(update);
+    s.livePatterns = { ...next };
+    this.syncDisplays();
+    return { ...next };
+  }
+
+  seedLivePatterns(
+    layerId: string,
+    points: ReadonlyArray<{ x: number; y: number; strength?: number }>,
+    radius: number,
+    seed = 1,
+    settings?: LivePatternsInput
+  ): { seededCells: number; stats: LivePatternStats } {
+    const s = this.settingsOf(layerId);
+    const f = this.patternFieldOf(layerId);
+    if (settings) {
+      const next = this.world?.hasLane(layerId) ? this.world.setLivePatterns(layerId, settings) : f.configure(settings);
+      s.livePatterns = { ...next };
+    } else if (!f.enabled) {
+      const next = this.world?.hasLane(layerId) ? this.world.setLivePatterns(layerId, s.livePatterns ?? {}) : f.configure(s.livePatterns ?? {});
+      s.livePatterns = { ...next };
+    }
+    let seededCells = 0;
+    const hasLane = Boolean(this.world?.hasLane(layerId));
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const str = p.strength ?? 1;
+      const ptSeed = (seed + i * 7919) | 0;
+      if (hasLane) {
+        seededCells += this.world!.seedLivePatterns(layerId, p.x, p.y, radius, ptSeed, str);
+      } else {
+        seededCells += f.seedDisc(p.x, p.y, radius, ptSeed, str);
+      }
+    }
+    this.syncDisplays();
+    return { seededCells, stats: this.livePatternStats(layerId) };
+  }
+
+  livePatternStats(layerId: string): LivePatternStats {
+    const f = this.patterns.get(layerId);
+    if (f?.enabled) {
+      const s = this.settingsOf(layerId);
+      if (!s.livePatterns) s.livePatterns = { ...f.settings };
+    }
+    if (this.world?.hasLane(layerId)) return this.world.livePatternStats(layerId);
+    if (f) return f.stats(() => false);
+    const cfg = this.settings.get(layerId)?.livePatterns ?? null;
+    return {
+      enabled: Boolean(cfg),
+      settings: normalizeLivePatterns(cfg ?? {}),
+      activeTiles: 0,
+      patternCells: 0,
+      wetPatternCells: 0,
+      meanV: 0,
+      maxV: 0,
+      bounds: null,
+    };
+  }
+
   setTilt(update: Partial<WetTilt>): WetTilt {
     this.tilt = normalizeTilt(update, this.tilt);
     this.world?.setTilt(this.tilt);
@@ -676,6 +795,8 @@ export class PaintWetLayers {
   /** A layer as tools describe it. */
   info(layerId: string): WetLayerInfo {
     const s = this.settingsOf(layerId);
+    const f = this.patterns.get(layerId);
+    if (f?.enabled && !s.livePatterns) s.livePatterns = { ...f.settings };
     const st: WetLaneStats | null = this.world?.hasLane(layerId) ? this.world.stats(layerId) : null;
     const g = this.world?.hasLane(layerId) ? this.world.getGhost(layerId) : s.ghost ?? null;
     return {
@@ -686,6 +807,7 @@ export class PaintWetLayers {
       activeTiles: st?.activeTiles ?? 0,
       params: { ...s.params },
       flow: { ...s.flow },
+      livePatterns: s.livePatterns ? { ...s.livePatterns } : null,
       ...(g ? { ghost: { remaining: Math.round(((g.remaining * FREE_INTERVAL) / this.speed) * 100) / 100 } } : {}),
     };
   }
@@ -697,10 +819,13 @@ export class PaintWetLayers {
   /** Shows the current wet pixels (at most `maxTiles` reshaded per layer). */
   syncDisplays(maxTiles = Infinity): RasterRect[] {
     const w = this.world;
+    this.syncHeights();
     if (!w) return [];
     const surfaces = new Map<string, TiledSurface>();
     const rects: RasterRect[] = [];
     for (const id of w.laneIds()) {
+      const f = this.patterns.get(id);
+      if (f?.enabled) this.settingsOf(id).livePatterns = { ...f.settings };
       const d = w.display(id, maxTiles);
       if (this.host.layerSurface(id) !== d.surface) surfaces.set(id, d.surface);
       rects.push(...d.changed);
@@ -713,10 +838,13 @@ export class PaintWetLayers {
   /** Like `syncDisplays`, shading on the GPU when Engine B is active (all stale tiles at once). */
   async syncDisplaysGpu(maxCpuTiles: number, lead = false): Promise<RasterRect[]> {
     const w = this.world;
+    this.syncHeights();
     if (!w) return [];
     const surfaces = new Map<string, TiledSurface>();
     const rects: RasterRect[] = [];
     for (const id of w.laneIds()) {
+      const f = this.patterns.get(id);
+      if (f?.enabled) this.settingsOf(id).livePatterns = { ...f.settings };
       const d = await w.displayGpu(id, maxCpuTiles, lead);
       if (!w.hasLane(id)) continue;
       if (this.host.layerSurface(id) !== d.surface) surfaces.set(id, d.surface);
@@ -725,6 +853,19 @@ export class PaintWetLayers {
     this.syncLights();
     if (surfaces.size) this.host.updateSurfaces(surfaces, rects);
     return rects;
+  }
+
+  /** Updates thick height maps for any layers with live pattern relief (`relief > 0`). */
+  private syncHeights(): void {
+    if (!this.host.layerHeight || !this.host.updateHeights) return;
+    const heights = new Map<string, TiledSurface>();
+    for (const [id, f] of this.patterns) {
+      if (!f.enabled || !(f.settings.relief > 0) || f.tiles.size === 0) continue;
+      const cur = this.host.layerHeight(id) ?? new TiledSurface(1, new Map(), 0);
+      const next = f.applyReliefHeight(cur);
+      if (next !== cur) heights.set(id, next);
+    }
+    if (heights.size) this.host.updateHeights(heights);
   }
 
   /** Shows each wet layer's live light paint (the light under it with the wet light shaded in). */
@@ -917,19 +1058,58 @@ export class PaintWetLayers {
   /** A snapshot of the world for undo (`null` when there is none). */
   snapshot(): WetSnapshot | null {
     const w = this.world;
-    if (!w || !w.laneIds().length) return null;
-    return w.snapshot();
+    const patterns = new Map<string, LivePatternFieldSnapshot>();
+    let patternBytes = 0;
+    for (const [id, f] of this.patterns) {
+      if (!f.enabled && f.tiles.size === 0) continue;
+      const ps = f.snapshot();
+      patterns.set(id, ps);
+      patternBytes += ps.bytes;
+    }
+    if (!w || !w.laneIds().length) {
+      if (!patterns.size) return null;
+      return {
+        clock: w?.clock ?? 0,
+        tilt: { ...this.tilt },
+        lanes: [],
+        slots: new Map(),
+        patterns,
+        bytes: patternBytes,
+      };
+    }
+    const snap = w.snapshot();
+    return patterns.size ? { ...snap, patterns } : snap;
   }
 
   /** Puts a snapshot back (`null`: no wet layers). Returns the layer surfaces it implies. */
   restore(snap: WetSnapshot | null): void {
+    this.patterns.clear();
+    for (const [, s] of this.settings) s.livePatterns = null;
     if (!snap) {
       if (this.world) for (const id of this.world.laneIds()) this.world.removeLane(id);
       return;
     }
     const { width, height } = this.host.canvas();
     if (this.world && (this.world.width !== width || this.world.height !== height)) this.dropWorld();
-    this.ensureWorld().restore(snap);
+    if (snap.patterns) {
+      for (const [id, ps] of snap.patterns) {
+        const f = new LivePatternField(width, height);
+        f.restore(ps);
+        this.patterns.set(id, f);
+        this.settingsOf(id).livePatterns = f.enabled ? { ...f.settings } : null;
+      }
+    }
+    if (snap.lanes.length) {
+      const w = this.ensureWorld();
+      w.restore(snap);
+      for (const id of w.laneIds()) {
+        const f = w.livePatternField(id);
+        this.patterns.set(id, f);
+        this.settingsOf(id).livePatterns = f.enabled ? { ...f.settings } : null;
+      }
+    } else if (this.world) {
+      for (const id of this.world.laneIds()) this.world.removeLane(id);
+    }
     this.syncDisplays();
   }
 
@@ -945,6 +1125,7 @@ export class PaintWetLayers {
     this.world = null;
     this.driver = null;
     this.settings.clear();
+    this.patterns.clear();
     this.lastTick = null;
     this.stepsOwed = 0;
   }
