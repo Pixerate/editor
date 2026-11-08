@@ -19,10 +19,9 @@ export interface EditorAutosaveOptions
    */
   dirty?: DirtyFlagSource;
   /**
-   * Optional monotonic server/host version of the document that is currently loaded.
-   * Stored alongside crash-recovery snapshots so `checkRecovery` / `recoverIfNewer`
-   * automatically retires stale snapshots from an older server version instead of
-   * overwriting newer server state.
+   * The server / host version of the loaded document, stored with each snapshot.
+   * `checkRecovery` / `recoverIfNewer` retire snapshots made on an older version instead of
+   * offering them (see `AutosaveControllerOptions.baseVersion`).
    */
   baseVersion?: number | (() => number | undefined);
   /**
@@ -36,7 +35,7 @@ export interface EditorAutosaveOptions
 export interface EditorAutosave {
   readonly controller: AutosaveController<EditorDocumentFile>;
   readonly revisions: RevisionTracker;
-  /** An earlier session's unsaved snapshot of this document, or `null` (stale snapshots older than `baseVersion` are retired automatically). */
+  /** An earlier session's unsaved snapshot of this document, or `null` (snapshots made on a version older than `baseVersion` are retired). */
   checkRecovery(): Promise<AutosaveRecovery<EditorDocumentFile> | null>;
   /**
    * Checks for an earlier session's unsaved snapshot, restoring it into `doc` if it is valid and
@@ -59,42 +58,14 @@ export interface EditorAutosave {
  * `controller.ready()` when nothing was found, or `restore` / `discard`.
  */
 export function createEditorAutosave(doc: EditorDocument, options: EditorAutosaveOptions): EditorAutosave {
-  const { dirty, key, baseVersion, collectAssetGarbage, ...rest } = options;
-  const resolvedKey = key ?? doc.kind;
-  const baseVersionKey = `${resolvedKey}:base-version`;
-  const readBaseVersion = (): number | undefined =>
-    typeof baseVersion === "function" ? baseVersion() : baseVersion;
-
-  const baseStorage = doc.assets ? withEditorAssets(rest.storage, doc.assets) : rest.storage;
-  const storage =
-    baseVersion === undefined
-      ? baseStorage
-      : {
-          ...baseStorage,
-          async set(k: string, value: string) {
-            await baseStorage.set(k, value);
-            if (k === resolvedKey) {
-              const v = readBaseVersion();
-              if (typeof v === "number" && Number.isFinite(v)) {
-                await rest.storage.set(baseVersionKey, JSON.stringify({ baseVersion: v }));
-              }
-            }
-          },
-          async remove(k: string) {
-            await baseStorage.remove(k);
-            if (k === resolvedKey) {
-              await rest.storage.remove(baseVersionKey);
-            }
-          },
-        };
-
+  const { dirty, key, collectAssetGarbage, ...rest } = options;
   const collect = () => collectRetiredEditorAssets(rest.storage, doc, collectAssetGarbage);
   const revisions = createRevisionTracker({ history: doc, dirty });
   const controller = createAutosaveController<EditorDocumentFile>({
     ...rest,
     // Image and paint documents hold asset references: their bytes are saved and read with them.
-    storage,
-    key: resolvedKey,
+    storage: doc.assets ? withEditorAssets(rest.storage, doc.assets) : rest.storage,
+    key: key ?? doc.kind,
     getSnapshot: () => toEditorDocumentFile(doc),
     deserialize: (text) => parseEditorDocument(text, { kind: doc.kind }),
     revision: revisions.revision,
@@ -102,23 +73,8 @@ export function createEditorAutosave(doc: EditorDocument, options: EditorAutosav
   });
   const unsubscribe = revisions.subscribe(() => controller.notify());
 
-  const isStaleRecovery = async (minimumVersion?: number): Promise<boolean> => {
-    const requiredVersion = minimumVersion ?? readBaseVersion();
-    if (requiredVersion === undefined) return false;
-    try {
-      const raw = await rest.storage.get(baseVersionKey);
-      if (!raw) return requiredVersion > 0;
-      const parsed = JSON.parse(raw) as { baseVersion?: unknown };
-      if (typeof parsed?.baseVersion !== "number") return requiredVersion > 0;
-      return parsed.baseVersion < requiredVersion;
-    } catch {
-      return requiredVersion > 0;
-    }
-  };
-
   const retireRecovery = async () => {
     await controller.discardRecovery();
-    await rest.storage.remove(baseVersionKey);
     controller.ready();
     await collect();
   };
@@ -126,22 +82,16 @@ export function createEditorAutosave(doc: EditorDocument, options: EditorAutosav
   return {
     controller,
     revisions,
-    async checkRecovery() {
-      const recovery = await controller.checkRecovery();
-      if (!recovery) return null;
-      if (await isStaleRecovery()) {
-        await retireRecovery();
-        return null;
-      }
-      return recovery;
-    },
+    checkRecovery: () => controller.checkRecovery(),
     async recoverIfNewer(minimumBaseVersion) {
-      const recovery = await controller.checkRecovery();
+      const recovery = await controller.checkRecovery(
+        minimumBaseVersion !== undefined ? { minimumBaseVersion } : undefined,
+      );
       if (!recovery) {
         controller.ready();
         return null;
       }
-      if (!recovery.snapshot || (await isStaleRecovery(minimumBaseVersion))) {
+      if (!recovery.snapshot) {
         await retireRecovery();
         return null;
       }
@@ -166,9 +116,6 @@ export function createEditorAutosave(doc: EditorDocument, options: EditorAutosav
     async markClean() {
       revisions.markSaved();
       await controller.markClean();
-      if (baseVersion !== undefined) {
-        await rest.storage.remove(baseVersionKey);
-      }
       await collect();
     },
     destroy() {

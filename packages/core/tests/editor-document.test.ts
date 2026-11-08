@@ -6,6 +6,7 @@ import {
   createEditorAutosave,
   createEditorDocumentStore,
   createEditorRemoteSync,
+  EditorRemoteConflictError,
   createMemoryStorage,
   defineEditorDocument,
   parseEditorDocument,
@@ -384,6 +385,79 @@ describe("createEditorRemoteSync", () => {
     expect(await flushed).toBe(true);
     expect(saved).toEqual([["b"], ["b", "c"]]);
     expect(sync.dirty()).toBe(false);
+  });
+
+  it("passes baseVersion for compare-and-set writes and merges on a conflict before saving again", async () => {
+    const { doc, edit } = setup();
+    // The "server": a collaborator already saved ["a", "server"] as version 3.
+    let server = { items: ["a", "server"], version: 3 };
+    const calls: Array<{ baseVersion: number; version: number; items: string[] }> = [];
+    const localChanges: string[][] = [];
+    const sync = createEditorRemoteSync(doc, {
+      initialVersion: 1,
+      debounceMs: 0,
+      onLocalChange: ({ document }) => localChanges.push(document.items),
+      save: async ({ document, version, baseVersion }) => {
+        calls.push({ baseVersion, version, items: document.items });
+        if (server.version !== baseVersion) return { conflict: true, version: server.version };
+        server = { items: document.items, version };
+        return { version };
+      },
+      onConflict: async ({ document, base, apply }) => {
+        const mine = document.items.filter((item) => !base.items.includes(item));
+        const merged = [...server.items, ...mine.filter((item) => !server.items.includes(item))];
+        apply(() => doc.loadDocument({ items: merged }, { history: "reset" }));
+        return { serverVersion: server.version, serverDocument: { items: [...server.items] } };
+      },
+    });
+
+    edit(["a", "mine"]);
+    await sync.whenIdle();
+    expect(calls).toEqual([
+      { baseVersion: 1, version: 2, items: ["a", "mine"] },
+      { baseVersion: 3, version: 4, items: ["a", "server", "mine"] },
+    ]);
+    expect(server).toEqual({ items: ["a", "server", "mine"], version: 4 });
+    expect(doc.getDocument().items).toEqual(["a", "server", "mine"]);
+    // Loading the merge was not broadcast as a local edit.
+    expect(localChanges).toEqual([["a", "mine"]]);
+    expect(sync.dirty()).toBe(false);
+    expect(sync.savedVersion()).toBe(4);
+    sync.destroy();
+  });
+
+  it("reports a conflict without onConflict, and gives up after maxConflictRetries", async () => {
+    const { doc, edit } = setup();
+    const errors: unknown[] = [];
+    const sync = createEditorRemoteSync(doc, {
+      debounceMs: 0,
+      onError: (error) => errors.push(error),
+      save: async () => ({ conflict: true, version: 7 }),
+    });
+    edit(["b"]);
+    await sync.whenIdle();
+    expect(errors[0]).toBeInstanceOf(EditorRemoteConflictError);
+    expect((errors[0] as EditorRemoteConflictError).serverVersion).toBe(7);
+    expect(sync.dirty()).toBe(true);
+    expect(sync.status().status).toBe("error");
+    sync.destroy();
+
+    let resolved = 0;
+    const stubborn = createEditorRemoteSync(doc, {
+      debounceMs: 0,
+      maxConflictRetries: 2,
+      onError: (error) => errors.push(error),
+      save: async () => ({ conflict: true }),
+      onConflict: () => {
+        resolved++;
+        return { serverVersion: 9 };
+      },
+    });
+    edit(["b", "c"]);
+    await stubborn.whenIdle();
+    expect(resolved).toBe(2);
+    expect(errors.at(-1)).toBeInstanceOf(EditorRemoteConflictError);
+    stubborn.destroy();
   });
 
   it("does not report a failed save when only autosave.markClean fails", async () => {

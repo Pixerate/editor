@@ -2576,14 +2576,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`EditorDocument`"
       },
       {
-        "feature": "Editor Autosave (crash recovery for any `EditorDocument`; restore loads the snapshot into the editor)",
+        "feature": "Editor Autosave (crash recovery for any `EditorDocument`; restore loads the snapshot into the editor; `baseVersion` retires snapshots made on an older server version)",
         "core": "`createEditorAutosave` (`/persistence`)",
         "react": "`useEditorAutosave` & `<RecoveryPrompt>`",
         "svelte": "`createEditorAutosave` & `<RecoveryPrompt>`",
         "swift": "Planned (#533)"
       },
       {
-        "feature": "Editor Remote Sync (saves any `EditorDocument` to a backend after each change: debounced, one save at a time, monotonic versions, diffs for collaborators, remote changes applied without echo, flush on hide / teardown)",
+        "feature": "Editor Remote Sync (saves any `EditorDocument` to a backend after each change: debounced, one save at a time, monotonic versions, compare-and-set conflicts merged with `onConflict`, diffs for collaborators, remote changes applied without echo, flush on hide / teardown)",
         "core": "`createEditorRemoteSync` (`/persistence`)",
         "react": "`useEditorSync`",
         "svelte": "`createEditorSync`",

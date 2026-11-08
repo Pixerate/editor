@@ -66,6 +66,7 @@ export function useEditorSync<TDocument = unknown, TDiff = unknown>(
       onLocalChange: (event) => optionsRef.current.onLocalChange?.(event),
       onSaved: (event) => optionsRef.current.onSaved?.(event),
       onError: (error) => optionsRef.current.onError?.(error),
+      onConflict: initial.onConflict ? (context) => optionsRef.current.onConflict!(context) : undefined,
       autosave: { markClean: async () => optionsRef.current.autosave?.markClean() },
     });
     const unsubscribe = instance.subscribe(setStatus);

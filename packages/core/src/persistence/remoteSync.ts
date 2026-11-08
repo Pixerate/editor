@@ -14,12 +14,58 @@ export interface EditorRemoteSyncStatus {
 
 export interface EditorRemoteSaveContext<TDocument = unknown, TDiff = unknown> {
   document: TDocument;
+  /** The version to write. */
   version: number;
+  /**
+   * The server version this save builds on (the last one confirmed). For a compare-and-set
+   * write, update only where the stored version still equals it, and return `{ conflict: true }`
+   * when nothing was updated.
+   */
+  baseVersion: number;
+  /** Changes since the last saved snapshot (with the `diff` option). */
   diff?: TDiff;
 }
 
 export interface EditorRemoteSaveResult {
   version?: number;
+  /**
+   * The server holds a newer version than `baseVersion`, so nothing was written. The controller
+   * calls `onConflict` (or reports an `EditorRemoteConflictError` without it) and keeps the edits.
+   */
+  conflict?: boolean;
+}
+
+export interface EditorRemoteConflictContext<TDocument = unknown> {
+  /** What this session tried to save. */
+  document: TDocument;
+  /** The last snapshot the server confirmed: the common base for a three-way merge. */
+  base: TDocument;
+  /** The server version reported with the conflict, when `save` returned one. */
+  serverVersion?: number;
+  /**
+   * Runs `fn` (e.g. loading the merged document into the editor) without it counting as a local
+   * change, so it is not broadcast as one; the retry save picks the result up.
+   */
+  apply<TResult>(fn: () => TResult): TResult;
+}
+
+export interface EditorRemoteConflictResolution<TDocument = unknown> {
+  /** The server's version the merge was made on; the retry save builds on it. */
+  serverVersion: number;
+  /** The server's document, used as the base for the retry's `diff` (default: the old base). */
+  serverDocument?: TDocument;
+}
+
+/** Reported through `onError` / `status().error` when a save conflicts and is not resolved. */
+export class EditorRemoteConflictError extends Error {
+  constructor(readonly serverVersion?: number) {
+    super(
+      serverVersion === undefined
+        ? "The document changed on the server since it was loaded; local edits were not saved."
+        : `The document is at version ${serverVersion} on the server; local edits were not saved.`,
+    );
+    this.name = "EditorRemoteConflictError";
+  }
 }
 
 export interface EditorRemoteLocalChangeEvent<TDocument = unknown, TDiff = unknown> {
@@ -58,6 +104,16 @@ export interface EditorRemoteSyncOptions<TDocument = unknown, TDiff = unknown> {
   onSaved?: (event: { document: TDocument; version: number }) => void;
   /** Invoked when a remote `save` throws. */
   onError?: (error: unknown) => void;
+  /**
+   * Resolves a conflicting save (`save` returned `{ conflict: true }`): fetch the server's
+   * document, merge this session's edits into it (`base` → `document`), load the result with
+   * `apply`, and return the server's version. The controller then saves again on top of it.
+   */
+  onConflict?: (
+    context: EditorRemoteConflictContext<TDocument>,
+  ) => Promise<EditorRemoteConflictResolution<TDocument>> | EditorRemoteConflictResolution<TDocument>;
+  /** Conflicts resolved in a row before the controller gives up with an error (default `3`). */
+  maxConflictRetries?: number;
   /**
    * Optional crash-recovery autosave instance. When a remote save succeeds and no newer
    * local edits occurred while it was in flight, `autosave.markClean()` is called automatically.
@@ -138,6 +194,7 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
   let lastError: unknown = undefined;
 
   let isApplyingRemote = false;
+  let conflictRetries = 0;
   let destroyed = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let inFlightPromise: Promise<boolean> | null = null;
@@ -182,6 +239,16 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
     return { changed: JSON.stringify(current) !== JSON.stringify(baseline) };
   };
 
+  const suppressed = <TResult>(fn: () => TResult): TResult => {
+    const wasApplying = isApplyingRemote;
+    isApplyingRemote = true;
+    try {
+      return fn();
+    } finally {
+      isApplyingRemote = wasApplying;
+    }
+  };
+
   // Edits already detected are saved even after `destroy()` (a flush on teardown must not drop them).
   const executeSave = async (): Promise<boolean> => {
     if (inFlightPromise) {
@@ -213,8 +280,34 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
         const result = await options.save({
           document: snapshotToSave,
           version: versionToSave,
+          baseVersion: confirmedVersion,
           diff: diffToSave,
         });
+
+        if (result && typeof result === "object" && result.conflict) {
+          const serverVersion = typeof result.version === "number" ? result.version : undefined;
+          if (!options.onConflict || conflictRetries >= (options.maxConflictRetries ?? 3)) {
+            conflictRetries = 0;
+            throw new EditorRemoteConflictError(serverVersion);
+          }
+          conflictRetries++;
+          const resolution = await options.onConflict({
+            document: snapshotToSave,
+            base: savedSnapshot,
+            serverVersion,
+            apply: (fn) => suppressed(fn),
+          });
+          confirmedVersion = resolution.serverVersion;
+          localVersion = Math.max(localVersion, confirmedVersion);
+          if (resolution.serverDocument !== undefined) savedSnapshot = cloneSnapshot(resolution.serverDocument);
+          // The merged document still has to be saved: count it as one more local change.
+          baselineSnapshot = cloneSnapshot(doc.getDocument());
+          localSequence++;
+          state = "pending";
+          emit();
+          return true;
+        }
+        conflictRetries = 0;
 
         const returnedVersion =
           typeof result === "number"

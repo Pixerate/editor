@@ -130,6 +130,30 @@ describe("useEditorAutosave", () => {
     expect(second.getSource()).toBe("flowchart LR\n  X --> Y\n");
     expect(second.getState().canUndo).toBe(false);
   });
+
+  it("stamps snapshots with baseVersion and does not offer one made on an older version", async () => {
+    const storage = createMemoryStorage();
+    const first = new DiagramController({ source });
+    const doc = createDiagramEditorDocument(first);
+    let result!: UseEditorAutosaveResult;
+    function Versioned(props: { doc: EditorDocument; baseVersion: number }) {
+      result = useEditorAutosave(props.doc, { storage, debounceMs: 5, interval: 20, baseVersion: props.baseVersion });
+      return null;
+    }
+    await act(async () => root.render(<Versioned doc={doc} baseVersion={2} />));
+    await act(async () => void (await wait(5)));
+    await act(async () => void first.load("flowchart LR\n  X --> Y\n"));
+    await act(async () => void (await wait(40)));
+    expect(JSON.parse(storage.entries.get("diagram:meta")!).baseVersion).toBe(2);
+    await act(async () => root.unmount());
+
+    root = createRoot(container);
+    await act(async () => root.render(<Versioned doc={createDiagramEditorDocument(new DiagramController({ source }))} baseVersion={5} />));
+    await act(async () => void (await wait(5)));
+    expect(result.recovery).toBeNull();
+    expect(result.pendingRecovery).toBe(false);
+    expect(storage.entries.has("diagram")).toBe(false);
+  });
 });
 
 describe("useMermaidDiagram().editorDocument", () => {
