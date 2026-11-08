@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.279.1
+
+### Patch Changes
+
+- d7eda00: Serialize WebGPU wet-paint tile shading and await in-flight lead-frame display shading before starting post-batch shading so the `"wet shaded read"` readback buffer is never submitted while mapped.
+
 ## 0.279.0
 
 ### Minor Changes

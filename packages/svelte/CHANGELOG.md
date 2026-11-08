@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.208.1
+
+### Patch Changes
+
+- d7eda00: Serialize WebGPU wet-paint tile shading and await in-flight lead-frame display shading before starting post-batch shading so the `"wet shaded read"` readback buffer is never submitted while mapped.
+- Updated dependencies [d7eda00]
+  - @pixerate/editor@0.279.1
+
 ## 0.208.0
 
 ### Minor Changes
