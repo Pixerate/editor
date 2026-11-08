@@ -30,6 +30,7 @@ import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural
 import { StickerSpray, type Sticker } from './stickers';
 import type { StickerArtLookup } from './sticker-art';
 import type { StickerRef, StickerVariant } from '../stickers/types';
+import type { DualColor } from '../color/dual';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -55,6 +56,8 @@ export interface StrokeSessionInit {
   seed: number;
   /** The paint colour as #rrggbb (recorded with the stroke). */
   colorHex: string;
+  /** The light / dark pair `colorHex` is one side of, when the colour came from one (recorded with the stroke). */
+  dualColor?: DualColor;
   /** The stroke's extra copies as affine maps (recorded with the stroke); `copies` holds all of them as engine copies. */
   affineCopies: readonly Affine[];
   copies: readonly StrokeCopy[];
