@@ -75,6 +75,43 @@ final class ChartUITests: XCTestCase {
         XCTAssertGreaterThan(decoded.data.count, 0)
     }
 
+    func testParseChartRGBAReturnsUnitComponents() throws {
+        let red = try XCTUnwrap(parseChartRGBA("#ff0000"))
+        XCTAssertEqual(red.r, 1, accuracy: 1e-9)
+        XCTAssertEqual(red.g, 0, accuracy: 1e-9)
+        XCTAssertEqual(red.a, 1, accuracy: 1e-9)
+        let grey = try XCTUnwrap(parseChartRGBA("rgb(128, 128, 128)", opacity: 0.5))
+        XCTAssertEqual(grey.r, 128.0 / 255.0, accuracy: 1e-9)
+        XCTAssertEqual(grey.a, 0.5, accuracy: 1e-9)
+        let named = try XCTUnwrap(parseChartRGBA("white"))
+        XCTAssertEqual(named.b, 1, accuracy: 1e-9)
+    }
+
+    func testRenderChartPngUsesTheRequestedRaceFrame() async throws {
+        let model = try ChartEditorModel(width: 320, height: 200)
+        let data = await model.registry.callTool("set_chart_data", [
+            "categories": ["2021", "2022", "2023"],
+            "series": [
+                ["name": "Alpha", "values": [10, 20, 90]],
+                ["name": "Beta", "values": [80, 18, 5]]
+            ]
+        ])
+        XCTAssertFalse(data.isError, data.text ?? "")
+        let type = await model.registry.callTool("update_chart", ["type": "barrace"])
+        XCTAssertFalse(type.isError, type.text ?? "")
+        func png(_ time: Double) async throws -> String {
+            let res = await model.registry.callTool("render_chart", ["format": "png", "time": .number(time)])
+            XCTAssertFalse(res.isError, res.text ?? "")
+            guard case .image(let data, _) = res.content[0] else { XCTFail("no image"); return "" }
+            return data
+        }
+        let first = try await png(0)
+        let last = try await png(2)
+        XCTAssertNotEqual(first, last, "render_chart png must draw the frame at `time`")
+        let again = try await png(0)
+        XCTAssertEqual(first, again)
+    }
+
     func testChartEditorModelInteractionClickDragHoverAndKeys() throws {
         let ticker = ChartDisplayTicker(manual: true)
         let model = try ChartEditorModel(
@@ -150,7 +187,13 @@ final class ChartUITests: XCTestCase {
         XCTAssertEqual(model.spec.palette.first, "#e69f00")
 
         XCTAssertTrue(model.applyPaletteShade(0.4))
-        XCTAssertNotEqual(model.spec.palette.first, "#e69f00")
+        let once = model.spec.palette.first
+        XCTAssertNotEqual(once, "#e69f00")
+        // Shade buttons pick a shade of the original palette rather than compounding.
+        XCTAssertTrue(model.applyPaletteShade(0.4))
+        XCTAssertEqual(model.spec.palette.first, once)
+        XCTAssertTrue(model.applyPaletteShade(0))
+        XCTAssertEqual(model.spec.palette.first, "#e69f00")
 
         XCTAssertTrue(model.setSeriesErrorBars(seriesId: "s1", type: .percent, value: 15, direction: .both))
         XCTAssertEqual(model.spec.series.first?.errorBars?.type, .percent)

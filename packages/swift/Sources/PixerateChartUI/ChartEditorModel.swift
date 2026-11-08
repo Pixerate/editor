@@ -44,6 +44,7 @@ public final class ChartEditorModel {
     public var error: String? = nil
 
     @ObservationIgnored private var activeDrag: ChartPointDrag? = nil
+    @ObservationIgnored fileprivate var paletteShadeBase: (base: [String], shaded: [String])? = nil
     @ObservationIgnored private var subscriptions: [Cancellable] = []
 
     public init(
@@ -329,11 +330,16 @@ extension ChartEditorModel {
     @discardableResult
     public func applyPaletteShade(_ shade: Double) -> Bool {
         let current = controller.getSpec().palette
-        let shaded = current.map { shadeChartColor($0, shade) }
-        return check(controller.update(
+        // Shade from the palette as it was before the last shade button, so the buttons pick a
+        // shade (0 returns to the original) instead of compounding.
+        let base = paletteShadeBase.flatMap { $0.shaded == current ? $0.base : nil } ?? current
+        let shaded = base.map { shadeChartColor($0, shade) }
+        let ok = check(controller.update(
             JSONObject([("palette", .array(shaded.map(JSONValue.string)))]),
             options: ChartEditOptions(label: "Change colours")
         ))
+        if ok { paletteShadeBase = (base: base, shaded: controller.getSpec().palette) }
+        return ok
     }
 
     @discardableResult

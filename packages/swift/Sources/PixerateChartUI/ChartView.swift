@@ -85,15 +85,15 @@ public func drawChartSceneInCanvas(_ scene: ChartScene, context ctx: inout Graph
                 ctx.fill(path, with: .color(fill))
             }
             if let stroke = chartSwiftUIColor(m.stroke, opacity: m.opacity) {
-                let roundJoin = m.role == .line || m.role == .area || m.role == .trendline
+                // chartSceneToSvg strokes every path with round joins and caps.
                 let dash = parseChartDash(m.dash)
                 ctx.stroke(
                     path,
                     with: .color(stroke),
                     style: StrokeStyle(
                         lineWidth: CGFloat(m.strokeWidth ?? 1.0),
-                        lineCap: roundJoin ? .round : .butt,
-                        lineJoin: roundJoin ? .round : .miter,
+                        lineCap: .round,
+                        lineJoin: .round,
                         dash: dash
                     )
                 )
@@ -165,12 +165,15 @@ private struct ChartInputModifier: ViewModifier {
     let interactive: Bool
     @Binding var dragStarted: Bool
     let requestFocus: () -> Void
+    /// Resets when the drag ends *or is cancelled*; SwiftUI skips `onEnded` on cancel.
+    @GestureState private var gestureActive = false
 
     func body(content: Content) -> some View {
         if interactive {
             content
                 .gesture(
                     DragGesture(minimumDistance: 0)
+                        .updating($gestureActive) { _, active, _ in active = true }
                         .onChanged { value in
                             requestFocus()
                             let x = Double(value.location.x)
@@ -187,6 +190,17 @@ private struct ChartInputModifier: ViewModifier {
                             model.pointerUp()
                         }
                 )
+                .onChange(of: gestureActive) { _, active in
+                    guard !active else { return }
+                    // onEnded runs after the gesture state resets; if it hasn't by the next
+                    // turn of the run loop, the gesture was cancelled.
+                    DispatchQueue.main.async {
+                        if dragStarted {
+                            dragStarted = false
+                            model.pointerCancel()
+                        }
+                    }
+                }
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let pt):

@@ -245,7 +245,7 @@ final class ChartSvgMermaidVectorTests: XCTestCase {
         try regWithRaster.register(createChartToolProvider(
             controller,
             ChartToolProviderOptions(
-                rasterize: { svg, size in
+                rasterize: { svg, size, _ in
                     XCTAssertTrue(svg.hasPrefix("<svg "))
                     return ChartRasterImage(
                         data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",

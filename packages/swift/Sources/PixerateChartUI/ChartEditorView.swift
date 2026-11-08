@@ -3,6 +3,8 @@ import PixerateCore
 import SwiftUI
 #if canImport(AppKit)
 import AppKit
+#elseif canImport(UIKit)
+import UIKit
 #endif
 
 /// The top toolbar of `ChartEditorView`: chart type badge, selection summary, bar-race Play/Pause,
@@ -46,6 +48,7 @@ public struct ChartToolbarView: View {
             } label: {
                 Label("Undo", systemImage: "arrow.uturn.backward")
             }
+            .keyboardShortcut("z", modifiers: .command)
             .disabled(!state.canUndo)
             .help(state.undoLabel.isEmpty ? "Undo" : "Undo \(state.undoLabel)")
 
@@ -54,6 +57,7 @@ public struct ChartToolbarView: View {
             } label: {
                 Label("Redo", systemImage: "arrow.uturn.forward")
             }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
             .disabled(!state.canRedo)
             .help(state.redoLabel.isEmpty ? "Redo" : "Redo \(state.redoLabel)")
 
@@ -74,6 +78,8 @@ public struct ChartToolbarView: View {
         #if canImport(AppKit) && !targetEnvironment(macCatalyst)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        #elseif canImport(UIKit)
+        UIPasteboard.general.string = text
         #endif
     }
 }

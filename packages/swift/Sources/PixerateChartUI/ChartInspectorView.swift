@@ -54,16 +54,8 @@ public struct ChartInspectorView: View {
             // Titles
             VStack(alignment: .leading, spacing: 6) {
                 Text("Titles").font(.subheadline.weight(.semibold))
-                TextField("Title", text: Binding(
-                    get: { spec.title },
-                    set: { _ = model.setTitle($0) }
-                ))
-                .textFieldStyle(.roundedBorder)
-                TextField("Subtitle", text: Binding(
-                    get: { spec.subtitle },
-                    set: { _ = model.setSubtitle($0) }
-                ))
-                .textFieldStyle(.roundedBorder)
+                ChartCommitTextField(title: "Title", value: spec.title) { _ = model.setTitle($0) }
+                ChartCommitTextField(title: "Subtitle", value: spec.subtitle) { _ = model.setSubtitle($0) }
             }
 
             // Quick Layouts (from ui.json layoutPresets)
@@ -307,5 +299,33 @@ private struct ChartRaceSection: View {
                 )
             }
         }
+    }
+}
+
+/// A text field that edits a local draft and commits it on Return or when focus leaves, so typing
+/// a title is one undo step rather than one per keystroke (like React's `ChartCommitInput`).
+struct ChartCommitTextField: View {
+    let title: String
+    let value: String
+    let commit: (String) -> Void
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(title, text: $draft)
+            .textFieldStyle(.roundedBorder)
+            .focused($focused)
+            .onAppear { draft = value }
+            .onChange(of: value) { _, newValue in
+                if !focused { draft = newValue }
+            }
+            .onChange(of: focused) { _, isFocused in
+                if !isFocused { save() }
+            }
+            .onSubmit { save() }
+    }
+
+    private func save() {
+        if draft != value { commit(draft) }
     }
 }

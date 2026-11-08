@@ -20,7 +20,7 @@ public struct ChartToolProviderOptions {
     public var width: Double
     public var height: Double
     /// Turns SVG into an image so `render_chart` can return PNG (e.g. through CoreGraphics).
-    public var rasterize: (@Sendable (String, (width: Double, height: Double)) async throws -> ChartRasterImage)?
+    public var rasterize: (@Sendable (String, (width: Double, height: Double), ChartScene) async throws -> ChartRasterImage)?
 
     public init(
         id: String = "chart",
@@ -28,7 +28,7 @@ public struct ChartToolProviderOptions {
         readOnly: (() -> Any)? = nil,
         width: Double = 640,
         height: Double = 400,
-        rasterize: (@Sendable (String, (width: Double, height: Double)) async throws -> ChartRasterImage)? = nil
+        rasterize: (@Sendable (String, (width: Double, height: Double), ChartScene) async throws -> ChartRasterImage)? = nil
     ) {
         self.id = id
         self.namespace = namespace
@@ -288,7 +288,7 @@ final class ChartToolProviderImpl: @unchecked Sendable {
                         guard let rasterize = self.options.rasterize else {
                             throw ToolExecutionError("This host cannot rasterize charts; call render_chart with format \"svg\", or get_chart for the layout warnings.")
                         }
-                        let image = try await rasterize(svg, (width: width, height: height))
+                        let image = try await rasterize(svg, (width: width, height: height), scene)
                         let info = JSONObject([
                             ("width", .number(width)),
                             ("height", .number(height)),

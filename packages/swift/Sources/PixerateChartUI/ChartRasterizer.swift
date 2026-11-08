@@ -32,9 +32,10 @@ public func parseChartRGBA(_ css: String?, opacity: Double? = nil) -> (r: Double
     }
     guard let rgb = parseChartColor(raw), rgb.count >= 3 else { return nil }
     return (
-        r: rgb[0] / 255.0,
-        g: rgb[1] / 255.0,
-        b: rgb[2] / 255.0,
+        // parseChartColor already returns components in 0...1.
+        r: rgb[0],
+        g: rgb[1],
+        b: rgb[2],
         a: op
     )
 }
@@ -112,10 +113,9 @@ public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContex
                 ctx.addPath(cgPath)
                 ctx.setStrokeColor(stroke)
                 ctx.setLineWidth(CGFloat(m.strokeWidth ?? 1.0))
-                if m.role == .line || m.role == .area || m.role == .trendline {
-                    ctx.setLineJoin(.round)
-                    ctx.setLineCap(.round)
-                }
+                // chartSceneToSvg strokes every path with round joins and caps.
+                ctx.setLineJoin(.round)
+                ctx.setLineCap(.round)
                 let dash = parseChartDash(m.dash)
                 if !dash.isEmpty {
                     ctx.setLineDash(phase: 0, lengths: dash)
@@ -239,20 +239,9 @@ public func makeChartCoreGraphicsRasterizer(
     _ controller: ChartController,
     scale: Double = 2,
     maxSize: Double = CHART_RASTER_MAX_SIZE
-) -> (@Sendable (String, (width: Double, height: Double)) async throws -> ChartRasterImage) {
-    return { _, requestedSize in
-        let spec = controller.toJSON()
-        let state = controller.getState()
-        let scene = layoutChart(
-            spec,
-            ChartLayoutOptions(
-                width: requestedSize.width,
-                height: requestedSize.height,
-                selection: nil,
-                measureText: controller.measureText,
-                raceFrame: state.raceFrame
-            )
-        )
-        return try rasterizeChartScene(scene, scale: scale, maxSize: maxSize)
+) -> (@Sendable (String, (width: Double, height: Double), ChartScene) async throws -> ChartRasterImage) {
+    return { _, _, scene in
+        // Draw the scene render_chart laid out, so its `time` / race frame and size carry over.
+        try rasterizeChartScene(scene, scale: scale, maxSize: maxSize)
     }
 }
