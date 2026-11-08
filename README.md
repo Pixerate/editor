@@ -650,7 +650,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>History, autosave and persistence</strong> (11)</summary>
+<summary><strong>History, autosave and persistence</strong> (12)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -663,7 +663,8 @@ Every feature is available from core and from both framework packages, except wh
 | Storage Adapters (memory, localStorage, IndexedDB, OPFS with atomic writes) | `create*Storage` / `create*Adapter` | Via core | Via core | Planned (#533) |
 | Document Migration & Load Reports (step-wise `migrateDocument`, per-section fallback, read-only newer versions) | `migrateDocument`, `loadSections`, `loadImageEditorDocument` | Via core | Via core | `migrateDocument` |
 | Editor Document Contract (one save / load / undo interface per editor: whole-document JSON, checked and migrated loads that change nothing on failure, revisions, history; files that name their editor; every editor: rich text, spreadsheet, tokens, canvas, diagram, chart, animation, video, parameters, vector, image and paint; canvas drags become one undo step with `createCanvasGestureRecorder`; the canvas document can carry the viewport, leave out host fields, run host node checks, normalize and migrate host shapes and keep inline images in node data as assets; image and paint pixels are content-addressed assets outside the JSON) | `defineEditorDocument`, `serializeEditorDocument` / `parseEditorDocument`, `create{Canvas,Diagram,Chart,Animation,Video,Parameters,Vector,Spreadsheet,Tokens,Image,Paint}EditorDocument`, `createRichTextEditorDocument` & `createEditorAssetRegistry` / `withEditorAssets` | `editorDocument` from `useMermaidDiagram`, `useChartEditor`, `useAnimationEditor`, `useVideoEditor`, `useParameters`, `useVectorEditor`, `useSpreadsheetEditor`, `useTokens`, `useImageEditor`, `usePaintEditor`; `useRichTextEditorDocument(editor)`, `useCanvasEditorDocument` | `editorDocument` from `createMermaidDiagram`, `createChartEditor`, `createAnimationEditor`, `createVideoEditor`, `createParameters`, `createVectorEditor`, `createReactiveSpreadsheet`, `createTokens`, `createReactiveImageEditor`, `createReactivePaintEditor`; `createCanvasDocument`; rich text via core | `EditorDocument` |
-| Editor Autosave (crash recovery for any `EditorDocument`; restore loads the snapshot into the editor) | `createEditorAutosave` (`/persistence`) | `useEditorAutosave` & `<RecoveryPrompt>` | `createEditorAutosave` & `<RecoveryPrompt>` | Planned (#533) |
+| Editor Autosave (crash recovery for any `EditorDocument`; restore loads the snapshot into the editor; `baseVersion` retires snapshots made on an older server version) | `createEditorAutosave` (`/persistence`) | `useEditorAutosave` & `<RecoveryPrompt>` | `createEditorAutosave` & `<RecoveryPrompt>` | Planned (#533) |
+| Editor Remote Sync (saves any `EditorDocument` to a backend after each change: debounced, one save at a time, monotonic versions, compare-and-set conflicts merged with `onConflict`, diffs for collaborators, remote changes applied without echo, flush on hide / teardown) | `createEditorRemoteSync` (`/persistence`) | `useEditorSync` | `createEditorSync` | Planned (#533) |
 | Saved Documents & Document Agent Tools (named saves on any storage adapter; `get_<kind>_document`, `load_<kind>_document` as one undo step, `undo_<kind>` / `redo_<kind>`, `save_<kind>_document`, `list_saved_<kind>_documents`, `open_saved_<kind>_document`; read-only documents refuse writes with the reason) | `createEditorDocumentStore` & `createDocumentToolProvider` (`/persistence`) | `useAgentToolProvider` | `useAgentToolProvider` | Planned (#533) |
 
 </details>

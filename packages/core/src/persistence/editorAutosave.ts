@@ -19,6 +19,12 @@ export interface EditorAutosaveOptions
    */
   dirty?: DirtyFlagSource;
   /**
+   * The server / host version of the loaded document, stored with each snapshot.
+   * `checkRecovery` / `recoverIfNewer` retire snapshots made on an older version instead of
+   * offering them (see `AutosaveControllerOptions.baseVersion`).
+   */
+  baseVersion?: number | (() => number | undefined);
+  /**
    * For documents with `assets`: after `markClean` or `discard` retire a snapshot, delete the
    * stored assets nothing refers to any more (`collectEditorAssetGarbage`, best effort, keeping
    * the assets the document uses now; default `true`). Needs `storage.keys`; `false` turns it off.
@@ -29,8 +35,13 @@ export interface EditorAutosaveOptions
 export interface EditorAutosave {
   readonly controller: AutosaveController<EditorDocumentFile>;
   readonly revisions: RevisionTracker;
-  /** An earlier session's unsaved snapshot of this document, or `null`. */
+  /** An earlier session's unsaved snapshot of this document, or `null` (snapshots made on a version older than `baseVersion` are retired). */
   checkRecovery(): Promise<AutosaveRecovery<EditorDocumentFile> | null>;
+  /**
+   * Checks for an earlier session's unsaved snapshot, restoring it into `doc` if it is valid and
+   * at least as new as `baseVersion`, or retiring it and starting autosave cleanly if stale/invalid.
+   */
+  recoverIfNewer(minimumBaseVersion?: number): Promise<LoadReport | null>;
   /** Loads a recovered snapshot into the document and starts autosaving. */
   restore(recovery: AutosaveRecovery<EditorDocumentFile>): LoadReport;
   /** Deletes the earlier session's snapshot and starts autosaving. */
@@ -61,10 +72,38 @@ export function createEditorAutosave(doc: EditorDocument, options: EditorAutosav
     savedRevision: revisions.savedRevision,
   });
   const unsubscribe = revisions.subscribe(() => controller.notify());
+
+  const retireRecovery = async () => {
+    await controller.discardRecovery();
+    controller.ready();
+    await collect();
+  };
+
   return {
     controller,
     revisions,
     checkRecovery: () => controller.checkRecovery(),
+    async recoverIfNewer(minimumBaseVersion) {
+      const recovery = await controller.checkRecovery(
+        minimumBaseVersion !== undefined ? { minimumBaseVersion } : undefined,
+      );
+      if (!recovery) {
+        controller.ready();
+        return null;
+      }
+      if (!recovery.snapshot) {
+        await retireRecovery();
+        return null;
+      }
+      try {
+        const report = doc.loadDocument(recovery.snapshot, { history: "reset" });
+        controller.ready();
+        return report;
+      } catch {
+        await retireRecovery();
+        return null;
+      }
+    },
     restore(recovery) {
       if (!recovery.snapshot) throw recovery.error ?? new Error("The recovered snapshot could not be read.");
       const report = doc.loadDocument(recovery.snapshot, { history: "reset" });
@@ -72,9 +111,7 @@ export function createEditorAutosave(doc: EditorDocument, options: EditorAutosav
       return report;
     },
     async discard() {
-      await controller.discardRecovery();
-      controller.ready();
-      await collect();
+      await retireRecovery();
     },
     async markClean() {
       revisions.markSaved();

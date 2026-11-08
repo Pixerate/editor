@@ -5,6 +5,8 @@ export * from './types.js';
 export {
 	createCanvasGraph,
 	calculateGraphDifferences,
+	applyGraphDifferences,
+	sanitizeCanvasDocument,
 	replaceNodeInGraph,
 	type CreateCanvasGraphOptions
 } from './createCanvasGraph.svelte.js';
