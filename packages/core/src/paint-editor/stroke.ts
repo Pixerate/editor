@@ -14,7 +14,8 @@ import { applyStrokeToTile, type StrokeApply } from '../paint/brush';
 import { EMPTY_MIXER_LOAD, type PaintTileTarget } from '../paint/exchange';
 import { cleanMixer, loadMixer, type MixerLoad } from '../paint/mixer';
 import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
-import { usesPaintExchange, type PaintBrush } from './brushes';
+import type { DisplacementField } from '../paint/displacement';
+import { brushVortex, usesPaintExchange, type PaintBrush } from './brushes';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import { PaintDabStroke } from './dab-stroke';
 import type { EffectPaintPixels, PaintEffectPaint } from './effect-paint';
@@ -22,6 +23,7 @@ import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engi
 import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
 import { FilmBuffer, ThickStrokeDriver, type ThickChannels } from './thick';
+import { VortexStrokeDriver, type VortexStrokeSummary } from './vortex';
 import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
 import { ferroToShadow, ferroTwinBrush, shadowToFerro } from './ferro';
 import { emptyThermo, finalizeThermoStroke, fluorTwinBrush, thermoTwinBrush } from './heat';
@@ -71,6 +73,8 @@ export interface StrokeSessionInit {
   wet?: { driver: WetStrokeDriver; surface: () => TiledSurface };
   /** Impasto brushes: the layer's thick-paint channels before the stroke. */
   thick?: { channels: ThickChannels };
+  /** Vortex brushes: the layer's thick-paint relief channels before the stroke (warped alongside colour). */
+  relief?: { channels: ThickChannels };
   /** Where paint may land (canvas-sized coverage 0..255: the stencils' mask), or none. */
   selection?: { width: number; height: number; data: ArrayLike<number> } | null;
   /** Sticker brushes: the next sticker number on the layer. */
@@ -119,6 +123,8 @@ export interface PaintStrokeResult {
   wet?: boolean;
   /** Sticker brushes: refs the spray picked but skipped because their art had not loaded yet. */
   skippedStickers?: string[];
+  /** Vortex brushes: classified stroke shape (`'point' | 'open' | 'closed'`) and maximum displacement (px). */
+  vortex?: VortexStrokeSummary;
 }
 
 function defaultTile(surface: TiledSurface): Uint8ClampedArray {
@@ -154,6 +160,7 @@ export class PaintStrokeSession {
   private wet: PaintDabStroke | null = null;
   private readonly wetDriver: WetStrokeDriver | null = null;
   private thickDriver: ThickStrokeDriver | null = null;
+  private vortexDriver: VortexStrokeDriver | null = null;
   private filmBuffer: FilmBuffer | null = null;
   private stickerSpray: StickerSpray | null = null;
   /** Light paint: the stroke's twin over the light channel, and what it left there. */
@@ -209,12 +216,30 @@ export class PaintStrokeSession {
   private build(effect: EffectPaintPixels | null): void {
     const init = this.init;
     const brush = init.brush;
-    this.dry = this.wet = this.thickDriver = this.stickerSpray = this.filmBuffer = null;
+    this.dry = this.wet = this.thickDriver = this.vortexDriver = this.stickerSpray = this.filmBuffer = null;
     if (init.sticker) {
       this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect, art: init.sticker.art, variant: init.sticker.variant });
     } else if (brush.engine === 'impasto' && init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect });
+    } else if (brush.engine === 'vortex') {
+      this.vortexDriver = new VortexStrokeDriver({
+        brush,
+        base: this.base,
+        offset: init.offset,
+        lockTransparency: init.lockTransparency,
+        selection: init.selection ?? null,
+        color: init.color,
+        background: init.background,
+        grain: init.grain,
+        paperDepth: init.paperDepth,
+        seed: init.seed,
+        copies: this.copies,
+        paint: init.paint ?? null,
+        effect,
+        stampArt: init.stampArt,
+        relief: init.relief?.channels ?? init.thick?.channels ?? null,
+      });
     } else {
       if (init.thick && (brush.iridescence || brush.engine === 'eraser')) {
         this.filmBuffer = new FilmBuffer(init.thick.channels.film, init.offset, init.selection ?? null);
@@ -255,7 +280,17 @@ export class PaintStrokeSession {
     this.fresh.clear();
     this.bounds = null;
     this.build(pixels);
-    const rects = this.points.length ? (this.dry ? this.dry.push(this.points) : this.thickDriver ? this.thickDriver.push(this.points) : this.stickerSpray ? this.stickerSpray.push(this.points) : this.wet!.push(this.points)) : [];
+    const rects = this.points.length
+      ? this.dry
+        ? this.dry.push(this.points)
+        : this.thickDriver
+          ? this.thickDriver.push(this.points)
+          : this.stickerSpray
+            ? this.stickerSpray.push(this.points)
+            : this.vortexDriver
+              ? this.vortexDriver.push(this.points)
+              : this.wet!.push(this.points)
+      : [];
     this.update(was ? [...rects, was] : rects);
   }
 
@@ -285,6 +320,7 @@ export class PaintStrokeSession {
       inputFilter: undefined,
       mixerLoad: { reservoir: init.mixerLoad.reservoir ? [g, g, g] : null, amount: init.mixerLoad.amount, pickup: null },
       thick: undefined,
+      relief: undefined,
       paint,
       effect,
       light: null,
@@ -311,6 +347,7 @@ export class PaintStrokeSession {
       lockTransparency: false,
       brush: fluorTwinBrush(init.brush),
       inputFilter: undefined,
+      relief: undefined,
       light: null,
       fluor: null,
       thermo: null,
@@ -346,6 +383,7 @@ export class PaintStrokeSession {
       secondary: [hotRgb[0], hotRgb[1], hotRgb[2], 255],
       inputFilter: undefined,
       mixerLoad: hotHex ? { reservoir: [hotRgb[0] / 255, hotRgb[1] / 255, hotRgb[2] / 255], amount: 1, pickup: null } : init.mixerLoad,
+      relief: undefined,
       paint: null,
       effect: null,
       light: null,
@@ -395,6 +433,7 @@ export class PaintStrokeSession {
       inputFilter: undefined,
       mixerLoad: { reservoir: init.mixerLoad.reservoir ? [g, g, g] : null, amount: init.mixerLoad.amount, pickup: null },
       thick: init.thick,
+      relief: undefined,
       paint,
       effect,
       light: null,
@@ -448,6 +487,10 @@ export class PaintStrokeSession {
       this.wetUpdate(this.wetDriver.push(points));
       return;
     }
+    if (this.vortexDriver) {
+      this.vortexDriver.push(points);
+      return;
+    }
     this.update(this.dry ? this.dry.push(points) : this.thickDriver ? this.thickDriver.push(points) : this.stickerSpray ? this.stickerSpray.push(points) : this.wet!.push(points));
   }
 
@@ -456,12 +499,18 @@ export class PaintStrokeSession {
     return this.stickerSpray ? this.stickerSpray.stickers.map((s) => ({ ...s })) : null;
   }
 
-  /** Impasto or iridescent strokes: the layer's thick-paint channels with the stroke so far. */
+  /** Impasto, iridescent or vortex strokes: the layer's thick-paint channels with the stroke so far. */
   thickChannels(): ThickChannels | null {
     if (this.thickDriver) return this.thickDriver.channels();
+    if (this.vortexDriver) return this.vortexDriver.reliefChannels();
     const f = this.filmBuffer ?? this.wetDriver?.init.film ?? null;
     if (f && this.init.thick) return { ...this.init.thick.channels, film: f.surface() };
     return null;
+  }
+
+  /** Vortex strokes: the view-only winding animation data when duration > 0 and pixels moved. */
+  vortexAnimation() {
+    return this.vortexDriver ? this.vortexDriver.windingAnimation() : null;
   }
 
   /** Shows a wet stroke's progress (the wet layer's display). */
@@ -489,6 +538,7 @@ export class PaintStrokeSession {
     const d = this.wetDriver!;
     const changed = d.dabCount > 0;
     this.result = { layerId: this.layerId, bounds: changed ? d.bounds : null, dabs: d.dabCount, strokeId: null, wet: true };
+    if (d.vortexSummary) this.result.vortex = d.vortexSummary;
     const carried = d.load;
     if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);
     this.host.commit(this, changed ? this.init.wet!.surface() : null, false);
@@ -537,8 +587,38 @@ export class PaintStrokeSession {
       else {
         this.wetEndPending = true;
         this.result = { layerId: this.layerId, bounds: this.bounds, dabs: this.wetDriver.dabCount, strokeId: null, wet: true };
+        if (this.wetDriver.vortexSummary) this.result.vortex = this.wetDriver.vortexSummary;
       }
       return this.result!;
+    }
+    if (this.vortexDriver) {
+      const { surface: warped, bounds } = this.vortexDriver.finish();
+      if (bounds) this.bounds = union(this.bounds, bounds);
+      this.closed = true;
+      for (const twin of [this.lightTwin, this.ferroTwin, this.fluorTwin, this.thermoTwin]) {
+        if (twin?.open) {
+          const tr = twin.end();
+          if (tr.bounds) this.bounds = union(this.bounds, tr.bounds);
+        }
+      }
+      const relief = this.vortexDriver.reliefChannels();
+      const twinChanged = this.fluorResult !== null || this.thermoResult !== null || this.lightResult !== null || this.ferroResult !== null;
+      const changed = warped !== null || relief !== null || twinChanged;
+      const surface = changed ? (this.invisibleDaylight ? this.base : (warped ?? this.base)) : null;
+      const vSummary = this.vortexDriver.vortexResult();
+      const dabs = changed ? Math.max(1, this.vortexDriver.dabCount || this.points.length) : 0;
+      this.result = {
+        layerId: this.layerId,
+        bounds: changed ? this.bounds : null,
+        dabs,
+        strokeId: null,
+        vortex: {
+          shape: vSummary.shape,
+          maxDisplacement: changed ? Math.max(vSummary.maxDisplacement, this.lightTwin?.result?.vortex?.maxDisplacement ?? 0) : 0,
+        },
+      };
+      this.host.commit(this, surface, false);
+      return this.result;
     }
     this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.stickerSpray ? this.stickerSpray.finish() : this.wet!.finish());
     this.closed = true;
@@ -613,7 +693,10 @@ export function mixerLoadForStroke(brush: PaintBrush, current: MixerLoad, color:
 export function brushLoadForStroke(brush: PaintBrush, current: MixerLoad, color: readonly [number, number, number]): MixerLoad {
   if (brush.engine === 'mixer') return mixerLoadForStroke(brush, current, color);
   if (brush.engine === 'impasto') return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
-  if (brush.engine === 'wet') return brush.wet.tool === 'paint' ? { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null } : EMPTY_MIXER_LOAD;
+  if (brush.engine === 'wet') {
+    const laysColor = brush.wet.tool === 'paint' || (brush.wet.tool === 'vortex' && brushVortex(brush).ink > 0);
+    return laysColor ? { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null } : EMPTY_MIXER_LOAD;
+  }
   if (usesPaintExchange(brush)) return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
   return EMPTY_MIXER_LOAD;
 }

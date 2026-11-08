@@ -16,6 +16,7 @@ more; this is where each one went.
 | Wet engine (medium, water, pigment, body…) | `behaviour.surface` `wet` and `behaviour.wet` |
 | Impasto (thickness, gloss, metallic, rim, clarity…) | `behaviour.surface` `thick` and `behaviour.thick` |
 | Particle settings | `marks` `{ kind: 'particles', physics, render, count… }`; textured dots are `tip.stamps` on a `stamp` tip |
+| Vortex paint | `marks` `{ kind: 'vortex', reach, turns, pull, direction, ink, duration }` |
 | Sticker spray | `marks` `{ kind: 'objects', density… }` and `tip.stamps` (sticker refs) |
 | Bristles | `tip.shape` `bristle` and `tip.bristle` |
 | A brush's own gradient (paint) | `colour.default` (a gradient); `unset: ['colour']` drops it |

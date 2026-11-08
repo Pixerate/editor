@@ -42,10 +42,17 @@ import {
   type LivePatternsSettings,
 } from '../paint/live-patterns';
 import { TILE, TiledSurface, translateSurface, type RasterRect } from '../raster/surface';
-import type { PaintBrush, WetMediumKind } from './brushes';
+import { brushVortex, type PaintBrush, type WetMediumKind } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { grainCatch, hexToRgb8, PaperGrain, type PaperGrain as PaperGrainType, type PaperSettings } from './paper';
 import type { FilmBuffer } from './thick';
+import {
+  buildVortexDisplacement,
+  buildVortexVelocityField,
+  classifyVortexShape,
+  resolveVortexSpinSign,
+  type VortexStrokeSummary,
+} from './vortex';
 
 /** Water depth a stroke lays at the tip's centre at `water` 1 (the sum over its dabs). */
 const STROKE_WATER = 0.9;
@@ -117,12 +124,14 @@ interface CopyState {
 export class WetStrokeDriver {
   dabCount = 0;
   bounds: RasterRect | null = null;
+  vortexSummary: VortexStrokeSummary | null = null;
   /** The world's clock at which each raw point was applied (recorded with the stroke). */
   readonly steps: number[] = [];
   private readonly smoother: PenSmoother;
   private readonly states: CopyState[];
   private readonly medium: WetMedium;
   private readonly queue: PenPoint[] = [];
+  private readonly vortexPoints: PenPoint[] = [];
   private finishing = false;
   private finished = false;
   private lastRaw: PenPoint | null = null;
@@ -139,29 +148,32 @@ export class WetStrokeDriver {
     this.smoother = new PenSmoother(brush.tip.smoothing, brush.pressureSmoothing);
     const copies = init.copies.length ? init.copies : [IDENTITY_COPY];
     const wet = brush.wet;
+    const vortex = brushVortex(brush);
+    const vortexHasInk = wet.tool === 'vortex' && vortex.ink > 0;
     const spacing = Math.max(0.02, brush.tip.spacing);
     // A stroke lays `STROKE_WATER × water` at the tip's centre: each dab a share by its spacing.
     const perDab = Math.min(1, spacing * 1.2);
     // Thinner: more water, less pigment and body.
     const thin = wet.thinner;
     const body = wet.body * (1 - thin);
+    const pigRate = wet.tool === 'vortex' ? Math.max(wet.pigment, vortex.ink) * vortex.ink : wet.pigment;
     this.medium = new WetMedium(init.world, init.laneId, {
       water: STROKE_WATER * Math.min(1, wet.water * (1 + thin)) * perDab,
-      mass: STROKE_MASS * wet.pigment * (1 - 0.6 * thin) * perDab,
+      mass: STROKE_MASS * pigRate * (1 - 0.6 * thin) * perDab,
       body,
       light: 0,
     });
-    if (wet.tool === 'paint' && brush.ghost && wet.pigment > 0) {
+    if ((wet.tool === 'paint' || vortexHasInk) && brush.ghost && pigRate > 0) {
       const one = pigmentOf(init.color, body);
       init.world.startGhost(init.laneId, [one[0], one[1], one[2], one[3]], brush.ghost.linger, init.speed ?? 120, brush.ghost.trigger ?? 'immediate');
     }
     // Light paint: wet paint brushes lay light with their pigment (thinned with it); it then flows with the paint.
-    this.lightBase = wet.tool === 'paint' ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0;
+    this.lightBase = (wet.tool === 'paint' || vortexHasInk) ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0;
     // Loading: below 1 the reservoir drains along the stroke, so the paint runs out.
     const rates = exchangeRates(brush.behavior.pickup, brush.behavior.mix, wet.load, brush.behavior.mixing);
     this.states = copies.map((c, i) => ({
       walker: new PenDabWalker(brush, (init.seed + i * 7919) | 0, c.linear),
-      exchange: wet.tool === 'paint' ? new PaintExchange(rates, init.load) : null,
+      exchange: wet.tool === 'paint' || vortexHasInk ? new PaintExchange(rates, init.load) : null,
       last: null,
     }));
     this.copies = copies;
@@ -202,6 +214,19 @@ export class WetStrokeDriver {
   flush(): RasterRect[] {
     const rects: RasterRect[] = [];
     if (this.init.world.busy || this.finished) return rects;
+    if (this.init.brush.wet.tool === 'vortex') {
+      while (this.queue.length) {
+        const raw = this.queue.shift()!;
+        this.steps.push(this.init.world.clock);
+        this.vortexPoints.push(raw);
+      }
+      if (this.finishing) {
+        this.applyVortex(rects);
+        this.finished = true;
+      }
+      for (const r of rects) this.bounds = union(this.bounds, r);
+      return rects;
+    }
     while (this.queue.length) {
       const raw = this.queue.shift()!;
       this.steps.push(this.init.world.clock);
@@ -227,6 +252,119 @@ export class WetStrokeDriver {
     }
     for (const r of rects) this.bounds = union(this.bounds, r);
     return rects;
+  }
+
+  private applyVortex(rects: RasterRect[]): void {
+    const { world, laneId, brush, mask } = this.init;
+    const vortex = brushVortex(brush);
+    if (this.vortexPoints.length === 0) {
+      this.vortexSummary = { shape: 'point', maxDisplacement: 0 };
+      return;
+    }
+    // Optional wet ink pre-deposit when `vortex.ink > 0`.
+    if (vortex.ink > 0) {
+      for (const raw of this.vortexPoints) {
+        this.lastRaw = raw;
+        const p = this.smoother.push(raw);
+        this.lastFed = p;
+        this.copies.forEach((c, i) => {
+          const dabs: PenDab[] = [];
+          this.states[i].walker.push(c.map(p), dabs);
+          this.applyDabs(i, dabs, rects);
+        });
+      }
+      const raw = this.lastRaw;
+      const fed = this.lastFed;
+      this.copies.forEach((c, i) => {
+        const dabs: PenDab[] = [];
+        if (raw && fed && (raw.x !== fed.x || raw.y !== fed.y)) {
+          this.states[i].walker.push(c.map({ ...raw, pressure: fed.pressure }), dabs);
+        }
+        this.states[i].walker.finish(dabs);
+        this.applyDabs(i, dabs, rects);
+      });
+    }
+
+    const primaryClass = classifyVortexShape(
+      this.vortexPoints,
+      brush.tip.size,
+      brush.tip.smoothing,
+      brush.pressureSmoothing
+    );
+    const { maxDisplacement } = buildVortexDisplacement(this.vortexPoints, brush, this.copies);
+    const speedScale = Math.min(
+      0.1,
+      Math.max(0.03, (0.045 + 0.015 * vortex.turns) * Math.max(0.3, brush.wet.strength))
+    );
+    const rewetAmount = Math.max(0.2, brush.wet.rewet * 0.45);
+
+    let anySwirled = false;
+    for (const copy of this.copies) {
+      const mapped = this.vortexPoints.map((p) => copy.map(p));
+      const spinSign = resolveVortexSpinSign(
+        vortex.direction,
+        primaryClass.shape,
+        primaryClass.signedArea,
+        copy
+      );
+      const { velocity } = buildVortexVelocityField(mapped, brush, spinSign);
+      if (velocity.maxSpeed <= 1e-5) continue;
+      const k = speedScale / velocity.maxSpeed;
+      const vx = new Float32Array(velocity.vx.length);
+      const vy = new Float32Array(velocity.vy.length);
+      for (let r = 0; r < velocity.rows; r++) {
+        const gy = velocity.rect.y + r * velocity.step;
+        for (let c = 0; c < velocity.cols; c++) {
+          const gx = velocity.rect.x + c * velocity.step;
+          const idx = r * velocity.cols + c;
+          let m = 1;
+          if (mask) {
+            const mx = Math.round(gx);
+            const my = Math.round(gy);
+            m =
+              mx >= 0 && my >= 0 && mx < mask.width && my < mask.height
+                ? (mask.data[my * mask.width + mx] ?? 0) / 255
+                : 0;
+          }
+          vx[idx] = velocity.vx[idx]! * k * m;
+          vy[idx] = velocity.vy[idx]! * k * m;
+        }
+      }
+      const clipX0 = Math.max(0, velocity.rect.x);
+      const clipY0 = Math.max(0, velocity.rect.y);
+      const clipX1 = Math.min(world.width, velocity.rect.x + velocity.rect.width);
+      const clipY1 = Math.min(world.height, velocity.rect.y + velocity.rect.height);
+      if (clipX1 <= clipX0 || clipY1 <= clipY0) continue;
+      const clipRect: RasterRect = {
+        x: clipX0,
+        y: clipY0,
+        width: clipX1 - clipX0,
+        height: clipY1 - clipY0,
+      };
+      world.swirl(
+        laneId,
+        clipRect,
+        {
+          vx,
+          vy,
+          cols: velocity.cols,
+          rows: velocity.rows,
+          step: velocity.step,
+          rect: velocity.rect,
+        },
+        rewetAmount
+      );
+      rects.push(clipRect);
+      anySwirled = true;
+    }
+
+    const hasWetOrInk = vortex.ink > 0 || world.stats(laneId).wetCells > 0;
+    if (anySwirled && hasWetOrInk) {
+      this.dabCount = Math.max(1, this.vortexPoints.length);
+      this.vortexSummary = { shape: primaryClass.shape, maxDisplacement };
+    } else {
+      this.vortexSummary = { shape: primaryClass.shape, maxDisplacement: 0 };
+    }
   }
 
   private applyDabs(copy: number, dabs: PenDab[], rects: RasterRect[]): void {
@@ -277,6 +415,7 @@ export class WetStrokeDriver {
     const k = Math.round(Math.min(1, d.alpha * d.opacity * brush.tip.opacity) * COVERAGE_STEPS) / COVERAGE_STEPS;
     if (!(k > 0)) return;
     switch (wet.tool) {
+      case 'vortex':
       case 'paint': {
         if (brush.ghost) {
           const smear = brush.ghost.smear;

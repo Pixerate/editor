@@ -1541,7 +1541,11 @@ public final class PaintEditorController {
         if !layer.isPixel { throw PaintEditorError("Layer \"\(layer.name)\" is a group; paint on a pixel layer inside it.") }
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) to paint on it.") }
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
-        let brush = try strokeBrush(i)
+        var brush = try strokeBrush(i)
+        if brush.engine == "vortex" && wet.wetLayerIds().contains(layer.id) {
+            brush.engine = "wet"
+            brush.wet.tool = "vortex"
+        }
         if let refusal = mutationBrushRefusal(brush) { throw PaintEditorError(refusal) }
         if brush.ghost != nil {
             if brush.light.amount > 0 { throw PaintEditorError("Ghost paint (\(brush.name)) shares the wet light channel and can't emit light; set light.amount to 0 or ghost to null (set_brush).") }
@@ -1620,7 +1624,7 @@ public final class PaintEditorController {
             let seedW = i.seed ?? Int(PixerateRandom.mix32(UInt32(truncatingIfNeeded: seedCounter &* 0x9E37_79B1)) & 0x7FFF_FFFF)
             let copiesW = (i.copies ?? symmetryCopies(guides.symmetry)).filter { m in m.enumerated().contains { $0.element != IDENTITY_AFFINE[$0.offset] } }
             let wetMask = i.maskStencils.map { stencilSelection($0) } ?? (i.stencils != false ? stencilSelection() : nil)
-            let wetFilm = brush.iridescence != nil && brush.wet.tool == "paint" ? FilmBuffer(d.thick?.get(id)?.film ?? emptySurface(4, 0), LayerOffset(x: 0, y: 0), wetMask) : nil
+            let wetFilm = brush.iridescence != nil && (brush.wet.tool == "paint" || (brush.wet.tool == "vortex" && brushVortex(brush).ink > 0)) ? FilmBuffer(d.thick?.get(id)?.film ?? emptySurface(4, 0), LayerOffset(x: 0, y: 0), wetMask) : nil
             let driver = WetStrokeDriver(WetStrokeInit(
                 world: world, laneId: id, brush: brush, color: rgb, load: load, grain: paperGrain(d.paper), paperDepth: d.paper.depth, paperColor: hexToRgb8(d.paper.color),
                 seed: seedW, copies: ([IDENTITY_AFFINE] + copiesW).map(affineCopy), mask: i.maskStencils.map { stencilSelection($0) } ?? (i.stencils != false ? stencilSelection() : nil),
@@ -1685,6 +1689,8 @@ public final class PaintEditorController {
         withLight.wet = wetInit
         if brush.engine == "impasto" {
             withLight.thick = d.thick?.get(layer.id) ?? emptyThickChannels()
+        } else if brush.engine == "vortex" {
+            withLight.relief = d.thick?.get(layer.id)
         } else if wetInit == nil && brush.engine != "sticker" {
             let existingFilm = d.thick?.get(layer.id)?.film
             if brush.iridescence != nil || (brush.engine == "eraser" && existingFilm != nil && !existingFilm!.tiles.isEmpty) {

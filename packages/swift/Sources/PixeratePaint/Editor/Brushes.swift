@@ -10,9 +10,10 @@ import PixerateRaster
  * tips, spray marks and gradient paint.
  */
 
-public let PAINT_BRUSH_ENGINES = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker"]
+public let PAINT_BRUSH_ENGINES = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "vortex"]
 public let PAINT_BRUSH_CATEGORIES = ["pencil", "pastel", "charcoal", "airbrush", "marker", "ink", "paint", "eraser", "blender", "smudge", "mixer", "watercolor", "wet-tool", "oil", "impasto", "procedural", "bristle", "sticker", "light", "custom"]
-public let WET_TOOLS = ["paint", "water", "dry", "blow", "blend", "smudge", "blot"]
+public let WET_TOOLS = ["paint", "water", "dry", "blow", "blend", "smudge", "blot", "vortex"]
+public let VORTEX_DIRECTIONS = ["follow", "cw", "ccw"]
 public let WET_MEDIA = ["watercolor", "gouache", "oil"]
 public let IMPASTO_TOOLS = ["brush", "tube", "knife", "roller", "gloop"]
 public let MULTI_COLOR_MODES = ["off", "tip", "dab"]
@@ -326,6 +327,53 @@ public struct SpraySettings: Equatable, Sendable {
 
 public let DEFAULT_SPRAY = SpraySettings(density: 0.5, size: 0.12)
 
+/// Vortex marks: draw a shape and the paint around it winds into a vortex of that shape.
+public struct VortexSettings: Equatable, Sendable {
+    /// How far it pulls from the stroke, in tip radii (1..8, default 3).
+    public var reach: Double
+    /// How far paint winds, in turns of the shape (0.25..6, default 1.5).
+    public var turns: Double
+    /// How strongly paint is drawn towards the stroke (0..1, default 0.3).
+    public var pull: Double
+    /// Spin direction (`"follow" | "cw" | "ccw"`, default `"follow"`).
+    public var direction: String
+    /// How much paint colour it lays before winding (0..1, default 0).
+    public var ink: Double
+    /// Seconds the winding takes on screen (0..3, default 1.2; 0 shows the result at once).
+    public var duration: Double
+
+    public init(reach: Double = 3, turns: Double = 1.5, pull: Double = 0.3, direction: String = "follow", ink: Double = 0, duration: Double = 1.2) {
+        self.reach = reach
+        self.turns = turns
+        self.pull = pull
+        self.direction = direction
+        self.ink = ink
+        self.duration = duration
+    }
+
+    var json: JSONValue {
+        ["reach": .number(reach), "turns": .number(turns), "pull": .number(pull), "direction": .string(direction), "ink": .number(ink), "duration": .number(duration)]
+    }
+}
+
+public let DEFAULT_VORTEX = VortexSettings()
+
+func normalizeVortex(_ raw: JSONObject, _ base: VortexSettings = DEFAULT_VORTEX) -> VortexSettings {
+    VortexSettings(
+        reach: rangeValue(raw["reach"], 1, 8, base.reach),
+        turns: rangeValue(raw["turns"], 0.25, 6, base.turns),
+        pull: unitValue(raw["pull"], base.pull),
+        direction: raw["direction"]?.stringValue.flatMap { VORTEX_DIRECTIONS.contains($0) ? $0 : nil } ?? base.direction,
+        ink: unitValue(raw["ink"], base.ink),
+        duration: rangeValue(raw["duration"], 0, 3, base.duration)
+    )
+}
+
+/// Resolved vortex settings of a brush, falling back to `DEFAULT_VORTEX`.
+public func brushVortex(_ brush: PaintBrush) -> VortexSettings {
+    brush.vortex ?? DEFAULT_VORTEX
+}
+
 extension BrushSettings {
     var json: JSONValue {
         ["size": .number(size), "hardness": .number(hardness), "spacing": .number(spacing), "angle": .number(angle), "roundness": .number(roundness), "opacity": .number(opacity), "flow": .number(flow), "smoothing": .number(smoothing), "pressureSize": .bool(pressureSize), "pressureOpacity": .bool(pressureOpacity), "blend": .string(blend.rawValue)]
@@ -452,6 +500,8 @@ public struct PaintBrush: Equatable, Sendable {
     public var particle: JSONObject
     public var bristle: JSONObject
     public var sticker: JSONObject
+    /// Vortex marks settings (`vortex` engine or `wet.tool == "vortex"`).
+    public var vortex: VortexSettings? = nil
     public var light: LightSettings
     public var fluorescence: FluorescenceSettings
     public var thermochromic: ThermochromicSettings
@@ -481,10 +531,11 @@ public struct PaintBrush: Equatable, Sendable {
             "smudge": ["strength": .number(smudge.strength), "length": .number(smudge.length), "mixing": .string(smudge.mixing)],
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
-            "light": light.json,
-            "fluorescence": fluorescence.json,
-            "thermochromic": thermochromic.json,
         ]
+        if let vortex { o["vortex"] = vortex.json }
+        o["light"] = light.json
+        o["fluorescence"] = fluorescence.json
+        o["thermochromic"] = thermochromic.json
         if let iridescence { o["iridescence"] = iridescence.json }
         if let ghost { o["ghost"] = ghost.json }
         if let mutation { o["mutation"] = mutation.json }
@@ -507,7 +558,8 @@ public func usesPaintExchange(_ brush: PaintBrush, _ gradient: Bool? = nil) -> B
 /// Whether strokes of a brush paint colour, so gradient paint applies.
 public func brushTakesPaint(_ brush: PaintBrush) -> Bool {
     if brush.engine == "eraser" || brush.engine == "blender" || brush.engine == "smudge" { return false }
-    if brush.engine == "wet" { return brush.wet.tool == "paint" }
+    if brush.engine == "vortex" { return brushVortex(brush).ink > 0 }
+    if brush.engine == "wet" { return brush.wet.tool == "paint" || (brush.wet.tool == "vortex" && brushVortex(brush).ink > 0) }
     if brush.engine == "mixer" { return brush.loadsColor }
     return true
 }
@@ -656,6 +708,11 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         return b.thermochromic.hotColor
     }()
     let wet = normalizeWetBrush(raw["wet"]?.objectValue ?? [:], b.wet)
+    let rawMarks = raw["marks"]?.objectValue
+    let rawVortex = raw["vortex"]?.objectValue ?? (rawMarks?["kind"]?.stringValue == "vortex" ? rawMarks : nil)
+    let vortex: VortexSettings? = (engine == "vortex" || (engine == "wet" && wet.tool == "vortex") || rawVortex != nil || b.vortex != nil)
+        ? normalizeVortex(rawVortex ?? [:], b.vortex ?? DEFAULT_VORTEX)
+        : nil
     let wantsLight = (rl["amount"]?.finite ?? 0) > 0
     let canMutate = engine == "dab" || (engine == "wet" && wet.tool == "paint") || engine == "impasto" || engine == "particle" || engine == "bristle"
     let mutation: MutationSettings? = {
@@ -708,6 +765,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         particle: normalizeParticle(raw["particle"]?.objectValue ?? [:], b.particle),
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
+        vortex: vortex,
         light: ghost != nil && !wantsLight ? DEFAULT_LIGHT : LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
         fluorescence: FluorescenceSettings(amount: unitValue(rfl["amount"], b.fluorescence.amount), invisible: boolValue(rfl["invisible"], b.fluorescence.invisible)),
         thermochromic: ThermochromicSettings(hotColor: hotColor, threshold: rangeValue(rth["threshold"], 0.05, 0.95, b.thermochromic.threshold)),

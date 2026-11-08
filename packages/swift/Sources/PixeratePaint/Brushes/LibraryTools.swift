@@ -52,8 +52,8 @@ private func paintWetTestStroke(_ brush: PaintBrush, _ paper: PaperSettings, _ c
         ))
         _ = try driver.push(thumbnailStroke(width, height))
         _ = try driver.finish()
-        // Blowing only shows once the water has moved.
-        if brush.wet.tool == "blow" { w.step(4) }
+        // Blowing and vortex only show once the water has moved.
+        if brush.wet.tool == "blow" || brush.wet.tool == "vortex" { w.step(brush.wet.tool == "vortex" ? 12 : 4) }
         let surf = try w.display("thumb").surface
         if let film {
             var ch = emptyThickChannels()
@@ -79,7 +79,7 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
         surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: height), bytes(rgba))
     } else if b.engine == "wet" {
         // the wet layer draws its own band
-    } else if b.engine == "blender" || b.engine == "smudge" || (b.engine == "mixer" && !b.loadsColor) || b.behavior.pickup > 0 {
+    } else if b.engine == "blender" || b.engine == "smudge" || b.engine == "vortex" || (b.engine == "mixer" && !b.loadsColor) || b.behavior.pickup > 0 {
         let half = Int(JS.ceil(Double(height) / 2))
         surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: half), bytes(rgba))
         surface = fillRect(surface, RasterRect(x: 0, y: half, width: width, height: height - half), [232, 196, 64, 255])

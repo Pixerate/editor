@@ -1244,10 +1244,65 @@
               "surface": "dry",
               "tip": "round",
               "variety": "ferrofluid"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "vortex",
+              "id": "vortex",
+              "kind": "mark",
+              "marks": "vortex",
+              "medium": "paint",
+              "name": "Vortex",
+              "size": 24,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "vortex"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "vortex",
+              "id": "ink-vortex",
+              "kind": "mark",
+              "marks": "vortex",
+              "medium": "paint",
+              "name": "Ink vortex",
+              "surface": "dry",
+              "tip": "round",
+              "variety": "vortex"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "vortex",
+              "id": "whirlpool",
+              "kind": "mark",
+              "marks": "vortex",
+              "medium": "paint",
+              "name": "Whirlpool",
+              "size": 28,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "vortex"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "wet-vortex",
+              "kind": "mark",
+              "marks": "vortex",
+              "medium": "paint",
+              "name": "Wet vortex",
+              "size": 28,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
             }
           ],
           "host": "paint",
-          "total": 88
+          "total": 92
         }
       }
     },

@@ -97,6 +97,7 @@ private final class WetCopyState {
 final class WetStrokeDriver {
     var dabCount = 0
     var bounds: RasterRect?
+    var vortexSummary: VortexStrokeSummary? = nil
     /// The world's clock at which each raw point was applied (recorded with the stroke).
     private(set) var steps: [Int] = []
     let initValues: WetStrokeInit
@@ -104,6 +105,7 @@ final class WetStrokeDriver {
     private let states: [WetCopyState]
     private let medium: WetMedium
     private let copies: [StrokeCopy]
+    private var vortexPoints: [PenPoint] = []
     private let depth: Double
     private let lightBase: Double
     private let sampler: PaintGradientSampler?
@@ -119,24 +121,27 @@ final class WetStrokeDriver {
         smoother = PenSmoother(brush.tip.smoothing, brush.pressureSmoothing)
         copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
         let wet = brush.wet
+        let vortex = brushVortex(brush)
+        let vortexHasInk = wet.tool == "vortex" && vortex.ink > 0
         let spacing = Swift.max(0.02, brush.tip.spacing)
         let perDab = Swift.min(1, spacing * 1.2)
         let thin = wet.thinner
         let body = wet.body * (1 - thin)
+        let pigRate = wet.tool == "vortex" ? Swift.max(wet.pigment, vortex.ink) * vortex.ink : wet.pigment
         medium = WetMedium(i.world, i.laneId, WetMedium.Options(
             water: STROKE_WATER * Swift.min(1, wet.water * (1 + thin)) * perDab,
-            mass: STROKE_MASS * wet.pigment * (1 - 0.6 * thin) * perDab,
+            mass: STROKE_MASS * pigRate * (1 - 0.6 * thin) * perDab,
             body: body,
             light: 0
         ))
-        if wet.tool == "paint", let ghost = brush.ghost, wet.pigment > 0 {
+        if (wet.tool == "paint" || vortexHasInk), let ghost = brush.ghost, pigRate > 0 {
             let one = pigmentOf(i.color, body)
             try? i.world.startGhost(i.laneId, pigment: one, linger: ghost.linger, stepsPerSecond: i.speed ?? 120, trigger: ghost.trigger ?? "immediate")
         }
-        lightBase = wet.tool == "paint" ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0
+        lightBase = (wet.tool == "paint" || vortexHasInk) ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0
         let rates = exchangeRates(brush.behavior.pickup, brush.behavior.mix, wet.load, brush.behavior.mixing)
         states = copies.enumerated().map { k, c in
-            WetCopyState(walker: PenDabWalker(brush, Int(Int32(truncatingIfNeeded: i.seed + k * 7919)), c.linear), exchange: wet.tool == "paint" ? PaintExchange(rates, i.load) : nil)
+            WetCopyState(walker: PenDabWalker(brush, Int(Int32(truncatingIfNeeded: i.seed + k * 7919)), c.linear), exchange: (wet.tool == "paint" || vortexHasInk) ? PaintExchange(rates, i.load) : nil)
         }
         depth = i.grain != nil && !i.grain!.flat ? Swift.min(1, Swift.max(0, i.paperDepth * brush.grain)) : 0
         if var g = i.paint {
@@ -155,6 +160,13 @@ final class WetStrokeDriver {
     func push(_ points: [PenPoint]) throws -> [RasterRect] {
         var rects: [RasterRect] = []
         if done { return rects }
+        if initValues.brush.wet.tool == "vortex" {
+            for raw in points {
+                steps.append(initValues.world.clock)
+                vortexPoints.append(raw)
+            }
+            return rects
+        }
         for raw in points {
             steps.append(initValues.world.clock)
             lastRaw = raw
@@ -174,6 +186,12 @@ final class WetStrokeDriver {
     func finish() throws -> [RasterRect] {
         var rects: [RasterRect] = []
         if done { return rects }
+        if initValues.brush.wet.tool == "vortex" {
+            try applyVortex(&rects)
+            done = true
+            for r in rects { bounds = unionRect(bounds, r) }
+            return rects
+        }
         for (k, c) in copies.enumerated() {
             var dabs: [PenDab] = []
             if let raw = lastRaw, let fed = lastFed, raw.x != fed.x || raw.y != fed.y {
@@ -187,6 +205,99 @@ final class WetStrokeDriver {
         done = true
         for r in rects { bounds = unionRect(bounds, r) }
         return rects
+    }
+
+    private func applyVortex(_ rects: inout [RasterRect]) throws {
+        let world = initValues.world
+        let laneId = initValues.laneId
+        let brush = initValues.brush
+        let mask = initValues.mask
+        let vortex = brushVortex(brush)
+        if vortexPoints.isEmpty {
+            vortexSummary = VortexStrokeSummary(shape: "point", maxDisplacement: 0)
+            return
+        }
+        if vortex.ink > 0 {
+            for raw in vortexPoints {
+                lastRaw = raw
+                let p = smoother.push(raw)
+                lastFed = p
+                for (k, c) in copies.enumerated() {
+                    var dabs: [PenDab] = []
+                    states[k].walker.push(c.map(p), &dabs)
+                    try applyDabs(k, dabs, &rects)
+                }
+            }
+            for (k, c) in copies.enumerated() {
+                var dabs: [PenDab] = []
+                if let raw = lastRaw, let fed = lastFed, raw.x != fed.x || raw.y != fed.y {
+                    var q = raw
+                    q.pressure = fed.pressure
+                    states[k].walker.push(c.map(q), &dabs)
+                }
+                states[k].walker.finish(&dabs)
+                try applyDabs(k, dabs, &rects)
+            }
+        }
+
+        let primaryClass = classifyVortexShape(
+            vortexPoints,
+            brush.tip.size,
+            brush.tip.smoothing,
+            brush.pressureSmoothing
+        )
+        let (_, _, maxDisplacement) = buildVortexDisplacement(vortexPoints, brush, copies)
+        let speedScale = Swift.min(
+            0.1,
+            Swift.max(0.03, (0.045 + 0.015 * vortex.turns) * Swift.max(0.3, brush.wet.strength))
+        )
+        let rewetAmount = Swift.max(0.2, brush.wet.rewet * 0.45)
+
+        var anySwirled = false
+        for copy in copies {
+            let mapped = vortexPoints.map { copy.map($0) }
+            let spinSign = resolveVortexSpinSign(vortex.direction, primaryClass.shape, primaryClass.signedArea, copy)
+            let (velocity, _) = buildVortexVelocityField(mapped, brush, spinSignOverride: spinSign)
+            if velocity.maxSpeed <= 1e-5 { continue }
+            let k = speedScale / velocity.maxSpeed
+            var vx = [Float](repeating: 0, count: velocity.vx.count)
+            var vy = [Float](repeating: 0, count: velocity.vy.count)
+            for r in 0..<velocity.rows {
+                let gy = Double(velocity.rect.y + r * velocity.step)
+                for c in 0..<velocity.cols {
+                    let gx = Double(velocity.rect.x + c * velocity.step)
+                    let idx = r * velocity.cols + c
+                    var m = 1.0
+                    if let mask {
+                        let mx = Int(JS.round(gx))
+                        let my = Int(JS.round(gy))
+                        m = (mx >= 0 && my >= 0 && mx < mask.width && my < mask.height)
+                            ? Double(mask.data[my * mask.width + mx]) / 255.0
+                            : 0.0
+                    }
+                    vx[idx] = Float(Double(velocity.vx[idx]) * k * m)
+                    vy[idx] = Float(Double(velocity.vy[idx]) * k * m)
+                }
+            }
+            let clipX0 = Swift.max(0, velocity.rect.x)
+            let clipY0 = Swift.max(0, velocity.rect.y)
+            let clipX1 = Swift.min(world.width, velocity.rect.x + velocity.rect.width)
+            let clipY1 = Swift.min(world.height, velocity.rect.y + velocity.rect.height)
+            if clipX1 <= clipX0 || clipY1 <= clipY0 { continue }
+            let clipRect = RasterRect(x: clipX0, y: clipY0, width: clipX1 - clipX0, height: clipY1 - clipY0)
+            let gridField = VelocityGridField(rect: velocity.rect, step: velocity.step, cols: velocity.cols, rows: velocity.rows, vx: vx, vy: vy, maxSpeed: speedScale)
+            try world.swirl(laneId, clipRect, gridField, rewetAmount: rewetAmount)
+            rects.append(clipRect)
+            anySwirled = true
+        }
+
+        let hasWetOrInk = try (vortex.ink > 0 || world.stats(laneId).wetCells > 0)
+        if anySwirled && hasWetOrInk {
+            dabCount = Swift.max(1, vortexPoints.count)
+            vortexSummary = VortexStrokeSummary(shape: primaryClass.shape, maxDisplacement: maxDisplacement)
+        } else {
+            vortexSummary = VortexStrokeSummary(shape: primaryClass.shape, maxDisplacement: 0)
+        }
     }
 
     private func applyDabs(_ copy: Int, _ dabs: [PenDab], _ rects: inout [RasterRect]) throws {
@@ -247,7 +358,7 @@ final class WetStrokeDriver {
         let k = JS.round(Swift.min(1, d.dab.alpha * d.dab.opacity * brush.tip.opacity) * COVERAGE_STEPS) / COVERAGE_STEPS
         if !(k > 0) { return }
         switch wet.tool {
-        case "paint":
+        case "paint", "vortex":
             if let ghost = brush.ghost {
                 let smear = ghost.smear
                 if wet.pigment > 0 {

@@ -20,7 +20,7 @@
 import { SRGB_TO_LINEAR, linearToSrgb8 } from '../paint/wet/film';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
-import { normalizePaintBrush, type PaintBrush } from './brushes';
+import { brushVortex, normalizePaintBrush, type PaintBrush } from './brushes';
 import { computeSpill } from './light';
 import { hexToRgb8, type PaperSettings } from './paper';
 
@@ -89,6 +89,17 @@ export function fluorTwinBrush(brush: PaintBrush): PaintBrush {
   const f = brush.fluorescence.amount;
   const base: PaintBrush = { ...brush, light: { amount: 0, pressure: false }, fluorescence: { amount: 0, invisible: false }, thermochromic: { hotColor: null, threshold: 0.5 }, tip: { ...brush.tip, blend: 'normal' } };
   if (brush.engine === 'eraser' || brush.engine === 'smudge' || brush.engine === 'blender') return base;
+  if (brush.engine === 'vortex') {
+    const v = brushVortex(brush);
+    return normalizePaintBrush(
+      {
+        ...base,
+        tip: { ...base.tip, opacity: f > 0 ? brush.tip.opacity * f : brush.tip.opacity, blend: 'normal' },
+        vortex: { ...v, ink: f > 0 ? v.ink : 0 },
+      },
+      base,
+    );
+  }
   const move = brush.engine === 'impasto' ? (brush.impasto.tool === 'knife' ? 'smudge' : 'dab') : brush.engine;
   if (f > 0) {
     return normalizePaintBrush(
@@ -128,6 +139,10 @@ export function thermoTwinBrush(brush: PaintBrush): PaintBrush {
     tip: { ...brush.tip, blend: 'normal' },
   };
   if (brush.engine === 'eraser' || brush.engine === 'smudge' || brush.engine === 'blender') return base;
+  if (brush.engine === 'vortex') {
+    const v = brushVortex(brush);
+    return normalizePaintBrush({ ...base, vortex: { ...v, ink: active ? v.ink : 0 } }, base);
+  }
   const move = brush.engine === 'impasto' ? (brush.impasto.tool === 'knife' ? 'smudge' : 'dab') : brush.engine;
   if (active) {
     return normalizePaintBrush({ ...base, engine: move, behavior: { ...base.behavior, pickup: 0 } }, base);

@@ -264,6 +264,17 @@ public struct PaintBrushPanel: View {
                     .font(.caption2)
                     .foregroundStyle(model.hasMutationAgent ? Color.secondary : Color.orange)
             }
+            if brush.engine == "vortex" || (brush.engine == "wet" && brush.wet.tool == "vortex") {
+                ForEach(model.vortexSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.vortexValue(item.path), range: item.min...item.max, step: item.step) { model.setVortexValue(item.path, $0) }
+                }
+                Picker("Direction", selection: Binding(get: { model.vortexDirection }, set: { model.setVortexDirection($0) })) {
+                    Text("Follow shape").tag("follow")
+                    Text("Clockwise").tag("cw")
+                    Text("Counter-clockwise").tag("ccw")
+                }
+                .font(.caption)
+            }
             if brush.engine == "mixer" || brush.behavior.dirty {
                 HStack(spacing: 6) {
                     Text("Carries").foregroundStyle(.secondary)

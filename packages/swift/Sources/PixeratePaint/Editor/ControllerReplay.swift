@@ -78,6 +78,7 @@ extension PaintEditorController {
         var out: JSONObject = ["layerId": .string(layerId), "bounds": rectJSON(bounds), "dabs": .number(Double(dabs)), "strokeIds": .array(strokeIds.map { .string($0) })]
         if let load = last?.result.mixerLoad { out["mixerLoad"] = loadResult(load) }
         if let w = last?.result.wet { out["wet"] = .bool(w) }
+        if let v = last?.result.vortex { out["vortex"] = v.json }
         return out
     }
 

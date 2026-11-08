@@ -973,6 +973,172 @@ public final class WetWorld {
         }
     }
 
+    /**
+     * Swirls the water over `rect` according to a 2D velocity field (`field`), capping per-cell
+     * velocity at `0.1`, lifting settled paint via `rewet` so older washes spin visibly, and
+     * installing the swirl flow so subsequent simulation steps keep turning.
+     */
+    public func swirl(_ id: String, _ rect: RasterRect, _ field: VelocityGridField, rewetAmount: Double = 0.25) throws {
+        try swirl(id, rect, { x, y in
+            let step = Double(field.step)
+            let ox = Double(field.rect.x)
+            let oy = Double(field.rect.y)
+            let cols = field.cols
+            let rows = field.rows
+            let gx = (x - ox) / step
+            let gy = (y - oy) / step
+            if gx < 0 || gy < 0 || gx > Double(cols - 1) || gy > Double(rows - 1) { return (0, 0) }
+            let c0 = Swift.max(0, Swift.min(cols - 1, Int(floor(gx))))
+            let r0 = Swift.max(0, Swift.min(rows - 1, Int(floor(gy))))
+            let c1 = Swift.min(cols - 1, c0 + 1)
+            let r1 = Swift.min(rows - 1, r0 + 1)
+            let fx = gx - Double(c0)
+            let fy = gy - Double(r0)
+            let i00 = r0 * cols + c0
+            let i10 = r0 * cols + c1
+            let i01 = r1 * cols + c0
+            let i11 = r1 * cols + c1
+            let w00 = (1.0 - fx) * (1.0 - fy)
+            let w10 = fx * (1.0 - fy)
+            let w01 = (1.0 - fx) * fy
+            let w11 = fx * fy
+            let vx = Double(field.vx[i00]) * w00 + Double(field.vx[i10]) * w10 + Double(field.vx[i01]) * w01 + Double(field.vx[i11]) * w11
+            let vy = Double(field.vy[i00]) * w00 + Double(field.vy[i10]) * w10 + Double(field.vy[i01]) * w01 + Double(field.vy[i11]) * w11
+            return (vx, vy)
+        }, rewetAmount: rewetAmount)
+    }
+
+    public func swirl(_ id: String, _ rect: RasterRect, _ sampleAt: (Double, Double) -> (Double, Double), rewetAmount: Double = 0.25) throws {
+        if rect.width <= 0 || rect.height <= 0 { return }
+        let cap = 0.1
+        let wRect = rect.width
+        let hRect = rect.height
+        var uxs = [Float](repeating: 0, count: wRect * hRect)
+        var uys = [Float](repeating: 0, count: wRect * hRect)
+        var cov = [Float](repeating: 0, count: wRect * hRect)
+
+        var anySpin = false
+        for yy in 0..<hRect {
+            let y = Double(rect.y + yy)
+            for xx in 0..<wRect {
+                let x = Double(rect.x + xx)
+                let i = yy * wRect + xx
+                var (ux, uy) = sampleAt(x, y)
+                let sp = hypot(ux, uy)
+                if sp <= 1e-6 { continue }
+                if sp > cap {
+                    ux = (ux * cap) / sp
+                    uy = (uy * cap) / sp
+                }
+                uxs[i] = Float(ux)
+                uys[i] = Float(uy)
+                cov[i] = Float(Swift.min(1.0, hypot(Double(uxs[i]), Double(uys[i])) / cap))
+                anySpin = true
+            }
+        }
+        if !anySpin { return }
+
+        if rewetAmount > 0 {
+            try rewet(id, rect, cov, amount: rewetAmount, paper: [paperBytes[0], paperBytes[1], paperBytes[2]], suspend: true)
+        }
+
+        let lane = try laneOf(id)
+        var moves: [(UnsafeMutablePointer<Float>, UnsafeMutablePointer<Float>, Double)] = []
+        try footprint(id, rect, cov, wake: false) { c, w, x, y in
+            let rho = Double(c[P_RHO * PL])
+            if !(rho >= DRY_EPS) { return }
+            let i = (y - rect.y) * wRect + (x - rect.x)
+            let ux = Double(uxs[i])
+            let uy = Double(uys[i])
+            let lift = Swift.min(1.0, Swift.max(0.0, rewetAmount * 1.4 * w))
+            if lift > 0 {
+                let dBase = self.single(c) + P_D0 * PL
+                for q in 0..<MASS_CHANNELS {
+                    let moved = Float(Double(dBase[q * PL]) * lift)
+                    if moved > 0 {
+                        dBase[q * PL] = Swift.max(0, dBase[q * PL] - moved)
+                        c[(P_P0 + q) * PL] = c[(P_P0 + q) * PL] + moved
+                    }
+                }
+            }
+            for k in 1..<9 {
+                let eu = WET_EX[k] * ux + WET_EY[k] * uy
+                c[k * PL] = Swift.max(0, Float(Double(c[k * PL]) + 3.0 * W9[k] * rho * eu))
+            }
+            var nux = Float(Double(c[P_UX * PL]) + ux)
+            var nuy = Float(Double(c[P_UY * PL]) + uy)
+            let nsp = hypot(Double(nux), Double(nuy))
+            if nsp > cap {
+                nux = Float((Double(nux) * cap) / nsp)
+                nuy = Float((Double(nuy) * cap) / nsp)
+            }
+            c[P_UX * PL] = nux
+            c[P_UY * PL] = nuy
+
+            let sx = Int(JS.round(ux * 16.0))
+            let sy = Int(JS.round(uy * 16.0))
+            if sx != 0 || sy != 0 {
+                if let from = self.cell(lane, x - sx, y - sy), Double(from[P_RHO * PL]) >= DRY_EPS {
+                    moves.append((from, c, Swift.min(0.45, w * 0.35)))
+                }
+            }
+        }
+
+        if !moves.isEmpty {
+            let taken: [[Float]] = moves.map { from, _, a in
+                var t = [Float](repeating: 0, count: MASS_CHANNELS)
+                for q in 0..<MASS_CHANNELS {
+                    let idx = (P_P0 + q) * PL
+                    t[q] = Float(Double(from[idx]) * a)
+                    from[idx] = Swift.max(0, from[idx] - t[q])
+                }
+                return t
+            }
+            for (idx, m) in moves.enumerated() {
+                let to = m.1, t = taken[idx]
+                for q in 0..<MASS_CHANNELS {
+                    to[(P_P0 + q) * PL] = to[(P_P0 + q) * PL] + t[q]
+                }
+            }
+        }
+
+        let prevFlow = lane.flow
+        let rx0 = rect.x
+        let ry0 = rect.y
+        let swirlUxs = uxs
+        let swirlUys = uys
+        let swirlFlow: WetFlowField = { px, py in
+            let base = prevFlow?(px, py) ?? (0.0, 0.0)
+            let ix = Int(floor(px)) - rx0
+            let iy = Int(floor(py)) - ry0
+            if ix < 0 || iy < 0 || ix >= wRect || iy >= hRect { return base }
+            let k = iy * wRect + ix
+            let fx = Swift.max(-0.015, Swift.min(0.015, base.0 + Double(swirlUxs[k]) * 0.08))
+            let fy = Swift.max(-0.015, Swift.min(0.015, base.1 + Double(swirlUys[k]) * 0.08))
+            return (fx, fy)
+        }
+        lane.flow = swirlFlow
+        if !(lane.flowStrength > 0) { lane.flowStrength = 1.0 }
+        pack(lane)
+        for key in active where laneIndexOf(key) == lane.index { fillFlow(key) }
+        refreshHalos()
+    }
+
+    /// Returns the instantaneous fluid velocity `(ux, uy)` at cell `(x, y)` on `id` (`(0, 0)` when dry or out of bounds).
+    public func velocityAt(_ id: String, _ x: Int, _ y: Int) throws -> (Double, Double) {
+        let lane = try laneOf(id)
+        guard let c = cell(lane, floor(Double(x)) == Double(x) ? x : Int(floor(Double(x))), y) else { return (0, 0) }
+        let rho = Double(c[P_RHO * PL])
+        if !(rho >= DRY_EPS) { return (0, 0) }
+        var jx = 0.0, jy = 0.0
+        for k in 1..<9 {
+            let fk = Double(c[k * PL])
+            jx += WET_EX[k] * fk
+            jy += WET_EY[k] * fk
+        }
+        return (jx / rho, jy / rho)
+    }
+
     /// Blends wet paint: each wet cell's suspended pigment (and light) moves `strength` × coverage towards the footprint's mean.
     public func blend(_ id: String, _ rect: RasterRect, _ cov: [Float]?, strength: Double) throws {
         let lane = try laneOf(id)

@@ -18,18 +18,36 @@ import {
   type LivePatternsInput,
   type LivePatternsSettings,
 } from '../paint/live-patterns';
-import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, DEFAULT_STICKER, normalizeBristle, normalizeParticle, normalizeStickerSettings, STAMP_KINDS, type BristleSettings, type ParticleSettings, type StickerSettings } from './mark-settings';
+import {
+  DEFAULT_BRISTLE,
+  DEFAULT_PARTICLE,
+  DEFAULT_STICKER,
+  DEFAULT_VORTEX,
+  normalizeBristle,
+  normalizeParticle,
+  normalizeStickerSettings,
+  normalizeVortex,
+  STAMP_KINDS,
+  VORTEX_DIRECTIONS,
+  type BristleSettings,
+  type ParticleSettings,
+  type StickerSettings,
+  type VortexDirection,
+  type VortexSettings,
+} from './mark-settings';
 
 export { DEFAULT_LIVE_PATTERNS, LIVE_PATTERN_KINDS, LIVE_PATTERN_PRESETS, normalizeLivePatterns, type LivePatternKind, type LivePatternsInput, type LivePatternsSettings };
+export { DEFAULT_VORTEX, normalizeVortex, VORTEX_DIRECTIONS, type VortexDirection, type VortexSettings };
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
  * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
- * Brush), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along).
+ * Brush), `blender` (mixes the colours under and near the tip), `smudge` (drags paint along) or
+ * `vortex` (winds surrounding paint into a vortex around the drawn shape).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'vortex';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'vortex'];
 
 export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'light' | 'custom';
 
@@ -39,11 +57,12 @@ export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 
  * What a wet brush does to the wet layer: `paint` (water and pigment), `water` (clear water;
  * with `rewet` it lifts dried paint), `dry` (a hair dryer: takes water, the pigment settles),
  * `blow` (pushes the water along the stroke), `blend` (evens out the wet pigment under the tip),
- * `smudge` (drags wet paint along) or `blot` (a tissue: takes up wet paint).
+ * `smudge` (drags wet paint along), `blot` (a tissue: takes up wet paint) or `vortex` (spins the
+ * wet fluid around the drawn shape).
  */
-export type WetTool = 'paint' | 'water' | 'dry' | 'blow' | 'blend' | 'smudge' | 'blot';
+export type WetTool = 'paint' | 'water' | 'dry' | 'blow' | 'blend' | 'smudge' | 'blot' | 'vortex';
 
-export const WET_TOOLS: readonly WetTool[] = ['paint', 'water', 'dry', 'blow', 'blend', 'smudge', 'blot'];
+export const WET_TOOLS: readonly WetTool[] = ['paint', 'water', 'dry', 'blow', 'blend', 'smudge', 'blot', 'vortex'];
 
 /**
  * The wet medium a wet brush paints: its layer takes the medium's wet settings the first time it
@@ -431,6 +450,8 @@ export interface PaintBrush {
   bristle: BristleSettings;
   /** Sticker engine only: the stamps and how they are sprayed. */
   sticker: StickerSettings;
+  /** Vortex engine (or wet vortex tool): reach, turns, pull, direction, ink and winding duration. */
+  vortex?: VortexSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
   /** UV-fluorescent ink: glows under the virtual UV blacklight (amount 0: none). */
@@ -576,7 +597,7 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'vortex' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -605,7 +626,13 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   particle?: Partial<ParticleSettings>;
   bristle?: Partial<BristleSettings>;
   sticker?: Partial<StickerSettings>;
+  vortex?: Partial<VortexSettings>;
 };
+
+/** Returns a brush's vortex settings, falling back to `DEFAULT_VORTEX` when omitted. */
+export function brushVortex(brush: Pick<PaintBrush, 'vortex'>): VortexSettings {
+  return brush.vortex ?? DEFAULT_VORTEX;
+}
 
 /** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab, mixer and wet brushes. */
 export function isWetCapable(brush: Pick<PaintBrush, 'engine'>): boolean {
@@ -626,9 +653,10 @@ export function usesPaintExchange(brush: PaintBrush, gradient = brush.paint !== 
 }
 
 /** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, blenders, smudges or the wet tools other than paint). */
-export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet'>): boolean {
+export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet' | 'vortex'>): boolean {
   if (brush.engine === 'eraser' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
-  if (brush.engine === 'wet') return brush.wet.tool === 'paint';
+  if (brush.engine === 'vortex') return (brush.vortex?.ink ?? 0) > 0;
+  if (brush.engine === 'wet') return brush.wet.tool === 'paint' || (brush.wet.tool === 'vortex' && (brush.vortex?.ink ?? 0) > 0);
   if (brush.engine === 'mixer') return brush.loadsColor;
   return true;
 }
@@ -718,6 +746,12 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
   // `behavior.multicolor` is a read-only view of the gradient, for older readers.
   behavior = { ...behavior, multicolor: paintToMultiColor(paint) ?? { ...DEFAULT_MULTI_COLOR, colors: [] } };
   const wet = normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH);
+  const rawMarks = (raw as { marks?: { kind?: string } & Partial<VortexSettings> }).marks;
+  const rawVortex = raw.vortex ?? (rawMarks?.kind === 'vortex' ? rawMarks : undefined);
+  const vortex =
+    engine === 'vortex' || (engine === 'wet' && wet.tool === 'vortex') || rawVortex !== undefined || b.vortex !== undefined
+      ? normalizeVortex(rawVortex ?? {}, b.vortex ?? DEFAULT_VORTEX)
+      : undefined;
   const wantsLight = typeof raw.light?.amount === 'number' && raw.light.amount > 0;
   const canMutate = engine === 'dab' || (engine === 'wet' && wet.tool === 'paint') || engine === 'impasto' || engine === 'particle' || engine === 'bristle';
   const mutation =
@@ -751,6 +785,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     particle: normalizeParticle(raw.particle ?? {}, b.particle ?? DEFAULT_PARTICLE),
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
+    ...(vortex ? { vortex } : {}),
     light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     fluorescence: normalizeFluorescence(raw.fluorescence ?? {}, b.fluorescence ?? DEFAULT_FLUORESCENCE),
     thermochromic: normalizeThermochromic(raw.thermochromic ?? {}, b.thermochromic ?? DEFAULT_THERMOCHROMIC),

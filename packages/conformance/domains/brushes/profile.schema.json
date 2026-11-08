@@ -63,7 +63,8 @@
           "continuous",
           "scatter",
           "particles",
-          "objects"
+          "objects",
+          "vortex"
         ]
       },
       "description": "Marks kinds it renders."

@@ -31,6 +31,15 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
         brush["tool"] = .string(b.engine)
         return brush
     }
+    if b.engine == "wet" && b.wet.tool == "vortex" {
+        brush["medium"] = "paint"
+        brush["variety"] = .string(b.wet.medium)
+        brush["marks"] = ["kind": "vortex"]
+        brush["behaviour"] = ["surface": "wet"]
+        if b.iridescence != nil { brush["iridescence"] = [:] }
+        if b.mutation != nil { brush["mutation"] = [:] }
+        return brush
+    }
     if b.engine == "wet" && b.wet.tool != "paint" {
         brush["kind"] = "tool"
         brush["tool"] = .string(WET_TOOL_OF.first { $0.1 == b.wet.tool }!.0)
@@ -55,6 +64,11 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
         brush["marks"] = ["kind": "particles"]
     case "sticker":
         brush["marks"] = ["kind": "objects"]
+    case "vortex":
+        let (medium, variety) = CATEGORY_MEDIUM[b.category] ?? ("paint", nil)
+        brush["medium"] = .string(medium)
+        if let variety { brush["variety"] = .string(variety) }
+        brush["marks"] = ["kind": "vortex"]
     default:
         if let (medium, variety) = CATEGORY_MEDIUM[b.category] {
             brush["medium"] = .string(medium)

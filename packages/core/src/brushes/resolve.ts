@@ -22,13 +22,13 @@ import {
 import { editorStampOf } from '../stickers/helpers';
 import type { Brush, BrushTool, ResolvedBrush } from './types';
 
-const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
+const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'vortex'];
 /** Engines that pick up and mix paint dab by dab (the exchange ratios apply). */
 const EXCHANGE: readonly PaintBrushEngine[] = ['dab', 'wet', 'impasto'];
 /** Engines that lay dabs from the pen dab walker: tip grain, count and flip apply. */
 const DABS: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge'];
 /** Mark engines that can deposit a thin-film iridescence channel. */
-const FILM: readonly PaintBrushEngine[] = ['dab', 'mixer', 'wet', 'impasto', 'particle', 'bristle'];
+const FILM: readonly PaintBrushEngine[] = ['dab', 'mixer', 'wet', 'impasto', 'particle', 'bristle', 'vortex'];
 
 /** One facet field and the engine field it sets. */
 export interface BrushField {
@@ -143,6 +143,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('marks.size', 'spray.size', ['dab'], { marks: ['scatter'] }),
   ...each('marks', 'sticker', ['density', 'sizeJitter', 'rotationJitter', 'scatter'], ['sticker']),
   f('marks.colourJitter', 'sticker.colorJitter', ['sticker']),
+  ...each('marks', 'vortex', ['reach', 'turns', 'pull', 'direction', 'ink', 'duration'], ['vortex', 'wet']).map((field) => ({ ...field, marks: ['vortex'] })),
   ...each('tip.bristle', 'bristle', ['count', 'stiffness', 'splay', 'thickness', 'load', 'jitter'], ['bristle']),
 ];
 
@@ -177,6 +178,7 @@ const copy = <T>(v: T): T => (v !== null && typeof v === 'object' ? (JSON.parse(
  */
 export function resolveEngine(brush: Pick<Brush, 'kind' | 'tool' | 'tip' | 'marks' | 'behaviour'>): PaintBrushEngine {
   if (brush.kind === 'tool') return brush.tool === 'eraser' || brush.tool === 'blender' || brush.tool === 'smudge' ? brush.tool : 'wet';
+  if (brush.marks?.kind === 'vortex') return brush.behaviour?.surface === 'wet' ? 'wet' : 'vortex';
   if (brush.marks?.kind === 'particles') return 'particle';
   if (brush.marks?.kind === 'objects') return 'sticker';
   if (brush.tip.shape === 'bristle') return 'bristle';
@@ -253,9 +255,10 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   }
   // Spray marks: the dab engine with droplets (their settings come from the fields above).
   if (engine === 'dab' && brush.marks?.kind === 'scatter') input.spray = { ...((input.spray as object | undefined) ?? {}) };
+  if (brush.marks?.kind === 'vortex') input.vortex = { ...((input.vortex as object | undefined) ?? {}) };
   if (brush.iridescence && FILM.includes(engine)) input.iridescence = { ...((input.iridescence as object | undefined) ?? {}) };
   if (engine === 'wet') {
-    setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');
+    setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : brush.marks?.kind === 'vortex' ? 'vortex' : 'paint');
     if (brush.kind === 'tool') delete input.livePatterns;
     const medium = resolveWetMedium(brush);
     if (medium) setPath(input, 'wet.medium', medium);

@@ -226,10 +226,10 @@
         y1={l.from.y}
         x2={l.to.x}
         y2={l.to.y}
-        stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' || l.kind === 'sticker' ? '#818cf8' : '#f472b6'}
-        stroke-opacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' || l.kind === 'sticker' ? 0.8 : 0.35}
-        stroke-width={1 / snap.view.zoom}
-        stroke-dasharray={l.kind === 'symmetry' ? `${6 / snap.view.zoom} ${4 / snap.view.zoom}` : undefined}
+        stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' || l.kind === 'sticker' ? '#818cf8' : l.kind === 'vortex' || l.kind === 'vortex-reach' ? '#38bdf8' : '#f472b6'}
+        stroke-opacity={l.kind === 'vortex' ? 0.9 : l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' || l.kind === 'sticker' ? 0.8 : l.kind === 'vortex-reach' ? 0.45 : 0.35}
+        stroke-width={(l.kind === 'vortex' ? 1.5 : 1) / snap.view.zoom}
+        stroke-dasharray={l.kind === 'symmetry' ? `${6 / snap.view.zoom} ${4 / snap.view.zoom}` : l.kind === 'vortex-reach' ? `${4 / snap.view.zoom} ${4 / snap.view.zoom}` : undefined}
       />
     {/each}
     {#each agentLines.strokes as s (s.id)}

@@ -8,7 +8,7 @@ import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
 
@@ -146,6 +146,20 @@ const OBJECTS = object(
     rotationJitter: unit('Random turn as a fraction of ±180° (default 1).'),
     scatter: num(0, 2, 'How far from the path marks land, in tip diameters (default 0.5).'),
     colourJitter: unit('Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2).'),
+  },
+  ['kind'],
+);
+
+const VORTEX = object(
+  'Vortex paint: the stroke you draw is the shape of a vortex (a point whirlpool, an open racetrack, or a closed loop) that pulls in and winds surrounding paint at pen-up. Missing fields take their defaults.',
+  {
+    kind: { type: 'string', const: 'vortex', description: 'Always "vortex".' },
+    reach: num(1, 8, 'How far the vortex pulls from the stroke, in tip radii (default 3). Pressure scales the local reach.'),
+    turns: num(0.25, 6, 'How far paint winds around the shape, in turns (default 1.5).'),
+    pull: unit('How strongly paint is drawn inward toward the stroke: 0 pure spin, 1 strong whirlpool contraction (default 0.3).'),
+    direction: oneOf(VORTEX_DIRECTIONS, 'Winding direction: follow (default: closed loops turn the way they were drawn; open strokes and points turn clockwise), cw (clockwise) or ccw (counter-clockwise).'),
+    ink: unit('How much paint colour the stroke lays before winding: 0 is colourless and only moves existing paint; > 0 lays colour and winds it (default 0).'),
+    duration: num(0, 3, 'Seconds the view-only winding animation takes on screen; 0 shows the final result at once (default 1.2).'),
   },
   ['kind'],
 );
@@ -340,7 +354,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
       'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.',
     ),
     tip: TIP,
-    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS] },
+    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers) or vortex (winds surrounding paint into a vortex of the drawn shape).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, VORTEX] },
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
@@ -361,7 +375,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
 export const BRUSH_FACET_SCHEMAS = {
   tip: TIP,
   tipGrain: TIP_GRAIN,
-  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS },
+  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS, vortex: VORTEX },
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,

@@ -1249,6 +1249,208 @@ export class WetWorld {
     );
   }
 
+  /**
+   * Swirls the water over `rect` according to a 2D velocity field (`field`: flat `[ux, uy]` array
+   * of `rect.width * rect.height * 2`, coarse `{ vx, vy, cols, rows, step }` grid, or `(x, y) => [ux, uy]`),
+   * capping per-cell velocity at `0.1`, lifting settled paint via `rewet` so older washes spin
+   * visibly, and installing the swirl flow so subsequent simulation steps keep turning.
+   */
+  swirl(
+    id: string,
+    rect: RasterRect,
+    field:
+      | ArrayLike<number>
+      | {
+          readonly vx: ArrayLike<number>;
+          readonly vy: ArrayLike<number>;
+          readonly cols?: number;
+          readonly rows?: number;
+          readonly step?: number;
+          readonly rect?: RasterRect;
+        }
+      | ((x: number, y: number) => readonly [number, number]),
+    rewetAmount = 0.25
+  ): void {
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const cap = 0.1;
+    const wRect = rect.width;
+    const hRect = rect.height;
+    const uxs = new Float32Array(wRect * hRect);
+    const uys = new Float32Array(wRect * hRect);
+    const cov = new Float32Array(wRect * hRect);
+
+    const sampleAt = (x: number, y: number): [number, number] => {
+      if (typeof field === 'function') {
+        const v = field(x, y);
+        return [v[0] ?? 0, v[1] ?? 0];
+      }
+      if ('vx' in field) {
+        const step = field.step ?? 1;
+        const ox = field.rect?.x ?? rect.x;
+        const oy = field.rect?.y ?? rect.y;
+        const cols = field.cols ?? wRect;
+        const rows = field.rows ?? hRect;
+        const gx = (x - ox) / step;
+        const gy = (y - oy) / step;
+        if (gx < 0 || gy < 0 || gx > cols - 1 || gy > rows - 1) return [0, 0];
+        const c0 = Math.max(0, Math.min(cols - 1, Math.floor(gx)));
+        const r0 = Math.max(0, Math.min(rows - 1, Math.floor(gy)));
+        const c1 = Math.min(cols - 1, c0 + 1);
+        const r1 = Math.min(rows - 1, r0 + 1);
+        const fx = gx - c0;
+        const fy = gy - r0;
+        const i00 = r0 * cols + c0;
+        const i10 = r0 * cols + c1;
+        const i01 = r1 * cols + c0;
+        const i11 = r1 * cols + c1;
+        const w00 = (1 - fx) * (1 - fy);
+        const w10 = fx * (1 - fy);
+        const w01 = (1 - fx) * fy;
+        const w11 = fx * fy;
+        const vx =
+          (field.vx[i00] ?? 0) * w00 +
+          (field.vx[i10] ?? 0) * w10 +
+          (field.vx[i01] ?? 0) * w01 +
+          (field.vx[i11] ?? 0) * w11;
+        const vy =
+          (field.vy[i00] ?? 0) * w00 +
+          (field.vy[i10] ?? 0) * w10 +
+          (field.vy[i01] ?? 0) * w01 +
+          (field.vy[i11] ?? 0) * w11;
+        return [vx, vy];
+      }
+      const idx = ((y - rect.y) * wRect + (x - rect.x)) * 2;
+      return [field[idx] ?? 0, field[idx + 1] ?? 0];
+    };
+
+    let anySpin = false;
+    for (let yy = 0; yy < hRect; yy++) {
+      const y = rect.y + yy;
+      for (let xx = 0; xx < wRect; xx++) {
+        const x = rect.x + xx;
+        const i = yy * wRect + xx;
+        let [ux, uy] = sampleAt(x, y);
+        const sp = Math.hypot(ux, uy);
+        if (sp <= 1e-6) continue;
+        if (sp > cap) {
+          ux = (ux * cap) / sp;
+          uy = (uy * cap) / sp;
+        }
+        uxs[i] = Math.fround(ux);
+        uys[i] = Math.fround(uy);
+        cov[i] = Math.min(1, Math.hypot(ux, uy) / cap);
+        anySpin = true;
+      }
+    }
+    if (!anySpin) return;
+
+    if (rewetAmount > 0) {
+      this.rewet(
+        id,
+        rect,
+        cov,
+        rewetAmount,
+        [this.paperBytes[0]!, this.paperBytes[1]!, this.paperBytes[2]!],
+        true
+      );
+    }
+
+    const lane = this.laneOf(id);
+    const moves: Array<[number, number, number]> = [];
+    this.footprint(
+      id,
+      rect,
+      cov,
+      (c, w, x, y) => {
+        const f = this.f32;
+        const rho = f[c + P_RHO * PLANE];
+        if (!(rho >= DRY_EPS)) return;
+        const i = (y - rect.y) * wRect + (x - rect.x);
+        const ux = uxs[i]!;
+        const uy = uys[i]!;
+        const lift = Math.min(1, Math.max(0, rewetAmount * 1.4 * w));
+        if (lift > 0) {
+          const dBase = this.single(c) + P_D0 * PLANE;
+          for (let q = 0; q < MASS_CHANNELS; q++) {
+            const moved = Math.fround(f[dBase + q * PLANE] * lift);
+            if (moved > 0) {
+              f[dBase + q * PLANE] = Math.max(0, Math.fround(f[dBase + q * PLANE] - moved));
+              f[c + (P_P0 + q) * PLANE] = Math.fround(f[c + (P_P0 + q) * PLANE] + moved);
+            }
+          }
+        }
+        for (let k = 1; k < 9; k++) {
+          const eu = EX[k] * ux + EY[k] * uy;
+          f[c + k * PLANE] = Math.max(0, Math.fround(f[c + k * PLANE] + 3 * W9[k] * rho * eu));
+        }
+        let nux = Math.fround(f[c + P_UX * PLANE] + ux);
+        let nuy = Math.fround(f[c + P_UY * PLANE] + uy);
+        const nsp = Math.hypot(nux, nuy);
+        if (nsp > cap) {
+          nux = Math.fround((nux * cap) / nsp);
+          nuy = Math.fround((nuy * cap) / nsp);
+        }
+        f[c + P_UX * PLANE] = nux;
+        f[c + P_UY * PLANE] = nuy;
+
+        const sx = Math.round(ux * 16);
+        const sy = Math.round(uy * 16);
+        if (sx || sy) {
+          const from = this.cell(lane, x - sx, y - sy);
+          if (from >= 0 && f[from + P_RHO * PLANE] >= DRY_EPS) {
+            moves.push([from, c, Math.min(0.45, w * 0.35)]);
+          }
+        }
+      },
+      false
+    );
+
+    if (moves.length > 0) {
+      const f = this.f32;
+      const taken = moves.map(([from, , a]) => {
+        const t = new Float32Array(MASS_CHANNELS);
+        for (let q = 0; q < MASS_CHANNELS; q++) {
+          const idx = from + (P_P0 + q) * PLANE;
+          t[q] = Math.fround(f[idx] * a);
+          f[idx] = Math.max(0, Math.fround(f[idx] - t[q]));
+        }
+        return t;
+      });
+      moves.forEach(([, to], idx) => {
+        const t = taken[idx]!;
+        for (let q = 0; q < MASS_CHANNELS; q++) {
+          f[to + (P_P0 + q) * PLANE] = Math.fround(f[to + (P_P0 + q) * PLANE] + t[q]!);
+        }
+      });
+    }
+
+    // Install the swirl into the lane's flow field so subsequent steps continue spinning.
+    const prevFlow = lane.flow;
+    const rx0 = rect.x;
+    const ry0 = rect.y;
+    const rx1 = rect.x + wRect;
+    const ry1 = rect.y + hRect;
+    const swirlFlow: WetFlowField = (px, py) => {
+      const base: readonly [number, number] = prevFlow ? prevFlow(px, py) : [0, 0];
+      const ix = Math.floor(px) - rx0;
+      const iy = Math.floor(py) - ry0;
+      if (ix < 0 || iy < 0 || ix >= wRect || iy >= hRect) return base;
+      const k = iy * wRect + ix;
+      const fx = Math.max(-0.015, Math.min(0.015, base[0] + uxs[k]! * 0.08));
+      const fy = Math.max(-0.015, Math.min(0.015, base[1] + uys[k]! * 0.08));
+      return [fx, fy] as const;
+    };
+    lane.flow = swirlFlow;
+    if (!(lane.flowStrength > 0)) lane.flowStrength = 1;
+    this.pack(lane);
+    for (const key of this.active) {
+      if (this.laneIndexOf(key) === lane.index) this.fillFlow(key);
+    }
+    void rx1;
+    void ry1;
+    this.refreshHalos();
+  }
+
   /** Blends wet paint: each wet cell's suspended pigment (and light) moves `strength` × coverage towards the footprint's mean. */
   blend(id: string, rect: RasterRect, cov: ArrayLike<number> | null, strength: number): void {
     const lane = this.laneOf(id);
@@ -1786,6 +1988,13 @@ export class WetWorld {
   waterAt(id: string, x: number, y: number): number {
     const c = this.cell(this.laneOf(id), Math.floor(x), Math.floor(y));
     return c < 0 ? 0 : this.f32[c + P_RHO * PLANE];
+  }
+
+  /** Macroscopic fluid velocity (ux, uy) in cells per step at a document cell (0, 0 where dry). */
+  velocityAt(id: string, x: number, y: number): [number, number] {
+    const c = this.cell(this.laneOf(id), Math.floor(x), Math.floor(y));
+    if (c < 0 || !(this.f32[c + P_RHO * PLANE] >= DRY_EPS)) return [0, 0];
+    return [this.f32[c + P_UX * PLANE], this.f32[c + P_UY * PLANE]];
   }
 
   /** Totals for a layer (scans its live tiles). */

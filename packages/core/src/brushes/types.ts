@@ -17,7 +17,7 @@ import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
 import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
-import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs } from '../paint-editor/mark-settings';
+import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs, VortexDirection } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';
 
 /** `mark`: lays a material; `tool`: works on paint already down (erases, blends, smudges, wets…). */
@@ -41,8 +41,8 @@ export type BrushTipShape = 'round' | 'flat' | 'chisel' | 'bristle' | 'stamp';
 export const BRUSH_TIP_SHAPES: readonly BrushTipShape[] = ['round', 'flat', 'chisel', 'bristle', 'stamp'];
 
 /** How the tip is laid along the path. */
-export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects';
-export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects'];
+export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects' | 'vortex';
+export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects', 'vortex'];
 
 /** What the material does on the surface: stays where it lands (`dry`), flows and dries (`wet`) or stands up in relief (`thick`). */
 export type BrushSurface = 'dry' | 'wet' | 'thick';
@@ -196,7 +196,24 @@ export interface BrushObjectMarks {
   colourJitter?: number;
 }
 
-export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks;
+/** Vortex marks: the drawn path shapes a flow field that pulls and winds surrounding paint at pen-up. */
+export interface BrushVortexMarks {
+  kind: 'vortex';
+  /** How far it pulls from the stroke, in tip radii, 1..8 (default 3). Pressure scales the local reach. */
+  reach?: number;
+  /** How far paint winds around the shape, in turns, 0.25..6 (default 1.5). */
+  turns?: number;
+  /** How strongly paint is drawn inward toward the stroke, 0..1 (default 0.3). */
+  pull?: number;
+  /** Winding direction: `follow` (default: loops turn as drawn, open strokes and points turn clockwise), `cw` or `ccw`. */
+  direction?: VortexDirection;
+  /** How much paint colour the stroke lays before winding, 0..1 (default 0: colourless, only moves paint). */
+  ink?: number;
+  /** Seconds the winding animation takes on screen, 0..3 (default 1.2; 0 shows the final result at once). */
+  duration?: number;
+}
+
+export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks | BrushVortexMarks;
 
 /** Pen feel. Every amount is 0 (off) .. 1 unless noted. */
 export interface BrushDynamics {
