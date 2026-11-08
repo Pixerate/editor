@@ -6,9 +6,6 @@
     "width": 640,
     "height": 400
   },
-  "skip": {
-    "swift": "chart not ported yet (#697)"
-  },
   "steps": [
     {
       "tool": "import_chart_csv",
