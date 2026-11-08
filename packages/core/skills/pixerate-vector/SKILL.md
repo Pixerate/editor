@@ -131,7 +131,7 @@ the pitfalls, and uses the commands below.
 
 | Command | Use it to |
 | --- | --- |
-| `vector.traceImage` | Turn a PNG (data URL) into vector paths in one group: `threshold` mode for one-colour art (logos, scans, silhouettes; `channel: "alpha"` for cut-outs), `color` mode for a stacked path per colour (`colors` 2–32). Raise `tolerance` for fewer anchors, `cornerRoundness` 0 for sharp polygons. Place it with `x`, `y`, `width`. Returns `{ id, paths }`; check `subpaths` counts and simplify or delete specks after. |
+| `vector.traceImage` | Turn a PNG (data URL) into vector paths in one group, or an image the host loads by reference (its `image` description says which: a canvas image node's id, a URL); pass the reference instead of writing the image out: `threshold` mode for one-colour art (logos, scans, silhouettes; `channel: "alpha"` for cut-outs), `color` mode for a stacked path per colour (`colors` 2–32). Raise `tolerance` for fewer anchors, `cornerRoundness` 0 for sharp polygons. Place it with `x`, `y`, `width`. Returns `{ id, paths }`; check `subpaths` counts and simplify or delete specks after. |
 | `vector.mosaicImage` | Stylise a PNG as mosaic tiles (`cell` px, `shape` square / circle, `gap`, `colors`): pixel art, tiled murals. Returns `{ id, paths }`, one compound path per colour. |
 | `vector.halftoneImage` | Stylise a PNG as halftone dots on a turned screen (`cell`, `angle`, ink `color` or null for the picture's colours): comic and pop-art looks, print effects. |
 | `vector.lowPolyImage` | Stylise a PNG as low-poly triangles (`cell`, `jitter`, `seed`, `colors`): geometric portraits and backdrops. |
