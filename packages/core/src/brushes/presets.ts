@@ -597,4 +597,11 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     ferro: { amount: 0.7, wavelength: 12, threshold: 0.15 },
     colour: { default: '#0f172a' },
   },
+  // --- Scraper: cuts down through the paint stack layer by layer ---
+  {
+    id: 'paint-scraper', name: 'Paint scraper', kind: 'mark', medium: 'paint', variety: 'scraper',
+    tip: { shape: 'flat', size: 28, hardness: 0.9, spacing: 0.06, angle: 30, roundness: 0.35 },
+    marks: { kind: 'scraper' },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5 },
+  },
 ];

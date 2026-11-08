@@ -168,6 +168,18 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
         load: false,
         stickerStamps: true,
       };
+    case 'scraper':
+      return {
+        title: 'Scraper',
+        sliders: [
+          { path: 'scraper.depth', label: 'Scrape depth', min: 0, max: 1, step: 0.01 },
+          { path: 'scraper.sharpness', label: 'Blade sharpness', min: 0, max: 1, step: 0.01 },
+        ],
+        mixingPath: null,
+        dirty: false,
+        multicolor: false,
+        load: false,
+      };
     case 'impasto':
       return {
         title: 'Thick paint',

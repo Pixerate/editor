@@ -150,6 +150,16 @@ const OBJECTS = object(
   ['kind'],
 );
 
+const SCRAPER = object(
+  'A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.',
+  {
+    kind: { type: 'string', const: 'scraper', description: 'Always "scraper".' },
+    depth: unit('Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below.'),
+    sharpness: unit('Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7).'),
+  },
+  ['kind'],
+);
+
 const DYNAMICS = object('Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing. Every amount 0 (off) .. 1 unless noted; missing fields take their defaults.', {
   pressureSize: bool('Pressure scales the size, down to minSize (default true).'),
   pressureOpacity: bool('Pressure scales the opacity (default false).'),
@@ -340,7 +350,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
       'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.',
     ),
     tip: TIP,
-    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS] },
+    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, SCRAPER] },
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
@@ -361,7 +371,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
 export const BRUSH_FACET_SCHEMAS = {
   tip: TIP,
   tipGrain: TIP_GRAIN,
-  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS },
+  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS, scraper: SCRAPER },
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,

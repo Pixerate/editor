@@ -38,7 +38,7 @@ public struct BrushHostProfile: Sendable {
 private let ALL_COLOURS = ["solid", "dual", "gradient", "effect"]
 private let ELLIPSES = ["round", "flat", "chisel"]
 public let BRUSH_TIP_SHAPES = ["round", "flat", "chisel", "bristle", "stamp"]
-public let BRUSH_MARKS_KINDS = ["continuous", "scatter", "particles", "objects"]
+public let BRUSH_MARKS_KINDS = ["continuous", "scatter", "particles", "objects", "scraper"]
 
 public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full", tipGrain: "full", dabCount: "full", livePatterns: "full", iridescence: "full", ferro: "full")
 public let IMAGE_PROFILE = BrushHostProfile(id: "image", name: "Image editor", kinds: ["mark", "tool"], tools: ["eraser"], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "full", grain: "ignored", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "ignored", tipGrain: "ignored", dabCount: "ignored", iridescence: "none")

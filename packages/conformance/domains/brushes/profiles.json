@@ -28,7 +28,8 @@
       "continuous",
       "scatter",
       "particles",
-      "objects"
+      "objects",
+      "scraper"
     ],
     "surfaces": [
       "dry",

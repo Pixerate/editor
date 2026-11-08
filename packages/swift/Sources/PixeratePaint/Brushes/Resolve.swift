@@ -13,7 +13,7 @@ import PixerateRaster
  */
 public typealias Brush = JSONObject
 
-private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker"]
+private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "scraper"]
 /// Engines that pick up and mix paint dab by dab (the exchange ratios apply).
 private let EXCHANGE = ["dab", "wet", "impasto"]
 /// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
@@ -144,6 +144,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("marks.size", "spray.size", ["dab"], marks: ["scatter"]))
     out += each("marks", "sticker", ["density", "sizeJitter", "rotationJitter", "scatter"], ["sticker"])
     out.append(f("marks.colourJitter", "sticker.colorJitter", ["sticker"]))
+    out += each("marks", "scraper", ["depth", "sharpness"], ["scraper"])
     out += each("tip.bristle", "bristle", ["count", "stiffness", "splay", "thickness", "load", "jitter"], ["bristle"])
     return out
 }()
@@ -193,6 +194,7 @@ public func resolveEngine(_ brush: Brush) -> String {
     let marks = brush.path("marks.kind")?.stringValue
     if marks == "particles" { return "particle" }
     if marks == "objects" { return "sticker" }
+    if marks == "scraper" { return "scraper" }
     if brush.path("tip.shape")?.stringValue == "bristle" { return "bristle" }
     let surface = brush.path("behaviour.surface")?.stringValue
     if surface == "thick" { return "impasto" }
@@ -222,6 +224,7 @@ public func resolveCategory(_ brush: Brush, _ engineIn: String? = nil) -> String
     switch engine {
     case "particle": return "procedural"
     case "sticker": return "sticker"
+    case "scraper": return "eraser"
     case "bristle": return "bristle"
     case "impasto": return "impasto"
     case "wet": return resolveWetMedium(brush) == "oil" ? "oil" : "watercolor"
@@ -258,8 +261,8 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     if brush["mutation"] != nil && ["dab", "wet", "impasto", "particle", "bristle"].contains(engine) && (engine != "wet" || brush["kind"]?.stringValue != "tool") {
         input["mutation"] = .object(brush["mutation"]?.objectValue ?? [:])
     }
-    // Blenders and smudges only move paint already down.
-    if engine == "blender" || engine == "smudge" { input["loadsColor"] = false }
+    // Blenders, smudges and scrapers only work on paint already down.
+    if engine == "blender" || engine == "smudge" || engine == "scraper" { input["loadsColor"] = false }
     if let paint = brush.path("colour.default"), paint.objectValue?["type"] == "gradient" { input["paint"] = paint }
     if builtin { input["builtin"] = true }
     return normalizePaintBrush(input)

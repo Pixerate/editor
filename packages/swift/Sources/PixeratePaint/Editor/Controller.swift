@@ -285,6 +285,11 @@ public final class PaintEditorController {
     public internal(set) var uvLight = DEFAULT_UV_LIGHT { didSet { emit() } }
     var uvCaches: [String: UvCache] = [:]
     var thermoCaches: [String: ThermoCache] = [:]
+    /// Non-destructive ageing preview and X-ray radiograph view.
+    public internal(set) var age = DEFAULT_AGE { didSet { emit() } }
+    public internal(set) var xrayView = false { didSet { emit() } }
+    var ageCaches: [String: AgeCache] = [:]
+    var xrayNodeCache: (version: Int, node: ViewLayer)?
     /// Tracked mutation exchanges (editor state, not saved in the document).
     var mutations: [MutationEntry] = []
     var nextMutationId = 1
@@ -399,6 +404,7 @@ public final class PaintEditorController {
         redoStack.append(e)
         let paper = doc.paper
         doc = e.before
+        age = doc.age ?? DEFAULT_AGE
         if let g = e.guides { guides = g.before }
         if let w = e.wet {
             if paper != doc.paper { wet.paperChanged() }
@@ -415,6 +421,7 @@ public final class PaintEditorController {
         undoStack.append(e)
         let paper = doc.paper
         doc = e.after
+        age = doc.age ?? DEFAULT_AGE
         if let g = e.guides { guides = g.after }
         if let w = e.wet {
             try? wet.restore(w.lost ? nil : w.after)
@@ -450,6 +457,8 @@ public final class PaintEditorController {
             wet.reset()
         }
         resetMutations()
+        age = DEFAULT_AGE
+        xrayView = false
         commit("New canvas", next)
         return next
     }
@@ -1589,7 +1598,49 @@ public final class PaintEditorController {
             throw PaintEditorError("Layer \"\(layer.name)\" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).")
         }
         var wetInit: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
-        if isWetBrush(brush) {
+        var scraperDriver: ScraperStrokeDriver? = nil
+        if brush.engine == "scraper" {
+            let (scrapeLayers, stoppedAtLocked) = collectScrapeableLayers(d)
+            let wetIds = wet.wetLayerIds()
+            let wetLayerId = scrapeLayers.first(where: { wetIds.contains($0.id) })?.id ?? (wetIds.contains(layer.id) ? layer.id : nil)
+            if let wetLayerId {
+                let w = findLayer(d.layers, wetLayerId)?.layer
+                throw PaintEditorError("Layer \"\(w?.name ?? wetLayerId)\" holds wet paint; dry it first (dry_paint) before scraping.")
+            }
+            if scrapeLayers.isEmpty {
+                if let locked = stoppedAtLocked {
+                    throw PaintEditorError("Layer \"\(locked.name)\" is locked; unlock it (update_layer locks) before scraping.")
+                }
+                throw PaintEditorError("There are no visible unlocked pixel layers to scrape.")
+            }
+            layer = scrapeLayers[0]
+            let scrapeMask = i.maskStencils.map { stencilSelection($0) } ?? (i.stencils != false ? stencilSelection() : nil)
+            let seedSc = i.seed ?? Int(PixerateRandom.mix32(UInt32(truncatingIfNeeded: seedCounter &* 0x9E37_79B1)) & 0x7FFF_FFFF)
+            let copiesSc = (i.copies ?? symmetryCopies(guides.symmetry)).filter { m in m.enumerated().contains { $0.element != IDENTITY_AFFINE[$0.offset] } }
+            let perspectiveSc = guides.perspective
+            let snapperSc = i.snapToPerspective == true && perspectiveSc.enabled && perspectiveSc.snap ? PerspectiveSnapper(perspectiveSc) : nil
+            let useStencilsSc = i.stencils != false
+            let stencilSnapperSc = useStencilsSc && guides.stencils.contains(where: { $0.enabled && $0.mode == "guide" }) ? StencilSnapper(guides.stencils) : nil
+            var filterSc: ((PenPoint) -> PenPoint)? = nil
+            if snapperSc != nil || stencilSnapperSc != nil {
+                filterSc = { p in
+                    let q = snapperSc?.snap(p) ?? p
+                    return stencilSnapperSc?.snap(q) ?? q
+                }
+            }
+            scraperDriver = ScraperStrokeDriver(
+                ScraperStrokeInit(
+                    brush: brush,
+                    seed: seedSc,
+                    copies: ([IDENTITY_AFFINE] + copiesSc).map(affineCopy),
+                    selection: scrapeMask,
+                    inputFilter: filterSc
+                ),
+                scrapeLayers: scrapeLayers,
+                thickMap: d.thick
+            )
+            i.seed = seedSc
+        } else if isWetBrush(brush) {
             // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
             if previewing { throw PaintEditorError("Wet paint can't be previewed; the \(brush.name) brush paints wet media. Suggest it with a dry brush.") }
             if !wet.wetLayerIds().contains(layer.id) && wet.wetLayerIds().count >= MAX_WET_LANES {
@@ -1683,9 +1734,10 @@ public final class PaintEditorController {
         var withLight = initValues
         withLight.effect = effect
         withLight.wet = wetInit
+        withLight.scraper = scraperDriver
         if brush.engine == "impasto" {
             withLight.thick = d.thick?.get(layer.id) ?? emptyThickChannels()
-        } else if wetInit == nil && brush.engine != "sticker" {
+        } else if wetInit == nil && scraperDriver == nil && brush.engine != "sticker" {
             let existingFilm = d.thick?.get(layer.id)?.film
             if brush.iridescence != nil || (brush.engine == "eraser" && existingFilm != nil && !existingFilm!.tiles.isEmpty) {
                 withLight.film = existingFilm ?? emptySurface(4, 0)
@@ -1693,10 +1745,10 @@ public final class PaintEditorController {
         }
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
         withLight.stampArt = stampArt
-        if wetInit == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
-        if wetInit == nil && brush.engine != "sticker" && (brush.ferro.amount > 0 || d.ferro?.get(layer.id) != nil) { withLight.ferro = d.ferro?.get(layer.id) ?? emptyFerro() }
-        if wetInit == nil && brush.engine != "sticker" && (brush.fluorescence.amount > 0 || d.fluor?.get(layer.id) != nil) { withLight.fluor = d.fluor?.get(layer.id) ?? emptyFluor() }
-        if wetInit == nil && brush.engine != "sticker" && (brush.thermochromic.hotColor != nil || d.thermo?.get(layer.id) != nil) { withLight.thermo = d.thermo?.get(layer.id) ?? emptyThermo() }
+        if wetInit == nil && scraperDriver == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
+        if wetInit == nil && scraperDriver == nil && brush.engine != "sticker" && (brush.ferro.amount > 0 || d.ferro?.get(layer.id) != nil) { withLight.ferro = d.ferro?.get(layer.id) ?? emptyFerro() }
+        if wetInit == nil && scraperDriver == nil && brush.engine != "sticker" && (brush.fluorescence.amount > 0 || d.fluor?.get(layer.id) != nil) { withLight.fluor = d.fluor?.get(layer.id) ?? emptyFluor() }
+        if wetInit == nil && scraperDriver == nil && brush.engine != "sticker" && (brush.thermochromic.hotColor != nil || d.thermo?.get(layer.id) != nil) { withLight.thermo = d.thermo?.get(layer.id) ?? emptyThermo() }
         let session = try PaintStrokeSession(withLight)
         session.maskStencils = i.maskStencils
         if let w = wetInit { wet.driver = w.driver }
@@ -1750,6 +1802,11 @@ public final class PaintEditorController {
             let stroke = record(session)
             result.strokeId = stroke.id
             paintedBounds[stroke.key] = .some(result.bounds)
+            if let scraper = session.initValues.scraper {
+                let scraped = scraper.commitToDocument(d)
+                out = scraped.doc.with { $0.strokes = d.strokes + [stroke] }
+                return (out, result, session.initValues.brush)
+            }
             let wetStroke = session.initValues.wet != nil
             var thick = session.thickChannels()
             if thick == nil, let nextFilm = session.filmChannel() ?? session.initValues.wet?.driver.initValues.film?.surface() {
@@ -1856,11 +1913,18 @@ public final class PaintEditorController {
     /// The layers with the live stroke's surface in place (a wet stroke's layer already shows the simulation).
     func currentLayers() -> [PaintLayer] {
         guard let live = liveStroke, live.open, !live.isWet else { return doc.layers }
+        if let scraper = live.shown.initValues.scraper {
+            var layers = doc.layers
+            for (id, surface) in scraper.liveSurfaces() {
+                layers = mapLayer(layers, id) { $0.withSurface(surface) }
+            }
+            return layers
+        }
         return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.shown.currentSurface()) }
     }
 
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
-    func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display") -> [ViewLayer] {
+    func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display", view: Bool = false, age ageOpt: Bool? = nil) -> [ViewLayer] {
         let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
         let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in
             guard l.open else { return nil }
@@ -1876,7 +1940,10 @@ public final class PaintEditorController {
             let b = l.shown.initValues.brush
             return (l.layerId, f, b.ferro.amount > 0 ? b.ferro : (doc.ferroSettings?.get(l.layerId) ?? DEFAULT_FERRO))
         }
-        var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live, liveFerro: liveFerro)), liveThick: live)
+        let useAge = (ageOpt ?? view) && isAgeActive(age)
+        let paintedCount = useAge ? Swift.max(1, flattenLayers(base).filter { $0.isPixel && $0.visible && !$0.pixelSurface.tiles.isEmpty }.count) : 1
+        var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live, liveFerro: liveFerro, useAge: useAge, paintedLayerCount: paintedCount)), liveThick: live)
+        if useAge { layers = ageLayers(layers, paintedLayerCount: paintedCount, liveThick: live) }
         // Backlit paper shines through everything: its light goes on top.
         let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
         if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
@@ -1884,9 +1951,28 @@ public final class PaintEditorController {
             layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }
         }
         let effectivePaper = uvLight.on ? uvPaper(doc.paper, uvLight) : doc.paper
-        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(effectivePaper, light: lighting)]
+        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(effectivePaper, light: lighting, age: useAge ? age : nil)]
         if paper != false, let p = doc.paperEffect { under.append(paperEffectNode(p)) }
-        return under + layers.map(ViewLayer.init)
+        var out = under + layers.map(ViewLayer.init)
+        if view && xrayView { out.append(xrayNode(base)) }
+        return out
+    }
+
+    func ageLayers(_ layers: [PaintLayer], paintedLayerCount: Int, liveThick: (layerId: String, channels: ThickChannels)? = nil) -> [PaintLayer] {
+        guard isAgeActive(age) else { return layers }
+        func visit(_ list: [PaintLayer]) -> [PaintLayer] {
+            list.map { l in
+                if !l.visible { return l }
+                if let children = l.children { return l.withChildren(visit(children)) }
+                guard l.isPixel, !l.pixelSurface.tiles.isEmpty else { return l }
+                let cache = ageCaches[l.id] ?? AgeCache()
+                ageCaches[l.id] = cache
+                let ch = liveThick?.layerId == l.id ? liveThick!.channels : doc.thick?.get(l.id)
+                let aged = cache.render(l.pixelSurface, ch?.height, age, paintedLayerCount, l.pixelOffset)
+                return aged !== l.pixelSurface ? l.withSurface(aged) : l
+            }
+        }
+        return visit(layers)
     }
 
     /// Light paint over the layers: glow in each layer's pixels, and its spill as a Linear Dodge (Add) layer directly above it.
@@ -1915,16 +2001,16 @@ public final class PaintEditorController {
     }
 
     /// The canvas as canvas-sized RGBA (paper included by default).
-    public func compositePixels(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "dried") -> (width: Int, height: Int, data: [UInt8]) {
+    public func compositePixels(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "dried", age: Bool? = nil) -> (width: Int, height: Int, data: [UInt8]) {
         let w = doc.canvas.width, h = doc.canvas.height
-        let data = createPaintCompositor().composite(renderLayers(paper: paper, layerIds: layerIds, wet: wetMode), RasterRect(x: 0, y: 0, width: w, height: h), sources())
+        let data = createPaintCompositor().composite(renderLayers(paper: paper, layerIds: layerIds, wet: wetMode, age: age), RasterRect(x: 0, y: 0, width: w, height: h), sources())
         return (w, h, data)
     }
 
     /// The canvas (or some layers), scaled so the longest side is at most `maxSide`.
-    public func renderPreview(maxSide: Double, layerIds: [String]? = nil, paper: Bool? = nil) -> (width: Int, height: Int, data: [UInt8]) {
+    public func renderPreview(maxSide: Double, layerIds: [String]? = nil, paper: Bool? = nil, age: Bool? = nil) -> (width: Int, height: Int, data: [UInt8]) {
         let w = doc.canvas.width, h = doc.canvas.height
-        let full = createPaintCompositor().composite(renderLayers(paper: paper, layerIds: layerIds), RasterRect(x: 0, y: 0, width: w, height: h), sources())
+        let full = createPaintCompositor().composite(renderLayers(paper: paper, layerIds: layerIds, age: age), RasterRect(x: 0, y: 0, width: w, height: h), sources())
         let side = Swift.max(1, JS.round(maxSide))
         let k = Swift.min(1, side / Double(Swift.max(w, h)))
         if k >= 1 { return (w, h, full) }
@@ -1933,8 +2019,8 @@ public final class PaintEditorController {
     }
 
     /// The canvas as PNG bytes (pure Swift, the same bytes as the TS encoder), scaled down by `scale`.
-    public func exportPng(scale: Double? = nil, paper: Bool? = nil) throws -> [UInt8] {
-        let full = compositePixels(paper: paper)
+    public func exportPng(scale: Double? = nil, paper: Bool? = nil, age: Bool? = nil) throws -> [UInt8] {
+        let full = compositePixels(paper: paper, age: age)
         let s = scale ?? 1
         if !(s > 0 && s <= 1) { throw PaintEditorError("scale \(jsText(s)) is out of range; use above 0 up to 1 (exports never upscale pixels).") }
         if s == 1 { return encodePng(full.width, full.height, full.data) }

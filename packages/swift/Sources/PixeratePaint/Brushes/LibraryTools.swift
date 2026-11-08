@@ -75,7 +75,7 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
     let rgba = rgb + [255]
     var surface = emptySurface(4)
     let bytes = { (c: [Int]) in c.map { UInt8($0) } }
-    if b.engine == "eraser" {
+    if b.engine == "eraser" || b.engine == "scraper" {
         surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: height), bytes(rgba))
     } else if b.engine == "wet" {
         // the wet layer draws its own band
@@ -95,6 +95,10 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
         )
         if b.engine == "impasto" { i.thick = emptyThickChannels() }
         else if b.iridescence != nil { i.film = emptySurface(4, 0) }
+        if b.engine == "scraper" {
+            let thumbLayer = RasterLayer(id: "thumbnail", name: "thumbnail", content: .pixel(surface: surface, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))
+            i.scraper = ScraperStrokeDriver(ScraperStrokeInit(brush: b, seed: 7, copies: [IDENTITY_COPY], selection: nil, inputFilter: nil), scrapeLayers: [thumbLayer], thickMap: nil)
+        }
         i.stampArt = stampArt
         if b.light.amount > 0 && b.engine != "sticker" { i.light = emptyLight() }
         let session = try PaintStrokeSession(i)

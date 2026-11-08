@@ -63,7 +63,8 @@
           "continuous",
           "scatter",
           "particles",
-          "objects"
+          "objects",
+          "scraper"
         ]
       },
       "description": "Marks kinds it renders."

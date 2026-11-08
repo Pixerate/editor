@@ -140,6 +140,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -291,6 +295,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -467,6 +475,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -618,6 +630,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -794,6 +810,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -945,6 +965,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -1120,6 +1144,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1271,6 +1299,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -1453,6 +1485,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1604,6 +1640,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -1783,6 +1823,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1934,6 +1978,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -2109,6 +2157,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2260,6 +2312,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -2437,6 +2493,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2589,6 +2649,10 @@
         "rotationJitter": 1,
         "scatter": 0.6,
         "colorJitter": 0.3
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -2764,6 +2828,10 @@
         "scatter": 0.6,
         "colorJitter": 0.3
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2915,6 +2983,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -3158,6 +3230,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3345,6 +3421,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3510,6 +3590,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3661,6 +3745,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -3835,6 +3923,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3986,6 +4078,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -4163,6 +4259,10 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -4317,6 +4417,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -4483,6 +4587,10 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,

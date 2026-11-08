@@ -883,6 +883,15 @@ export const MAGNET_SLIDERS: readonly SliderControl[] = [
   { path: 'radius', label: 'Radius', min: 4, max: 512, step: 1 },
 ];
 
+/** The time machine panel's sliders for ageing (`years`, `varnish`, `cracks`, `fading`, `dust`). */
+export const AGE_SLIDERS: readonly SliderControl[] = [
+  { path: 'years', label: 'Years', min: 0, max: 500, step: 5 },
+  { path: 'varnish', label: 'Varnish yellowing', min: 0, max: 1, step: 0.01 },
+  { path: 'cracks', label: 'Cracks (craquelure)', min: 0, max: 1, step: 0.01 },
+  { path: 'fading', label: 'Pigment fading', min: 0, max: 1, step: 0.01 },
+  { path: 'dust', label: 'Dust & patina', min: 0, max: 1, step: 0.01 },
+];
+
 /** Stencils a toolbar can lay with one click, centred on the canvas. */
 export function quickStencil(kind: 'ruler' | 'circle' | 'ellipse-mask' | 'edge-mask', canvas: { width: number; height: number }): StencilInput {
   const { width: w, height: h } = canvas;

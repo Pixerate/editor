@@ -27,9 +27,9 @@ export { DEFAULT_LIVE_PATTERNS, LIVE_PATTERN_KINDS, LIVE_PATTERN_PRESETS, normal
  * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
  * Brush), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'scraper';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'scraper'];
 
 export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'light' | 'custom';
 
@@ -270,6 +270,24 @@ export function normalizeFerro(raw: number | Partial<FerroSettings> | null | und
   };
 }
 
+/** Scraper engine settings (`engine: 'scraper'`). */
+export interface ScraperSettings {
+  /** Layers removed per full-pressure pass, 0..1 (default 0.5). */
+  depth: number;
+  /** Blade edge sharpness, 0 (feathered) .. 1 (razor-sharp, default 0.7). */
+  sharpness: number;
+}
+
+export const DEFAULT_SCRAPER: Readonly<ScraperSettings> = { depth: 0.5, sharpness: 0.7 };
+
+export function normalizeScraper(raw: Partial<ScraperSettings> | null | undefined = {}, base: ScraperSettings = DEFAULT_SCRAPER): ScraperSettings {
+  const r = raw ?? {};
+  return {
+    depth: unit(r.depth, base.depth),
+    sharpness: unit(r.sharpness, base.sharpness),
+  };
+}
+
 export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
   return {
     tool: IMPASTO_TOOLS.includes(raw.tool as ImpastoTool) ? (raw.tool as ImpastoTool) : base.tool,
@@ -431,6 +449,8 @@ export interface PaintBrush {
   bristle: BristleSettings;
   /** Sticker engine only: the stamps and how they are sprayed. */
   sticker: StickerSettings;
+  /** Scraper engine only: how deep and sharp the blade cuts through the paint stack. */
+  scraper: ScraperSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
   /** UV-fluorescent ink: glows under the virtual UV blacklight (amount 0: none). */
@@ -576,7 +596,7 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'scraper' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -592,6 +612,7 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   /** Thin-film iridescence (`null` removes it). */
   iridescence?: Partial<IridescenceSettings> | null;
   ferro?: number | Partial<FerroSettings>;
+  scraper?: Partial<ScraperSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
@@ -625,9 +646,9 @@ export function usesPaintExchange(brush: PaintBrush, gradient = brush.paint !== 
   return brush.engine === 'dab' && (brush.behavior.pickup > 0 || gradient);
 }
 
-/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, blenders, smudges or the wet tools other than paint). */
+/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, scrapers, blenders, smudges or the wet tools other than paint). */
 export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet'>): boolean {
-  if (brush.engine === 'eraser' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
+  if (brush.engine === 'eraser' || brush.engine === 'scraper' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
   if (brush.engine === 'wet') return brush.wet.tool === 'paint';
   if (brush.engine === 'mixer') return brush.loadsColor;
   return true;
@@ -751,6 +772,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     particle: normalizeParticle(raw.particle ?? {}, b.particle ?? DEFAULT_PARTICLE),
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
+    scraper: normalizeScraper(raw.scraper, b.scraper ?? DEFAULT_SCRAPER),
     light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     fluorescence: normalizeFluorescence(raw.fluorescence ?? {}, b.fluorescence ?? DEFAULT_FLUORESCENCE),
     thermochromic: normalizeThermochromic(raw.thermochromic ?? {}, b.thermochromic ?? DEFAULT_THERMOCHROMIC),
@@ -787,6 +809,7 @@ const BASE_BRUSH: PaintBrush = {
   particle: { ...DEFAULT_PARTICLE },
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
+  scraper: { ...DEFAULT_SCRAPER },
   light: { ...DEFAULT_LIGHT },
   fluorescence: { ...DEFAULT_FLUORESCENCE },
   thermochromic: { ...DEFAULT_THERMOCHROMIC },

@@ -18,6 +18,7 @@ import type { FerroSettings, PaintMagnet } from './ferro';
 import type { Sticker } from './stickers';
 import type { PaintEffectSource, PaintPaperEffect } from './effects';
 import type { HeatField } from './heat';
+import type { PaintAgeSettings } from './age';
 
 export type PaintPixelLayer = RasterPixelLayer & {
   /** A temporary layer for a dry mutation stroke (fades on claim, merges down on timeout or save). */
@@ -84,6 +85,8 @@ export interface PaintDocumentState {
    * `extendCanvas({ left: 100 })` moves it to x −100; a host maps its own coordinates with it.
    */
   origin?: { x: number; y: number };
+  /** Non-destructive time-machine ageing preview settings (`years`, `varnish`, `cracks`, `fading`, `dust`, `seed`). */
+  age?: PaintAgeSettings;
 }
 
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
