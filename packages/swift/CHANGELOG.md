@@ -1,5 +1,16 @@
 # @pixerate/swift
 
+## 0.28.0
+
+### Minor Changes
+
+- b3b12be: Port chart controller, commands, agent tools, style checker, and conformance scenario runner (#701).
+- b3b12be: Port chart layout, scene generation, sparklines, streaming, tooltips, and hit-testing/interaction helpers to `PixerateChart` (#700).
+- b3b12be: Port chart model, number formats, scales, stats, trendlines, error bars, presets, recommendations, summaries, links, trees, maps, and CSV helpers (`PixerateChart` and `PixerateCore`).
+- b3b12be: Port Office chart import and export (`PixerateCore` ZIP reader, DrawingML `c:chartSpace` and `cx:chartSpace` OOXML reader and writer, `.xlsx`/`.pptx`/`.docx` chart extraction, and `office-charts` tool provider) to Swift (#702).
+- b3b12be: Port chart SVG export (`chartSceneToSvg`, `chartToSvg`, `chartSceneToDomSpec`, `sparklineToSvg`), raster helpers (`resolveChartSvgPaints`, `chartRasterSize`, `chartFileName`), diagram Sankey/Treemap parsers (`parseSankey`, `parseTreemap`, `treemapValue`), and Mermaid chart export/import (`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`) to Swift (#698).
+- b3b12be: Add the `PixerateChartUI` target (`ChartEditorView`, `ChartView`, `ChartInspectorView`, `ChartTooltipOverlay`, `ChartEditorModel`, `coreTextChartMeasureText`, `ChartDisplayTicker`, `rasterizeChartScene` / `makeChartCoreGraphicsRasterizer`) and a Chart tab in `apps/swift-demo` (#699).
+
 ## 0.27.0
 
 ### Minor Changes
