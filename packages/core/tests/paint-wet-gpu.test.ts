@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { createWetGpuEngine, flowField, normalizeFlow, pigmentOf, wetGpuSupport, WetWorld, type WetGpuJob, type WetGpuProvider, type WetPaperInput } from '../src/paint';
 import { MASS_CHANNELS, P_D0, P_P0, P_RHO, P_SW, PLANE, SET_PLANES, SLOT_PLANES, WET_TILE } from '../src/paint/wet/model';
 import { shadeTile } from '../src/paint/wet/film';
+import { PaintEditorController } from '../src/paint-editor';
 
 /**
  * Engine B needs a GPU. In Node the capability checks run against fake providers; the GPU-vs-CPU
@@ -146,6 +147,31 @@ describe('Engine B capability check (no GPU needed)', () => {
     expect(a).toHaveLength(1);
     expect(b).toHaveLength(2);
     engine!.destroy();
+  });
+});
+
+describe('wet lead-frame shading', () => {
+  // A lead frame shades on the GPU while a CPU batch runs; `idle()` must wait for it, and a lead
+  // frame that fails (a lost GPU) must not fail whoever waits (the next batch reshades its tiles).
+  it('idle() waits for a lead frame still shading, and settles when it fails', async () => {
+    const c = new PaintEditorController({ width: 64, height: 64, paper: 'cold-pressed', wet: { kernel: 'wasm', threads: 0 } });
+    const wet = (c as unknown as { wet: { displaying: Promise<void> | null; idle(): Promise<void> } }).wet;
+    let fail!: (error: Error) => void;
+    const shading = new Promise<void>((_, reject) => (fail = reject));
+    wet.displaying = shading;
+    shading.catch(() => undefined).finally(() => {
+      if (wet.displaying === shading) wet.displaying = null;
+    });
+
+    let settled = false;
+    const idle = wet.idle().then(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(settled).toBe(false);
+
+    fail(new Error('The GPU is gone (lost).'));
+    await idle;
+    expect(settled).toBe(true);
+    expect(wet.displaying).toBeNull();
   });
 });
 
