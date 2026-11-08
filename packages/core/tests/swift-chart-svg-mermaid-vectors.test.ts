@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { conformanceValuesMatch } from '../src/tools/conformance.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -587,6 +588,29 @@ function buildMermaidAndDiagramVectors(familySpecs: { name: string; input: unkno
 	};
 }
 
+/**
+ * The fixture is recorded on an arm64 Mac, but CI also runs on x64 Linux, where trig (parliament
+ * seats, pie arcs) can differ in the last bits (see GOTCHAS, geometry vectors). Compare text
+ * exactly and the numbers inside strings within the conformance tolerance.
+ */
+const NUMBER_IN_TEXT = /-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi;
+function stringsMatch(a: string, b: string): boolean {
+	if (a === b) return true;
+	if (a.split(NUMBER_IN_TEXT).join('\u0000') !== b.split(NUMBER_IN_TEXT).join('\u0000')) return false;
+	const na = a.match(NUMBER_IN_TEXT) ?? [];
+	const nb = b.match(NUMBER_IN_TEXT) ?? [];
+	return na.length === nb.length && na.every((x, i) => conformanceValuesMatch(Number(x), Number(nb[i])));
+}
+function vectorsMatch(a: unknown, b: unknown): boolean {
+	if (typeof a === 'string' && typeof b === 'string') return stringsMatch(a, b);
+	if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => vectorsMatch(x, b[i]));
+	if (a && b && typeof a === 'object' && typeof b === 'object') {
+		const ka = Object.keys(a), kb = Object.keys(b);
+		return ka.length === kb.length && ka.every((k) => k in (b as object) && vectorsMatch((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+	}
+	return conformanceValuesMatch(a, b);
+}
+
 describe('Swift chart SVG and Mermaid vectors', () => {
 	it('matches the recorded Swift fixture (set UPDATE_SWIFT_VECTORS=1 to regenerate)', () => {
 		const vectors = buildVectors();
@@ -597,6 +621,6 @@ describe('Swift chart SVG and Mermaid vectors', () => {
 		}
 		expect(existsSync(fixturePath)).toBe(true);
 		const current = readFileSync(fixturePath, 'utf8');
-		expect(JSON.parse( serialized )).toEqual(JSON.parse(current));
+		expect(vectorsMatch(JSON.parse(serialized), JSON.parse(current))).toBe(true);
 	});
 });
