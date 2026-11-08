@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
 import { createEditorAssetRegistry, createMemoryStorage, defineEditorDocument, toEditorDocumentFile } from "@pixerate/editor/persistence";
-import { createEditorAutosave } from "../src/persistence";
+import { createEditorAutosave, createEditorSync } from "../src/persistence";
 
 describe("createEditorAutosave asset garbage collection", () => {
   const big = (seed: number) => `data:image/png;base64,${Array.from({ length: 800 }, (_, i) => "ABCDEFGHIJKLMNOP"[(i * seed) % 16]).join("")}`;
@@ -204,6 +204,37 @@ describe("createCanvasDocument", () => {
     doc.loadDocument({ nodes: [{ id: "b", position: { x: 0, y: 0 }, data: {} }], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
     expect(viewport).toEqual({ x: 0, y: 0, zoom: 1 });
     expect(() => doc.loadDocument({ nodes: [{ id: "_x", position: { x: 0, y: 0 }, data: {} }], edges: [] })).toThrow("ids starting with _ are reserved.");
+  });
+
+  it("drives createEditorSync reactively on node edits and flushes on demand", async () => {
+    let nodes = $state<any[]>([{ id: "a", position: { x: 0, y: 0 }, data: { label: "A" } }]);
+    const doc = createCanvasDocument({
+      getNodes: () => nodes,
+      setNodes: (next) => void (nodes = next),
+      getEdges: () => [],
+      setEdges: () => {},
+      history: new HistoryManager(),
+    });
+    const saved: Array<{ version: number; x: number }> = [];
+    const sync = createEditorSync(doc, {
+      initialVersion: 1,
+      debounceMs: 1000,
+      save: async ({ document, version }) => {
+        saved.push({ version, x: document.nodes[0].position.x });
+      },
+    });
+    cleanup.push(() => sync.destroy(), () => doc.destroy());
+    flushSync();
+
+    nodes = [{ id: "a", position: { x: 42, y: 0 }, data: { label: "A" } }];
+    flushSync();
+    expect(sync.dirty).toBe(true);
+    expect(sync.version).toBe(2);
+
+    await sync.flush();
+    expect(saved).toEqual([{ version: 2, x: 42 }]);
+    expect(sync.dirty).toBe(false);
+    expect(sync.savedVersion).toBe(2);
   });
 });
 

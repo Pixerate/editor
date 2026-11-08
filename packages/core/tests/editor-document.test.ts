@@ -5,6 +5,7 @@ import {
   createDocumentToolProvider,
   createEditorAutosave,
   createEditorDocumentStore,
+  createEditorRemoteSync,
   createMemoryStorage,
   defineEditorDocument,
   parseEditorDocument,
@@ -205,6 +206,110 @@ describe("createEditorAutosave", () => {
     expect(second.items()).toEqual(["a", "b"]);
     expect(second.history.getState().canUndo).toBe(false);
     again.destroy();
+  });
+
+  it("retires stale recovery snapshots when baseVersion has advanced on the server", async () => {
+    const storage = createMemoryStorage();
+    const first = setup();
+    const autosave = createEditorAutosave(first.doc, { storage, debounceMs: 10, baseVersion: 3 });
+    autosave.controller.ready();
+    first.edit(["a", "stale"]);
+    await vi.advanceTimersByTimeAsync(20);
+    await autosave.controller.whenIdle();
+    autosave.destroy();
+
+    // Server moved ahead to version 5 in another tab/session.
+    const second = setup();
+    const newerServer = createEditorAutosave(second.doc, { storage, baseVersion: 5 });
+    expect(await newerServer.recoverIfNewer()).toBeNull();
+    expect(second.items()).toEqual(["a"]);
+    expect(await storage.get("list")).toBeNull();
+    newerServer.destroy();
+  });
+});
+
+describe("createEditorRemoteSync", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("debounces local edits, serializes in-flight saves, advances monotonic version, and flushes on demand", async () => {
+    const { doc, edit } = setup();
+    const storage = createMemoryStorage();
+    const autosave = createEditorAutosave(doc, { storage, debounceMs: 10, baseVersion: () => sync.savedVersion() });
+    autosave.controller.ready();
+
+    const localChanges: Array<{ items: string[]; version: number }> = [];
+    const savedCalls: Array<{ items: string[]; version: number }> = [];
+    let resolveInFlight: ((res: { version: number }) => void) | null = null;
+
+    const sync = createEditorRemoteSync(doc, {
+      initialVersion: 2,
+      debounceMs: 50,
+      autosave,
+      onLocalChange: ({ document, version }) => {
+        localChanges.push({ items: document.items, version });
+      },
+      save: ({ document, version }) => {
+        savedCalls.push({ items: document.items, version });
+        if ( resolveInFlight === null && savedCalls.length === 1 ) {
+          return new Promise<{ version: number }>((resolve) => {
+            resolveInFlight = resolve;
+          });
+        }
+        return Promise.resolve({ version });
+      },
+    });
+
+    // Local edit 1: onLocalChange fires immediately, save waits for debounce.
+    edit(["a", "b"]);
+    expect(localChanges).toEqual([{ items: ["a", "b"], version: 3 }]);
+    expect(sync.dirty()).toBe(true);
+    expect(sync.status().status).toBe("pending");
+    expect(savedCalls).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(savedCalls).toEqual([{ items: ["a", "b"], version: 3 }]);
+    expect(sync.status().status).toBe("saving");
+
+    // Local edit 2 arrives while save 1 is in flight: coalesced without overlapping save calls.
+    edit(["a", "b", "c"]);
+    expect(localChanges).toHaveLength(2);
+    expect(savedCalls).toHaveLength(1);
+
+    // Server reports version 10 (e.g., collaborator saved versions 4..9).
+    resolveInFlight!({ version: 10 });
+    await vi.advanceTimersByTimeAsync(50);
+    await sync.whenIdle();
+
+    // Follow-up save uses monotonic version 11 (> 10), never wedging.
+    expect(savedCalls).toEqual([
+      { items: ["a", "b"], version: 3 },
+      { items: ["a", "b", "c"], version: 11 },
+    ]);
+    expect(sync.dirty()).toBe(false);
+    expect(sync.savedVersion()).toBe(11);
+    expect(sync.status().status).toBe("saved");
+
+    // applyRemote updates the document and baseline without echoing a local change or save.
+    sync.applyRemote(() => {
+      doc.loadDocument({ items: ["remote"] }, { history: "reset" });
+    }, 15);
+    expect(localChanges).toHaveLength(2);
+    expect(sync.dirty()).toBe(false);
+    expect(sync.version()).toBe(15);
+
+    // flush() immediately saves pending edits without waiting for the debounce timer.
+    edit(["remote", "local-before-exit"]);
+    expect(sync.dirty()).toBe(true);
+    await sync.flush();
+    expect(savedCalls.at(-1)).toEqual({ items: ["remote", "local-before-exit"], version: 16 });
+    expect(sync.dirty()).toBe(false);
+
+    sync.destroy();
+    autosave.destroy();
   });
 });
 

@@ -1,6 +1,14 @@
 import { getConnectedEdges, type XYPosition } from '@xyflow/svelte';
 import { cubicOut } from 'svelte/easing';
+import {
+	applyGraphDifferences,
+	calculateGraphDifferences as calculateCoreGraphDifferences,
+	sanitizeCanvasDocument,
+	type CanvasDocumentOmitOptions
+} from '@pixerate/editor/canvas';
 import type { CanvasNode, CanvasEdge, GraphDifferences } from './types.js';
+
+export { applyGraphDifferences, sanitizeCanvasDocument };
 
 /**
  * Pure calculation of graph differences between a current state and a baseline state.
@@ -10,35 +18,10 @@ export function calculateGraphDifferences<
 	TEdge extends CanvasEdge = CanvasEdge
 >(
 	currentState: { nodes?: TNode[]; edges?: TEdge[] },
-	baselineState: { nodes?: TNode[]; edges?: TEdge[] }
+	baselineState: { nodes?: TNode[]; edges?: TEdge[] },
+	options?: CanvasDocumentOmitOptions
 ): GraphDifferences<TNode, TEdge> {
-	const currentNodes = currentState.nodes ?? [];
-	const currentEdges = currentState.edges ?? [];
-	const baselineNodes = baselineState.nodes ?? [];
-	const baselineEdges = baselineState.edges ?? [];
-
-	// Map baseline for fast O(1) lookup
-	const baselineNodeMap = new Map(baselineNodes.map((n) => [n.id, n]));
-	const baselineEdgeMap = new Map(baselineEdges.map((e) => [e.id, e]));
-	const currentNodeMap = new Map(currentNodes.map((n) => [n.id, n]));
-	const currentEdgeMap = new Map(currentEdges.map((e) => [e.id, e]));
-
-	const removedNodes = baselineNodes.filter((oldNode) => !currentNodeMap.has(oldNode.id));
-	const removedEdges = baselineEdges.filter((oldEdge) => !currentEdgeMap.has(oldEdge.id));
-
-	const changedNodes = currentNodes.filter((newNode) => {
-		const oldNode = baselineNodeMap.get(newNode.id);
-		if (!oldNode) return true;
-		return JSON.stringify(newNode) !== JSON.stringify(oldNode);
-	});
-
-	const changedEdges = currentEdges.filter((newEdge) => {
-		const oldEdge = baselineEdgeMap.get(newEdge.id);
-		if (!oldEdge) return true;
-		return JSON.stringify(newEdge) !== JSON.stringify(oldEdge);
-	});
-
-	return { changedNodes, changedEdges, removedNodes, removedEdges };
+	return calculateCoreGraphDifferences(currentState, baselineState, options);
 }
 
 /**
