@@ -33,6 +33,7 @@ The paint editor adds no storage or compositor of its own. Paper is a compositor
 - **Procedural brushes** (`particle`, #242): `string` (strands of masses on springs), `spring`, `orbit` and `flow` particles, each drawn as dots, a line or a sequence of beads.
 - **Bristle brushes** (`bristle`): a tuft of bristles that splay with pressure, flatten with tilt, lag at turns and run dry one by one.
 - **Stickers** (`sticker`): procedural stamps (dot, star, heart, leaf, flower, confetti, splat, sparkle, ring) sprayed onto a sticker layer, where each stays an object that can be moved, turned, resized, recoloured or deleted.
+- **Biopaint** (`culture`, #684): a brush facet (`species: 'mycelium'`, `reach`, `branching`, `wander`, `appetite`, `digest`, `fuse`, `thickness`, `glow`; presets `mycelial-ink`, `rot`, `foxfire`) that seeds living spores along any dry, particle or bristle stroke (`paint/culture.ts`, `Culture.swift`). Tips creep across the layer in deterministic fixed-point integer arithmetic (`CULTURE_FP = 256`, 1024-entry integer cosine table, 32-bit integer hash), sensing ahead for existing paint, paper grain and occupancy, fading paint by `digest` while shifting their carried colour toward what they ate, branching into finer threads, fusing into closed loops (`fuse`), and writing bioluminescence to `doc.light` when `glow > 0`. Growth runs live via `playCultures(clock)` (committed as one undo step when interrupted) or headlessly via `grow_cultures`, records `{ kind: 'culture-grow' }` replay events so high-res exports scale the exact network without re-simulating, and optionally catches up up to 5,000 ticks on reopen when `growWhileClosed` is set.
 - **Library**: built-in presets, saving and removing brushes, JSON import / export and thumbnails rendered from a test stroke.
 
 Every engine is deterministic: jitter is a hash of the stroke's seed and the dab index, and simulations step by distance travelled, not by input sampling. That is what makes replay, undo and agent painting exact.
@@ -126,7 +127,7 @@ An agent that contributes while the user paints suggests rather than paints:
 | 4–5. Oils and replay | #241 | Thick paint and lighting, oils, paint loading and thinners, drying controls, tilt and drips, time-lapse and high-resolution export |
 | 6. Procedural | #242 | Particle and bristle brushes, stickers, stencils |
 | 7. Paths | #271, #274, #277, #305, #306 | Brushstrokes on canvas and vector paths through one shared renderer |
-| Later | #273, #275, #284, #685, #686 | Gradient paint, canvas paint-layer helpers, provider effects, ghost paint and invisible ink, mutation paint |
+| Later | #273, #275, #284, #684, #685, #686 | Gradient paint, canvas paint-layer helpers, provider effects, biopaint (mycelial ink), ghost paint and invisible ink, mutation paint |
 
 ## Decisions
 

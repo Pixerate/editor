@@ -108,6 +108,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out += each("thermochromic", "thermochromic", ["hotColor", "threshold"])
     out += each("iridescence", "iridescence", ["thickness", "pressureToThickness", "ior"], FILM)
     out += each("ferro", "ferro", ["amount", "wavelength", "threshold"])
+    out += each("culture", "culture", ["species", "reach", "branching", "wander", "appetite", "digest", "fuse", "thickness", "glow"], FILM)
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))
     out.append(f("behaviour.exchange.mix", "behavior.mix", EXCHANGE))
     out.append(f("behaviour.exchange.dirty", "behavior.dirty", EXCHANGE))
@@ -257,6 +258,9 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     }
     if brush["mutation"] != nil && ["dab", "wet", "impasto", "particle", "bristle"].contains(engine) && (engine != "wet" || brush["kind"]?.stringValue != "tool") {
         input["mutation"] = .object(brush["mutation"]?.objectValue ?? [:])
+    }
+    if brush["culture"] != nil && brush["kind"]?.stringValue != "tool" && FILM.contains(engine) {
+        input["culture"] = .object(brush["culture"]?.objectValue ?? [:])
     }
     // Blenders and smudges only move paint already down.
     if engine == "blender" || engine == "smudge" { input["loadsColor"] = false }

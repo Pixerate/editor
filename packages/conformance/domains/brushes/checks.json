@@ -3360,5 +3360,113 @@
         ]
       }
     }
+  },
+  {
+    "id": "mycelial-ink",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "rot",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "foxfire",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "culture",
+            "severity": "error"
+          }
+        ]
+      }
+    }
   }
 ]

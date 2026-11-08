@@ -41,6 +41,8 @@ export { BACKLIGHT_SPILL, DEFAULT_BACKLIGHT_COLOR, backlightOf } from './backlig
 export * from './thick-tools';
 export * from './ferro';
 export * from './ferro-tools';
+export * from '../paint/culture';
+export * from './culture-tools';
 export * from './replay';
 export * from './replay-tools';
 export * from './stencils';

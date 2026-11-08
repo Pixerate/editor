@@ -30,6 +30,7 @@ import { createLayerEffectTools } from '../image-editor/effect-tools';
 import { createPaintWetTools } from './wet-tools';
 import { createPaintThickTools } from './thick-tools';
 import { createFerroTools } from './ferro-tools';
+import { createCultureTools } from './culture-tools';
 import { createPaintReplayTools } from './replay-tools';
 import { createMutationTools } from './mutation-tools';
 import { createPaintEvolutionTools } from './evolution-tools';
@@ -669,7 +670,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, brushes with a culture facet (mycelial-ink, rot, foxfire) seed spores along the stroke (`culture: { seeds }` in the result; see grow_cultures), and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet), for culture brushes culture ({ seeds }) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1122,6 +1123,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   tools.push(...createPaintWetTools(c));
   tools.push(...createPaintThickTools(c));
   tools.push(...createFerroTools(c));
+  tools.push(...createCultureTools(c));
   tools.push(...createPaintReplayTools(c));
   tools.push(...createPaintEvolutionTools(c));
   tools.push(...createPaintStickerTools(c));

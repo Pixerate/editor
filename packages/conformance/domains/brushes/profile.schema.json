@@ -200,6 +200,15 @@
         "none"
       ],
       "description": "Liquid ferrofluid (ferro); missing: none."
+    },
+    "culture": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Biopaint living ink (culture); missing: none."
     }
   },
   "required": [

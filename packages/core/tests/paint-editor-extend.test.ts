@@ -224,6 +224,30 @@ describe('extendCanvas', () => {
     t.dispose();
   });
 
+  it('shifts biopaint cultures and occupancy on extendCanvas so growth continues from the shifted position', () => {
+    const a = editor();
+    const b = editor();
+    for (const c of [a, b]) {
+      c.paintStroke({
+        brushId: 'mycelial-ink',
+        seed: 17,
+        points: [
+          { x: 65, y: 60 },
+          { x: 95, y: 60 },
+        ],
+      });
+      c.growCultures({ steps: 10 });
+    }
+    const beforeExtend = b.compositePixels();
+    b.extendCanvas({ left: 32, top: 24 });
+    expect(same(crop(b.compositePixels(), 32, 24, 160, 120), beforeExtend.data)).toBe(true);
+
+    // Growing further on the extended canvas produces the exact same pixels inside the shifted crop
+    a.growCultures({ steps: 15 });
+    b.growCultures({ steps: 15 });
+    expect(same(crop(b.compositePixels(), 32, 24, 160, 120), a.compositePixels().data)).toBe(true);
+  });
+
   it('refuses bad sizes with a reason, changing nothing', () => {
     const c = editor();
     const doc = c.document;

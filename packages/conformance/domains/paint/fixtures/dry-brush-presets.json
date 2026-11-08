@@ -1244,10 +1244,52 @@
               "surface": "dry",
               "tip": "round",
               "variety": "ferrofluid"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "mycelial-ink",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Mycelial ink",
+              "size": 8,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "biopaint"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "rot",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Rot",
+              "size": 12,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "biopaint"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "foxfire",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Foxfire",
+              "size": 10,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "biopaint"
             }
           ],
           "host": "paint",
-          "total": 88
+          "total": 91
         }
       }
     },

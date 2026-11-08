@@ -222,7 +222,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|iridescence)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|iridescence|culture)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
   const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
@@ -237,6 +237,19 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.scale', label: 'Pattern scale', ariaLabel: 'Brush pattern scale', min: 0.5, max: 4, step: 0.1, value: brush.livePatterns.scale ?? 1 }),
     engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.contrast', label: 'Pattern contrast', ariaLabel: 'Brush pattern contrast', min: 0, max: 2, step: 0.05, value: brush.livePatterns.contrast ?? 1 }),
     engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.relief', label: 'Pattern relief', ariaLabel: 'Brush pattern relief', min: 0, max: 1, step: 0.05, value: brush.livePatterns.relief ?? 0 }),
+    !isTool && full(profile.culture ?? 'none') && marks !== 'objects' && withNote({ kind: 'toggle', path: 'culture', label: 'Biopaint (mycelial ink)', ariaLabel: 'Brush biopaint', value: Boolean(brush.culture) }),
+    ...(brush.culture && !isTool && full(profile.culture ?? 'none')
+      ? [
+          slider({ path: 'culture.reach', label: 'Reach', min: 1, max: 100, step: 1 }),
+          slider({ path: 'culture.branching', label: 'Branching', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.wander', label: 'Wander', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.appetite', label: 'Appetite', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.digest', label: 'Digest', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.fuse', label: 'Fuse', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.thickness', label: 'Thread width', min: 0.02, max: 0.5, step: 0.01 }),
+          slider({ path: 'culture.glow', label: 'Bioluminescence', min: 0, max: 1, step: 0.01 }),
+        ]
+      : []),
   ]);
 
   if (!isTool && full(profile.light) && engineOk && engineControls?.light) {
@@ -334,6 +347,8 @@ function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
       return 'ghost paint';
     case 'mutation':
       return 'mutation paint';
+    case 'culture':
+      return 'biopaint';
     case 'motion':
       return 'motion';
     case 'dynamics.velocity':
@@ -455,6 +470,7 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
       delete next.ghost;
       delete next.mutation;
       delete next.ferro;
+      delete next.culture;
       delete next.colour;
       next.tool = next.tool ?? 'eraser';
       if (next.tip.shape === 'stamp') next.tip = { shape: 'round', ...(next.tip.size !== undefined ? { size: next.tip.size } : {}) };
@@ -467,6 +483,9 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
   } else if (path === 'iridescence') {
     if (value) next.iridescence = next.iridescence ?? { thickness: 400 };
     else delete next.iridescence;
+  } else if (path === 'culture') {
+    if (value) next.culture = next.culture ?? { species: 'mycelium' };
+    else delete next.culture;
   } else if (path === 'tip.grain.source' && (value === undefined || value === '')) {
     delete next.tip.grain;
   } else if (path === 'livePatterns.pattern' && (value === undefined || value === '')) {

@@ -19,6 +19,7 @@ import { WetStrokeDriver, wetPaperInput } from './wet';
 import { DEFAULT_LIGHTING, emptyThickChannels, FilmBuffer, LitCache, type ThickChannels } from './thick';
 import { computeSpill, emptyLight, LightCache } from './light';
 import { computeUvSpill, emptyFluor, UvCache } from './heat';
+import { seedCultureFromStroke, stepLayerCulture } from '../paint/culture';
 import type { StickerArtLookup } from './sticker-art';
 
 /** One small wet world reused for wet brush thumbnails (by size). */
@@ -122,8 +123,34 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       stampArt,
     }
   );
-  session.push(thumbnailStroke(width, height));
+  const pts = thumbnailStroke(width, height);
+  session.push(pts);
   session.end();
+  if (brush.culture) {
+    const seeded = seedCultureFromStroke({
+      points: pts,
+      brushSize: brush.tip.size,
+      color: [r, g, b],
+      culture: brush.culture,
+      strokeSeed: 7,
+      beforeSurface: surface,
+      afterSurface: result,
+      canvasWidth: width,
+      canvasHeight: height,
+    });
+    const grown = stepLayerCulture({
+      culture: seeded.culture,
+      surface: result,
+      lightSurface: light ?? (brush.culture.glow > 0 ? emptyLight() : undefined),
+      paperSeed: paper.seed,
+      paperDepthPermille: Math.round(paper.depth * 1000),
+      canvasWidth: width,
+      canvasHeight: height,
+      steps: 24,
+    });
+    result = grown.surface;
+    if (grown.lightSurface && grown.lightSurface.tileCount > 0) light = grown.lightSurface;
+  }
   // Thick paint is shown lit, light paint glowing, and fluorescent paint under UV, as on the canvas.
   const lit = thick ? new LitCache().lit(result, thick, DEFAULT_LIGHTING) : result;
   const glowed = light || thick ? new LightCache().glow(lit, light ?? undefined, thick ?? undefined) : lit;

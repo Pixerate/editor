@@ -460,6 +460,7 @@ public struct PaintBrush: Equatable, Sendable {
     public var ghost: GhostSettings? = nil
     public var mutation: MutationSettings? = nil
     public var ferro: FerroSettings = DEFAULT_FERRO
+    public var culture: CultureSettings? = nil
     public var stamp: String?
     public var spray: SpraySettings?
     /// Dab engines: texture inside the tip (nil: none).
@@ -493,6 +494,7 @@ public struct PaintBrush: Equatable, Sendable {
         o["spray"] = spray?.json ?? .null
         if let tipGrain { o["tipGrain"] = tipGrain.json }
         if let livePatterns { o["livePatterns"] = livePatterns.json }
+        if let culture { o["culture"] = culture.json }
         o["paint"] = paint?.json ?? .null
         if withBuiltin, builtin == true { o["builtin"] = true }
         return o
@@ -715,6 +717,10 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         ghost: ghost,
         mutation: mutation,
         ferro: normalizeFerro(raw["ferro"]?.objectValue ?? (raw["ferro"]?.numberValue.map { ["amount": .number($0)] } ?? [:]), b.ferro),
+        culture: {
+            let canCulture = ["dab", "mixer", "wet", "impasto", "particle", "bristle"].contains(engine) && (engine != "wet" || wet.tool == "paint")
+            return canCulture ? readCulture(raw["culture"], b.culture) : nil
+        }(),
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
         tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),

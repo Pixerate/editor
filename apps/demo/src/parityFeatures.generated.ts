@@ -2185,6 +2185,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
         "svelte": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
         "swift": "✅ `FerroSettings`, `PaintMagnet`, `ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`; `PaintEditorController` `addMagnet`, `updateMagnet`, `removeMagnets`, `listMagnets`, `getFerrofluid`, `cureFerrofluid`; `PaintFerroPanel` (in `PaintPaperPanel`) and magnet guides in `PaintCanvasView`"
+      },
+      {
+        "feature": "Biopaint (Mycelial Ink & Living Cultures) (a `culture` brush facet (`species: 'mycelium'`, `reach`, `branching`, `wander`, `appetite`, `digest`, `fuse`, `thickness`, `glow`; built-in presets `mycelial-ink`, `rot`, `foxfire`) that seeds spores along committed strokes into per-layer `doc.cultures[layerId]` (`tick`, `nextId`, living `tips`, 1-channel `occupancy`, `segmentsTotal`, `status`); deterministic fixed-point integer simulation where hyphal tips sense ahead, steer toward existing paint (`appetite`), fade what they eat (`digest`), carry its colour along the network, branch into tapering filaments, fuse on contact (`fuse`), and write bioluminescence to `doc.light` (`glow`); live clock playback (`playCultures`), `growWhileClosed` catch-up on reopen (`catchUpCultures`), and exact scaled replay (`'culture-grow'` paint events); agent tools `get_cultures`, `grow_cultures`, `remove_cultures`, `set_culture_options`)",
+        "core": "`seedCultureFromStroke`, `stepLayerCulture`, `applyCultureGrowReplay`, `CULTURE_SLIDERS`, `createCultureTools` (`/paint`, `/paint-editor`)",
+        "react": "`<CulturePanel>` (in `<PaperPanel>`), live playback in `<PaintCanvas>`, `culture` controls in `<BrushEditor>` (`/paint-editor`)",
+        "svelte": "`<CulturePanel>` (in `<PaperPanel>`), live playback in `<PaintCanvas>`, `culture` controls in `<BrushEditor>` (`/paint-editor`)",
+        "swift": "✅ `CultureSettings`, `LayerCultureState`, `seedCultureFromStroke`, `stepLayerCulture`, `applyCultureGrowReplay`; `PaintEditorController` `getCultures`, `growCultures`, `removeCultures`, `setCultureOptions`, `catchUpCultures`; `PaintCulturePanel` (in `PaintPaperPanel`)"
       }
     ]
   },

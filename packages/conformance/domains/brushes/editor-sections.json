@@ -560,6 +560,13 @@
             "label": "Dirty brush",
             "ariaLabel": "Dirty brush",
             "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
           }
         ]
       },
@@ -2501,6 +2508,13 @@
             "path": "behaviour.exchange.dirty",
             "label": "Dirty brush",
             "ariaLabel": "Dirty brush",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
             "value": false
           }
         ]
@@ -4378,6 +4392,13 @@
               }
             ],
             "value": ""
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
           }
         ]
       },
@@ -5951,6 +5972,13 @@
             "max": 1,
             "step": 0.01,
             "value": 0
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
           }
         ]
       },
@@ -7374,6 +7402,13 @@
             "label": "Load each stroke",
             "ariaLabel": "Brush load each stroke",
             "value": true
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
           }
         ]
       },
@@ -10059,6 +10094,13 @@
             "path": "behaviour.exchange.dirty",
             "label": "Dirty brush",
             "ariaLabel": "Dirty brush",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
             "value": false
           }
         ]

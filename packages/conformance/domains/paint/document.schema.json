@@ -314,6 +314,27 @@
               "description": "Remaining daylight ambient level (0..1)."
             }
           }
+        },
+        "cultures": {
+          "type": "object",
+          "description": "Living and extinct biopaint (`culture`) colonies per layer, plus offline growth options.",
+          "properties": {
+            "layers": {
+              "type": "object",
+              "description": "Layer id → serialized `LayerCultureJSON` (tick, nextId, tips, segmentsTotal, status, occupancy).",
+              "additionalProperties": {
+                "type": "object"
+              }
+            },
+            "growWhileClosed": {
+              "type": "boolean",
+              "description": "Whether living colonies catch up elapsed growth when reopened."
+            },
+            "lastGrownAt": {
+              "type": "number",
+              "description": "Timestamp in milliseconds when the document was saved with living colonies."
+            }
+          }
         }
       },
       "required": [

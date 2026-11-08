@@ -102,6 +102,7 @@ in wet paint and freeze when it dries; presets `turing-wash`, `coral-ink`):
 Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`, and `iridescence` (`scarab-lacquer`, `soap-film`, `pearl-glaze`) adds thin-film structural colour that shifts hue with light and `set_view_tilt`: load `pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint** (neon, glowing glass and watercolour: `light.amount`, the Light category; backlit paper): [references/light-paint.md](references/light-paint.md).
 **Smart inks** (`fluorescence` for UV/invisible ink under `set_uv_light`, `thermochromic` for heat-reactive ink with `paint_heat` / `advance_heat`; presets `uv-marker`, `thermo-ink`): [references/smart-inks.md](references/smart-inks.md).
 **Ferrofluid paint** (`ferro.amount`, presets `ferrofluid` and `ferro-ink`, pulled by dipole magnets into lit Rosensweig spikes until cured): [references/ferrofluid.md](references/ferrofluid.md).
+**Biopaint (mycelial ink)** (`culture` facet, presets `mycelial-ink`, `rot`, `foxfire`: spores seeded along a stroke grow fine branching threads that seek out existing paint, digest it, carry its colour along the network, and fuse into loops; `grow_cultures` steps them): [references/culture.md](references/culture.md).
 
 ## Gradient paint
 
@@ -226,7 +227,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `ghost`, `mutation`, `motion`, `colour`, `livePatterns` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `ghost`, `mutation`, `ferro`, `culture`, `motion`, `colour`, `livePatterns` (objects merge, lists replace; marks of another kind replace the marks; `culture: null` or `unset: ["culture"]` drops biopaint spores), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -318,6 +319,10 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `list_magnets` | List the canvas magnets (`id`, `x`, `y`, `strength`, `radius`). Changes nothing. |
 | `get_ferrofluid` | Read a layer's liquid ferrofluid and live spikes (`ferro`, `bounds`, `peak`, `coverage`, `activeSpikeArea`, `maxSpikeHeight`, `magnetCount`, `wavelength`, `threshold`). Changes nothing. |
 | `cure_ferrofluid` | Bake a layer's current magnetic spikes into solid impasto height and dark glossy material, clearing its liquid ferrofluid so magnet edits no longer change it. One undo step. Returns `layerId`, `cured`, `bounds`, `maxSpikeHeight`, `activeSpikeArea`. |
+| `get_cultures` | Read living biopaint (`culture`) colonies across layers (`tick`, living `tips`, `segments`, `bounds`, `status`: `growing` / `extinct` / `capped`), plus `growWhileClosed` and `pendingCatchUpTicks`. Changes nothing. |
+| `grow_cultures` | Step living biopaint (`culture`) colonies forward by `steps` ticks (1..2000, default 40) on `layerId` (or all layers with living tips when omitted) as one undo step. Threads sense ahead, steer toward existing paint (`appetite`), fade what they eat (`digest`), carry its colour along the network, branch (`branching`) and fuse (`fuse`). Returns `segmentsAdded`, `tipsAlive`, `bounds`, `status` and per-layer results. Refuses stroke layers, effect layers, and wet layers holding wet paint (`dry_paint` first). |
+| `remove_cultures` | Kill living biopaint tips on `layerId` (or the active layer) so growth stops (`status: "extinct"`), keeping the threads already drawn as ordinary paint. One undo step. Returns `layerId`, `removedTips`, `status`. |
+| `set_culture_options` | Turn `growWhileClosed` (`true` / `false`) on or off so saving records a timestamp and reopening catches up elapsed growth as one undo step (`"Growth while closed"`). Returns `{ growWhileClosed }`. |
 
 ### Stickers
 

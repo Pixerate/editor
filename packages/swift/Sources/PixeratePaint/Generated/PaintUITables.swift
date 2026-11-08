@@ -286,6 +286,23 @@ public struct PaintUISlidersMutationItem: Equatable, Sendable {
     }
 }
 
+public struct PaintUISlidersCultureItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersCultureItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersCultureItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersCultureItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersCultureItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersCultureItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersCultureItem")
+    }
+}
+
 public struct PaintUISlidersLivePatternsItem: Equatable, Sendable {
     public var path: String
     public var label: String
@@ -364,6 +381,7 @@ public struct PaintUISliders: Equatable, Sendable {
     public var viewTilt: [PaintUISlidersViewTiltItem]
     public var ghost: [PaintUISlidersGhostItem]
     public var mutation: [PaintUISlidersMutationItem]
+    public var culture: [PaintUISlidersCultureItem]
     public var livePatterns: [PaintUISlidersLivePatternsItem]
     public var stroke: [PaintUISlidersStrokeItem]
     public var sticker: [PaintUISlidersStickerItem]
@@ -380,6 +398,7 @@ public struct PaintUISliders: Equatable, Sendable {
         viewTilt = try ContractTable.field(try o["viewTilt"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersViewTiltItem") { v in try v.map(PaintUISlidersViewTiltItem.init(json:)) } }, "viewTilt", "PaintUISliders")
         ghost = try ContractTable.field(try o["ghost"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersGhostItem") { v in try v.map(PaintUISlidersGhostItem.init(json:)) } }, "ghost", "PaintUISliders")
         mutation = try ContractTable.field(try o["mutation"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersMutationItem") { v in try v.map(PaintUISlidersMutationItem.init(json:)) } }, "mutation", "PaintUISliders")
+        culture = try ContractTable.field(try o["culture"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersCultureItem") { v in try v.map(PaintUISlidersCultureItem.init(json:)) } }, "culture", "PaintUISliders")
         livePatterns = try ContractTable.field(try o["livePatterns"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersLivePatternsItem") { v in try v.map(PaintUISlidersLivePatternsItem.init(json:)) } }, "livePatterns", "PaintUISliders")
         stroke = try ContractTable.field(try o["stroke"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStrokeItem") { v in try v.map(PaintUISlidersStrokeItem.init(json:)) } }, "stroke", "PaintUISliders")
         sticker = try ContractTable.field(try o["sticker"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStickerItem") { v in try v.map(PaintUISlidersStickerItem.init(json:)) } }, "sticker", "PaintUISliders")

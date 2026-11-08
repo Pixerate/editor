@@ -165,7 +165,7 @@ private func readPaint(_ value: JSONValue, _ path: String, _ problems: inout [St
 }
 
 /// The facet order of a hand-written brush.
-let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "motion", "colour", "livePatterns"]
+let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "culture", "motion", "colour", "livePatterns"]
 
 func orderedBrush(_ brush: JSONObject) -> Brush {
     var out = Brush()
@@ -278,10 +278,18 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             drop("iridescence", "tools lay no thin film")
             brush["iridescence"] = nil
         }
+        if brush["culture"] != nil {
+            drop("culture", "tools lay no spores")
+            brush["culture"] = nil
+        }
     }
     if brush.path("marks.kind")?.stringValue == "objects" && brush["iridescence"] != nil {
         drop("iridescence", "object marks are stickers")
         brush["iridescence"] = nil
+    }
+    if brush.path("marks.kind")?.stringValue == "objects" && brush["culture"] != nil {
+        drop("culture", "object marks are stickers, not living ink")
+        brush["culture"] = nil
     }
     tip = brush["tip"]!.objectValue!
     var behaviour = brush["behaviour"]?.objectValue
@@ -421,12 +429,16 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 // MARK: - Patches (`brushes/patch.ts`)
 
 /// The facets a patch can remove (`unset`), back to the engine's defaults.
-public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "motion", "colour", "livePatterns"]
+public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "culture", "motion", "colour", "livePatterns"]
 
 /// `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks.
 public func mergeBrushPatch(_ base: JSONObject, _ patch: JSONObject, _ path: String = "") -> JSONObject {
     var out = base
     for (k, rawV) in patch {
+        if path.isEmpty && (k == "culture" || k == "mutation" || k == "ghost") && rawV == .null {
+            out[k] = nil
+            continue
+        }
         let v: JSONValue = (path.isEmpty && k == "ferro" && rawV.numberValue != nil) ? ["amount": rawV] : rawV
         let rawOld = out[k]
         let old: JSONValue? = (path.isEmpty && k == "ferro" && rawOld?.numberValue != nil) ? ["amount": rawOld!] : rawOld

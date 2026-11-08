@@ -71,6 +71,8 @@ public struct PaintStrokeResult {
     public var mixerLoad: MixerLoad?
     /// Wet brushes: the paint is wet (it keeps moving until it dries).
     public var wet: Bool?
+    /// Biopaint brushes: how many spores the stroke seeded onto the layer.
+    public var culture: Int?
 }
 
 private func sameTile(_ a: Tile?, _ b: Tile?) -> Bool {

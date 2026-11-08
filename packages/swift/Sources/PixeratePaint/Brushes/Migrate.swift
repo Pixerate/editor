@@ -64,6 +64,7 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
     }
     if b.iridescence != nil { brush["iridescence"] = [:] }
     if b.mutation != nil { brush["mutation"] = [:] }
+    if b.culture != nil { brush["culture"] = [:] }
     return brush
 }
 

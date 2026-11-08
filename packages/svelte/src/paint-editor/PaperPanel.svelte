@@ -4,6 +4,7 @@
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
   import FerroPanel from './FerroPanel.svelte';
+  import CulturePanel from './CulturePanel.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
   interface Props {
@@ -104,5 +105,6 @@
     </div>
   </div>
   <FerroPanel {controller} />
+  <CulturePanel {controller} />
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
 </div>

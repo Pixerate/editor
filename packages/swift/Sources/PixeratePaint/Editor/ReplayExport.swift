@@ -308,6 +308,8 @@ extension PaintEditorController {
                     _ = try target.flattenRelief(e.layerId)
                 case "cure-ferrofluid":
                     _ = try target.cureFerrofluid(e.layerId)
+                case "culture-grow":
+                    try target.applyCultureGrowEvent(e.layerId, d, scale: s)
                 default:
                     continue
                 }

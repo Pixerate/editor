@@ -102,6 +102,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   ...each('fluorescence', 'fluorescence', ['amount', 'invisible']),
   ...each('thermochromic', 'thermochromic', ['hotColor', 'threshold']),
   ...each('iridescence', 'iridescence', ['thickness', 'pressureToThickness', 'ior'], FILM),
+  ...each('culture', 'culture', ['species', 'reach', 'branching', 'wander', 'appetite', 'digest', 'fuse', 'thickness', 'glow'], FILM),
   ...each('ferro', 'ferro', ['amount', 'wavelength', 'threshold']),
   // Paint exchange: the dab, wet and impasto engines' behaviour, or the Mixer Brush's settings.
   f('behaviour.exchange.pickup', 'behavior.pickup', EXCHANGE),
@@ -254,6 +255,7 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   // Spray marks: the dab engine with droplets (their settings come from the fields above).
   if (engine === 'dab' && brush.marks?.kind === 'scatter') input.spray = { ...((input.spray as object | undefined) ?? {}) };
   if (brush.iridescence && FILM.includes(engine)) input.iridescence = { ...((input.iridescence as object | undefined) ?? {}) };
+  if (brush.culture && brush.kind !== 'tool' && FILM.includes(engine)) input.culture = { ...((input.culture as object | undefined) ?? {}) };
   if (engine === 'wet') {
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');
     if (brush.kind === 'tool') delete input.livePatterns;

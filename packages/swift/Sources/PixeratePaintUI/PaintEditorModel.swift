@@ -344,6 +344,70 @@ public final class PaintEditorModel {
     /// The count of active mutations waiting for or being answered by an agent.
     public var pendingMutationsCount: Int { track(); return controller.listMutations().count }
 
+    // MARK: - Biopaint (living mycelial ink)
+
+    /// The biopaint culture sliders (`PaintUITables.sliders.culture`).
+    public var cultureSliders: [PaintUISlidersCultureItem] { tables.sliders.culture }
+
+    /// The current biopaint state (`get_cultures`).
+    public var cultures: PaintCulturesStateInfo { track(); return controller.getCultures() }
+
+    /// Whether the active brush carries biopaint spores.
+    public var brushHasCulture: Bool { track(); return controller.brush.culture != nil }
+
+    /// Enables or disables biopaint spores on the active brush.
+    public func setBrushCultureEnabled(_ on: Bool) {
+        if on {
+            let cur = controller.brush.culture ?? DEFAULT_CULTURE
+            attempt { _ = try controller.setBrushFacets(["culture": cur.json]) }
+        } else {
+            attempt { _ = try controller.setBrushFacets(["culture": .null]) }
+        }
+    }
+
+    /// Reads one biopaint slider value from the active brush (`culture.reach`, etc.).
+    public func cultureValue(_ path: String) -> Double {
+        track()
+        let c = controller.brush.culture ?? DEFAULT_CULTURE
+        let key = path.hasPrefix("culture.") ? String(path.dropFirst("culture.".count)) : path
+        switch key {
+        case "reach": return c.reach
+        case "branching": return c.branching
+        case "wander": return c.wander
+        case "appetite": return c.appetite
+        case "digest": return c.digest
+        case "fuse": return c.fuse
+        case "thickness": return c.thickness
+        case "glow": return c.glow
+        default: return 0
+        }
+    }
+
+    /// Sets one biopaint slider value on the active brush.
+    public func setCultureValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// Steps living biopaint colonies forward (`grow_cultures`; one undo step).
+    public func growCultures(steps: Int = 24, layerId: String? = nil) {
+        attempt { _ = try controller.growCultures(layerId: layerId, steps: steps) }
+    }
+
+    /// Kills living biopaint tips on the layer (`remove_cultures`; one undo step).
+    public func removeCultures(layerId: String? = nil) {
+        attempt { _ = try controller.removeCultures(layerId) }
+    }
+
+    /// Sets document-level biopaint options (`set_culture_options`).
+    public func setCultureOptions(growWhileClosed: Bool) {
+        _ = controller.setCultureOptions(growWhileClosed: growWhileClosed)
+    }
+
+    /// Pauses or resumes live biopaint growth.
+    public func setCulturePaused(_ paused: Bool) {
+        _ = controller.setCulturePaused(paused)
+    }
+
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
         let size = controller.brush.tip.size

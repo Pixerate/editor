@@ -119,6 +119,8 @@ export interface PaintStrokeResult {
   wet?: boolean;
   /** Sticker brushes: refs the spray picked but skipped because their art had not loaded yet. */
   skippedStickers?: string[];
+  /** Biopaint (`brush.culture`): how many spores were placed along the stroke on commit. */
+  culture?: { seeds: number };
 }
 
 function defaultTile(surface: TiledSurface): Uint8ClampedArray {

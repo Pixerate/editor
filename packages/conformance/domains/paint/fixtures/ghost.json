@@ -34,7 +34,7 @@
             "code": "invalid_arguments",
             "details": [
               {
-                "message": "Unknown property \"preset\". Allowed: id, name, description, tags, kind, medium, variety, tool, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, colour, unset.",
+                "message": "Unknown property \"preset\". Allowed: id, name, description, tags, kind, medium, variety, tool, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, culture, colour, unset.",
                 "path": "/preset"
               }
             ],
