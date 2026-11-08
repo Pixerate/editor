@@ -39,8 +39,9 @@ public struct ChartMermaidResult: Sendable, Equatable {
     }
 }
 
-private let rangeRegex = try! NSRegularExpression(pattern: "^(-?\\d+(?:\\.\\d+)?)\\s*-->\\s*(-?\\d+(?:\\.\\d+)?)$")
-private let startsWithSignedDigitRegex = try! NSRegularExpression(pattern: "^-?\\d")
+// JS `\d` and `\b` are ASCII-only; ICU's are Unicode-aware, so spell them out (see GOTCHAS).
+private let rangeRegex = try! NSRegularExpression(pattern: "^(-?[0-9]+(?:\\.[0-9]+)?)\\s*-->\\s*(-?[0-9]+(?:\\.[0-9]+)?)$")
+private let startsWithSignedDigitRegex = try! NSRegularExpression(pattern: "^-?[0-9]")
 private let firstWordRestRegex = try! NSRegularExpression(pattern: "^(\\S+)\\s*(.*)$", options: [.dotMatchesLineSeparators])
 private let closedListRegex = try! NSRegularExpression(pattern: "^\\[(.*)\\]$", options: [.dotMatchesLineSeparators])
 private let openListRegex = try! NSRegularExpression(pattern: "^\\[(.*)$", options: [.dotMatchesLineSeparators])
@@ -51,16 +52,16 @@ private let radarHeaderRegex = try! NSRegularExpression(pattern: "^radar(?:-beta
 private let sankeyHeaderLineRegex = try! NSRegularExpression(pattern: "^sankey(?:-beta)?\\s*$", options: [.caseInsensitive])
 private let treemapHeaderLineRegex = try! NSRegularExpression(pattern: "^treemap(?:-beta)?\\s*$", options: [.caseInsensitive])
 private let titleStmtRegex = try! NSRegularExpression(pattern: "^title\\s+(.+)$", options: [.caseInsensitive])
-private let xAxisStmtRegex = try! NSRegularExpression(pattern: "^x-axis\\b(.*)$", options: [.caseInsensitive])
-private let yAxisStmtRegex = try! NSRegularExpression(pattern: "^y-axis\\b(.*)$", options: [.caseInsensitive])
-private let barLineStmtRegex = try! NSRegularExpression(pattern: "^(bar|line)\\b(.*)$", options: [.caseInsensitive])
-private let pieSliceStmtRegex = try! NSRegularExpression(pattern: "^\"((?:[^\"\\\\]|\\\\.)*)\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)\\s*$")
+private let xAxisStmtRegex = try! NSRegularExpression(pattern: "^x-axis(?![A-Za-z0-9_])(.*)$", options: [.caseInsensitive])
+private let yAxisStmtRegex = try! NSRegularExpression(pattern: "^y-axis(?![A-Za-z0-9_])(.*)$", options: [.caseInsensitive])
+private let barLineStmtRegex = try! NSRegularExpression(pattern: "^(bar|line)(?![A-Za-z0-9_])(.*)$", options: [.caseInsensitive])
+private let pieSliceStmtRegex = try! NSRegularExpression(pattern: "^\"((?:[^\"\\\\]|\\\\.)*)\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)\\s*$")
 private let showDataStmtRegex = try! NSRegularExpression(pattern: "^showData\\s*$", options: [.caseInsensitive])
 private let radarAxisStmtRegex = try! NSRegularExpression(pattern: "^axis\\s+(.+)$")
 private let radarAxisItemRegex = try! NSRegularExpression(pattern: "^([A-Za-z_][A-Za-z0-9_-]*)\\s*(?:\\[\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\])?$")
 private let radarCurveStmtRegex = try! NSRegularExpression(pattern: "^curve\\s+([A-Za-z_][A-Za-z0-9_-]*)\\s*(?:\\[\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\])?\\s*\\{(.*)\\}?\\s*$")
-private let radarCurveKeyedRegex = try! NSRegularExpression(pattern: "^([A-Za-z_][A-Za-z0-9_-]*)\\s*:\\s*(-?\\d+(?:\\.\\d+)?)$")
-private let radarCurveNumRegex = try! NSRegularExpression(pattern: "^-?\\d+(?:\\.\\d+)?$")
+private let radarCurveKeyedRegex = try! NSRegularExpression(pattern: "^([A-Za-z_][A-Za-z0-9_-]*)\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)$")
+private let radarCurveNumRegex = try! NSRegularExpression(pattern: "^-?[0-9]+(?:\\.[0-9]+)?$")
 private let radarSettingStmtRegex = try! NSRegularExpression(pattern: "^(max|min|ticks|graticule|showLegend)\\s+(\\S+)$")
 private let trailingCloseBraceRegex = try! NSRegularExpression(pattern: "\\}\\s*$")
 
@@ -359,7 +360,7 @@ public func chartFromMermaid(_ text: String, _ options: ChartMermaidParseOptions
                     } else if key == "ticks" {
                         let n = val.jsToNumber
                         if n.isFinite && n >= 1 {
-                            radarTicks = Swift.min(50, Int(JS.round(n)))
+                            radarTicks = Int(Swift.min(50, JS.round(n)))
                         } else {
                             lineIssue(i, "expected ticks to be a number of rings (1 or more), got \"\(val)\".")
                         }
@@ -582,11 +583,12 @@ public struct FoundChartMermaid: Sendable, Equatable {
     }
 }
 
-private let findXyHeaderRegex = try! NSRegularExpression(pattern: "^\\s*xychart(-beta)?\\b")
-private let findPieHeaderRegex = try! NSRegularExpression(pattern: "^\\s*pie\\b")
-private let findRadarHeaderRegex = try! NSRegularExpression(pattern: "^\\s*radar(-beta)?\\b")
-private let findSankeyHeaderRegex = try! NSRegularExpression(pattern: "^\\s*sankey(-beta)?\\s*$")
-private let findTreemapHeaderRegex = try! NSRegularExpression(pattern: "^\\s*treemap(-beta)?\\s*$")
+// JS `\s` also matches \v and the BOM (U+FEFF); ICU's does not.
+private let findXyHeaderRegex = try! NSRegularExpression(pattern: "^[\\s\\x{0B}\\x{FEFF}]*xychart(-beta)?(?![A-Za-z0-9_])")
+private let findPieHeaderRegex = try! NSRegularExpression(pattern: "^[\\s\\x{0B}\\x{FEFF}]*pie(?![A-Za-z0-9_])")
+private let findRadarHeaderRegex = try! NSRegularExpression(pattern: "^[\\s\\x{0B}\\x{FEFF}]*radar(-beta)?(?![A-Za-z0-9_])")
+private let findSankeyHeaderRegex = try! NSRegularExpression(pattern: "^[\\s\\x{0B}\\x{FEFF}]*sankey(-beta)?\\s*$")
+private let findTreemapHeaderRegex = try! NSRegularExpression(pattern: "^[\\s\\x{0B}\\x{FEFF}]*treemap(-beta)?\\s*$")
 private let openFenceRegex = try! NSRegularExpression(pattern: "^ {0,3}(`{3,}|~{3,})\\s*([A-Za-z0-9_-]*)")
 
 private func jsTrimEnd(_ s: String) -> String {

@@ -35,11 +35,15 @@ extension ChartToolProviderImpl {
         add("set_chart_values") { args in
             let cells = args["cells"]?.arrayValue ?? []
             var resolved: [(seriesId: String, index: Int, value: JSONValue)] = []
+            // As in TS: resolve every series and category first, then check the values.
             for cellVal in cells {
                 guard case .object(let c) = cellVal else { continue }
                 let s = try self.seriesById(c["series"]?.stringValue ?? "")
                 let index = try self.categoryIndex(c["category"] ?? .null)
-                let raw = c["value"] ?? .null
+                resolved.append((seriesId: s.id, index: index, value: c["value"] ?? .null))
+            }
+            for cell in resolved {
+                let raw = cell.value
                 let parsed = parseChartValue(raw)
                 guard parsed != nil else {
                     let text: String
@@ -53,7 +57,6 @@ extension ChartToolProviderImpl {
                         "\"\(text)\" is not a number; pass a number, numeric text or null for a gap. Nothing was changed."
                     )
                 }
-                resolved.append((seriesId: s.id, index: index, value: raw))
             }
             try self.check(self.controller.setValues(resolved))
             return [

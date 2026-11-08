@@ -189,26 +189,26 @@ private func firstChild(_ el: MiniXmlElement?, _ localName: String) -> MiniXmlEl
     el?.children.first { $0.localName == localName }
 }
 
-private func readEntryText(_ zip: ZipArchive, _ path: String) -> String? {
+private func readEntryText(_ zip: ZipArchive, _ path: String) throws -> String? {
     if zip.has(path) {
-        return try? zip.readText(path)
+        return try zip.readText(path)
     }
     let lower = path.lowercased()
     if let match = zip.entries.first(where: { $0.name.lowercased() == lower }) {
-        return try? zip.readText(match.name)
+        return try zip.readText(match.name)
     }
     return nil
 }
 
-private func readXml(_ r: Reader, _ path: String) -> MiniXmlDocument? {
-    guard let text = readEntryText(r.zip, path) else { return nil }
+private func readXml(_ r: Reader, _ path: String) throws -> MiniXmlDocument? {
+    guard let text = try readEntryText(r.zip, path) else { return nil }
     let doc = parseChartXml(text)
     return doc.getElementsByTagName("parsererror").isEmpty ? doc : nil
 }
 
-private func readRels(_ r: Reader, _ partPath: String) -> RelsMap {
+private func readRels(_ r: Reader, _ partPath: String) throws -> RelsMap {
     var rels = RelsMap()
-    guard let doc = readXml(r, relsPathFor(partPath)) else { return rels }
+    guard let doc = try readXml(r, relsPathFor(partPath)) else { return rels }
     let base = dirname(partPath)
     for rel in elements(doc, "Relationship") {
         guard let id = rel.getAttribute("Id"), !id.isEmpty else { continue }
@@ -251,7 +251,7 @@ private func chartsInPart(
     _ root: MiniXmlDocument,
     _ rels: RelsMap,
     _ place: (MiniXmlElement) -> ChartPlace
-) {
+) throws {
     for ref in elements(root, "chart") {
         if r.charts.count >= r.max { return }
         if !isChartRef(ref) { continue }
@@ -260,7 +260,7 @@ private func chartsInPart(
               !rel.external,
               !r.seen.contains(rel.target),
               r.zip.has(rel.target),
-              let xmlText = try? r.zip.readText(rel.target) else { continue }
+              let xmlText = try Optional(r.zip.readText(rel.target)) else { continue }
         r.seen.insert(rel.target)
         let read = chartFromOoxml(xmlText)
         let name = frameName(ref)
@@ -283,24 +283,25 @@ private func chartsInPart(
     }
 }
 
-private func columnName(_ index: Int) -> String {
+private func columnName(_ index: Double) -> String {
+    // Double arithmetic as in TS, so huge columns cannot overflow.
     var name = ""
     var n = index + 1
     while n > 0 {
-        name = String(UnicodeScalar(65 + ((n - 1) % 26))!) + name
-        n = (n - 1) / 26
+        let unit = (n - 1).truncatingRemainder(dividingBy: 26)
+        name = String(UnicodeScalar(UInt8(65 + unit))) + name
+        n = ((n - 1) / 26).rounded(.down)
     }
     return name
 }
 
 private func anchorCell(_ marker: MiniXmlElement?) -> String? {
-    guard let colText = firstChild(marker, "col")?.textContent.jsTrimmed,
-          let rowText = firstChild(marker, "row")?.textContent.jsTrimmed,
-          let col = Int(colText),
-          let row = Int(rowText),
-          col >= 0,
-          row >= 0 else { return nil }
-    return "\(columnName(col))\(row + 1)"
+    // `Number(textContent)`: a missing element is NaN, "" is 0.
+    let col = firstChild(marker, "col").map { $0.textContent.jsToNumber } ?? .nan
+    let row = firstChild(marker, "row").map { $0.textContent.jsToNumber } ?? .nan
+    guard col.isFinite, row.isFinite, col == col.rounded(.towardZero), row == row.rounded(.towardZero),
+          col >= 0, row >= 0 else { return nil }
+    return "\(columnName(col))\(JSONValue.jsNumber(row + 1))"
 }
 
 private func drawingPlace(_ ref: MiniXmlElement, sheet: String) -> ChartPlace {
@@ -324,52 +325,52 @@ private func drawingPlace(_ ref: MiniXmlElement, sheet: String) -> ChartPlace {
 }
 
 private func readMainPart(_ r: Reader) throws -> (path: String, doc: MiniXmlDocument) {
-    let rootRels = readRels(r, "")
+    let rootRels = try readRels(r, "")
     let main = rootRels.values.first { $0.type.hasSuffix("/officeDocument") && !$0.external }
-    guard let main, let doc = readXml(r, main.target) else {
+    guard let main, let doc = try readXml(r, main.target) else {
         throw OfficeChartsError("This is not an Office file: _rels/.rels names no main part (expected an .xlsx, .pptx or .docx file).")
     }
     return (path: main.target, doc: doc)
 }
 
-private func readXlsx(_ r: inout Reader, _ main: (path: String, doc: MiniXmlDocument)) {
-    let rels = readRels(r, main.path)
+private func readXlsx(_ r: inout Reader, _ main: (path: String, doc: MiniXmlDocument)) throws {
+    let rels = try readRels(r, main.path)
     for sheet in elements(main.doc, "sheet") {
         guard let sid = relId(sheet), let rel = rels.get(sid), !rel.external else { continue }
-        guard let doc = readXml(r, rel.target) else { continue }
+        guard let doc = try readXml(r, rel.target) else { continue }
         let sheetName = sheet.getAttribute("name") ?? rel.target
-        let sheetRels = readRels(r, rel.target)
+        let sheetRels = try readRels(r, rel.target)
         for drawingRef in elements(doc, "drawing") {
             guard let did = relId(drawingRef),
                   let drawingRel = sheetRels.get(did),
                   !drawingRel.external,
-                  let drawing = readXml(r, drawingRel.target) else { continue }
-            let drawingRels = readRels(r, drawingRel.target)
-            chartsInPart(&r, drawing, drawingRels) { ref in
+                  let drawing = try readXml(r, drawingRel.target) else { continue }
+            let drawingRels = try readRels(r, drawingRel.target)
+            try chartsInPart(&r, drawing, drawingRels) { ref in
                 drawingPlace(ref, sheet: sheetName)
             }
         }
     }
 }
 
-private func readPptx(_ r: inout Reader, _ main: (path: String, doc: MiniXmlDocument)) {
-    let rels = readRels(r, main.path)
+private func readPptx(_ r: inout Reader, _ main: (path: String, doc: MiniXmlDocument)) throws {
+    let rels = try readRels(r, main.path)
     let slides = elements(main.doc, "sldId")
     for (i, slideEl) in slides.enumerated() {
         guard let sid = relId(slideEl),
               let rel = rels.get(sid),
               !rel.external,
-              let doc = readXml(r, rel.target) else { continue }
-        let slideRels = readRels(r, rel.target)
-        chartsInPart(&r, doc, slideRels) { _ in
+              let doc = try readXml(r, rel.target) else { continue }
+        let slideRels = try readRels(r, rel.target)
+        try chartsInPart(&r, doc, slideRels) { _ in
             ChartPlace(slide: i + 1)
         }
     }
 }
 
-private func readDocx(_ r: inout Reader, _ main: (path: String, doc: MiniXmlDocument)) {
-    let docRels = readRels(r, main.path)
-    chartsInPart(&r, main.doc, docRels) { _ in ChartPlace() }
+private func readDocx(_ r: inout Reader, _ main: (path: String, doc: MiniXmlDocument)) throws {
+    let docRels = try readRels(r, main.path)
+    try chartsInPart(&r, main.doc, docRels) { _ in ChartPlace() }
 }
 
 private func openOffice(_ bytes: [UInt8], _ options: OfficeChartsReadOptions) throws -> (r: Reader, main: (path: String, doc: MiniXmlDocument), format: OfficeChartFileFormat) {
@@ -401,9 +402,9 @@ private func openOffice(_ bytes: [UInt8], _ options: OfficeChartsReadOptions) th
 public func extractOfficeCharts(_ bytes: [UInt8], options: OfficeChartsReadOptions = OfficeChartsReadOptions()) throws -> OfficeChartsResult {
     var (r, main, format) = try openOffice(bytes, options)
     switch format {
-    case .xlsx: readXlsx(&r, main)
-    case .pptx: readPptx(&r, main)
-    case .docx: readDocx(&r, main)
+    case .xlsx: try readXlsx(&r, main)
+    case .pptx: try readPptx(&r, main)
+    case .docx: try readDocx(&r, main)
     }
     return OfficeChartsResult(format: format, charts: r.charts)
 }

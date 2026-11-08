@@ -421,6 +421,10 @@ public final class ZipEntry {
     /// Reads the entry's bytes (`brushes/import/zip.ts` compatibility).
     public func read() throws -> [UInt8] {
         if let cached { return cached }
+        // Entries listed by readZipArchive carry no bytes; read those through the archive.
+        guard start >= 0, start + compressedSize <= bytes.count, !(bytes.isEmpty && compressedSize > 0) else {
+            throw ZipError("\"\(name)\" has no bytes of its own; read it with ZipArchive.read(\"\(name)\").")
+        }
         let raw = Array(bytes[start..<(start + compressedSize)])
         let out: [UInt8]
         if compressionMethod == 0 {

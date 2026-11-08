@@ -49,7 +49,7 @@ public func parseChartColor(_ color: String) -> ChartRgb? {
             Double(Int(h[i] + h[i + 1], radix: 16) ?? 0) / 255.0
         }
     }
-    if let m = matchGroups(#"^rgba?\(\s*([\d.]+)%?[\s,]+([\d.]+)%?[\s,]+([\d.]+)%?(?:[\s,/]+[\d.]+%?)?\s*\)$"#, in: text) {
+    if let m = matchGroups(#"^rgba?\(\s*([0-9.]+)%?[\s,]+([0-9.]+)%?[\s,]+([0-9.]+)%?(?:[\s,/]+[0-9.]+%?)?\s*\)$"#, in: text) {
         let pct = text.contains("%")
         let denom = pct ? 100.0 : 255.0
         return [m[1], m[2], m[3]].map { v in

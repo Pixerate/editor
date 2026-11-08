@@ -301,3 +301,44 @@ public func jsToPrecision(_ value: Double, _ precision: Int) -> String {
     }
     return "\(sign)0.\(String(repeating: "0", count: -(e + 1)))\(digits)"
 }
+
+// MARK: - Code-unit string search (JS `includes`, `startsWith`, `endsWith`, `replaceAll`)
+//
+// Swift's `String.contains`, `hasPrefix` and `replacingOccurrences` compare whole Characters, so
+// `"\r\n"` contains neither `"\r"` nor `"\n"`, and `"&\u{301}"` does not contain `"&"`. JS
+// compares UTF-16 code units; these helpers do the same.
+extension String {
+    /// JS `s.includes(needle)`.
+    public func jsIncludes(_ needle: String) -> Bool {
+        let h = Array(utf16), n = Array(needle.utf16)
+        if n.isEmpty { return true }
+        if n.count > h.count { return false }
+        for i in 0...(h.count - n.count) where h[i] == n[0] && Array(h[i..<(i + n.count)]) == n { return true }
+        return false
+    }
+
+    /// JS `s.startsWith(prefix)`.
+    public func jsStartsWith(_ prefix: String) -> Bool { utf16.starts(with: prefix.utf16) }
+
+    /// JS `s.endsWith(suffix)`.
+    public func jsEndsWith(_ suffix: String) -> Bool { utf16.reversed().starts(with: suffix.utf16.reversed()) }
+
+    /// JS `s.replaceAll(target, replacement)` for a non-empty literal `target`.
+    public func jsReplacingAll(_ target: String, with replacement: String) -> String {
+        let h = Array(utf16), n = Array(target.utf16), r = Array(replacement.utf16)
+        guard !n.isEmpty, n.count <= h.count else { return self }
+        var out: [UInt16] = []
+        out.reserveCapacity(h.count)
+        var i = 0
+        while i < h.count {
+            if i + n.count <= h.count && h[i] == n[0] && Array(h[i..<(i + n.count)]) == n {
+                out.append(contentsOf: r)
+                i += n.count
+            } else {
+                out.append(h[i])
+                i += 1
+            }
+        }
+        return String(decoding: out, as: UTF16.self)
+    }
+}

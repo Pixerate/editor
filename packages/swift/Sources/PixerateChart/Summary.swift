@@ -139,7 +139,7 @@ public func summarizeChart(
 }
 
 private func isWaterfallTotalCategory(_ label: String) -> Bool {
-    guard let regex = try? NSRegularExpression(pattern: "\\b(sub)?total\\b", options: [.caseInsensitive]) else {
+    guard let regex = try? NSRegularExpression(pattern: "(?<![A-Za-z0-9_])(sub)?total(?![A-Za-z0-9_])", options: [.caseInsensitive]) else {
         return false
     }
     let range = NSRange(label.startIndex..<label.endIndex, in: label)

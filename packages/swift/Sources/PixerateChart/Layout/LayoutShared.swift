@@ -215,7 +215,7 @@ public func contrastingTextColor(_ fill: String) -> String {
         rgb = [0, 2, 4].map { i in
             Double(Int(String(chars[i...i + 1]), radix: 16) ?? 0)
         }
-    } else if let fnMatch = matchRegexGroups(#"^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)"#, in: trimmed, caseInsensitive: true) {
+    } else if let fnMatch = matchRegexGroups(#"^rgba?\(\s*([0-9.]+)[\s,]+([0-9.]+)[\s,]+([0-9.]+)"#, in: trimmed, caseInsensitive: true) {
         rgb = [1, 2, 3].map { i in Double(fnMatch[i]) ?? .nan }
     }
     guard let rgb, rgb.count == 3 else { return "#ffffff" }

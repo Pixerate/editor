@@ -378,7 +378,7 @@ public func dateValueToSerial(_ value: String) -> Double? {
     let utf16Count = value.utf16.count
     if utf16Count < 8 || utf16Count > 30 { return nil }
     let trimmed = value.jsTrimmed
-    guard let m = matchGroups(#"^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?)?$"#, in: trimmed) else {
+    guard let m = matchGroups(#"^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})(?:[ T]([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}(?:\.[0-9]+)?))?)?$"#, in: trimmed) else {
         return nil
     }
     guard let y = Int(m[1]), let mo = Int(m[2]), let d = Int(m[3]) else { return nil }
@@ -701,7 +701,7 @@ private func parsePlain(_ t: String) -> NumericParsed? {
     guard let firstCh = digits.first, (firstCh >= "0" && firstCh <= "9") || firstCh == "." else {
         return nil
     }
-    guard digits.range(of: #"^(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$"#, options: .regularExpression) != nil,
+    guard digits.range(of: #"^([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$"#, options: .regularExpression) != nil,
           let rawN = Double(digits), rawN.isFinite else {
         return nil
     }
@@ -723,7 +723,7 @@ private func parsePlain(_ t: String) -> NumericParsed? {
 }
 
 private func parseDecimal(_ s: String) -> Double? {
-    guard s.range(of: #"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$"#, options: .regularExpression) != nil else {
+    guard s.range(of: #"^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$"#, options: .regularExpression) != nil else {
         return nil
     }
     return Double(s)
@@ -804,7 +804,7 @@ private func parseDate(_ input: String) -> (date: DateParts, format: String)? {
     let t = input.jsTrimmed.replacingOccurrences(of: #",+$"#, with: "", options: .regularExpression)
     func num(_ s: String) -> Int? {
         let tr = s.jsTrimmed
-        guard tr.range(of: #"^[+-]?\d+$"#, options: .regularExpression) != nil else { return nil }
+        guard tr.range(of: #"^[+-]?[0-9]+$"#, options: .regularExpression) != nil else { return nil }
         return Int(tr)
     }
     func withFormat(_ date: DateParts?, _ format: String) -> (date: DateParts, format: String)? {

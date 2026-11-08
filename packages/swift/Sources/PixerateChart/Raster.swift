@@ -163,7 +163,7 @@ private func substituteVars(_ value: String, lookup: (String) -> String, depth: 
     return out
 }
 
-private let paintAttrRegex = try! NSRegularExpression(pattern: "(\\s)([\\w:-]+)=\"([^\"]*)\"")
+private let paintAttrRegex = try! NSRegularExpression(pattern: "(\\s)([A-Za-z0-9_:-]+)=\"([^\"]*)\"")
 private let currentColorRegex = try! NSRegularExpression(pattern: "currentcolor", options: [.caseInsensitive])
 private let nonAlnumRegex = try! NSRegularExpression(pattern: "[^\\p{L}\\p{N}]+")
 

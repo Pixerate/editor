@@ -506,7 +506,19 @@ extension ChartToolProviderImpl {
             title: "Chart editor",
             description: "One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight, grouped data, flows, bar race playback and presets, CSV, Mermaid and OOXML import, rendering and colour checks.",
             skill: "pixerate-chart",
-            tools: reads + writes
+            // As in TS: a read-only chart lists only its read tools, so a write call is an unknown tool.
+            tools: { self.readOnlyReason() != nil ? reads : reads + writes },
+            subscribe: { notify in
+                // Re-announce when the read-only state may have changed.
+                var last = self.readOnlyReason()
+                return self.controller.subscribe { _ in
+                    let now = self.readOnlyReason()
+                    if now != last {
+                        last = now
+                        notify()
+                    }
+                }
+            }
         )
     }
 }
@@ -692,7 +704,8 @@ private final class OfficeChartToolProviderImpl: @unchecked Sendable {
             tools.append(t)
         }
 
-        if let controller = options.controller, readOnlyReason() == nil {
+        var loadChart: AgentTool? = nil
+        if let controller = options.controller {
             if let t = makeTool("load_file_chart", { args in
                 if let reason = self.readOnlyReason() {
                     throw ToolExecutionError(reason)
@@ -712,17 +725,21 @@ private final class OfficeChartToolProviderImpl: @unchecked Sendable {
                     ("lossless", .bool(chart.lossless))
                 ]))
             }) {
-                tools.append(t)
+                loadChart = t
             }
         }
 
+        // As in TS, load_file_chart is listed only while the chart can be edited, decided per listing.
         return AgentToolProvider(
             id: options.id,
             namespace: options.namespace,
             title: "Office charts",
             description: "Charts inside Word, Excel and PowerPoint files: list and read them, and load one into the chart editor.",
             skill: "pixerate-chart",
-            tools: tools
+            tools: { [tools] in
+                guard let loadChart, self.readOnlyReason() == nil else { return tools }
+                return tools + [loadChart]
+            }
         )
     }
 }

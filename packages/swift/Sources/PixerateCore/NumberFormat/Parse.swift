@@ -231,7 +231,7 @@ private func parseColor(_ lc: String) -> NumberFormatColor? {
     if NAMED_COLORS.contains(lc) { return lc }
     guard lc.hasPrefix("color") else { return nil }
     let rest = String(lc.dropFirst(5)).jsTrimmed
-    guard rest.range(of: #"^\+?\d{1,3}$"#, options: .regularExpression) != nil,
+    guard rest.range(of: #"^\+?[0-9]{1,3}$"#, options: .regularExpression) != nil,
           let n = Int(rest.replacingOccurrences(of: "+", with: "")),
           n >= 1 && n <= 56 else {
         return nil
@@ -265,7 +265,7 @@ private func parseCond(_ s: String) -> Cond? {
         return nil
     }
     let r = rest.jsTrimmed
-    guard r.range(of: #"^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$"#, options: [.regularExpression, .caseInsensitive]) != nil,
+    guard r.range(of: #"^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)(e[+-]?[0-9]+)?$"#, options: [.regularExpression, .caseInsensitive]) != nil,
           let value = Double(r), value.isFinite else {
         return nil
     }

@@ -162,7 +162,7 @@ public func runChartStyleChecks(
         case "palette-only":
             let palette = profile["palette"]?.arrayValue?.compactMap { $0.stringValue } ?? []
             if palette.isEmpty {
-                skipped.append(ChartStyleSkipped(check: id, reason: "the profile has no palette."))
+                skipped.append(ChartStyleSkipped(check: id, reason: "The check could not run: the profile has no palette."))
                 continue
             }
             let tolerance = options["tolerance"]?.numberValue ?? 0.02

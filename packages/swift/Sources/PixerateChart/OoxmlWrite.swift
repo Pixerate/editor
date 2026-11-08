@@ -51,13 +51,13 @@ private let LEGEND_OUT: [ChartLegendPosition: String] = [
 internal func esc(_ s: String) -> String {
     var out = ""
     out.reserveCapacity(s.count)
-    for ch in s {
+    for ch in s.unicodeScalars {
         switch ch {
         case "&": out += "&amp;"
         case "<": out += "&lt;"
         case ">": out += "&gt;"
         case "\"": out += "&quot;"
-        default: out.append(ch)
+        default: out.unicodeScalars.append(ch)
         }
     }
     return out

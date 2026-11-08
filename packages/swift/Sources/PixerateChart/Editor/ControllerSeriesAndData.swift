@@ -460,7 +460,11 @@ extension ChartController {
         _ options: ChartTableOptions = ChartTableOptions(),
         delimiter: String? = nil
     ) -> ChartActionResult {
-        let sep = delimiter ?? (text.contains("\t") ? "\t" : ",")
+        let sep = delimiter ?? (text.jsIncludes("\t") ? "\t" : ",")
+        // parseCsv in TS throws on these; refuse them rather than guess a delimiter.
+        if sep.utf16.count != 1 || sep == "\"" || sep == "\n" || sep == "\r" {
+            return .failure("Invalid CSV delimiter: \(JSONValue.string(sep).stringified())")
+        }
         let parsed = parseCsv(text, options: CsvParseOptions(delimiter: sep))
         return importTable(parsed.map { $0.map(JSONValue.string) }, options)
     }

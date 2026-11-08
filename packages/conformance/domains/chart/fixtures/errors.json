@@ -147,6 +147,58 @@
         },
         "isError": true
       }
+    },
+    {
+      "tool": "set_chart_values",
+      "arguments": {
+        "cells": [
+          {
+            "series": "Revenue",
+            "category": "Q1",
+            "value": "abc"
+          },
+          {
+            "series": "Nope",
+            "category": "Q1",
+            "value": 1
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no series \"Nope\"; expected one of \"series-1\" (Revenue)."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "set_chart_values",
+      "arguments": {
+        "cells": [
+          {
+            "series": "Revenue",
+            "category": "Q1",
+            "value": "abc"
+          },
+          {
+            "series": "Revenue",
+            "category": "Q9",
+            "value": 1
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no category \"Q9\"; expected an index from 0 to 1 or one of \"Q1\", \"Q2\"."
+          }
+        },
+        "isError": true
+      }
     }
   ]
 }

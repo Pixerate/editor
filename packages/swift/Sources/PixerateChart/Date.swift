@@ -45,14 +45,14 @@ private func valid(_ y: Int, _ mo: Int, _ d: Int) -> Double? {
 /// `2024/03/05`, `Mar 2024` and `5 Mar 2024`. Returns milliseconds since the epoch, or `nil`.
 public func parseChartDate(_ label: String) -> Double? {
     let text = label.jsTrimmed
-    if let m = matchGroups(#"^(\d{4})$"#, in: text), let y = Int(m[1]) {
+    if let m = matchGroups(#"^([0-9]{4})$"#, in: text), let y = Int(m[1]) {
         return dateUTC(y, 0, 1)
     }
-    if let m = matchGroups(#"^(\d{4})[-/](\d{1,2})$"#, in: text),
+    if let m = matchGroups(#"^([0-9]{4})[-/]([0-9]{1,2})$"#, in: text),
        let y = Int(m[1]), let mo = Int(m[2]) {
         return valid(y, mo - 1, 1)
     }
-    if let m = matchGroups(#"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})?)?$"#, in: text),
+    if let m = matchGroups(#"^([0-9]{4})[-/]([0-9]{1,2})[-/]([0-9]{1,2})(?:[T ]([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?(?:\.([0-9]+))?(Z|[+-][0-9]{2}:?[0-9]{2})?)?$"#, in: text),
        let y = Int(m[1]), let mo = Int(m[2]), let d = Int(m[3]) {
         if !m[4].isEmpty {
             // JS `Date.parse(text.replace(' ', 'T').replace(/\//g, '-') + (m[7] ? '' : 'Z'))`:
@@ -88,7 +88,7 @@ public func parseChartDate(_ label: String) -> Double? {
         }
         return valid(y, mo - 1, d)
     }
-    if let m = matchGroups(#"^(?:(\d{1,2})\s+)?([A-Za-z]{3})[a-z]*\.?,?\s+(\d{4})$"#, in: text),
+    if let m = matchGroups(#"^(?:([0-9]{1,2})\s+)?([A-Za-z]{3})[a-z]*\.?,?\s+([0-9]{4})$"#, in: text),
        let y = Int(m[3]) {
         let m2Lower = m[2].lowercased()
         if let month = MONTHS.firstIndex(where: { $0.lowercased() == m2Lower }) {

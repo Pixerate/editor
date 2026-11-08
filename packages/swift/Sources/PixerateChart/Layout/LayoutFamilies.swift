@@ -336,7 +336,7 @@ internal func layoutWaterfall(_ ctx: LayoutCtx, _ area: ChartRect, _ series: Cha
     let theme = ctx.theme
     let fs = ctx.fs
     func isTotal(_ label: String) -> Bool {
-        label.range(of: #"\b(sub)?total\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        label.range(of: #"(?<![A-Za-z0-9_])(sub)?total(?![A-Za-z0-9_])"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
     struct Step {
         var label: String
@@ -2031,7 +2031,7 @@ internal func layoutBarRace(_ ctx: LayoutCtx, _ area: ChartRect, _ frame: Double
 
 /// Path data (absolute M / L / Z) scaled by `s` and moved by (`ox`, `oy`).
 private func placePath(_ d: String, _ s: Double, _ ox: Double, _ oy: Double) -> String {
-    guard let regex = try? NSRegularExpression(pattern: #"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)"#) else {
+    guard let regex = try? NSRegularExpression(pattern: #"(-?[0-9]+(?:\.[0-9]+)?),(-?[0-9]+(?:\.[0-9]+)?)"#) else {
         return d
     }
     let nsRange = NSRange(d.startIndex..<d.endIndex, in: d)

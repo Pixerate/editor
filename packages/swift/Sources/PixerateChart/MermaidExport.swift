@@ -43,7 +43,7 @@ public struct ChartMermaidOptions: Sendable, Equatable {
 }
 
 internal func mermaidQuote(_ text: String) -> String {
-    return "\"\(text.replacingOccurrences(of: "\"", with: "#quot;"))\""
+    return "\"\(text.jsReplacingAll("\"", with: "#quot;"))\""
 }
 
 internal func mermaidUnquote(_ text: String) -> String {
@@ -105,9 +105,9 @@ internal func splitOutside(_ text: String, _ sep: Character) -> [String] {
 private func csvField(_ text: String) -> String {
     let scalars = Array(text.unicodeScalars)
     let hasEdgeSpace = (!scalars.isEmpty && (isJSWhitespace(scalars.first!) || isJSWhitespace(scalars.last!)))
-    let needsQuote = hasEdgeSpace || text.contains("\"") || text.contains(",") || text.contains("\n")
+    let needsQuote = hasEdgeSpace || text.jsIncludes("\"") || text.jsIncludes(",") || text.jsIncludes("\n")
     if needsQuote {
-        return "\"\(text.replacingOccurrences(of: "\"", with: "\"\""))\""
+        return "\"\(text.jsReplacingAll("\"", with: "\"\""))\""
     }
     return text
 }

@@ -8,7 +8,7 @@ import XCTest
 final class ChartConformanceTests: XCTestCase {
     func testChartScenarios() async throws {
         let scenarios = try ConformanceScenario.load(domain: "chart")
-        XCTAssertEqual(scenarios.count, 16)
+        XCTAssertEqual(scenarios.count, 18)
         var passed: [String] = []
         var skipped: [(String, String)] = []
         var failures: [ConformanceMismatch] = []
@@ -43,19 +43,19 @@ final class ChartConformanceTests: XCTestCase {
         }
         for failure in failures { XCTFail(failure.description) }
         for (id, reason) in skipped { XCTFail("The chart domain is fully ported, but \(id) is skipped for Swift: \(reason)") }
-        XCTAssertEqual(passed.count, 16)
+        XCTAssertEqual(passed.count, 18)
         XCTAssertEqual(skipped.count, 0)
         ChartConformanceReport.write(passed: passed, skipped: skipped, failed: Set(failures.map(\.scenario)).count)
     }
 
-    /// Every chart scenario runs on Swift: none carries a skip, and the 16 known ones are there.
+    /// Every chart scenario runs on Swift: none carries a skip, and the 18 known ones are there.
     func testNoChartScenarioIsSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "chart")
         for scenario in scenarios { XCTAssertNil(scenario.skip["swift"], "\(scenario.id) is skipped for Swift; the chart domain is fully ported (#694).") }
         for id in [
             "bar-basics", "bar-race", "errors", "interaction", "line-dates", "map-choropleth",
-            "mermaid-round-trip", "number-formats", "office", "pie-donut", "presets-style",
-            "render-svg", "sankey-links", "scatter-trend", "stacked-area-streamgraph", "tree-treemap"
+            "mermaid-round-trip", "number-formats", "office", "pie-donut", "presets-style", "read-only",
+            "render-svg", "sankey-links", "scatter-trend", "stacked-area-streamgraph", "style-skips", "tree-treemap"
         ] {
             XCTAssertNotNil(scenarios.first { $0.id == id }, id)
         }

@@ -1710,6 +1710,647 @@
           "width": 640
         }
       }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "yAxis": {
+          "format": {
+            "style": "percent"
+          }
+        }
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Jan",
+              "Feb",
+              "Mar"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "format": {
+                  "currency": "EUR",
+                  "decimals": 0,
+                  "style": "currency"
+                },
+                "id": "series-1",
+                "name": "Revenue",
+                "values": [
+                  1250000,
+                  1480000,
+                  980000
+                ]
+              },
+              {
+                "axis": "secondary",
+                "id": "series-2",
+                "name": "Margin",
+                "type": "line",
+                "values": [
+                  0.185,
+                  0.214,
+                  -0.042
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Financial Format Codes",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {
+                "style": "percent"
+              },
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Revenue"
+            },
+            "yAxis2": {
+              "format": {
+                "code": "0.0%;(0.0%);\"-\""
+              },
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Margin"
+            }
+          }
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Jan",
+              "Feb",
+              "Mar"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "format": {
+                  "currency": "EUR",
+                  "decimals": 0,
+                  "style": "currency"
+                },
+                "id": "series-1",
+                "name": "Revenue",
+                "values": [
+                  1250000,
+                  1480000,
+                  980000
+                ]
+              },
+              {
+                "axis": "secondary",
+                "id": "series-2",
+                "name": "Margin",
+                "type": "line",
+                "values": [
+                  0.185,
+                  0.214,
+                  -0.042
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Financial Format Codes",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {
+                "style": "percent"
+              },
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Revenue"
+            },
+            "yAxis2": {
+              "format": {
+                "code": "0.0%;(0.0%);\"-\""
+              },
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Margin"
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "yAxis": {
+          "format": {
+            "style": "currency",
+            "currency": "EUR"
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Jan",
+              "Feb",
+              "Mar"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "format": {
+                  "currency": "EUR",
+                  "decimals": 0,
+                  "style": "currency"
+                },
+                "id": "series-1",
+                "name": "Revenue",
+                "values": [
+                  1250000,
+                  1480000,
+                  980000
+                ]
+              },
+              {
+                "axis": "secondary",
+                "id": "series-2",
+                "name": "Margin",
+                "type": "line",
+                "values": [
+                  0.185,
+                  0.214,
+                  -0.042
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Financial Format Codes",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {
+                "currency": "EUR",
+                "style": "currency"
+              },
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Revenue"
+            },
+            "yAxis2": {
+              "format": {
+                "code": "0.0%;(0.0%);\"-\""
+              },
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Margin"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "yAxis": {
+          "format": {
+            "style": "number"
+          }
+        }
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Jan",
+              "Feb",
+              "Mar"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "format": {
+                  "currency": "EUR",
+                  "decimals": 0,
+                  "style": "currency"
+                },
+                "id": "series-1",
+                "name": "Revenue",
+                "values": [
+                  1250000,
+                  1480000,
+                  980000
+                ]
+              },
+              {
+                "axis": "secondary",
+                "id": "series-2",
+                "name": "Margin",
+                "type": "line",
+                "values": [
+                  0.185,
+                  0.214,
+                  -0.042
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Financial Format Codes",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {
+                "style": "number"
+              },
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Revenue"
+            },
+            "yAxis2": {
+              "format": {
+                "code": "0.0%;(0.0%);\"-\""
+              },
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Margin"
+            }
+          }
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Jan",
+              "Feb",
+              "Mar"
+            ],
+            "curve": "linear",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "format": {
+                  "currency": "EUR",
+                  "decimals": 0,
+                  "style": "currency"
+                },
+                "id": "series-1",
+                "name": "Revenue",
+                "values": [
+                  1250000,
+                  1480000,
+                  980000
+                ]
+              },
+              {
+                "axis": "secondary",
+                "id": "series-2",
+                "name": "Margin",
+                "type": "line",
+                "values": [
+                  0.185,
+                  0.214,
+                  -0.042
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Financial Format Codes",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {
+                "style": "number"
+              },
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Revenue"
+            },
+            "yAxis2": {
+              "format": {
+                "code": "0.0%;(0.0%);\"-\""
+              },
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "Margin"
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
     }
   ]
 }

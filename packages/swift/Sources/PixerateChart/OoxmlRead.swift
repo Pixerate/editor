@@ -154,9 +154,9 @@ internal struct MiniXmlDocument {
 }
 
 private let xmlEntityRegex = try! NSRegularExpression(pattern: #"&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);"#)
-private let xmlOpenTagRegex = try! NSRegularExpression(pattern: #"^<([A-Za-z_][\w:.-]*)((?:\s+[A-Za-z_][\w:.-]*\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(/?)>"#)
-private let xmlCloseTagRegex = try! NSRegularExpression(pattern: #"^</([A-Za-z_][\w:.-]*)\s*>"#)
-private let xmlAttrRegex = try! NSRegularExpression(pattern: #"([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')"#)
+private let xmlOpenTagRegex = try! NSRegularExpression(pattern: #"^<([A-Za-z_][A-Za-z0-9_:.-]*)((?:\s+[A-Za-z_][A-Za-z0-9_:.-]*\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(/?)>"#)
+private let xmlCloseTagRegex = try! NSRegularExpression(pattern: #"^</([A-Za-z_][A-Za-z0-9_:.-]*)\s*>"#)
+private let xmlAttrRegex = try! NSRegularExpression(pattern: #"([A-Za-z_][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')"#)
 private let xmlPiRegex = try! NSRegularExpression(pattern: #"<\?[\s\S]*?\?>"#)
 private let xmlCommentRegex = try! NSRegularExpression(pattern: #"<!--[\s\S]*?-->"#)
 private let xmlDoctypeRegex = try! NSRegularExpression(pattern: #"<!DOCTYPE[^>]*>"#, options: [.caseInsensitive])
@@ -394,12 +394,10 @@ internal func bool(_ v: String?, _ fallback: Bool = false) -> Bool {
 
 internal func numberOf(_ v: String?) -> Double? {
     guard let v else { return nil }
-    let trimmed = v.jsTrimmed
-    if trimmed.isEmpty { return nil }
-    if let n = Double(trimmed), n.isFinite {
-        return n == 0 ? 0 : n
-    }
-    return nil
+    // JS `Number(v)`: "" is 0, hex counts, "0x1p3" does not.
+    let n = v.jsToNumber
+    guard n.isFinite else { return nil }
+    return n == 0 ? 0 : n
 }
 
 internal func strings(_ e: MiniXmlElement?) -> [String] {
@@ -897,7 +895,10 @@ internal func readChartex(
         let levels: [[String]] = kids(strDim, "lvl").map { l in
             var out: [String] = []
             for p in kids(l, "pt") {
-                let idx = Int(p.getAttribute("idx") ?? "") ?? out.count
+                // A JS array index; anything else (negative, fractional, huge) is not a point.
+                let at = p.getAttribute("idx").map { $0.jsToNumber } ?? Double(out.count)
+                guard at >= 0, at < Double(MAX_POINTS), at == at.rounded(.towardZero) else { continue }
+                let idx = Int(at)
                 while out.count <= idx { out.append("") }
                 out[idx] = p.textContent.jsTrimmed
             }
@@ -923,7 +924,9 @@ internal func readChartex(
         var values: [ChartValue] = []
         let nl = lvl(numDim)
         for p in kids(nl, "pt") {
-            let i = Int(p.getAttribute("idx") ?? "") ?? values.count
+            let at = p.getAttribute("idx").map { $0.jsToNumber } ?? Double(values.count)
+            guard at >= 0, at < Double(MAX_POINTS), at == at.rounded(.towardZero) else { continue }
+            let i = Int(at)
             while values.count < i { values.append(nil) }
             let val = numberOf(p.textContent.jsTrimmed)
             if values.count == i { values.append(val) }

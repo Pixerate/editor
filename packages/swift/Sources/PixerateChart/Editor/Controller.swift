@@ -403,16 +403,8 @@ extension ChartController {
                case .object(let subPatch) = v,
                case .object(var existingSub) = merged[k] {
                 for (sk, sv) in subPatch {
-                    if sk == "format", case .object(let fmtPatch) = sv, case .object(var existingFmt) = existingSub["format"] {
-                        for (fk, fv) in fmtPatch {
-                            if fv == .null && fk != "decimals" {
-                                existingFmt[fk] = nil
-                            } else {
-                                existingFmt[fk] = fv
-                            }
-                        }
-                        existingSub["format"] = .object(existingFmt)
-                    } else if sv == .null && sk != "min" && sk != "max" && sk != "step" {
+                    // `{ ...s.yAxis, ...patch.yAxis }` in TS: a new `format` replaces the old one whole.
+                    if sv == .null && sk != "min" && sk != "max" && sk != "step" {
                         existingSub[sk] = nil
                     } else {
                         existingSub[sk] = sv

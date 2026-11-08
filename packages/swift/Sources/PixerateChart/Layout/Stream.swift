@@ -53,7 +53,7 @@ public func parsePartialChartJson(_ text: String) -> JSONValue? {
         }
         next = next.replacingOccurrences(of: #":\s*$"#, with: ": null", options: .regularExpression)
         next = next.replacingOccurrences(of: #"(?<=[\[,:]\s*)(-|tr?u?|fa?l?s?|nu?l?)$"#, with: "", options: .regularExpression)
-        if let dotRange = next.range(of: #"(?<=[\[,:]\s*)(-?\d+\.)$"#, options: .regularExpression) {
+        if let dotRange = next.range(of: #"(?<=[\[,:]\s*)(-?[0-9]+\.)$"#, options: .regularExpression) {
             let m = String(next[dotRange])
             next.replaceSubrange(dotRange, with: String(m.dropLast()))
         }
@@ -176,7 +176,7 @@ private func mix(_ a: Double, _ b: Double, _ t: Double) -> Double {
 }
 
 private func blendPath(_ a: String, _ b: String, _ t: Double) -> String {
-    guard let regex = try? NSRegularExpression(pattern: #"-?\d*\.?\d+(?:e-?\d+)?"#) else {
+    guard let regex = try? NSRegularExpression(pattern: #"-?[0-9]*\.?[0-9]+(?:e-?[0-9]+)?"#) else {
         return t < 1.0 ? a : b
     }
     let nsA = NSRange(a.startIndex..<a.endIndex, in: a)

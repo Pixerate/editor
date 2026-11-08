@@ -146,8 +146,8 @@ public func parseCsv(_ text: String, options: CsvParseOptions = CsvParseOptions(
 
 /// Quotes `value` when it contains the delimiter, a quote or a line break.
 public func escapeCsvField(_ value: String, delimiter: String = ",", quoteAll: Bool = false) -> String {
-    if quoteAll || value.contains(delimiter) || value.contains("\"") || value.contains("\r") || value.contains("\n") {
-        return "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    if quoteAll || value.jsIncludes(delimiter) || value.jsIncludes("\"") || value.jsIncludes("\r") || value.jsIncludes("\n") {
+        return "\"\(value.jsReplacingAll("\"", with: "\"\""))\""
     }
     return value
 }
@@ -206,8 +206,8 @@ public func serializeTsv(_ rows: [[String?]]) -> String {
         .map { row in
             row.map { value in
                 let text = value ?? ""
-                if text.contains("\t") || text.contains("\r") || text.contains("\n") || text.hasPrefix("\"") {
-                    return "\"\(text.replacingOccurrences(of: "\"", with: "\"\""))\""
+                if text.jsIncludes("\t") || text.jsIncludes("\r") || text.jsIncludes("\n") || text.jsStartsWith("\"") {
+                    return "\"\(text.jsReplacingAll("\"", with: "\"\""))\""
                 }
                 return text
             }.joined(separator: "\t")
@@ -219,8 +219,8 @@ public func serializeTsv(_ rows: [[String]]) -> String {
     rows
         .map { row in
             row.map { text in
-                if text.contains("\t") || text.contains("\r") || text.contains("\n") || text.hasPrefix("\"") {
-                    return "\"\(text.replacingOccurrences(of: "\"", with: "\"\""))\""
+                if text.jsIncludes("\t") || text.jsIncludes("\r") || text.jsIncludes("\n") || text.jsStartsWith("\"") {
+                    return "\"\(text.jsReplacingAll("\"", with: "\"\""))\""
                 }
                 return text
             }.joined(separator: "\t")

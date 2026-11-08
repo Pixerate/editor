@@ -21,13 +21,13 @@ public func chartTextTransform(_ mark: ChartTextMark) -> String? {
 private func escapeSvg(_ text: String) -> String {
     var out = ""
     out.reserveCapacity(text.utf8.count)
-    for ch in text {
+    for ch in text.unicodeScalars {
         switch ch {
         case "&": out.append("&amp;")
         case "<": out.append("&lt;")
         case ">": out.append("&gt;")
         case "\"": out.append("&quot;")
-        default: out.append(ch)
+        default: out.unicodeScalars.append(ch)
         }
     }
     return out
