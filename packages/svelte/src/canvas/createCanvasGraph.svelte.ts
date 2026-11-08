@@ -21,7 +21,13 @@ export function calculateGraphDifferences<
 	baselineState: { nodes?: TNode[]; edges?: TEdge[] },
 	options?: CanvasDocumentOmitOptions
 ): GraphDifferences<TNode, TEdge> {
-	return calculateCoreGraphDifferences(currentState, baselineState, options);
+	// Svelte Flow nodes are wider than the core's `CanvasNode`; the comparison only needs ids.
+	type CoreState = Parameters<typeof calculateCoreGraphDifferences>[0];
+	return calculateCoreGraphDifferences(
+		currentState as CoreState,
+		baselineState as CoreState,
+		options
+	) as unknown as GraphDifferences<TNode, TEdge>;
 }
 
 /**

@@ -39,7 +39,10 @@ export interface EditorRemoteSyncOptions<TDocument = unknown, TDiff = unknown> {
   initialVersion?: number;
   /** Debounce delay in milliseconds after a local edit before calling `save` (default `500`). */
   debounceMs?: number;
-  /** Optional diff calculator between the current snapshot and the previous committed baseline. */
+  /**
+   * Optional diff calculator. `onLocalChange` receives the diff from the previous local snapshot
+   * (the one edit); `save` receives the diff from the last saved snapshot (every edit it covers).
+   */
   diff?: (current: TDocument, baseline: TDocument) => TDiff;
   /**
    * Optional predicate returning `true` when `diff` represents no meaningful change.
@@ -127,7 +130,9 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
   let savedSequence = 0;
 
   let baselineSnapshot: TDocument = cloneSnapshot(doc.getDocument());
-  let pendingDiff: TDiff | undefined = undefined;
+  // What the remote backend holds: `save` receives the diff from this, not from the last local
+  // change, so several edits coalesced into one save are all in its diff.
+  let savedSnapshot: TDocument = baselineSnapshot;
   let state: EditorRemoteSyncState = "idle";
   let lastSavedAt: number | null = null;
   let lastError: unknown = undefined;
@@ -177,10 +182,11 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
     return { changed: JSON.stringify(current) !== JSON.stringify(baseline) };
   };
 
+  // Edits already detected are saved even after `destroy()` (a flush on teardown must not drop them).
   const executeSave = async (): Promise<boolean> => {
     if (inFlightPromise) {
       await inFlightPromise;
-      if (localSequence > savedSequence && !destroyed) {
+      if (localSequence > savedSequence) {
         return executeSave();
       }
       return true;
@@ -194,7 +200,7 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
 
     const targetSequence = localSequence;
     const snapshotToSave = cloneSnapshot(baselineSnapshot);
-    const diffToSave = pendingDiff;
+    const diffToSave = options.diff ? options.diff(snapshotToSave, savedSnapshot) : undefined;
     const versionToSave = Math.max(localVersion, confirmedVersion + 1);
     localVersion = versionToSave;
 
@@ -222,13 +228,18 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
           localVersion = returnedVersion;
         }
         savedSequence = Math.max(savedSequence, targetSequence);
+        savedSnapshot = snapshotToSave;
         lastSavedAt = now();
         lastError = undefined;
 
         if (localSequence <= savedSequence) {
-          pendingDiff = undefined;
           state = "saved";
-          await options.autosave?.markClean();
+          try {
+            await options.autosave?.markClean();
+          } catch (error) {
+            // The remote save succeeded; a failed local cleanup only leaves a recovery snapshot behind.
+            console.error("[remoteSync] autosave.markClean failed:", error);
+          }
         } else {
           state = "pending";
         }
@@ -242,16 +253,21 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
         options.onError?.(error);
         emit();
         return false;
-      } finally {
-        inFlightPromise = null;
       }
     })();
 
+    // Cleared here rather than in `run`'s finally: a `save` that throws synchronously settles `run`
+    // before this assignment, which would otherwise leave a settled promise in flight forever.
     inFlightPromise = run;
-    const ok = await run;
+    let ok: boolean;
+    try {
+      ok = await run;
+    } finally {
+      if (inFlightPromise === run) inFlightPromise = null;
+    }
 
     // If new local edits arrived while the save was in flight and no timer is waiting, save them next.
-    if (ok && localSequence > savedSequence && debounceTimer === null && !destroyed) {
+    if (ok && localSequence > savedSequence && debounceTimer === null) {
       return executeSave();
     }
 
@@ -280,7 +296,6 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
 
     const previousBaseline = baselineSnapshot;
     baselineSnapshot = current;
-    pendingDiff = diff;
     localSequence++;
     localVersion = Math.max(localVersion, confirmedVersion) + 1;
 
@@ -298,6 +313,15 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
 
     scheduleSave();
     return true;
+  };
+
+  const flush = async (): Promise<boolean> => {
+    clearTimer();
+    notify();
+    if (localSequence <= savedSequence && !inFlightPromise) {
+      return true;
+    }
+    return executeSave();
   };
 
   const unsubscribeDoc = doc.subscribe(() => {
@@ -324,6 +348,7 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
         }
         if (!wasDirty) {
           savedSequence = localSequence;
+          savedSnapshot = baselineSnapshot;
         }
         emit();
         return result;
@@ -334,7 +359,7 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
     resetBaseline(remoteVersion?: number) {
       clearTimer();
       baselineSnapshot = cloneSnapshot(doc.getDocument());
-      pendingDiff = undefined;
+      savedSnapshot = baselineSnapshot;
       if (typeof remoteVersion === "number" && Number.isFinite(remoteVersion)) {
         localVersion = remoteVersion;
         confirmedVersion = remoteVersion;
@@ -344,19 +369,15 @@ export function createEditorRemoteSync<TDocument = unknown, TDiff = unknown>(
       state = "idle";
       emit();
     },
-    async flush(): Promise<boolean> {
-      clearTimer();
-      notify();
-      if (localSequence <= savedSequence && !inFlightPromise) {
-        return true;
-      }
-      return executeSave();
-    },
+    flush,
     async whenIdle(): Promise<void> {
-      if (debounceTimer !== null) {
-        await this.flush();
-      } else if (inFlightPromise) {
-        await inFlightPromise;
+      // A save can queue a follow-up save, so wait until nothing is pending or in flight.
+      while (debounceTimer !== null || inFlightPromise) {
+        if (debounceTimer !== null) {
+          await flush();
+        } else if (inFlightPromise) {
+          await inFlightPromise.catch(() => false);
+        }
       }
     },
     subscribe(listener) {

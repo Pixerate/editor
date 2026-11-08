@@ -2583,6 +2583,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
+        "feature": "Editor Remote Sync (saves any `EditorDocument` to a backend after each change: debounced, one save at a time, monotonic versions, diffs for collaborators, remote changes applied without echo, flush on hide / teardown)",
+        "core": "`createEditorRemoteSync` (`/persistence`)",
+        "react": "`useEditorSync`",
+        "svelte": "`createEditorSync`",
+        "swift": "Planned (#533)"
+      },
+      {
         "feature": "Saved Documents & Document Agent Tools (named saves on any storage adapter; `get_<kind>_document`, `load_<kind>_document` as one undo step, `undo_<kind>` / `redo_<kind>`, `save_<kind>_document`, `list_saved_<kind>_documents`, `open_saved_<kind>_document`; read-only documents refuse writes with the reason)",
         "core": "`createEditorDocumentStore` & `createDocumentToolProvider` (`/persistence`)",
         "react": "`useAgentToolProvider`",

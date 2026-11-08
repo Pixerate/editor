@@ -311,6 +311,99 @@ describe("createEditorRemoteSync", () => {
     sync.destroy();
     autosave.destroy();
   });
+
+  it("hands save the diff of every edit since the last save, and onLocalChange only the latest edit", async () => {
+    const { doc, edit } = setup();
+    const localDiffs: string[][] = [];
+    const savedDiffs: string[][] = [];
+    const sync = createEditorRemoteSync<{ items: string[] }, string[]>(doc, {
+      debounceMs: 50,
+      diff: (current, baseline) => current.items.filter((item) => !baseline.items.includes(item)),
+      isEmptyDiff: (diff, current, baseline) => diff.length === 0 && current.items.length === baseline.items.length,
+      onLocalChange: ({ diff }) => localDiffs.push(diff!),
+      save: async ({ diff, version }) => {
+        savedDiffs.push(diff!);
+        return { version };
+      },
+    });
+
+    edit(["a", "b"]);
+    edit(["a", "b", "c"]);
+    await sync.flush();
+    expect(localDiffs).toEqual([["b"], ["c"]]);
+    expect(savedDiffs).toEqual([["b", "c"]]);
+
+    edit(["a", "b", "c", "d"]);
+    await sync.flush();
+    expect(savedDiffs.at(-1)).toEqual(["d"]);
+    sync.destroy();
+  });
+
+  it("recovers when save throws synchronously instead of wedging later saves", async () => {
+    const { doc, edit } = setup();
+    let calls = 0;
+    const sync = createEditorRemoteSync(doc, {
+      debounceMs: 0,
+      onError: () => {},
+      save: ({ version }) => {
+        calls++;
+        if (calls === 1) throw new Error("offline");
+        return Promise.resolve({ version });
+      },
+    });
+
+    edit(["b"]);
+    await sync.whenIdle();
+    expect(sync.status().status).toBe("error");
+    expect(sync.dirty()).toBe(true);
+
+    expect(await sync.flush()).toBe(true);
+    expect(calls).toBe(2);
+    expect(sync.dirty()).toBe(false);
+    sync.destroy();
+  });
+
+  it("still saves edits a flush picked up after destroy()", async () => {
+    const { doc, edit } = setup();
+    const saved: string[][] = [];
+    let release!: () => void;
+    const sync = createEditorRemoteSync(doc, {
+      debounceMs: 0,
+      save: ({ document, version }) => {
+        saved.push(document.items);
+        if (saved.length === 1) return new Promise((resolve) => (release = () => resolve({ version })));
+        return Promise.resolve({ version });
+      },
+    });
+
+    edit(["b"]);
+    edit(["b", "c"]);
+    const flushed = sync.flush();
+    sync.destroy();
+    release();
+    expect(await flushed).toBe(true);
+    expect(saved).toEqual([["b"], ["b", "c"]]);
+    expect(sync.dirty()).toBe(false);
+  });
+
+  it("does not report a failed save when only autosave.markClean fails", async () => {
+    const { doc, edit } = setup();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const onError = vi.fn();
+    const sync = createEditorRemoteSync(doc, {
+      debounceMs: 0,
+      onError,
+      autosave: { markClean: () => Promise.reject(new Error("storage full")) },
+      save: async ({ version }) => ({ version }),
+    });
+
+    edit(["b"]);
+    expect(await sync.flush()).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+    expect(sync.status().status).toBe("saved");
+    errorSpy.mockRestore();
+    sync.destroy();
+  });
 });
 
 describe("createDocumentToolProvider", () => {

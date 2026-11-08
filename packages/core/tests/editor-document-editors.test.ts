@@ -535,6 +535,20 @@ describe("editor documents", () => {
       expect(patched.nodes.map((n) => n.id)).toEqual(["frame", "added"]);
       expect(patched.edges).toEqual([]);
     });
+
+    it("sanitizeCanvasDocument breaks a parent cycle at one node and keeps the other links", () => {
+      const doc = sanitizeCanvasDocument({
+        nodes: [
+          { id: "a", parentId: "b", position: { x: 0, y: 0 }, data: {} },
+          { id: "b", parentId: "a", position: { x: 0, y: 0 }, data: {} },
+          { id: "c", parentId: "a", position: { x: 0, y: 0 }, data: {} },
+        ],
+        edges: [],
+      });
+      const parentOf = Object.fromEntries(doc.nodes.map((n) => [n.id, n.parentId]));
+      expect(parentOf).toEqual({ a: undefined, b: "a", c: "a" });
+      expect(doc.nodes[0].id).toBe("a");
+    });
   });
 
   it("read-only animation and video refuse agent loads", async () => {

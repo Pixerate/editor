@@ -167,12 +167,15 @@ export function sanitizeCanvasDocument<TNode extends CanvasNode = CanvasNode, TE
 		return false;
 	};
 
+	// Detach one node per cycle and write it back, so later checks see the cycle already broken
+	// (in A ⇄ B only A is detached, and a child of A keeps its parent).
 	const sanitizedNodes: TNode[] = [];
 	for (const node of nodeMap.values()) {
 		if (node.parentId !== undefined && (typeof node.parentId !== 'string' || !nodeMap.has(node.parentId) || hasCycle(node.id, node.parentId))) {
 			const copy = { ...node } as Record<string, unknown>;
 			delete copy.parentId;
 			delete copy.extent;
+			nodeMap.set(node.id, copy as TNode);
 			sanitizedNodes.push(copy as TNode);
 		} else {
 			sanitizedNodes.push(node);
