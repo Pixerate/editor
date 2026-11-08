@@ -88,6 +88,19 @@ export const MUTATION_SLIDERS: readonly SliderControl[] = [
   { path: 'mutation.fade', label: 'Fade', min: 0.5, max: 10, step: 0.5 },
 ];
 
+export const ANTIMATTER_SLIDERS: readonly SliderControl[] = [
+  { path: 'antimatter.blastRadius', label: 'Blast size', min: 1, max: 6, step: 0.1 },
+  { path: 'antimatter.blastSpacing', label: 'Blast spacing', min: 0.5, max: 8, step: 0.1 },
+  { path: 'antimatter.threshold', label: 'Fuel threshold', min: 0, max: 1, step: 0.01 },
+  { path: 'antimatter.invert', label: 'Inversion', min: 0, max: 1, step: 0.01 },
+  { path: 'antimatter.scorch', label: 'Scorch', min: 0, max: 1, step: 0.01 },
+  { path: 'antimatter.annihilate', label: 'Annihilate', min: 0, max: 1, step: 0.01 },
+  { path: 'antimatter.sparks', label: 'Sparks', min: 0, max: 1, step: 0.01 },
+  { path: 'antimatter.sparkReach', label: 'Spark reach', min: 0.5, max: 8, step: 0.1 },
+  { path: 'antimatter.crater', label: 'Crater depth', min: 0, max: 1, step: 0.01 },
+  { path: 'antimatter.duration', label: 'Blast duration', min: 0, max: 2, step: 0.05 },
+];
+
 /**
  * The controls the active brush's engine adds to the brush panel (`null` for the eraser):
  * blender strength and blend distance; smudge strength and length; the Mixer Brush's pick-up,
@@ -100,13 +113,14 @@ export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: 
   if (!c) return null;
   const mut = brush.mutation ? MUTATION_SLIDERS : [];
   const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint' && !brush.ghost && !brush.mutation;
-  if (!(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine))) {
+  if (!(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto', 'antimatter'].includes(brush.engine))) {
     return mut.length ? { ...c, sliders: [...c.sliders, ...mut] } : c;
   }
   // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
   const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
-  const film: readonly SliderControl[] = brush.iridescence ? IRIDESCENCE_SLIDERS : [];
-  return { ...c, sliders: [...c.sliders, ...mut, LIGHT_SLIDER, ...extra, ...film], light: true, iridescence: true };
+  const canFilm = brush.engine !== 'antimatter';
+  const film: readonly SliderControl[] = canFilm && brush.iridescence ? IRIDESCENCE_SLIDERS : [];
+  return { ...c, sliders: [...c.sliders, ...mut, LIGHT_SLIDER, ...extra, ...film], light: true, iridescence: canFilm };
 }
 
 function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
@@ -167,6 +181,15 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
         multicolor: false,
         load: false,
         stickerStamps: true,
+      };
+    case 'antimatter':
+      return {
+        title: 'Antimatter',
+        sliders: ANTIMATTER_SLIDERS,
+        mixingPath: null,
+        dirty: false,
+        multicolor: false,
+        load: false,
       };
     case 'impasto':
       return {

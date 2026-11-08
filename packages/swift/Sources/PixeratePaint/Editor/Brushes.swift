@@ -10,7 +10,8 @@ import PixerateRaster
  * tips, spray marks and gradient paint.
  */
 
-public let PAINT_BRUSH_ENGINES = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker"]
+public let PAINT_BRUSH_ENGINES = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter"]
+public let ANTIMATTER_INVERT_MODES = ["rgb", "oklab"]
 public let PAINT_BRUSH_CATEGORIES = ["pencil", "pastel", "charcoal", "airbrush", "marker", "ink", "paint", "eraser", "blender", "smudge", "mixer", "watercolor", "wet-tool", "oil", "impasto", "procedural", "bristle", "sticker", "light", "custom"]
 public let WET_TOOLS = ["paint", "water", "dry", "blow", "blend", "smudge", "blot"]
 public let WET_MEDIA = ["watercolor", "gouache", "oil"]
@@ -211,6 +212,67 @@ func normalizeMutation(_ raw: JSONObject, _ base: MutationSettings = DEFAULT_MUT
         settle: rangeValue(raw["settle"], 0.5, 10, base.settle),
         patience: rangeValue(raw["patience"], 5, 300, base.patience),
         fade: rangeValue(raw["fade"], 0.5, 10, base.fade)
+    )
+}
+
+/// Antimatter paint settings.
+public struct AntimatterSettings: Equatable, Sendable {
+    public var blastRadius: Double
+    public var blastSpacing: Double
+    public var threshold: Double
+    public var invert: Double
+    public var invertMode: String
+    public var scorch: Double
+    public var annihilate: Double
+    public var sparks: Double
+    public var sparkReach: Double
+    public var crater: Double
+    public var duration: Double
+
+    public var json: JSONValue {
+        [
+            "blastRadius": .number(blastRadius),
+            "blastSpacing": .number(blastSpacing),
+            "threshold": .number(threshold),
+            "invert": .number(invert),
+            "invertMode": .string(invertMode),
+            "scorch": .number(scorch),
+            "annihilate": .number(annihilate),
+            "sparks": .number(sparks),
+            "sparkReach": .number(sparkReach),
+            "crater": .number(crater),
+            "duration": .number(duration),
+        ]
+    }
+}
+
+public let DEFAULT_ANTIMATTER = AntimatterSettings(
+    blastRadius: 2.5,
+    blastSpacing: 2,
+    threshold: 0.1,
+    invert: 1,
+    invertMode: "rgb",
+    scorch: 0.6,
+    annihilate: 0.25,
+    sparks: 0.5,
+    sparkReach: 3,
+    crater: 0.5,
+    duration: 0.7
+)
+
+func normalizeAntimatter(_ raw: JSONObject, _ base: AntimatterSettings = DEFAULT_ANTIMATTER) -> AntimatterSettings {
+    AntimatterSettings(
+        blastRadius: rangeValue(raw["blastRadius"], 1, 6, base.blastRadius),
+        blastSpacing: rangeValue(raw["blastSpacing"], 0.5, 8, base.blastSpacing),
+        threshold: unitValue(raw["threshold"], base.threshold),
+        invert: unitValue(raw["invert"], base.invert),
+        invertMode: raw["invertMode"]?.stringValue.flatMap { ANTIMATTER_INVERT_MODES.contains($0) ? $0 : nil } ?? base.invertMode,
+        scorch: unitValue(raw["scorch"], base.scorch),
+        annihilate: unitValue(raw["annihilate"], base.annihilate),
+        sparks: unitValue(raw["sparks"], base.sparks),
+        sparkReach: rangeValue(raw["sparkReach"], 0.5, 8, base.sparkReach),
+        crater: unitValue(raw["crater"], base.crater),
+        duration: rangeValue(raw["duration"], 0, 2, base.duration)
     )
 }
 
@@ -452,6 +514,7 @@ public struct PaintBrush: Equatable, Sendable {
     public var particle: JSONObject
     public var bristle: JSONObject
     public var sticker: JSONObject
+    public var antimatter: AntimatterSettings = DEFAULT_ANTIMATTER
     public var light: LightSettings
     public var fluorescence: FluorescenceSettings
     public var thermochromic: ThermochromicSettings
@@ -481,6 +544,7 @@ public struct PaintBrush: Equatable, Sendable {
             "smudge": ["strength": .number(smudge.strength), "length": .number(smudge.length), "mixing": .string(smudge.mixing)],
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
+            "antimatter": antimatter.json,
             "light": light.json,
             "fluorescence": fluorescence.json,
             "thermochromic": thermochromic.json,
@@ -708,6 +772,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         particle: normalizeParticle(raw["particle"]?.objectValue ?? [:], b.particle),
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
+        antimatter: normalizeAntimatter(raw["antimatter"]?.objectValue ?? [:], b.antimatter),
         light: ghost != nil && !wantsLight ? DEFAULT_LIGHT : LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
         fluorescence: FluorescenceSettings(amount: unitValue(rfl["amount"], b.fluorescence.amount), invisible: boolValue(rfl["invisible"], b.fluorescence.invisible)),
         thermochromic: ThermochromicSettings(hotColor: hotColor, threshold: rangeValue(rth["threshold"], 0.05, 0.95, b.thermochromic.threshold)),

@@ -203,6 +203,7 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
     if (profile.id !== 'paint') feature('none', true, 'mutation', 'mutation paint', 'Remove mutation.');
     else if (brush.kind === 'tool') add('mutation', 'error', 'Tools work on paint already down and cannot be mutation brushes.', 'Use a mark brush, or remove mutation.');
     else if (brush.marks?.kind === 'objects') add('mutation', 'error', 'Sticker brushes place objects rather than paint strokes and cannot be mutation brushes.', 'Remove marks (or use continuous marks), or remove mutation.');
+    else if (brush.marks?.kind === 'antimatter') add('mutation', 'error', 'Antimatter brushes detonate paint already down and cannot be mutation brushes.', 'Remove marks (or use continuous marks), or remove mutation.');
     else if (ex?.reservoir) add('mutation', 'error', 'A Mixer Brush reads paint from the layer beneath and cannot be a mutation brush.', 'Remove behaviour.exchange.reservoir, or remove mutation.');
     else if (nonZero(ex?.pickup) || !!ex?.dirty) add('mutation', 'error', 'Mutation brushes must lay their own colour without picking up paint from beneath.', 'Remove behaviour.exchange (or set pickup to 0 and dirty to false), or remove mutation.');
     else if (surface === 'wet' && nonZero(brush.light?.amount)) add('mutation', 'error', 'Wet mutation brushes use the wet light channel as their fade tracer.', 'Remove light (or set light.amount to 0), or remove mutation.');

@@ -422,6 +422,19 @@
                   "strokes": [
                     {
                       "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
                         "behavior": {
                           "dirty": false,
                           "mix": 0.5,
@@ -594,6 +607,19 @@
                     },
                     {
                       "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
                         "behavior": {
                           "dirty": false,
                           "mix": 0.5,
@@ -778,6 +804,19 @@
                   "strokes": [
                     {
                       "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
                         "behavior": {
                           "dirty": false,
                           "mix": 0.5,
@@ -950,6 +989,19 @@
                     },
                     {
                       "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
                         "behavior": {
                           "dirty": false,
                           "mix": 0.5,
@@ -1134,6 +1186,19 @@
                   "strokes": [
                     {
                       "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
                         "behavior": {
                           "dirty": false,
                           "mix": 0.5,
@@ -1309,6 +1374,19 @@
                     },
                     {
                       "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
                         "behavior": {
                           "dirty": false,
                           "mix": 0.5,
@@ -1490,6 +1568,19 @@
                   "strokes": [
                     {
                       "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
                         "behavior": {
                           "dirty": false,
                           "mix": 0.5,

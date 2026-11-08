@@ -27,6 +27,7 @@ func strokeResultJSON(_ r: PaintStrokeResult) -> JSONValue {
     var o: JSONObject = ["layerId": .string(r.layerId), "bounds": rectJSON(r.bounds), "dabs": .number(Double(r.dabs)), "strokeId": r.strokeId.map { .string($0) } ?? .null]
     if let load = r.mixerLoad { o["mixerLoad"] = loadResult(load) }
     if let wet = r.wet { o["wet"] = .bool(wet) }
+    if let am = r.antimatter { o["antimatter"] = am.json }
     return .object(o)
 }
 

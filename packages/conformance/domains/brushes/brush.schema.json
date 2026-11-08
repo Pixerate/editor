@@ -269,7 +269,7 @@
       "additionalProperties": false
     },
     "marks": {
-      "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).",
+      "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
       "oneOf": [
         {
           "type": "object",
@@ -491,6 +491,89 @@
               "minimum": 0,
               "maximum": 1,
               "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "antimatter",
+              "description": "Always \"antimatter\"."
+            },
+            "blastRadius": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 6,
+              "description": "Blast size, in tip radii (default 2.5)."
+            },
+            "blastSpacing": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 8,
+              "description": "Stroke travel between blasts, in tip diameters (default 2)."
+            },
+            "threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Paint needed under the tip to fire (default 0.1)."
+            },
+            "invert": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Strength of the colour inversion in the blast core (default 1)."
+            },
+            "invertMode": {
+              "type": "string",
+              "enum": [
+                "rgb",
+                "oklab"
+              ],
+              "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+            },
+            "scorch": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Strength of the soot ring around the blast (default 0.6)."
+            },
+            "annihilate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+            },
+            "sparks": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+            },
+            "sparkReach": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 8,
+              "description": "How far sparks fly, in tip diameters (default 3)."
+            },
+            "crater": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+            },
+            "duration": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2,
+              "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
             }
           },
           "required": [

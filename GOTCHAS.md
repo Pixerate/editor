@@ -4221,3 +4221,20 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After merging live patterns (#705) with ghost paint, mutation paint and thin-film iridescence, a wet stroke on a layer with `livePatterns.relief > 0` could drop the layer's `film` channel (iridescence vanished), and a restored or re-created wet lane could lose its ghost fade or its reaction-diffusion field.
 - **Root Cause**: The relief pass rebuilds the layer's thick channels from `height` and `material` only (`ThickChannels(height:material:)` defaults `film` to empty in Swift). `newLane` / `WetLane.init`, `ensureLane`, `snapshot` and `restore` each grew a ghost argument on one branch and a `livePatterns` argument on the other, and either one is easy to drop when merging.
 - **Solution / Workaround**: Build relief from the previous channels with `film` included (`{ ...prevCh, height }` in TS, `ThickChannels(height:material:film: base.film)` in Swift), then pass the result through `withLayerThick`. Lane constructors take `(…, width, height, ghost, livePatterns)` in that order in both TS and Swift. Snapshots carry `ghost` and `livePatterns`. Wet layer settings persist `params` (with held evaporation restored), `flow`, `ghost` (not agent-triggered) and `livePatterns`.
+
+### [core|swift/paint] Antimatter Multi-Layer Strokes: Quantised Fuel Coverage, Recorded Targets, and Signed OKLab Powers
+- **Issue / Symptom**: Implementing antimatter paint (#682) across TypeScript and Swift exposes four subtle traps:
+  1. Measuring fuel over continuous 2×2 supersampled dab coverage shifts the accumulated fuel at `scale > 1` (`renderHighRes`), causing blasts to fire at different dabs during high-res export.
+  2. Replaying an antimatter stroke after layer visibility changes modifies a different set of layers unless the original target list was recorded.
+  3. If the controller's light twin runs for `engine === 'antimatter'`, it overwrites the active layer's `doc.light` with a normal dab trail instead of clearing light in blast cores and drawing spark light.
+  4. In Swift, inverting OKLab `a` and `b` channels (`-a`, `-b`) can push linear RGB slightly negative before clamping, and `pow(negative, 1 / 2.4)` returns `NaN` in C/Swift `pow`.
+- **Root Cause**:
+  1. `rasterizeDab` supersamples edges at higher resolution when `scale` increases, slightly changing continuous mean coverage across the tip footprint.
+  2. Normal strokes only write to `stroke.layerId`, whereas antimatter strokes read fuel from all visible layers and write to all visible editable pixel layers.
+  3. `PaintStrokeSession` normally creates a `lightTwin` dab engine whenever `init.light` is passed.
+  4. IEEE 754 `pow(x, y)` for `x < 0` and non-integer `y` is `NaN`.
+- **Solution / Workaround**:
+  1. Quantise each pixel's coverage to 4 fixed steps (`Math.round(cov * 4) / 4`) and sample fuel on a 16×16 grid normalized to the brush tip so 1×, 2×, TS, and Swift measure identical fuel.
+  2. Record `targets?: string[]` on `RecordedStroke` from the layers changed by the stroke, and pass `targets` through `replay_strokes` and `replayPainting`.
+  3. Skip `init.light`, `init.thick`, `init.film`, `init.ferro`, `init.fluor`, and `init.thermo` in `PaintStrokeSession` when `brush.engine === 'antimatter'`; `AntimatterStrokeDriver` updates `surface`, `light`, and `thick` (preserving `material` and `film`) per target layer directly.
+  4. In `srgbToLinear` and `linearToSrgb`, preserve the sign with `abs(v)` before calling `pow`.

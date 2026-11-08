@@ -46,6 +46,8 @@ export interface RecordedStroke {
    * readers), or effect paint (the effect it took its colours from; replays render it first).
    */
   paint?: PaintGradientSource | PaintEffectPaint;
+  /** Antimatter brushes: the visible fuel layer ids at the time of the stroke, so a replay reaches the same layers. */
+  targets?: string[];
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -167,6 +169,10 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   if (effect) out.paint = effect;
   else if (paint && paint.type === 'gradient') out.paint = paint;
   if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
+  if (Array.isArray(r.targets)) {
+    const targets = r.targets.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    if (targets.length) out.targets = targets;
+  }
   return out;
 }
 

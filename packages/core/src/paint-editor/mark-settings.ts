@@ -10,6 +10,7 @@ import { STAMP_KINDS, type StampKind } from '../stickers/stamps';
 import type { StickerRef } from '../stickers/types';
 
 const unit = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
+const range = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const oneOf = <T extends string>(v: unknown, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);
 
 // ---------------------------------------------------------------------------
@@ -209,5 +210,69 @@ export function normalizeBristle(raw: Partial<BristleSettings> = {}, base: Brist
     thickness: unit(raw.thickness, base.thickness),
     load: unit(raw.load, base.load),
     jitter: unit(raw.jitter, base.jitter),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Antimatter brushes
+// ---------------------------------------------------------------------------
+
+/** How antimatter blasts invert paint colour: `rgb` (channel complement) or `oklab` (flips lightness and hue so mid-grey changes too). */
+export type InvertMode = 'rgb' | 'oklab';
+export const INVERT_MODES: readonly InvertMode[] = ['rgb', 'oklab'];
+
+/** Antimatter engine settings. */
+export interface AntimatterSettings {
+  /** Blast size, in tip radii (1..6, default 2.5). */
+  blastRadius: number;
+  /** Stroke travel between blasts, in tip diameters (0.5..8, default 2). */
+  blastSpacing: number;
+  /** Paint needed under the tip to fire (0..1, default 0.1). */
+  threshold: number;
+  /** Strength of the colour inversion in the blast core (0..1, default 1). */
+  invert: number;
+  /** Colour inversion mode: `rgb` (default) or `oklab` (flips lightness and hue). */
+  invertMode: InvertMode;
+  /** Strength of the soot ring around the blast (0..1, default 0.6). */
+  scorch: number;
+  /** Paint destroyed at the centre — alpha removed (0..1, default 0.25). */
+  annihilate: number;
+  /** How many sparks fly out from each blast (0..1, default 0.5). */
+  sparks: number;
+  /** How far sparks fly, in tip diameters (0.5..8, default 3). */
+  sparkReach: number;
+  /** Depth of the dent and raised rim on layers with relief (0..1, default 0.5). */
+  crater: number;
+  /** Seconds a blast plays on screen (0..2, default 0.7; 0 shows the result at once). */
+  duration: number;
+}
+
+export const DEFAULT_ANTIMATTER: Readonly<AntimatterSettings> = {
+  blastRadius: 2.5,
+  blastSpacing: 2,
+  threshold: 0.1,
+  invert: 1,
+  invertMode: 'rgb',
+  scorch: 0.6,
+  annihilate: 0.25,
+  sparks: 0.5,
+  sparkReach: 3,
+  crater: 0.5,
+  duration: 0.7,
+};
+
+export function normalizeAntimatter(raw: Partial<AntimatterSettings> = {}, base: AntimatterSettings = DEFAULT_ANTIMATTER): AntimatterSettings {
+  return {
+    blastRadius: range(raw.blastRadius, 1, 6, base.blastRadius),
+    blastSpacing: range(raw.blastSpacing, 0.5, 8, base.blastSpacing),
+    threshold: unit(raw.threshold, base.threshold),
+    invert: unit(raw.invert, base.invert),
+    invertMode: oneOf(raw.invertMode, INVERT_MODES, base.invertMode),
+    scorch: unit(raw.scorch, base.scorch),
+    annihilate: unit(raw.annihilate, base.annihilate),
+    sparks: unit(raw.sparks, base.sparks),
+    sparkReach: range(raw.sparkReach, 0.5, 8, base.sparkReach),
+    crater: unit(raw.crater, base.crater),
+    duration: range(raw.duration, 0, 2, base.duration),
   };
 }
