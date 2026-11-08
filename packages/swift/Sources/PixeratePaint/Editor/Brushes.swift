@@ -106,19 +106,111 @@ public struct LightSettings: Equatable, Sendable {
 
 public let DEFAULT_LIGHT = LightSettings(amount: 0, pressure: false)
 
+/// UV-fluorescent ink: how strongly the stroke glows under the virtual UV blacklight, and whether it leaves no daylight pigment.
+public struct FluorescenceSettings: Equatable, Sendable {
+    public var amount: Double
+    public var invisible: Bool
+    var json: JSONValue { ["amount": .number(amount), "invisible": .bool(invisible)] }
+}
+
+public let DEFAULT_FLUORESCENCE = FluorescenceSettings(amount: 0, invisible: false)
+
+/// Thermochromic ink: the colour the stroke shifts toward where the canvas heat field exceeds `threshold` (0.05..0.95).
+public struct ThermochromicSettings: Equatable, Sendable {
+    public var hotColor: String?
+    public var threshold: Double
+    var json: JSONValue { ["hotColor": hotColor.map { .string($0) } ?? .null, "threshold": .number(threshold)] }
+}
+
+public let DEFAULT_THERMOCHROMIC = ThermochromicSettings(hotColor: nil, threshold: 0.5)
+
+/// Thin-film iridescence: interference coat whose hue shifts with the light and view angle.
+public struct IridescenceSettings: Equatable, Sendable {
+    /// Film thickness at full pressure in nanometres (100..1000).
+    public var thickness: Double
+    /// How much lighter pressure thins the film (0: uniform thickness, 1: scales with pressure).
+    public var pressureToThickness: Double
+    /// Film refractive index (1.2..2.0; 1.33 soap film, 1.5 lacquer, 1.7 pearl / chitin).
+    public var ior: Double
+
+    public init(thickness: Double = 400, pressureToThickness: Double = 0, ior: Double = 1.5) {
+        self.thickness = thickness
+        self.pressureToThickness = pressureToThickness
+        self.ior = ior
+    }
+
+    var json: JSONValue { ["thickness": .number(thickness), "pressureToThickness": .number(pressureToThickness), "ior": .number(ior)] }
+}
+
+public let DEFAULT_IRIDESCENCE = IridescenceSettings(thickness: 400, pressureToThickness: 0, ior: 1.5)
+
+func readIridescence(_ raw: JSONValue?, _ base: IridescenceSettings?) -> IridescenceSettings? {
+    guard let raw else { return base }
+    if raw == .null || raw == .bool(false) { return nil }
+    guard let r = raw.objectValue else { return base }
+    let b = base ?? DEFAULT_IRIDESCENCE
+    return IridescenceSettings(
+        thickness: rangeValue(r["thickness"], 100, 1000, b.thickness),
+        pressureToThickness: unitValue(r["pressureToThickness"], b.pressureToThickness),
+        ior: rangeValue(r["ior"], 1.2, 2.0, b.ior)
+    )
+}
+
+public func withIridescence(_ brush: PaintBrush, _ patch: IridescenceSettings?) -> PaintBrush {
+    guard let patch else {
+        var next = brush
+        next.iridescence = nil
+        return next
+    }
+    let b = brush.iridescence ?? DEFAULT_IRIDESCENCE
+    var next = brush
+    next.iridescence = IridescenceSettings(
+        thickness: Swift.min(1000, Swift.max(100, patch.thickness.isFinite ? patch.thickness : b.thickness)),
+        pressureToThickness: Swift.min(1, Swift.max(0, patch.pressureToThickness.isFinite ? patch.pressureToThickness : b.pressureToThickness)),
+        ior: Swift.min(2.0, Swift.max(1.2, patch.ior.isFinite ? patch.ior : b.ior))
+    )
+    return next
+}
+
 /// Ghost paint: wet paint whose colour vanishes after `linger` seconds, leaving only what it smeared.
 public struct GhostSettings: Equatable, Sendable {
     public var linger: Double
     public var smear: Double
-    var json: JSONValue { ["linger": .number(linger), "smear": .number(smear)] }
+    /// When the fade begins: `immediate` (default) fades as the wet clock ticks; `agent` waits for an agent claim (`read_mutation`).
+    public var trigger: String? = nil
+    var json: JSONValue {
+        var o: JSONObject = ["linger": .number(linger), "smear": .number(smear)]
+        if trigger == "agent" { o["trigger"] = "agent" }
+        return .object(o)
+    }
 }
 
 public let DEFAULT_GHOST = GhostSettings(linger: 4, smear: 0.3)
 
 func normalizeGhost(_ raw: JSONObject, _ base: GhostSettings = DEFAULT_GHOST) -> GhostSettings {
-    GhostSettings(
+    let trigger = raw["trigger"]?.stringValue == "agent" ? "agent" : raw["trigger"]?.stringValue == "immediate" ? "immediate" : base.trigger
+    return GhostSettings(
         linger: rangeValue(raw["linger"], 0.5, 60, base.linger),
-        smear: unitValue(raw["smear"], base.smear)
+        smear: unitValue(raw["smear"], base.smear),
+        trigger: trigger == "agent" ? "agent" : nil
+    )
+}
+
+/// Mutation paint: strokes pause for `settle` seconds, then an agent claims them, they fade over `fade` seconds, and the agent paints an answer.
+public struct MutationSettings: Equatable, Sendable {
+    public var settle: Double
+    public var patience: Double
+    public var fade: Double
+    var json: JSONValue { ["settle": .number(settle), "patience": .number(patience), "fade": .number(fade)] }
+}
+
+public let DEFAULT_MUTATION = MutationSettings(settle: 1.5, patience: 45, fade: 2)
+
+func normalizeMutation(_ raw: JSONObject, _ base: MutationSettings = DEFAULT_MUTATION) -> MutationSettings {
+    MutationSettings(
+        settle: rangeValue(raw["settle"], 0.5, 10, base.settle),
+        patience: rangeValue(raw["patience"], 5, 300, base.patience),
+        fade: rangeValue(raw["fade"], 0.5, 10, base.fade)
     )
 }
 
@@ -361,11 +453,19 @@ public struct PaintBrush: Equatable, Sendable {
     public var bristle: JSONObject
     public var sticker: JSONObject
     public var light: LightSettings
+    public var fluorescence: FluorescenceSettings
+    public var thermochromic: ThermochromicSettings
+    /// Thin-film iridescence coat (nil: none).
+    public var iridescence: IridescenceSettings? = nil
     public var ghost: GhostSettings? = nil
+    public var mutation: MutationSettings? = nil
+    public var ferro: FerroSettings = DEFAULT_FERRO
     public var stamp: String?
     public var spray: SpraySettings?
     /// Dab engines: texture inside the tip (nil: none).
     public var tipGrain: TipGrainSettings? = nil
+    /// Wet engine: Gray-Scott reaction-diffusion patterns that grow in wet paint (nil: none).
+    public var livePatterns: LivePatternsSettings? = nil
     public var paint: PaintGradientSource?
     public var builtin: Bool?
 
@@ -382,11 +482,17 @@ public struct PaintBrush: Equatable, Sendable {
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
             "light": light.json,
+            "fluorescence": fluorescence.json,
+            "thermochromic": thermochromic.json,
         ]
+        if let iridescence { o["iridescence"] = iridescence.json }
         if let ghost { o["ghost"] = ghost.json }
+        if let mutation { o["mutation"] = mutation.json }
+        o["ferro"] = ferro.json
         o["stamp"] = stamp.map { .string($0) } ?? .null
         o["spray"] = spray?.json ?? .null
         if let tipGrain { o["tipGrain"] = tipGrain.json }
+        if let livePatterns { o["livePatterns"] = livePatterns.json }
         o["paint"] = paint?.json ?? .null
         if withBuiltin, builtin == true { o["builtin"] = true }
         return o
@@ -472,11 +578,18 @@ private func readSpray(_ raw: JSONValue?, _ base: SpraySettings?) -> SpraySettin
     return SpraySettings(density: unitValue(r["density"], b.density), size: rangeValue(r["size"], 0.02, 1, b.size))
 }
 
+private func readLivePatterns(_ raw: JSONValue?, _ base: LivePatternsSettings?) -> LivePatternsSettings? {
+    guard let raw else { return base }
+    if raw == .null { return nil }
+    guard let r = raw.objectValue else { return base }
+    return normalizeLivePatterns(r, base ?? DEFAULT_LIVE_PATTERNS)
+}
+
 let BASE_BRUSH = PaintBrush(
     id: "round", name: "Round", category: "custom", engine: "dab", tip: DEFAULT_BRUSH, grain: 0, pressureSmoothing: 0, rotation: "fixed",
     dynamics: DEFAULT_DYNAMICS, mixer: DEFAULT_MIXER, loadsColor: true, behavior: DEFAULT_BEHAVIOR, blender: DEFAULT_BLENDER, smudge: DEFAULT_SMUDGE,
     wet: DEFAULT_WET_BRUSH, impasto: DEFAULT_IMPASTO, particle: DEFAULT_PARTICLE, bristle: DEFAULT_BRISTLE, sticker: DEFAULT_STICKER,
-    light: DEFAULT_LIGHT, stamp: nil, spray: nil, paint: nil, builtin: nil
+    light: DEFAULT_LIGHT, fluorescence: DEFAULT_FLUORESCENCE, thermochromic: DEFAULT_THERMOCHROMIC, ferro: DEFAULT_FERRO, stamp: nil, spray: nil, paint: nil, builtin: nil
 )
 
 /// A brush with every field in range; missing fields come from `base` (default: a plain round dab brush).
@@ -529,17 +642,49 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
     let rbl = raw["blender"]?.objectValue ?? [:]
     let rsm = raw["smudge"]?.objectValue ?? [:]
     let rl = raw["light"]?.objectValue ?? [:]
+    let rfl: JSONObject = {
+        if let n = raw["fluorescence"]?.finite { return ["amount": .number(n)] }
+        return raw["fluorescence"]?.objectValue ?? [:]
+    }()
+    let rth = raw["thermochromic"]?.objectValue ?? [:]
+    let hotColor: String? = {
+        if rth["hotColor"] == .null { return nil }
+        if let s = rth["hotColor"]?.stringValue {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if isHexColor(t) { return t }
+        }
+        return b.thermochromic.hotColor
+    }()
     let wet = normalizeWetBrush(raw["wet"]?.objectValue ?? [:], b.wet)
     let wantsLight = (rl["amount"]?.finite ?? 0) > 0
+    let canMutate = engine == "dab" || (engine == "wet" && wet.tool == "paint") || engine == "impasto" || engine == "particle" || engine == "bristle"
+    let mutation: MutationSettings? = {
+        guard canMutate else { return nil }
+        if let rm = raw["mutation"] {
+            if rm == .null { return nil }
+            return normalizeMutation(rm.objectValue ?? [:], b.mutation ?? DEFAULT_MUTATION)
+        }
+        return b.mutation.map { normalizeMutation([:], $0) }
+    }()
+    let hadAutoGhost = b.mutation != nil && raw["mutation"] == .null && raw["ghost"] == nil
+    let ghostBase: GhostSettings = {
+        if let mutation {
+            var g = b.ghost ?? DEFAULT_GHOST
+            g.linger = mutation.fade
+            g.trigger = "agent"
+            return g
+        }
+        return b.ghost ?? DEFAULT_GHOST
+    }()
     let ghost: GhostSettings? = {
-        guard engine == "wet" && wet.tool == "paint" else { return nil }
+        guard engine == "wet" && wet.tool == "paint" && !hadAutoGhost else { return nil }
         if let rg = raw["ghost"] {
             if rg == .null { return nil }
-            return normalizeGhost(rg.objectValue ?? [:], b.ghost ?? DEFAULT_GHOST)
+            return normalizeGhost(rg.objectValue ?? [:], ghostBase)
         }
-        return !wantsLight && b.ghost != nil ? normalizeGhost([:], b.ghost ?? DEFAULT_GHOST) : nil
+        return (mutation != nil || (!wantsLight && b.ghost != nil)) ? normalizeGhost([:], ghostBase) : nil
     }()
-    if ghost != nil {
+    if ghost != nil || mutation != nil {
         behavior.pickup = 0
         behavior.dirty = false
     }
@@ -564,10 +709,16 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
         light: ghost != nil && !wantsLight ? DEFAULT_LIGHT : LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
+        fluorescence: FluorescenceSettings(amount: unitValue(rfl["amount"], b.fluorescence.amount), invisible: boolValue(rfl["invisible"], b.fluorescence.invisible)),
+        thermochromic: ThermochromicSettings(hotColor: hotColor, threshold: rangeValue(rth["threshold"], 0.05, 0.95, b.thermochromic.threshold)),
+        iridescence: readIridescence(raw["iridescence"], b.iridescence),
         ghost: ghost,
+        mutation: mutation,
+        ferro: normalizeFerro(raw["ferro"]?.objectValue ?? (raw["ferro"]?.numberValue.map { ["amount": .number($0)] } ?? [:]), b.ferro),
         stamp: readStamp(raw["stamp"], b.stamp),
         spray: readSpray(raw["spray"], b.spray),
         tipGrain: readTipGrain(raw["tipGrain"], b.tipGrain),
+        livePatterns: readLivePatterns(raw["livePatterns"], b.livePatterns),
         paint: paint,
         builtin: raw["builtin"]?.boolValue == true ? true : nil
     )

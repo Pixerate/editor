@@ -18,6 +18,8 @@ private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impast
 private let EXCHANGE = ["dab", "wet", "impasto"]
 /// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
 private let DABS = ["dab", "eraser", "mixer", "blender", "smudge"]
+/// Engines that can deposit a thin-film iridescence coat.
+private let FILM = ["dab", "mixer", "wet", "impasto", "particle", "bristle"]
 
 /// One facet field and the engine field it sets.
 struct BrushField: Sendable {
@@ -59,6 +61,27 @@ private let ONE_STAMP: FieldMap = (
     { v in v.arrayValue?.first ?? .null },
     { v in v == .null || v == .bool(false) || v == .string("") ? nil : .array([v]) }
 )
+/// Live reaction-diffusion patterns (`livePatterns`): sparse facet ↔ normalized engine settings.
+private let LIVE_PATTERNS_MAP: FieldMap = (
+    { v in
+        guard let o = v.objectValue else { return .null }
+        return normalizeLivePatterns(o, DEFAULT_LIVE_PATTERNS).json
+    },
+    { v in
+        guard let r = v.objectValue else { return nil }
+        let pattern = isLivePatternKind(r["pattern"]?.stringValue) ? r["pattern"]!.stringValue! : DEFAULT_LIVE_PATTERNS.pattern
+        let preset = LIVE_PATTERN_PRESETS[pattern] ?? LIVE_PATTERN_PRESETS["spots"]!
+        var out = JSONObject()
+        out["pattern"] = .string(pattern)
+        if let feed = r["feed"]?.numberValue, feed != preset.feed { out["feed"] = .number(feed) }
+        if let kill = r["kill"]?.numberValue, kill != preset.kill { out["kill"] = .number(kill) }
+        if let scale = r["scale"]?.numberValue, scale != DEFAULT_LIVE_PATTERNS.scale { out["scale"] = .number(scale) }
+        if let contrast = r["contrast"]?.numberValue, contrast != DEFAULT_LIVE_PATTERNS.contrast { out["contrast"] = .number(contrast) }
+        if let secondColor = r["secondColor"]?.stringValue, !secondColor.isEmpty { out["secondColor"] = .string(secondColor) }
+        if let relief = r["relief"]?.numberValue, relief != DEFAULT_LIVE_PATTERNS.relief { out["relief"] = .number(relief) }
+        return .object(out)
+    }
+)
 
 private func f(_ facet: String, _ engine: String, _ engines: [String] = ALL, map: FieldMap? = nil, shapes: [String]? = nil, marks: [String]? = nil) -> BrushField {
     BrushField(facet: facet, engine: engine, engines: engines, map: map, shapes: shapes, marks: marks)
@@ -81,6 +104,10 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("tip.grain", "tipGrain", DABS))
     out.append(f("behaviour.grain", "grain"))
     out += each("light", "light", ["amount", "pressure"])
+    out += each("fluorescence", "fluorescence", ["amount", "invisible"])
+    out += each("thermochromic", "thermochromic", ["hotColor", "threshold"])
+    out += each("iridescence", "iridescence", ["thickness", "pressureToThickness", "ior"], FILM)
+    out += each("ferro", "ferro", ["amount", "wavelength", "threshold"])
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))
     out.append(f("behaviour.exchange.mix", "behavior.mix", EXCHANGE))
     out.append(f("behaviour.exchange.dirty", "behavior.dirty", EXCHANGE))
@@ -100,7 +127,9 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("behaviour.mixing", "smudge.mixing", ["smudge"]))
     out.append(f("behaviour.strength", "wet.strength", ["wet"]))
     out += each("behaviour.wet", "wet", ["medium", "water", "pigment", "body", "rewet", "load", "thinner"], ["wet"])
+    out.append(f("livePatterns", "livePatterns", ["wet"], map: LIVE_PATTERNS_MAP))
     out += each("ghost", "ghost", ["linger", "smear"], ["wet"])
+    out += each("mutation", "mutation", ["settle", "patience", "fade"], ["dab", "wet", "impasto", "particle", "bristle"])
     out.append(f("behaviour.thick.applicator", "impasto.tool", ["impasto"]))
     out += each("behaviour.thick", "impasto", ["thickness", "gloss", "metallic", "load", "thinner", "drag", "rim", "clarity"], ["impasto"])
     out.append(f("marks.physics", "particle.kind", ["particle"]))
@@ -219,11 +248,15 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     }
     // Spray marks: the dab engine with droplets.
     if engine == "dab" && marksKind == "scatter" { input["spray"] = .object(input["spray"]?.objectValue ?? [:]) }
+    if brush["iridescence"] != nil && FILM.contains(engine) { input["iridescence"] = .object(input["iridescence"]?.objectValue ?? [:]) }
     if engine == "wet" {
         let tool = brush["kind"]?.stringValue == "tool" ? WET_TOOL_OF.first { $0.0 == brush["tool"]?.stringValue }?.1 : "paint"
         setPath(&input, "wet.tool", tool.map { .string($0) } ?? .null)
         if let medium = resolveWetMedium(brush) { setPath(&input, "wet.medium", .string(medium)) }
         if brush["ghost"] != nil && tool == "paint" { input["ghost"] = .object(input["ghost"]?.objectValue ?? [:]) }
+    }
+    if brush["mutation"] != nil && ["dab", "wet", "impasto", "particle", "bristle"].contains(engine) && (engine != "wet" || brush["kind"]?.stringValue != "tool") {
+        input["mutation"] = .object(brush["mutation"]?.objectValue ?? [:])
     }
     // Blenders and smudges only move paint already down.
     if engine == "blender" || engine == "smudge" { input["loadsColor"] = false }

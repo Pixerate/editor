@@ -3,7 +3,9 @@ import {
   PaintCanvasPresenter,
   PaintGesture,
   documentToScreen,
+  screenToDocument,
   drawWaterOverlay,
+  startDeviceTilt,
   startWetClock,
   fitZoom,
   guideOverlay,
@@ -13,6 +15,7 @@ import {
   paintAgentStrokePoints,
   paintProposalGhost,
   type PaintAgentStrokes,
+  type FillRegionOptions,
   type PaintPresence,
   type PaintProposal,
   type PaintProposals,
@@ -25,6 +28,8 @@ export interface PaintCanvasProps {
   controller: PaintEditorController;
   /** The active tool (default brush). */
   tool?: PaintTool;
+  /** Options for the Fill tool (`tool === 'fill'`). */
+  fillOptions?: Omit<FillRegionOptions, 'x' | 'y' | 'points'>;
   /** Draw the symmetry axes and perspective lines (default true). */
   showGuides?: boolean;
   /** Fit the canvas in the viewport on mount (default true). */
@@ -37,6 +42,8 @@ export interface PaintCanvasProps {
   proposals?: PaintProposals;
   /** Strokes an agent is painting live alongside the user's, drawn as soft lines (see `createPaintAgentStrokes`). */
   agentStrokes?: PaintAgentStrokes;
+  /** Follow device orientation (gyroscope tilt on iPhone and iPad) for thin-film iridescence view tilt. */
+  deviceTilt?: boolean;
   className?: string;
 }
 
@@ -47,7 +54,7 @@ export interface PaintCanvasProps {
  * tail drawn as a thin preview, palm rejection, middle-button pan, wheel zoom and Shift+wheel
  * rotation. Guides and floating reference images are drawn on top.
  */
-export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, className }) => {
+export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', fillOptions, showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, deviceTilt = false, className }) => {
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -56,6 +63,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
   const measured = useRef(false);
   const [predicted, setPredicted] = useState<Array<{ x: number; y: number }>>([]);
   const [strokeDrag, setStrokeDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
+  const magnetDrag = useRef<{ id: string; moved: boolean } | null>(null);
   const presenter = useMemo(() => new PaintCanvasPresenter(controller), [controller]);
   const gesture = useMemo(
     () =>
@@ -68,6 +76,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
     [controller]
   );
   gesture.tool = tool;
+  if (fillOptions) gesture.fillOptions = fillOptions;
   const { canvas: doc } = state.document;
 
   useEffect(() => {
@@ -101,6 +110,9 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
 
   // Wet paint flows with the display.
   useEffect(() => startWetClock(controller), [controller]);
+
+  // Device orientation shifts viewTilt when opted in.
+  useEffect(() => (deviceTilt ? startDeviceTilt(controller) : undefined), [controller, deviceTilt]);
 
   // The water overlay.
   useEffect(() => {
@@ -205,6 +217,46 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
         .map((r) => (
           <ReferencePanel key={r.id} controller={controller} id={r.id} />
         ))}
+      {showGuides &&
+        (state.document.magnets ?? []).map((m) => {
+          const p = documentToScreen(state.view, doc, size, m.x, m.y);
+          return (
+            <button
+              key={m.id}
+              type="button"
+              aria-label={`Magnet ${m.id}`}
+              data-testid={`paint-magnet-${m.id}`}
+              data-magnet={m.id}
+              title={`Magnet ${m.id} (${Math.round(m.x)}, ${Math.round(m.y)})`}
+              className="absolute -translate-x-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full border border-indigo-300 bg-slate-900/90 text-[9px] font-bold text-indigo-200 shadow cursor-move"
+              style={{ left: p.x, top: p.y }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                magnetDrag.current = { id: m.id, moved: false };
+                (e.target as Element).setPointerCapture?.(e.pointerId);
+              }}
+              onPointerMove={(e) => {
+                const d = magnetDrag.current;
+                if (!d || d.id !== m.id) return;
+                e.stopPropagation();
+                const r = viewport.current?.getBoundingClientRect();
+                const box = { width: r?.width || size.width, height: r?.height || size.height };
+                const pt = screenToDocument(state.view, doc, box, e.clientX - (r?.left ?? 0), e.clientY - (r?.top ?? 0));
+                controller.updateMagnet(m.id, { x: Math.round(pt.x * 100) / 100, y: Math.round(pt.y * 100) / 100 }, !d.moved);
+                d.moved = true;
+              }}
+              onPointerUp={(e) => {
+                e.stopPropagation();
+                magnetDrag.current = null;
+              }}
+              onPointerCancel={() => {
+                magnetDrag.current = null;
+              }}
+            >
+              {m.strength >= 0 ? 'N' : 'S'}
+            </button>
+          );
+        })}
       {proposals && <PaintProposalGhosts proposals={proposals} transform={transform} zoom={state.view.zoom} />}
       {presence && <PaintPresenceLayer presence={presence} view={state.view} canvas={doc} viewport={size} />}
       <div className="absolute bottom-1 right-2 text-[10px] text-slate-500 pointer-events-none" data-testid="paint-view-status">

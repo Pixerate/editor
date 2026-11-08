@@ -28,17 +28,19 @@ function read(value: unknown, schema: JsonSchema, path: string, problems: string
     problems.push(`${path} must be ${JSON.stringify(schema.const)}; dropped.`);
     return undefined;
   }
-  switch (schema.type) {
+  if (value === null && Array.isArray(schema.type) && schema.type.includes('null')) return null;
+  const schemaType = Array.isArray(schema.type) ? schema.type[0] : schema.type;
+  switch (schemaType) {
     case 'number':
     case 'integer': {
       if (typeof value !== 'number' || !Number.isFinite(value)) {
         problems.push(`${path} must be a number; dropped.`);
         return undefined;
       }
-      let n = schema.type === 'integer' ? Math.round(value) : value;
+      let n = schemaType === 'integer' ? Math.round(value) : value;
       if (schema.minimum !== undefined && n < schema.minimum) n = schema.minimum;
       if (schema.maximum !== undefined && n > schema.maximum) n = schema.maximum;
-      if (n !== value) problems.push(`${path} ${value} is out of range (${schema.minimum}..${schema.maximum}${schema.type === 'integer' ? ', whole' : ''}); set to ${n}.`);
+      if (n !== value) problems.push(`${path} ${value} is out of range (${schema.minimum}..${schema.maximum}${schemaType === 'integer' ? ', whole' : ''}); set to ${n}.`);
       return n;
     }
     case 'boolean':
@@ -51,7 +53,8 @@ function read(value: unknown, schema: JsonSchema, path: string, problems: string
         problems.push(`${path} ${JSON.stringify(value)} is not valid${schema.enum ? `; use one of ${schema.enum.join(', ')}` : ''}; dropped.`);
         return undefined;
       }
-      return schema.maxLength !== undefined ? value.slice(0, schema.maxLength) : value;
+      const s = schema.pattern === '^#[0-9a-fA-F]{6}$' ? value.toLowerCase() : value;
+      return schema.maxLength !== undefined ? s.slice(0, schema.maxLength) : s;
     }
     case 'array': {
       if (!Array.isArray(value)) {
@@ -129,13 +132,15 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   else throw new Error(`Brush "${raw.id}" kind ${JSON.stringify(raw.kind)} is not valid: use mark (lays a material) or tool (works on paint already down).`);
   if (kind === 'tool' && !tool) throw new Error(`Brush "${raw.id}" is a tool and needs tool: one of ${BRUSH_TOOLS.join(', ')}.`);
 
-  const { colour: rawColour, marks: rawMarks, kind: _k, id: _i, name: _n, tool: _t, ...rest } = raw;
+  const { colour: rawColour, marks: rawMarks, ferro: rawFerro, kind: _k, id: _i, name: _n, tool: _t, ...rest } = raw;
+  if (typeof rest.fluorescence === 'number' && Number.isFinite(rest.fluorescence)) rest.fluorescence = { amount: rest.fluorescence };
   const out = readObject(rest, BRUSH_JSON_SCHEMA, 'brush', problems) as Partial<Brush>;
+  if (out.thermochromic?.hotColor) out.thermochromic.hotColor = out.thermochromic.hotColor.toLowerCase();
   const brush: Brush = { id: raw.id, name, ...out, kind, ...(tool ? { tool } : {}), tip: out.tip ?? { shape: 'round' } } as Brush;
   // Keep the key order of a hand-written brush: identity, what it is, then the facets.
   const ordered = (): Brush => {
-    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ghost, motion, colour } = brush;
-    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, ghost, motion, colour };
+    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, colour } = brush;
+    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, colour };
     return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as unknown as Brush;
   };
 
@@ -150,6 +155,12 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
     const schema = BRUSH_FACET_SCHEMAS.marks[k as keyof typeof BRUSH_FACET_SCHEMAS.marks];
     if (!schema) problems.push(`marks.kind ${JSON.stringify(k)} is not valid; use continuous, scatter, particles or objects. marks dropped.`);
     else brush.marks = readObject(rawMarks, schema, 'brush.marks', problems) as unknown as Brush['marks'];
+  }
+
+  if (rawFerro !== undefined) {
+    const ferroObj = typeof rawFerro === 'number' ? { amount: rawFerro } : rawFerro;
+    const f = readObject(ferroObj, BRUSH_FACET_SCHEMAS.ferro, 'brush.ferro', problems) as Brush['ferro'];
+    if (f && Object.keys(f).length) brush.ferro = f;
   }
 
   if (rawColour !== undefined) {
@@ -188,6 +199,18 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       drop('marks', 'tools lay no marks');
       delete brush.marks;
     }
+    if (brush.ferro) {
+      drop('ferro', 'tools lay no ferrofluid');
+      delete brush.ferro;
+    }
+    if (brush.iridescence) {
+      drop('iridescence', 'tools lay no film');
+      delete brush.iridescence;
+    }
+  }
+  if (brush.iridescence && brush.marks?.kind === 'objects') {
+    drop('iridescence', 'object marks are stickers, not film');
+    delete brush.iridescence;
   }
   if (brush.marks?.kind === 'scatter') {
     // Spray droplets are dabs of a round or stamp tip (they may pick paint up): not bristles, wet or thick paint, or the Mixer Brush.
@@ -279,6 +302,10 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       drop('behaviour.exchange', 'particle, object and bristle marks do not pick paint up');
       delete b.exchange;
     }
+  }
+  if (brush.livePatterns && (kind !== 'mark' || brush.behaviour?.surface !== 'wet' || brush.marks?.kind === 'particles' || brush.marks?.kind === 'objects' || brush.tip.shape === 'bristle')) {
+    drop('livePatterns', 'only wet paint brushes grow live patterns (set behaviour.surface to wet)');
+    delete brush.livePatterns;
   }
   if (brush.ghost) {
     if (kind === 'tool' || brush.behaviour?.surface !== 'wet') {

@@ -6,6 +6,11 @@
       "key": "b"
     },
     {
+      "id": "fill",
+      "label": "Fill",
+      "key": "g"
+    },
+    {
       "id": "eyedropper",
       "label": "Eyedropper",
       "key": "i"
@@ -2733,6 +2738,38 @@
         "step": 0.01
       }
     ],
+    "uvLight": [
+      {
+        "path": "strength",
+        "label": "UV strength",
+        "min": 0,
+        "max": 2,
+        "step": 0.05
+      },
+      {
+        "path": "ambient",
+        "label": "Ambient light",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "viewTilt": [
+      {
+        "path": "x",
+        "label": "View tilt X",
+        "min": -1,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "y",
+        "label": "View tilt Y",
+        "min": -1,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
     "ghost": [
       {
         "path": "ghost.linger",
@@ -2744,6 +2781,52 @@
       {
         "path": "ghost.smear",
         "label": "Smear",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "mutation": [
+      {
+        "path": "mutation.settle",
+        "label": "Settle",
+        "min": 0.5,
+        "max": 10,
+        "step": 0.5
+      },
+      {
+        "path": "mutation.patience",
+        "label": "Patience",
+        "min": 5,
+        "max": 300,
+        "step": 5
+      },
+      {
+        "path": "mutation.fade",
+        "label": "Fade",
+        "min": 0.5,
+        "max": 10,
+        "step": 0.5
+      }
+    ],
+    "livePatterns": [
+      {
+        "path": "scale",
+        "label": "Scale",
+        "min": 0.25,
+        "max": 4,
+        "step": 0.05
+      },
+      {
+        "path": "contrast",
+        "label": "Contrast",
+        "min": 0,
+        "max": 2,
+        "step": 0.05
+      },
+      {
+        "path": "relief",
+        "label": "Relief",
         "min": 0,
         "max": 1,
         "step": 0.01
@@ -2793,6 +2876,22 @@
         "min": 0,
         "max": 1,
         "step": 0.01
+      }
+    ],
+    "magnet": [
+      {
+        "path": "strength",
+        "label": "Strength",
+        "min": -1,
+        "max": 1,
+        "step": 0.05
+      },
+      {
+        "path": "radius",
+        "label": "Radius",
+        "min": 4,
+        "max": 512,
+        "step": 1
       }
     ]
   },
@@ -2858,6 +2957,13 @@
       "watercolor": "Watercolour",
       "gouache": "Gouache",
       "oil": "Oil"
+    },
+    "livePatterns": {
+      "spots": "Spots",
+      "stripes": "Stripes",
+      "coral": "Coral",
+      "maze": "Maze",
+      "worms": "Worms"
     },
     "impastoTools": {
       "brush": "Brush",

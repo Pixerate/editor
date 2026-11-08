@@ -15,7 +15,7 @@ import type { ColorValue } from '../color/dual';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
-import type { BrushRotation, ImpastoTool, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
+import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
 import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';
@@ -333,12 +333,70 @@ export interface BrushLight {
   glow?: boolean;
 }
 
+/**
+ * UV-fluorescent ink: paint that emits its colour under the virtual UV blacklight (`uvLight`).
+ * With `invisible: true`, the stroke lays no daylight paint and reveals only under UV.
+ */
+export interface BrushFluorescence {
+  /** Fluorescence intensity under UV blacklight, 0..1 (default 0: none). */
+  amount?: number;
+  /** Invisible in normal light: lays no daylight paint and glows only under UV (default false). */
+  invisible?: boolean;
+}
+
+/**
+ * Thermochromic ink: paint that shifts smoothly toward `hotColor` where the canvas heat field
+ * warms it past `threshold`.
+ */
+export interface BrushThermochromic {
+  /** Colour (#rrggbb) the ink turns when heated above `threshold`. */
+  hotColor?: string;
+  /** Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5). */
+  threshold?: number;
+}
+
+/** Structural colour: a thin dielectric film over the paint whose interference hue shifts with light and view angle. */
+export interface BrushIridescence {
+  /** Film thickness in nanometres, 100..1000 (default 400). */
+  thickness?: number;
+  /** How much pen pressure shifts the film thickness per dab, 0..1 (default 0). */
+  pressureToThickness?: number;
+  /** Refractive index of the film, 1.2..2.0 (default 1.5: soap film ~1.33, pearl ~1.53, scarab chitin ~1.65). */
+  ior?: number;
+}
+
+/** When a ghost brush's fade starts: immediately (`immediate`, default) or once claimed by an agent (`agent`). */
+export type GhostTrigger = 'immediate' | 'agent';
+export const GHOST_TRIGGERS: readonly GhostTrigger[] = ['immediate', 'agent'];
+
 /** Ghost paint: wet paint whose colour fades away after `linger` seconds, leaving only what it smeared. */
 export interface BrushGhost {
   /** Seconds of simulated time before the ghost paint has fully faded, 0.5..60 (default 4). */
   linger?: number;
   /** How much the ghost paint drags and lifts the paint it passes through, 0..1 (default 0.3). */
   smear?: number;
+  /** When the fade starts: `immediate` (default) or `agent` (waits until claimed by `read_mutation`). */
+  trigger?: GhostTrigger;
+}
+
+/** Mutation paint: your stroke sinks away once claimed by an agent, which paints its own answer. */
+export interface BrushMutation {
+  /** Seconds after the last stroke before it counts as finished, 0.5..10 (default 1.5). */
+  settle?: number;
+  /** Seconds to wait for an agent before giving up and keeping the paint, 5..300 (default 45). */
+  patience?: number;
+  /** Seconds the paint takes to sink away once claimed, 0.5..10 (default 2). */
+  fade?: number;
+}
+
+/** Liquid ferrofluid paint that rises into glossy Rosensweig spikes near magnets until cured. */
+export interface BrushFerro {
+  /** Ferrofluid per dab, 0..1 (default 0: none). */
+  amount?: number;
+  /** Capillary wavelength (spike-to-spike spacing) in pixels, 4..64 (default 16). */
+  wavelength?: number;
+  /** Critical magnetic field |B| threshold where spikes begin to rise, 0.01..0.95 (default 0.12). */
+  threshold?: number;
 }
 
 /** Animation after painting. */
@@ -349,6 +407,27 @@ export interface BrushMotion {
   fps?: number;
   /** Particle waves: how fast they run, 0..1 (default 0). */
   waveSpeed?: number;
+}
+
+/**
+ * Gray-Scott reaction-diffusion patterns (`spots`, `stripes`, `coral`, `maze`, `worms`) that grow
+ * inside wet paint (`behaviour.surface: 'wet'`) and freeze where the paint dries.
+ */
+export interface BrushLivePatterns {
+  /** Named Pearson feed/kill preset (`spots`, `stripes`, `coral`, `maze`, `worms`; default `spots`). */
+  pattern?: LivePatternKind;
+  /** Gray-Scott feed rate F, 0.01..0.1 (default from `pattern`). */
+  feed?: number;
+  /** Gray-Scott kill rate k, 0.03..0.08 (default from `pattern`). */
+  kill?: number;
+  /** Spatial scale of the pattern (diffusion multiplier), 0.5..4 (default 1). */
+  scale?: number;
+  /** Visual contrast of the V concentration field, 0..2 (default 1). */
+  contrast?: number;
+  /** Second colour (#rrggbb) that V blends the wet paint towards, or `null` to modulate pigment contrast (default `null`). */
+  secondColor?: string | null;
+  /** Impasto relief written to the layer's thick height map as patterns grow, 0..1 (default 0). */
+  relief?: number;
 }
 
 /**
@@ -390,8 +469,14 @@ export interface Brush {
   dynamics?: BrushDynamics;
   behaviour?: BrushBehaviour;
   light?: BrushLight;
+  fluorescence?: BrushFluorescence;
+  thermochromic?: BrushThermochromic;
+  iridescence?: BrushIridescence;
   ghost?: BrushGhost;
+  mutation?: BrushMutation;
+  ferro?: BrushFerro;
   motion?: BrushMotion;
+  livePatterns?: BrushLivePatterns;
   colour?: BrushColour;
 }
 

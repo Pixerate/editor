@@ -6,14 +6,20 @@
  */
 
 import type { JsonSchema } from '../tools/schema';
-import { BRUSH_JSON_SCHEMA } from './schema';
-import type { Brush } from './types';
+import { BRUSH_FACET_SCHEMAS, BRUSH_JSON_SCHEMA } from './schema';
+import type { Brush, BrushFerro } from './types';
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-/** A brush's facets, any of them, as a patch takes them (the tip's `shape` may be left out). */
-export type BrushPatch = { [K in Exclude<keyof Brush, 'id'>]?: K extends 'tip' ? Partial<Brush['tip']> : Brush[K] };
+/** A brush's facets, any of them, as a patch takes them (the tip's `shape` may be left out, and `ferro` accepts a `0..1` amount shorthand). */
+export type BrushPatch = {
+  [K in Exclude<keyof Brush, 'id'>]?: K extends 'tip'
+    ? Partial<Brush['tip']>
+    : K extends 'ferro'
+      ? number | BrushFerro
+      : Brush[K];
+};
 
 const FACETS = BRUSH_JSON_SCHEMA.properties!;
 
@@ -21,11 +27,18 @@ const FACETS = BRUSH_JSON_SCHEMA.properties!;
 export const BRUSH_PATCH_PROPERTIES: Readonly<Record<string, JsonSchema>> = (() => {
   const { id: _id, name: _name, ...rest } = FACETS as Record<string, JsonSchema>;
   const { required: _r, ...tip } = rest.tip!;
-  return { ...rest, tip: { ...tip, description: `${tip.description} In a patch, shape may be left out to keep it.` } };
+  const ferro: JsonSchema = {
+    description: 'Liquid ferrofluid paint: 0..1 (amount), or { amount, wavelength, threshold }. Rises into glossy Rosensweig spikes near magnets until cured.',
+    anyOf: [
+      { type: 'number', minimum: 0, maximum: 1, description: 'How much liquid ferrofluid the brush lays per dab (0..1).' },
+      BRUSH_FACET_SCHEMAS.ferro,
+    ],
+  };
+  return { ...rest, tip: { ...tip, description: `${tip.description} In a patch, shape may be left out to keep it.` }, ferro };
 })();
 
 /** The facets a patch can remove (`unset`), back to the engine's defaults. */
-export const UNSETTABLE_BRUSH_FACETS = ['description', 'tags', 'medium', 'variety', 'marks', 'dynamics', 'behaviour', 'light', 'ghost', 'motion', 'colour'] as const;
+export const UNSETTABLE_BRUSH_FACETS = ['description', 'tags', 'medium', 'variety', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'ferro', 'motion', 'livePatterns', 'colour'] as const;
 export type UnsettableBrushFacet = (typeof UNSETTABLE_BRUSH_FACETS)[number];
 
 /** The `unset` argument of tools that take a patch. */
@@ -40,9 +53,11 @@ export const BRUSH_UNSET_PROPERTY: JsonSchema = {
 /** `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks. */
 export function mergeBrushPatch<T extends Record<string, unknown>>(base: T, patch: Record<string, unknown>, path = ''): T {
   const out: Record<string, unknown> = { ...base };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v === undefined) continue;
-    const old = out[k];
+  for (const [k, rawV] of Object.entries(patch)) {
+    if (rawV === undefined) continue;
+    const v = path === '' && k === 'ferro' && typeof rawV === 'number' ? { amount: rawV } : rawV;
+    const rawOld = out[k];
+    const old = path === '' && k === 'ferro' && typeof rawOld === 'number' ? { amount: rawOld } : rawOld;
     const replaceMarks = path === '' && k === 'marks' && isObject(old) && isObject(v) && old.kind !== v.kind;
     out[k] = isObject(v) && isObject(old) && !replaceMarks ? mergeBrushPatch(old, v, `${path}${k}.`) : copy(v);
   }

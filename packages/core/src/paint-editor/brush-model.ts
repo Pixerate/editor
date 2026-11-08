@@ -9,7 +9,18 @@ import { DEFAULT_BLENDER, DEFAULT_SMUDGE, normalizeBlender, normalizeSmudge, typ
 import type { MixingModel } from '../paint/exchange';
 import { readPaintSource, type PaintGradientSource, type PaintSource } from '../paint/gradient-paint';
 import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixer';
+import {
+  DEFAULT_LIVE_PATTERNS,
+  LIVE_PATTERN_KINDS,
+  LIVE_PATTERN_PRESETS,
+  normalizeLivePatterns,
+  type LivePatternKind,
+  type LivePatternsInput,
+  type LivePatternsSettings,
+} from '../paint/live-patterns';
 import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, DEFAULT_STICKER, normalizeBristle, normalizeParticle, normalizeStickerSettings, STAMP_KINDS, type BristleSettings, type ParticleSettings, type StickerSettings } from './mark-settings';
+
+export { DEFAULT_LIVE_PATTERNS, LIVE_PATTERN_KINDS, LIVE_PATTERN_PRESETS, normalizeLivePatterns, type LivePatternKind, type LivePatternsInput, type LivePatternsSettings };
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
@@ -128,20 +139,134 @@ export function normalizeLight(raw: Partial<LightSettings> = {}, base: LightSett
   return { amount: unit(raw.amount, base.amount), pressure: typeof raw.pressure === 'boolean' ? raw.pressure : base.pressure };
 }
 
+/** UV-fluorescent ink: paint that glows in its colour under the UV blacklight (`doc.fluor`). */
+export interface FluorescenceSettings {
+  /** Fluorescence intensity under UV blacklight (0..1, default 0: none). */
+  amount: number;
+  /** Invisible ink in normal light: lays no daylight pigment and glows only under UV (default false). */
+  invisible: boolean;
+}
+
+export const DEFAULT_FLUORESCENCE: Readonly<FluorescenceSettings> = { amount: 0, invisible: false };
+
+export function normalizeFluorescence(raw: Partial<FluorescenceSettings> | number = {}, base: FluorescenceSettings = DEFAULT_FLUORESCENCE): FluorescenceSettings {
+  if (typeof raw === 'number') return { amount: unit(raw, base.amount), invisible: base.invisible };
+  return {
+    amount: unit(raw.amount, base.amount),
+    invisible: typeof raw.invisible === 'boolean' ? raw.invisible : base.invisible,
+  };
+}
+
+/** Thermochromic ink: paint that shifts toward `hotColor` where the canvas is heated above `threshold` (`doc.thermo`). */
+export interface ThermochromicSettings {
+  /** Colour (#rrggbb) the ink turns when heated above `threshold` (`null`: off). */
+  hotColor: string | null;
+  /** Temperature 0.05..0.95 at which the colour shift is halfway (default 0.5). */
+  threshold: number;
+}
+
+export const DEFAULT_THERMOCHROMIC: Readonly<ThermochromicSettings> = { hotColor: null, threshold: 0.5 };
+
+export function normalizeThermochromic(raw: Partial<ThermochromicSettings> = {}, base: ThermochromicSettings = DEFAULT_THERMOCHROMIC): ThermochromicSettings {
+  const hotColor = raw.hotColor === null ? null : typeof raw.hotColor === 'string' && HEX.test(raw.hotColor.trim()) ? raw.hotColor.trim().toLowerCase() : base.hotColor;
+  return {
+    hotColor,
+    threshold: range(raw.threshold, 0.05, 0.95, base.threshold),
+  };
+}
+
+/** Thin-film iridescence: structural colour whose hue shifts with the light and view angle (see `doc.thick`). */
+export interface IridescenceSettings {
+  /** Film thickness in nanometres (100..1000, default 400). */
+  thickness: number;
+  /** How much pen pressure shifts the film thickness (0..1, default 0). */
+  pressureToThickness: number;
+  /** Film refractive index (1.2..2.0, default 1.5). */
+  ior: number;
+}
+
+export const DEFAULT_IRIDESCENCE: Readonly<IridescenceSettings> = { thickness: 400, pressureToThickness: 0, ior: 1.5 };
+
+const withIridescence = (ir: IridescenceSettings | null): { iridescence?: IridescenceSettings } => (ir ? { iridescence: ir } : {});
+
+function readIridescence(raw: unknown, base: IridescenceSettings | null): IridescenceSettings | null {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Partial<IridescenceSettings>;
+  const b = base ?? DEFAULT_IRIDESCENCE;
+  return {
+    thickness: range(r.thickness, 100, 1000, b.thickness),
+    pressureToThickness: unit(r.pressureToThickness, b.pressureToThickness),
+    ior: range(r.ior, 1.2, 2.0, b.ior),
+  };
+}
+
+/** When a ghost brush's fade starts: immediately (`immediate`, default) or once claimed by an agent (`agent`). */
+export type GhostTrigger = 'immediate' | 'agent';
+export const GHOST_TRIGGERS: readonly GhostTrigger[] = ['immediate', 'agent'];
+
 /** Ghost paint: wet paint whose colour vanishes after `linger` seconds, leaving only what it smeared. */
 export interface GhostSettings {
   /** Seconds of simulated time before the ghost paint has fully faded, 0.5..60 (default 4). */
   linger: number;
   /** How much the ghost paint drags and lifts the paint it passes through, 0..1 (default 0.3). */
   smear: number;
+  /** When the fade starts: `immediate` (default, omitted) or `agent` (waits until claimed by `read_mutation`). */
+  trigger?: GhostTrigger;
 }
 
 export const DEFAULT_GHOST: Readonly<GhostSettings> = { linger: 4, smear: 0.3 };
 
 export function normalizeGhost(raw: Partial<GhostSettings> = {}, base: GhostSettings = DEFAULT_GHOST): GhostSettings {
+  const trigger = raw.trigger === 'agent' || raw.trigger === 'immediate' ? raw.trigger : base.trigger;
   return {
     linger: range(raw.linger, 0.5, 60, base.linger),
     smear: unit(raw.smear, base.smear),
+    ...(trigger === 'agent' ? { trigger: 'agent' } : {}),
+  };
+}
+
+/** Mutation paint: your stroke sinks away once claimed by an agent, which paints its own answer. */
+export interface MutationSettings {
+  /** Seconds after the last stroke before it counts as finished, 0.5..10 (default 1.5). */
+  settle: number;
+  /** Seconds to wait for an agent before giving up and keeping the paint, 5..300 (default 45). */
+  patience: number;
+  /** Seconds the paint takes to sink away once claimed, 0.5..10 (default 2). */
+  fade: number;
+}
+
+export const DEFAULT_MUTATION: Readonly<MutationSettings> = { settle: 1.5, patience: 45, fade: 2 };
+
+export function normalizeMutation(raw: Partial<MutationSettings> = {}, base: MutationSettings = DEFAULT_MUTATION): MutationSettings {
+  return {
+    settle: range(raw.settle, 0.5, 10, base.settle),
+    patience: range(raw.patience, 5, 300, base.patience),
+    fade: range(raw.fade, 0.5, 10, base.fade),
+  };
+}
+
+/** Ferrofluid paint: how much liquid ferrofluid a brush lays, and its Rosensweig spike settings (see `doc.ferro`). */
+export interface FerroSettings {
+  /** How much liquid ferrofluid each dab lays, scaled by coverage and flow (0..1, default 0: none). */
+  amount: number;
+  /** Capillary wavelength (spike-to-spike spacing) in pixels (4..64, default 16). */
+  wavelength: number;
+  /** Critical magnetic field |B| threshold where spikes begin to rise (0.01..0.95, default 0.12). */
+  threshold: number;
+}
+
+export const DEFAULT_FERRO: Readonly<FerroSettings> = { amount: 0, wavelength: 16, threshold: 0.12 };
+
+export function normalizeFerro(raw: number | Partial<FerroSettings> | null | undefined = {}, base: FerroSettings = DEFAULT_FERRO): FerroSettings {
+  if (typeof raw === 'number') {
+    return { amount: unit(raw, base.amount), wavelength: base.wavelength, threshold: base.threshold };
+  }
+  const r = raw ?? {};
+  return {
+    amount: unit(r.amount, base.amount),
+    wavelength: range(r.wavelength, 4, 64, base.wavelength),
+    threshold: range(r.threshold, 0.01, 0.95, base.threshold),
   };
 }
 
@@ -308,8 +433,18 @@ export interface PaintBrush {
   sticker: StickerSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
+  /** UV-fluorescent ink: glows under the virtual UV blacklight (amount 0: none). */
+  fluorescence: FluorescenceSettings;
+  /** Thermochromic ink: shifts toward `hotColor` where the canvas is heated (`hotColor: null`: off). */
+  thermochromic: ThermochromicSettings;
+  /** Thin-film iridescence: structural colour film laid over the paint (missing: none). */
+  iridescence?: IridescenceSettings;
   /** Wet engine: ghost paint settings (missing when not a ghost brush). */
   ghost?: GhostSettings;
+  /** Mutation paint settings (missing when not a mutation brush). */
+  mutation?: MutationSettings;
+  /** Ferrofluid paint: liquid ferrofluid it lays and its Rosensweig spike settings (amount 0: none). */
+  ferro: FerroSettings;
   /**
    * Dab engine: a stamp tip. Each dab (and each spray droplet) is this sticker's shape, an editor
    * stamp (`editor:star`) or any sticker ref from the sticker library, laid in the paint colour;
@@ -320,6 +455,8 @@ export interface PaintBrush {
   spray: SpraySettings | null;
   /** Dab engines: texture inside the tip (missing: none). Recorded with the stroke, source ref included, so replays match. */
   tipGrain?: TipGrainSettings;
+  /** Wet engine: Gray-Scott reaction-diffusion pattern seeded into the wet paint (missing: none). */
+  livePatterns?: LivePatternsSettings;
   /**
    * The brush's own gradient paint (`@pixerate/editor/paint` `PaintGradientSource`), used instead
    * of the editor's paint; `null` (default): the editor's paint. Stops may be `paint` / `secondary`
@@ -386,6 +523,13 @@ function countAndFlip(raw: Partial<BrushDynamics>, base: BrushDynamics): Pick<Br
 }
 
 const withTipGrain = (g: TipGrainSettings | null): { tipGrain?: TipGrainSettings } => (g ? { tipGrain: g } : {});
+const withLivePatterns = (lp: LivePatternsSettings | null): { livePatterns?: LivePatternsSettings } => (lp ? { livePatterns: lp } : {});
+
+function readLivePatterns(raw: unknown, base: LivePatternsSettings | null): LivePatternsSettings | null {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return base;
+  return normalizeLivePatterns(raw as LivePatternsInput, base ?? DEFAULT_LIVE_PATTERNS);
+}
 
 /** Tip grain settings in range, `null` to clear, or `base` when `raw` is missing or has no usable source. */
 function readTipGrain(raw: unknown, base: TipGrainSettings | null): TipGrainSettings | null {
@@ -432,13 +576,22 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'ghost' | 'spray' | 'tipGrain'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
   /** Ghost paint (`null` removes it). */
   ghost?: Partial<GhostSettings> | null;
+  /** Mutation paint (`null` removes it). */
+  mutation?: Partial<MutationSettings> | null;
+  /** Live reaction-diffusion patterns (`null` removes it). */
+  livePatterns?: LivePatternsInput | null;
   light?: Partial<LightSettings>;
+  fluorescence?: Partial<FluorescenceSettings> | number;
+  thermochromic?: Partial<ThermochromicSettings>;
+  /** Thin-film iridescence (`null` removes it). */
+  iridescence?: Partial<IridescenceSettings> | null;
+  ferro?: number | Partial<FerroSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
@@ -566,11 +719,18 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
   behavior = { ...behavior, multicolor: paintToMultiColor(paint) ?? { ...DEFAULT_MULTI_COLOR, colors: [] } };
   const wet = normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH);
   const wantsLight = typeof raw.light?.amount === 'number' && raw.light.amount > 0;
-  const ghost =
-    engine === 'wet' && wet.tool === 'paint' && (raw.ghost !== undefined ? raw.ghost !== null : !wantsLight && Boolean(b.ghost))
-      ? normalizeGhost(raw.ghost ?? {}, b.ghost ?? DEFAULT_GHOST)
+  const canMutate = engine === 'dab' || (engine === 'wet' && wet.tool === 'paint') || engine === 'impasto' || engine === 'particle' || engine === 'bristle';
+  const mutation =
+    canMutate && (raw.mutation !== undefined ? raw.mutation !== null : Boolean(b.mutation))
+      ? normalizeMutation(raw.mutation ?? {}, b.mutation ?? DEFAULT_MUTATION)
       : undefined;
-  if (ghost) behavior = { ...behavior, pickup: 0, dirty: false };
+  const hadAutoGhost = Boolean(b.mutation && raw.mutation === null && raw.ghost === undefined);
+  const ghostBase: GhostSettings = mutation ? { ...(b.ghost ?? DEFAULT_GHOST), linger: mutation.fade, trigger: 'agent' } : (b.ghost ?? DEFAULT_GHOST);
+  const ghost =
+    engine === 'wet' && wet.tool === 'paint' && !hadAutoGhost && (raw.ghost !== undefined ? raw.ghost !== null : Boolean(mutation) || (!wantsLight && Boolean(b.ghost)))
+      ? normalizeGhost(raw.ghost ?? {}, ghostBase)
+      : undefined;
+  if (ghost || mutation) behavior = { ...behavior, pickup: 0, dirty: false };
   return {
     id,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : b.name,
@@ -592,10 +752,16 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
+    fluorescence: normalizeFluorescence(raw.fluorescence ?? {}, b.fluorescence ?? DEFAULT_FLUORESCENCE),
+    thermochromic: normalizeThermochromic(raw.thermochromic ?? {}, b.thermochromic ?? DEFAULT_THERMOCHROMIC),
+    ...withIridescence(readIridescence(raw.iridescence, b.iridescence ?? null)),
     ...(ghost ? { ghost } : {}),
+    ...(mutation ? { mutation } : {}),
+    ferro: normalizeFerro(raw.ferro, b.ferro ?? DEFAULT_FERRO),
     stamp: readStamp(raw.stamp, b.stamp ?? null),
     spray: readSpray(raw.spray, b.spray ?? null),
     ...withTipGrain(readTipGrain(raw.tipGrain, b.tipGrain ?? null)),
+    ...withLivePatterns(readLivePatterns(raw.livePatterns, b.livePatterns ?? null)),
     paint,
     ...(raw.builtin ? { builtin: true } : {}),
   };
@@ -622,6 +788,9 @@ const BASE_BRUSH: PaintBrush = {
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
   light: { ...DEFAULT_LIGHT },
+  fluorescence: { ...DEFAULT_FLUORESCENCE },
+  thermochromic: { ...DEFAULT_THERMOCHROMIC },
+  ferro: { ...DEFAULT_FERRO },
   stamp: null,
   spray: null,
   paint: null,

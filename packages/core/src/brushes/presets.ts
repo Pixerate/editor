@@ -164,6 +164,21 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     behaviour: { surface: 'wet', exchange: { pickup: 0.4, mix: 0.4 }, wet: { water: 0.8, pigment: 0.45, rewet: 0.2 } },
     colour: { default: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'distance', length: 500, repeat: 'mirror', unit: 'px' } } },
   },
+  // Live patterns: Gray-Scott reaction-diffusion that grows inside the wet wash and freezes as it dries.
+  {
+    id: 'turing-wash', name: 'Turing wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 36, hardness: 0.5, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.45 }, wet: { water: 0.75, pigment: 0.55, rewet: 0.2 } },
+    livePatterns: { pattern: 'spots', contrast: 1.2, secondColor: '#0ea5e9', relief: 0.25 },
+  },
+  {
+    id: 'coral-ink', name: 'Coral ink', kind: 'mark', medium: 'ink', variety: 'watercolor',
+    tip: { shape: 'round', size: 22, hardness: 0.65, spacing: 0.12 },
+    dynamics: { smoothing: 0.3, pressureOpacity: true, minSize: 0.3 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.35 }, wet: { water: 0.7, pigment: 0.75, rewet: 0.15 } },
+    livePatterns: { pattern: 'coral', scale: 1.2, contrast: 1.3 },
+  },
   {
     id: 'watercolor-detail', name: 'Watercolour rigger', kind: 'mark', medium: 'paint', variety: 'watercolor',
     tip: { shape: 'round', size: 7, hardness: 0.75 },
@@ -481,6 +496,49 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
     colour: { palette: ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#a855f7', '#111827', '#f8fafc'] },
   },
+  // --- Smart inks: UV-fluorescent and thermochromic ------------------------------------
+  // Invisible UV marker: invisible in normal light, glows brightly under the UV blacklight.
+  {
+    id: 'uv-marker', name: 'UV marker', kind: 'mark', medium: 'ink', variety: 'uv-ink',
+    tip: { shape: 'round', size: 18, hardness: 0.75, spacing: 0.06, opacity: 0.9 },
+    dynamics: { smoothing: 0.3, minSize: 0.5 },
+    fluorescence: { amount: 0.9, invisible: true },
+    colour: { default: '#22d3ee', palette: ['#22d3ee', '#a855f7', '#4ade80', '#f472b6'] },
+  },
+  // Thermochromic ink: shifts smoothly toward its hot colour where the canvas heat field warms it.
+  {
+    id: 'thermo-ink', name: 'Thermochromic ink', kind: 'mark', medium: 'ink', variety: 'thermochromic',
+    tip: { shape: 'round', size: 12, hardness: 0.85, spacing: 0.05 },
+    dynamics: { smoothing: 0.3, minSize: 0.4 },
+    thermochromic: { hotColor: '#ff7a18', threshold: 0.45 },
+    colour: { default: '#1e3a8a', palette: ['#1e3a8a', '#312e81', '#065f46', '#7f1d1d'] },
+  },
+  // --- Structural colour (thin-film iridescence) ---------------------------------------
+  // Scarab lacquer: thick metallic impasto under a high-index chitin-like thin film.
+  {
+    id: 'scarab-lacquer', name: 'Scarab lacquer', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'round', size: 22, hardness: 0.75, spacing: 0.06 },
+    dynamics: { smoothing: 0.25, minSize: 0.3 },
+    behaviour: { surface: 'thick', thick: { thickness: 0.7, gloss: 0.85, metallic: 0.5 } },
+    iridescence: { thickness: 480, pressureToThickness: 0.35, ior: 1.65 },
+    colour: { default: '#065f46', palette: ['#065f46', '#1e3a8a', '#581c87', '#7c2d12', '#111827'] },
+  },
+  // Soap film: a soft glaze whose thin watery film shifts across the spectrum with pressure.
+  {
+    id: 'soap-film', name: 'Soap film', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'round', size: 32, hardness: 0.4, spacing: 0.06, opacity: 0.85, flow: 0.75 },
+    dynamics: { smoothing: 0.35, pressureOpacity: true, minSize: 0.35 },
+    iridescence: { thickness: 340, pressureToThickness: 0.8, ior: 1.33 },
+    colour: { default: { light: '#0284c7', dark: '#bae6fd' }, palette: [{ light: '#0284c7', dark: '#bae6fd' }, '#f472b6', '#a78bfa', '#34d399'] },
+  },
+  // Pearl glaze: a flat nacre glaze with gentle interference colour shifts.
+  {
+    id: 'pearl-glaze', name: 'Pearl glaze', kind: 'mark', medium: 'paint', variety: 'iridescent',
+    tip: { shape: 'flat', size: 28, hardness: 0.5, spacing: 0.06, angle: 25, roundness: 0.4, opacity: 0.9, flow: 0.85 },
+    dynamics: { smoothing: 0.3, rotation: 'stroke', minSize: 0.4 },
+    iridescence: { thickness: 560, pressureToThickness: 0.25, ior: 1.55 },
+    colour: { default: { light: '#475569', dark: '#f1f5f9' }, palette: [{ light: '#475569', dark: '#f1f5f9' }, '#fbcfe8', '#ddd6fe', '#bae6fd', '#fef3c7'] },
+  },
   // --- Ghost paint: wet paint whose colour vanishes, leaving only what it smeared ---
   {
     id: 'ghost-wash', name: 'Ghost wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
@@ -509,5 +567,34 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     dynamics: { smoothing: 0.3, minSize: 0.4 },
     behaviour: { surface: 'wet', wet: { water: 0.45, pigment: 0, rewet: 0.35 } },
     ghost: { smear: 0.65 },
+  },
+  // --- Mutation paint: strokes that sink away once claimed, and an agent answers ---
+  {
+    id: 'mutation-wash', name: 'Mutation wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 28, hardness: 0.6, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.6, rewet: 0.2 } },
+    mutation: {},
+  },
+  {
+    id: 'mutation-ink', name: 'Mutation ink', kind: 'mark', medium: 'ink', variety: 'pen',
+    tip: { shape: 'round', size: 6, hardness: 0.9, spacing: 0.06 },
+    dynamics: { smoothing: 0.35, pressureSmoothing: 0.25, minSize: 0.25 },
+    mutation: {},
+  },
+  // --- Ferrofluid paint: liquid magnetic paint that rises into lit Rosensweig spikes near magnets ---
+  {
+    id: 'ferrofluid', name: 'Ferrofluid', kind: 'mark', medium: 'paint', variety: 'ferrofluid',
+    tip: { shape: 'round', size: 28, hardness: 0.75, flow: 0.9 },
+    dynamics: { smoothing: 0.35 },
+    ferro: { amount: 0.85 },
+    colour: { default: '#111827', palette: ['#111827', '#1e293b', '#312e81', '#0f3d3e', '#3b0764', '#451a03'] },
+  },
+  {
+    id: 'ferro-ink', name: 'Ferro ink', kind: 'mark', medium: 'ink', variety: 'ferrofluid',
+    tip: { shape: 'round', size: 12, spacing: 0.08 },
+    dynamics: { smoothing: 0.45, minSize: 0.25, velocitySize: -0.25 },
+    ferro: { amount: 0.7, wavelength: 12, threshold: 0.15 },
+    colour: { default: '#0f172a' },
   },
 ];

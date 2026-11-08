@@ -2026,11 +2026,18 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`PaintEditorController.strokePath`"
       },
       {
-        "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `clear_layer`, `pick_color` agent tools)",
-        "core": "`addLayer`, `updateLayer`, `fillLayer`, `mergeDown`, `pickColor`",
-        "react": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
-        "svelte": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
-        "swift": "`PaintEditorController`, `PaintLayersPanel` (eyedropper in `PaintCanvasView`)"
+        "feature": "Evolutionary Strokes (breed and mutate `RecordedStroke` genomes into a grid of paint proposals (`kind: 'strokes'`, previewed one after another through `previewPaint`): geometry mutation with `varyStroke` and smoothed point jitter, perceptual colour drift in OKLCH, brush facet drift within schema bounds, deterministic seed reroll, and two-parent crossover that resamples paths and mixes facets; contact-sheet grid export; accepting paints on a new layer as one undo step; `breed_strokes`, `breed_proposal`, `get_proposal_genome` agent tools)",
+        "core": "`breedStrokes`, `breedProposal`, `getProposalGenome`, `mutateGenome`, `crossoverGenomes`, `EVOLUTION_SLIDERS`, `createPaintEvolutionToolProvider`",
+        "react": "`<EvolutionPanel>` (in `<PaintEditor>`'s Layers tab)",
+        "svelte": "`<EvolutionPanel>` (in `<PaintEditor>`'s Layers tab)",
+        "swift": "`PaintEditorController.breedStrokes`, `PaintEditorController.breedProposal`, `PaintEditorController.getProposalGenome`"
+      },
+      {
+        "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; reference-layer region / flats flood fill with gap closing (`closeGap`), line-edge bleed (`expand`), antialiasing, paper grain, wet wash pour (`wet: true`), leak warning and enclosed unfilled-region detection; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `fill_region`, `find_unfilled_regions`, `clear_layer`, `pick_color` agent tools)",
+        "core": "`addLayer`, `updateLayer`, `fillLayer`, `fillRegion`, `findUnfilledRegions`, `fillRegionMask`, `findUnfilledRegionsMask`, `mergeDown`, `pickColor`",
+        "react": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
+        "svelte": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
+        "swift": "`PaintEditorController` (`fillRegion`, `findUnfilledRegions`), `fillRegionMask`, `findUnfilledRegionsMask`, `PaintLayersPanel`, Fill tool (G) in `PaintToolbarView` & `PaintCanvasView` (eyedropper in `PaintCanvasView`)"
       },
       {
         "feature": "Paint View & Pen Input (zoom, pan, rotation and mirroring as view state only, pen azimuth and twist turned with the view; Pointer Events to pen samples with tilt, altitude / azimuth and twist, mouse pressure fix; palm rejection by drawing hand; `set_view`, `set_hand` agent tools)",
@@ -2082,11 +2089,25 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "✅ Metal shading of the display: `WetMetalEngine` shades every stale tile at once from the core's WGSL shading kernel (translated by naga, `pnpm gen:msl`), reading the CPU engine's tiles in place on shared memory (`WetWorld` `attachGpu` / `displayGpu`), at 16 wet tiles; the GPU never steps (the CPU is the authority and runs every step), so there are no lead frames; `set_wet_engine` reports the engine (`WetEngineInfo`), and the engine picker in `PaintWetPanel` lists both"
       },
       {
+        "feature": "Live Patterns in Wet Paint (Gray-Scott reaction-diffusion patterns — spots, stripes, coral, maze and worms — that grow inside wet paint on a half-resolution tile field outside the wet kernel, gated by water coverage so the pattern freezes when the paint dries; `livePatterns` brush facet with Pearson presets, explicit `feed` / `kill`, `scale`, `contrast`, `secondColor` and `relief` that embosses ridges into the layer's thick height map; built-in presets Turing wash and Coral ink; undone, saved and replayed; `get_live_patterns`, `set_live_patterns`, `seed_live_patterns` agent tools)",
+        "core": "`LivePatternField`, `LIVE_PATTERN_PRESETS`, `LIVE_PATTERN_KINDS` (`/paint`) & `getLivePatterns`, `setLivePatterns`, `seedLivePatterns`, `LIVE_PATTERN_SLIDERS` (`/paint-editor`)",
+        "react": "Live patterns section in `<WetPanel>` & `<BrushEditor>`",
+        "svelte": "Live patterns section in `<WetPanel>` & `<BrushEditor>`",
+        "swift": "✅ `LivePatternField`, `LivePatternsSettings`, `BrushLivePatterns`, `PaintEditorController` `getLivePatterns`, `setLivePatterns`, `seedLivePatterns`, Live patterns section in `PaintWetPanel`"
+      },
+      {
         "feature": "Oils & Thick Paint (wet oil on the wet simulation: thick, slow-drying, blending into the wet paint it meets; a thick-paint layer channel set of height and material (gloss, metallic) lit at render time by a movable light, relit tile by tile; impasto brush with bristle ridges, paint tube, palette knife that scrapes and smears, roller, gloop pen, metallic paint; paint loading that runs out along a stroke, thinners, instant dry; metallic paper; relief and lighting saved with the document; `set_lighting`, `get_relief`, `flatten_relief`, `set_instant_dry` agent tools)",
         "core": "`ThickStrokeDriver`, `LitCache`, `lightTile`, `setLighting`, `flattenRelief`, `WET_MEDIUM_PARAMS`",
         "react": "`<BrushPanel>` impasto and medium menus, light section in `<PaperPanel>`, Instant dry in `<WetPanel>`",
         "svelte": "`<BrushPanel>` impasto and medium menus, light section in `<PaperPanel>`, Instant dry in `<WetPanel>`",
         "swift": "✅ `ThickChannels`, `PaintLighting`, `PaintEditorController` `setLighting`, `reliefOf`, `flattenRelief`, `setInstantDry`; wet oils on `PaintWetLayers`; metallic paper; `PaintLightPanel` (light sliders, Flatten relief)"
+      },
+      {
+        "feature": "Structural Colour & Thin-Film Iridescence (an `iridescence` brush facet (`thickness` 100–1000 nm, `pressureToThickness`, `ior` 1.2–2.0) writing a dielectric thin-film surface `ThickChannels.film` on thick or flat paint; optical path difference $2 \\cdot n \\cdot d \\cdot \\cos(\\theta_t)$ from Snell's law between the surface normal, light and view vector mapped to interference RGB and blended over the diffuse paint; view tilt (`viewTilt`: `x`, `y` in -1..1) that shifts the view vector without moving the light, plus opt-in device orientation / gyroscope tilt on iPhone and iPad; presets Scarab lacquer, Soap film, Pearl glaze; film channel saved with the document; `set_view_tilt`, `get_view_tilt`, `set_brush` `iridescence` agent tools)",
+        "core": "`FilmBuffer`, `thinFilmRgb`, `setViewTilt`, `getViewTilt`, `startDeviceTilt`, `requestDeviceTiltPermission`, `deviceOrientationToViewTilt`, `VIEW_TILT_SLIDERS`, `IRIDESCENCE_SLIDERS`",
+        "react": "`<PaintEditor deviceTilt>`, `<PaintCanvas deviceTilt>`, `<PaperPanel>` view tilt sliders and Device tilt toggle, `<BrushEditor>` Thin-film iridescence controls",
+        "svelte": "`<PaintEditor deviceTilt>`, `<PaintCanvas deviceTilt>`, `<PaperPanel>` view tilt sliders and Device tilt toggle, `<BrushEditor>` Thin-film iridescence controls",
+        "swift": "✅ `FilmBuffer`, `thinFilmRgb`, `PaintViewTilt`, `PaintEditorController` `setViewTilt` / `getViewTilt`, `PaintLightPanel` view tilt sliders and CoreMotion device tilt on iOS (`PaintCanvasView`, `PaintEditorView`)"
       },
       {
         "feature": "Time-lapse & High-Res Replay (the painting repainted from its recorded strokes and events in a headless editor: fills, clears, flattened relief and wet events at their simulation clock, wet strokes point by point at the clock each point was painted, so wet paint flows as it did; time-lapse frames after strokes and while paint flows, as PNGs, a video project of stills and the ffmpeg command from the video editor's export path, zipped; a high-resolution export repainted at 2–8× with brush sizes, grain and wet events scaled; `export_time_lapse`, `export_high_res` agent tools)",
@@ -2108,6 +2129,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "Light, Rim and Clarity sliders in `<BrushPanel>`, a Light section (spill, Clear light) in `<PaintLayersPanel>`",
         "svelte": "Light, Rim and Clarity sliders in `<BrushPanel>`, a Light section (spill, Clear light) in `<PaintLayersPanel>`",
         "swift": "✅ `PaintEditorController` `lightOf`, `setLightSpill`, `clearLight`; glow with rim and clarity, spill, wet light, backlit paper; `PaintLightSpillPanel`; no Light, Rim or Clarity sliders in `PaintBrushPanel` yet"
+      },
+      {
+        "feature": "UV-Fluorescent & Thermochromic Smart Inks (a `fluorescence` brush facet (`amount` 0..1, `invisible` true for invisible ink that leaves no daylight pigment) writing a per-layer `doc.fluor` channel that glows and spills in Linear Dodge (`::uv`) when the virtual UV blacklight (`uvLight: { on, strength, ambient }`) dims the room; a `thermochromic` brush facet (`hotColor`, `threshold` 0.05..0.95) writing a per-layer `doc.thermo` channel that shifts smoothly toward `hotColor` where a coarse 1/4-resolution document heat field (`doc.heat`) warms the canvas, spreading by Laplacian diffusion and fading by Newtonian cooling (`advanceHeat`) while drying wet paint under hot tiles; presets `uv-marker` and `thermo-ink`; saved, undone, duplicated, merged, shifted on `extendCanvas` and replayed; `set_uv_light`, `get_uv_light`, `paint_heat`, `advance_heat`, `clear_heat`, `get_heat` agent tools)",
+        "core": "`UvCache`, `ThermoCache`, `HeatField`, `setUvLight`, `getUvLight`, `paintHeat`, `advanceHeat`, `clearHeat`, `getHeat`, `UV_LIGHT_SLIDERS` (`/paint-editor`)",
+        "react": "UV blacklight & heat controls in `<PaperPanel>`, `fluorescence` & `thermochromic` controls in `<BrushEditor>`",
+        "svelte": "UV blacklight & heat controls in `<PaperPanel>`, `fluorescence` & `thermochromic` controls in `<BrushEditor>`",
+        "swift": "✅ `UvLightSettings`, `HeatField`, `UvCache`, `ThermoCache`, `PaintEditorController` `setUvLight`, `getUvLight`, `paintHeat`, `advanceHeat`, `clearHeat`, `getHeat`, `PaintPaperPanel`"
       },
       {
         "feature": "Live stroke layers (a layer drawn from its strokes, so each stroke's brush, settings, colour, paint, seed and points stay editable; redraws exactly and only where an edit changes; reorder, delete, rasterize; select and drag on the canvas; saved, undone and replayed; `stroke_at`, `update_stroke`, `edit_stroke_points`, `reorder_stroke`, `remove_strokes`, `convert_to_stroke_layer`, `rasterize_stroke_layer`, `list_strokes {live}`, `add_layer {type: strokes}` agent tools)",
@@ -2143,6 +2171,20 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "Linger and Smear sliders in `<BrushPanel>`'s `<BrushEditor>`",
         "svelte": "Linger and Smear sliders in `<BrushPanel>`'s `<BrushEditor>`",
         "swift": "✅ `WetWorld.fadeGhost`, `GhostSettings`, `DEFAULT_GHOST`, `normalizeGhost`; Linger and Smear sliders in `PaintBrushPanel`"
+      },
+      {
+        "feature": "Mutation Paint (wet or dry paint with a `mutation` facet (`settle`, `patience`, `fade`) where strokes group after `settle` seconds and notify an agent via `onMutationRequest`; when claimed with `read_mutation`, the stroke sinks away over `fade` seconds — wet strokes hold evaporation while waiting and release their ghost fade (`ghost.trigger: \"agent\"`) on claim leaving only their smear, and dry strokes paint on a temporary layer above the active layer that fades in the view and is removed — while the agent paints its answer through `answer_mutation` (`PaintDirector` cursor, one undo step with origin `agent:<id>`); if declined (`decline_mutation`), `patience` expires, or no agent is connected, the paint stays as ordinary paint (dry temporary layers merge down as one undo step); presets Mutation wash and Mutation ink; agent tools `list_mutations`, `read_mutation`, `answer_mutation`, `decline_mutation`; workflow skill `pixerate-paint-mutation`)",
+        "core": "`createMutationTools`, `MUTATION_SLIDERS`, `DEFAULT_MUTATION`, `normalizeMutation`, `MutationSettings` (`/paint-editor`)",
+        "react": "`useMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
+        "svelte": "`createMutationRequests`, Settle / Patience / Fade sliders and agent status in `<BrushPanel>`, Temporary badge in `<PaintLayersPanel>`",
+        "swift": "✅ `PaintMutationInfo`, `MutationSettings`, `DEFAULT_MUTATION`, `normalizeMutation`, `PaintEditorController` `onMutationRequest` / `listMutations` / `readMutation` / `answerMutation` / `declineMutation`; Settle / Patience / Fade sliders and agent status in `PaintBrushPanel`, Temporary badge in `PaintLayersPanel`"
+      },
+      {
+        "feature": "Ferrofluid Paint & Magnets (a per-layer liquid ferrofluid channel `doc.ferro[layerId]` laid by brushes with the `ferro` facet (`amount`, `wavelength`, `threshold`; built-in presets `ferrofluid` and `ferro-ink`); document magnets `doc.magnets` (`x`, `y`, `strength` in `-1..1`, `radius` in px) that deterministically advect liquid ferrofluid toward magnets when placed or moved and pull it into analytical hexagonal Rosensweig relief spikes where `|B| > threshold`, tilted along the magnetic field and shaded by `LitCache` / `lightTile` with glossy metallic material; `cure_ferrofluid` bakes the active spikes into permanent impasto relief and clears the liquid channel as one undo step; saved, undone and replayed; agent tools `add_magnet`, `update_magnet`, `remove_magnets`, `list_magnets`, `get_ferrofluid`, `cure_ferrofluid`)",
+        "core": "`ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`, `createFerroTools` (`/paint-editor`)",
+        "react": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
+        "svelte": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
+        "swift": "✅ `FerroSettings`, `PaintMagnet`, `ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`; `PaintEditorController` `addMagnet`, `updateMagnet`, `removeMagnets`, `listMagnets`, `getFerrofluid`, `cureFerrofluid`; `PaintFerroPanel` (in `PaintPaperPanel`) and magnet guides in `PaintCanvasView`"
       }
     ]
   },

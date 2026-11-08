@@ -48,7 +48,7 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
   // The brush's suggested colours, resolved for the colour scheme: one click makes one the paint colour.
   const palette = (spec.colour?.palette ?? []).flatMap((c) => brushColourHex(c, state.colorScheme) ?? []);
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
-  const loads = (['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint')) && !brush.ghost;
+  const loads = (['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint')) && !brush.ghost && !brush.mutation;
 
   return (
     <div className={`${panel} ${className ?? ''}`} data-testid="brush-panel">
@@ -64,20 +64,29 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
         renderExtra={(section) => {
           if (section === 'shape' && brush.engine === 'sticker')
             return <StickerPicker controller={controller} label="Sticker stamps" selected={brush.sticker.stamps} onPick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />;
-          if (section === 'behaviour' && loads)
+          if (section === 'behaviour')
             return (
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400">Carries</span>
-                <span aria-label="Brush load" title={carried ?? 'Clean'} className="h-4 w-4 rounded ring-1 ring-slate-700" style={{ background: carried ?? 'transparent' }} />
-                {brush.engine === 'mixer' && (
-                  <button type="button" className={button} onClick={() => controller.loadMixerBrush()}>
-                    Load
-                  </button>
+              <>
+                {brush.mutation && !state.hasMutationAgent && (
+                  <p className="text-[11px] text-amber-400" role="status" data-paint-mutation-unconnected>
+                    No agent is connected — mutation strokes will stay as ordinary paint.
+                  </p>
                 )}
-                <button type="button" className={button} onClick={() => controller.cleanMixerBrush(brush.engine === 'mixer')}>
-                  Clean
-                </button>
-              </div>
+                {loads && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400">Carries</span>
+                    <span aria-label="Brush load" title={carried ?? 'Clean'} className="h-4 w-4 rounded ring-1 ring-slate-700" style={{ background: carried ?? 'transparent' }} />
+                    {brush.engine === 'mixer' && (
+                      <button type="button" className={button} onClick={() => controller.loadMixerBrush()}>
+                        Load
+                      </button>
+                    )}
+                    <button type="button" className={button} onClick={() => controller.cleanMixerBrush(brush.engine === 'mixer')}>
+                      Clean
+                    </button>
+                  </div>
+                )}
+              </>
             );
           if (section === 'colour')
             return (

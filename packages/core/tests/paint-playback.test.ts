@@ -24,7 +24,7 @@ describe('paint playback', () => {
 		const directed = createPaintEditorToolProvider(controller, { director });
 		expect(directed.playbackSurface).toBe('paint');
 		const tools = typeof directed.tools === 'function' ? directed.tools() : directed.tools;
-		expect(tools.filter((t) => t.playback === 'self').map((t) => t.name).sort()).toEqual(['fill_layer', 'paint_stroke', 'replay_strokes', 'stroke_path']);
+		expect(tools.filter((t) => t.playback === 'self').map((t) => t.name).sort()).toEqual(['fill_layer', 'fill_region', 'paint_stroke', 'replay_strokes', 'stroke_path']);
 		const plain = createPaintEditorToolProvider(controller);
 		const plainTools = typeof plain.tools === 'function' ? plain.tools() : plain.tools;
 		expect(plainTools.some((t) => t.playback === 'self')).toBe(false);

@@ -141,6 +141,7 @@ extension PaintEditorController {
         paper.scale = Swift.min(8, paper.scale * scale)
         target.doc = PaintDocumentState(canvas: target.doc.canvas, paper: paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [])
         target.lighting = lighting
+        target.uvLight = uvLight
         // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
         target.effectsProvider = effectsProvider
         if Int(w) == width && Int(h) == height { target.effectPaintPixels = effectPaintPixels }
@@ -201,15 +202,87 @@ extension PaintEditorController {
                 case "wet-paper":
                     let d = e.data?.objectValue ?? [:]
                     if let id = e.layerId, target.getLayer(id) != nil { _ = try? target.wetPaper(layerId: id, rect: sr(d["rect"]), amount: d["amount"]?.numberValue) }
+                case "live-patterns":
+                    if let id = e.layerId, target.getLayer(id) != nil {
+                        if var d = e.data?.objectValue {
+                            if let sc = d["scale"]?.numberValue { d["scale"] = .number(Swift.min(4, sc * s)) }
+                            d["enabled"] = .bool(true)
+                            _ = try? target.setLivePatterns(id, d)
+                        } else {
+                            _ = try? target.setLivePatterns(id, ["enabled": .bool(false)])
+                        }
+                    }
+                case "seed-live-patterns":
+                    let d = e.data?.objectValue ?? [:]
+                    if let id = e.layerId, target.getLayer(id) != nil, let pts = d["points"]?.arrayValue {
+                        let scaledPts: [JSONValue] = pts.compactMap { item in
+                            guard var o = item.objectValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue else { return nil }
+                            o["x"] = .number(x * s)
+                            o["y"] = .number(y * s)
+                            return .object(o)
+                        }
+                        var args: JSONObject = [
+                            "layerId": .string(id),
+                            "points": .array(scaledPts),
+                            "radius": .number(Swift.min(512, (d["radius"]?.numberValue ?? 16) * s)),
+                        ]
+                        if let seed = d["seed"] { args["seed"] = seed }
+                        if let st = d["settings"]?.objectValue {
+                            for (k, v) in st { args[k] = v }
+                            if let sc = st["scale"]?.numberValue { args["scale"] = .number(Swift.min(4, sc * s)) }
+                        }
+                        _ = try? target.seedLivePatterns(args)
+                    }
+                case "ghost-release":
+                    let d = e.data?.objectValue ?? [:]
+                    if let id = e.layerId, target.getLayer(id) != nil { target.wet.releaseGhost(id, linger: d["linger"]?.numberValue) }
+                case "ghost-keep":
+                    if let id = e.layerId, target.getLayer(id) != nil { target.wet.keepGhost(id) }
                 default:
                     break
                 }
             case .paint(let e):
-                if target.getLayer(e.layerId) == nil { continue }
                 let d = e.data ?? [:]
+                if e.kind == "magnets" {
+                    let list = magnetsFromJSON(.array(d["magnets"]?.arrayValue ?? [])).map { m -> PaintMagnet in
+                        if s == 1 { return m }
+                        return PaintMagnet(id: m.id, x: m.x * s, y: m.y * s, strength: m.strength, radius: Swift.min(2000, Swift.max(8, m.radius * s)))
+                    }
+                    try target.replaceMagnets(list, advect: d["advect"] == .bool(true))
+                    continue
+                }
+                if target.getLayer(e.layerId) == nil { continue }
                 switch e.kind {
                 case "fill":
                     _ = try target.fillLayer(layerId: e.layerId, color: d["color"]?.stringValue, opacity: d["opacity"]?.numberValue, grain: d["grain"]?.numberValue, pressure: d["pressure"]?.numberValue, blend: d["blend"]?.stringValue)
+                case "fill-region":
+                    var pts: [FillRegionPoint] = []
+                    if let arr = d["points"]?.arrayValue {
+                        for p in arr {
+                            if let po = p.objectValue, let px = po["x"]?.numberValue, let py = po["y"]?.numberValue {
+                                pts.append(FillRegionPoint(x: px * s, y: py * s))
+                            }
+                        }
+                    } else if let px = d["x"]?.numberValue, let py = d["y"]?.numberValue {
+                        pts.append(FillRegionPoint(x: px * s, y: py * s))
+                    }
+                    let cg = d["closeGap"]?.numberValue.map { Swift.min(32, $0 * s) }
+                    let exp = d["expand"]?.numberValue.map { Swift.max(-16, Swift.min(16, $0 * s)) }
+                    _ = try target.fillRegion(
+                        points: pts,
+                        layerId: e.layerId,
+                        reference: d["reference"]?.stringValue,
+                        color: d["color"]?.stringValue,
+                        opacity: d["opacity"]?.numberValue,
+                        blend: d["blend"]?.stringValue,
+                        tolerance: d["tolerance"]?.numberValue,
+                        closeGap: cg,
+                        expand: exp,
+                        antialias: d["antialias"]?.boolValue,
+                        grain: d["grain"]?.numberValue,
+                        pressure: d["pressure"]?.numberValue,
+                        wet: d["wet"]?.boolValue
+                    )
                 case "clear":
                     _ = try target.clearLayer(e.layerId)
                 case "live-strokes":
@@ -233,6 +306,8 @@ extension PaintEditorController {
                     try target.replaceStickers(e.layerId, list)
                 case "flatten":
                     _ = try target.flattenRelief(e.layerId)
+                case "cure-ferrofluid":
+                    _ = try target.cureFerrofluid(e.layerId)
                 default:
                     continue
                 }

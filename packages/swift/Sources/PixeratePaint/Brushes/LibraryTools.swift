@@ -45,15 +45,22 @@ private func paintWetTestStroke(_ brush: PaintBrush, _ paper: PaperSettings, _ c
             try w.paint("thumb", RasterRect(x: 0, y: 0, width: width, height: half), nil, water: 0.4, pigment: pigmentOf(rgb, 0).map { $0 * 0.05 })
             try w.paint("thumb", RasterRect(x: 0, y: half, width: width, height: height - half), nil, water: 0.4, pigment: pigmentOf([232.0 / 255, 196.0 / 255, 64.0 / 255], 0).map { $0 * 0.05 })
         }
+        let film = brush.iridescence != nil && brush.wet.tool == "paint" ? FilmBuffer(emptySurface(4, 0)) : nil
         let driver = WetStrokeDriver(WetStrokeInit(
             world: w, laneId: "thumb", brush: brush, color: rgb, load: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, rgb), grain: paperGrain(paper),
-            paperDepth: paper.depth, paperColor: hexToRgb8(paper.color), seed: 7, copies: [IDENTITY_COPY], mask: nil, paint: nil, effect: nil
+            paperDepth: paper.depth, paperColor: hexToRgb8(paper.color), seed: 7, copies: [IDENTITY_COPY], mask: nil, paint: nil, effect: nil, film: film
         ))
         _ = try driver.push(thumbnailStroke(width, height))
         _ = try driver.finish()
         // Blowing only shows once the water has moved.
         if brush.wet.tool == "blow" { w.step(4) }
-        return try w.display("thumb").surface
+        let surf = try w.display("thumb").surface
+        if let film {
+            var ch = emptyThickChannels()
+            ch.film = film.surface()
+            return LitCache().lit(surf, ch, DEFAULT_LIGHTING)
+        }
+        return surf
     }
 }
 
@@ -87,13 +94,14 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
             affineCopies: [], copies: [IDENTITY_COPY], mixerLoad: brushLoadForStroke(b, EMPTY_MIXER_LOAD, rgb.map { Double($0) / 255 }), secondary: nil, selection: nil, paint: nil
         )
         if b.engine == "impasto" { i.thick = emptyThickChannels() }
+        else if b.iridescence != nil { i.film = emptySurface(4, 0) }
         i.stampArt = stampArt
         if b.light.amount > 0 && b.engine != "sticker" { i.light = emptyLight() }
         let session = try PaintStrokeSession(i)
         try session.push(thumbnailStroke(width, height))
         _ = try session.end()
         surface = session.surfaceAfter ?? surface
-        let thick = session.thickChannels()
+        let thick = session.thickChannels() ?? session.filmChannel().map { ThickChannels(height: emptySurface(1, 0), material: emptySurface(4, 0), film: $0) }
         light = session.lightChannel
         // Thick paint is shown lit, and light paint glowing, as on the canvas.
         let lit = thick.map { LitCache().lit(surface, $0, DEFAULT_LIGHTING) } ?? surface
@@ -126,6 +134,7 @@ func brushSummary(_ e: BrushLibraryEntry, withCheck: Bool) -> JSONValue {
     o["marks"] = b.path("marks.kind") ?? "continuous"
     o["surface"] = b.path("behaviour.surface") ?? "dry"
     if let l = b.path("light.amount"), l != 0 { o["light"] = l }
+    if let f = b.path("ferro.amount"), f != 0 { o["ferro"] = f }
     if let tags = b["tags"]?.arrayValue, !tags.isEmpty { o["tags"] = .array(tags) }
     if withCheck { o["renderable"] = .bool(checkBrush(b, PAINT_PROFILE).ok) }
     return .object(o)

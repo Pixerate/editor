@@ -42,6 +42,19 @@
     }
   },
   {
+    "id": "tool.fill",
+    "label": "Fill",
+    "group": "tools",
+    "keys": [
+      "G"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "tool.eyedropper",
     "label": "Eyedropper",
     "group": "tools",

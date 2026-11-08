@@ -20,10 +20,48 @@ public struct ThickChannels {
     public var height: TiledSurface
     /// Material per pixel (4 channels): R gloss, G metallic, B rim, A opacity (255 solid; 0 no material).
     public var material: TiledSurface
+    /// Thin-film iridescence per pixel (4 channels): R thickness (100..1000 nm), G IOR (1.2..2.0), B unused, A film amount.
+    public var film: TiledSurface
+
+    public init(height: TiledSurface, material: TiledSurface, film: TiledSurface = emptySurface(4, 0)) {
+        self.height = height
+        self.material = material
+        self.film = film
+    }
 }
 
 public func emptyThickChannels() -> ThickChannels {
-    ThickChannels(height: emptySurface(1, 0), material: emptySurface(4, 0))
+    ThickChannels(height: emptySurface(1, 0), material: emptySurface(4, 0), film: emptySurface(4, 0))
+}
+
+/// Whether a layer's thick channels carry any relief or thin-film coat.
+public func hasThickChannels(_ ch: ThickChannels?) -> Bool {
+    guard let ch else { return false }
+    return !ch.height.tiles.isEmpty || !ch.film.tiles.isEmpty
+}
+
+/// Viewer tilt for thin-film iridescence and specular highlights (`-1..1` on each axis; `{ 0, 0 }` is straight-on).
+public struct PaintViewTilt: Equatable, Sendable {
+    public var x: Double = 0
+    public var y: Double = 0
+
+    public init(x: Double = 0, y: Double = 0) {
+        self.x = x
+        self.y = y
+    }
+
+    public var json: JSONValue { ["x": .number(x), "y": .number(y)] }
+}
+
+public let DEFAULT_VIEW_TILT = PaintViewTilt()
+
+/// View tilt with both axes clamped into `-1..1`; missing fields come from `base`.
+public func normalizeViewTilt(x: Double?, y: Double?, _ base: PaintViewTilt = DEFAULT_VIEW_TILT) -> PaintViewTilt {
+    func num(_ v: Double?, _ d: Double) -> Double { v.flatMap { $0.isFinite ? $0 : nil } ?? d }
+    return PaintViewTilt(
+        x: Swift.min(1, Swift.max(-1, num(x, base.x))),
+        y: Swift.min(1, Swift.max(-1, num(y, base.y)))
+    )
 }
 
 public let DEFAULT_LIGHTING = PaintLighting()
@@ -49,20 +87,52 @@ private func lightVector(_ l: PaintLighting) -> (Double, Double, Double) {
     return (JS.cos(el) * JS.sin(az), -JS.cos(el) * JS.cos(az), JS.sin(el))
 }
 
+/// Unit view vector (towards the viewer) from `viewTilt`.
+private func viewVector(_ v: PaintViewTilt) -> (Double, Double, Double) {
+    let vx = v.x * 1.25
+    let vy = v.y * 1.25
+    let vz = 1.0
+    let len = JS.hypot(vx, vy, vz)
+    return (vx / len, vy / len, vz / len)
+}
+
+/// Representative R, G, B wavelengths in nanometres for two-beam thin-film interference.
+private let FILM_WAVELENGTHS = (630.0, 532.0, 465.0)
+
 /**
- * One tile of a thick layer lit (`lightTile`): `color` (RGBA, straight), the height and material of
- * the tile, and the height of its neighbours for the slopes at the border. Returns a new RGBA tile.
+ * Two-beam thin-film interference reflectance (`0..1` linear RGB) for an optical path difference
+ * `opd = 2 · n · d · cos(θ_t)` in nanometres, with a half-wave phase flip at the air–film boundary:
+ * `R(λ) = 0.5 - 0.5 · cos(2π · opd / λ)`.
  */
-func lightTile(_ color: [UInt8], _ height: [UInt8]?, _ heightAround: (Int, Int) -> [UInt8]?, _ material: [UInt8]?, _ light: PaintLighting) -> [UInt8] {
+public func thinFilmRgb(_ opd: Double) -> (Double, Double, Double) {
+    let twoPi = 2 * Double.pi * opd
+    return (
+        0.5 - 0.5 * JS.cos(twoPi / FILM_WAVELENGTHS.0),
+        0.5 - 0.5 * JS.cos(twoPi / FILM_WAVELENGTHS.1),
+        0.5 - 0.5 * JS.cos(twoPi / FILM_WAVELENGTHS.2)
+    )
+}
+
+/**
+ * One tile of a thick layer lit (`lightTile`): `color` (RGBA, straight), the height, material and
+ * thin-film channels of the tile, and the height of its neighbours for the slopes at the border.
+ * Returns a new RGBA tile.
+ */
+func lightTile(_ color: [UInt8], _ height: [UInt8]?, _ heightAround: (Int, Int) -> [UInt8]?, _ material: [UInt8]?, _ light: PaintLighting, _ film: [UInt8]? = nil, _ viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT) -> [UInt8] {
     var out = color
-    guard let height, light.relief > 0 else { return out }
+    let hasHeight = height != nil && light.relief > 0
+    if !hasHeight && film == nil { return out }
     let (lx, ly, lz) = lightVector(light)
-    let hl = JS.hypot(lx, ly, lz + 1)
-    let hx = lx / hl, hy = ly / hl, hz = (lz + 1) / hl
+    let (vx, vy, vz) = viewVector(viewTilt)
+    let hl = JS.hypot(lx + vx, ly + vy, lz + vz)
+    let hx = hl > 1e-9 ? (lx + vx) / hl : 0
+    let hy = hl > 1e-9 ? (ly + vy) / hl : 0
+    let hz = hl > 1e-9 ? (lz + vz) / hl : 1
     let k = (RELIEF_PX / 255) * light.relief * 2
     let flatDiffuse = AMBIENT + (1 - AMBIENT) * lz
     var around: [Int: [UInt8]?] = [:]
     func read(_ x: Int, _ y: Int) -> Double {
+        guard let height else { return 0 }
         if x >= 0 && y >= 0 && x < TILE && y < TILE { return Double(height[y * TILE + x]) }
         let dx = x < 0 ? -1 : x >= TILE ? 1 : 0
         let dy = y < 0 ? -1 : y >= TILE ? 1 : 0
@@ -76,66 +146,308 @@ func lightTile(_ color: [UInt8], _ height: [UInt8]?, _ heightAround: (Int, Int) 
             let p = y * TILE + x
             let i = p * 4
             if color[i + 3] == 0 { continue }
-            let h = height[p]
-            let gx = (read(x + 1, y) - read(x - 1, y)) * 0.5
-            let gy = (read(x, y + 1) - read(x, y - 1)) * 0.5
-            if h == 0 && gx == 0 && gy == 0 { continue }
-            var nx = -gx * k
-            var ny = -gy * k
-            let nl = JS.hypot(nx, ny, 1)
-            nx /= nl
-            ny /= nl
-            let nz = 1 / nl
-            let diffuse = Swift.max(0, nx * lx + ny * ly + nz * lz)
-            let shade = (AMBIENT + (1 - AMBIENT) * diffuse) / flatDiffuse
+            let fa = film.map { Double($0[i + 3]) / 255 } ?? 0
+            let h: UInt8 = hasHeight ? height![p] : 0
+            let gx = hasHeight ? (read(x + 1, y) - read(x - 1, y)) * 0.5 : 0
+            let gy = hasHeight ? (read(x, y + 1) - read(x, y - 1)) * 0.5 : 0
+            let hasSlope = hasHeight && (h != 0 || gx != 0 || gy != 0)
+            if !hasSlope && fa <= 0 { continue }
+            var nx = 0.0, ny = 0.0, nz = 1.0
+            if hasSlope {
+                nx = -gx * k
+                ny = -gy * k
+                let nl = JS.hypot(nx, ny, 1)
+                nx /= nl
+                ny /= nl
+                nz = 1 / nl
+            }
+            var filmRgb: (Double, Double, Double)? = nil
+            if fa > 0, let film {
+                let d = 100 + (Double(film[i]) / 255) * 900
+                let ior = 1.2 + (Double(film[i + 1]) / 255) * 0.8
+                let nh = Swift.max(0, nx * hx + ny * hy + nz * hz)
+                let nv = Swift.max(0, nx * vx + ny * vy + nz * vz)
+                let cosThetaI = Swift.max(0, Swift.min(1, nh * nv))
+                let sin2ThetaT = (1 - cosThetaI * cosThetaI) / (ior * ior)
+                let cosThetaT = Swift.max(0, 1 - sin2ThetaT).squareRoot()
+                let opd = 2 * ior * d * cosThetaT
+                filmRgb = thinFilmRgb(opd)
+            }
             let gloss = material.map { Double($0[i]) / 255 } ?? 0.3
             let metal = material.map { Double($0[i + 1]) / 255 } ?? 0
-            let shininess = 6 + 90 * gloss
-            let nh = Swift.max(0, nx * hx + ny * hy + nz * hz)
-            // Only slopes catch a highlight: subtract what a flat surface would show.
-            let spec = Swift.max(0, JS.pow(nh, shininess) - JS.pow(hz, shininess)) * (0.25 + 0.75 * gloss) * light.relief
+            var shade = 1.0
+            var spec = 0.0
+            if hasSlope {
+                let diffuse = Swift.max(0, nx * lx + ny * ly + nz * lz)
+                shade = (AMBIENT + (1 - AMBIENT) * diffuse) / flatDiffuse
+                let shininess = 6 + 90 * gloss
+                let nh = Swift.max(0, nx * hx + ny * hy + nz * hz)
+                // Only slopes catch a highlight: subtract what a flat surface would show.
+                spec = Swift.max(0, JS.pow(nh, shininess) - JS.pow(hz, shininess)) * (0.25 + 0.75 * gloss) * light.relief
+            }
+            let fArr: [Double]? = filmRgb.map { [$0.0, $0.1, $0.2] }
             for c in 0..<3 {
                 let a = SRGB_TO_LINEAR[Int(color[i + c])]
-                let tint = metal * a + (1 - metal)
-                let v = a * shade * (1 - 0.35 * metal) + spec * tint * (1 + metal)
-                out[i + c] = UInt8(linearToSrgb8(v))
+                let fc = fArr?[c] ?? a
+                if hasSlope {
+                    let tint = metal * a + (1 - metal)
+                    let diff = fa > 0 ? a * (1 - fa * 0.75) + fc * fa * (0.45 + 0.55 * a) : a
+                    let specTint = fa > 0 ? tint * (1 - fa) + fc * fa : tint
+                    let v = diff * shade * (1 - 0.35 * metal) + spec * specTint * (1 + metal)
+                    out[i + c] = UInt8(linearToSrgb8(v))
+                } else {
+                    let v = a * (1 - fa * 0.75) + fc * fa * (0.45 + 0.55 * a)
+                    out[i + c] = UInt8(linearToSrgb8(v))
+                }
             }
         }
     }
     return out
 }
 
+private func expandTile(_ t: Tile, _ channels: Int) -> [UInt8] {
+    if t.data.count == TILE * TILE * channels { return t.data }
+    let u = t.uniform ?? 0
+    if channels == 1 { return [UInt8](repeating: UInt8(u & 255), count: TILE * TILE) }
+    var out = [UInt8](repeating: 0, count: TILE * TILE * 4)
+    let b0 = UInt8((u >> 24) & 255), b1 = UInt8((u >> 16) & 255), b2 = UInt8((u >> 8) & 255), b3 = UInt8(u & 255)
+    for i in stride(from: 0, to: out.count, by: 4) {
+        out[i] = b0; out[i + 1] = b1; out[i + 2] = b2; out[i + 3] = b3
+    }
+    return out
+}
+
 /// Cache of lit tiles for one layer, by the identity of their inputs (`LitCache`).
 final class LitCache {
-    private var tiles: [TileKey: (inputs: [ObjectIdentifier?], light: PaintLighting, tile: Tile)] = [:]
+    private var tiles: [TileKey: (inputs: [ObjectIdentifier?], light: PaintLighting, viewTilt: PaintViewTilt, ferroKey: String, tile: Tile)] = [:]
 
-    /// The layer's pixels lit (tiles without relief nearby are the colour tiles themselves).
-    func lit(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting) -> TiledSurface {
-        if ch.height.tiles.isEmpty || light.relief <= 0 { return color }
+    /// The layer's pixels lit (tiles without relief, thin film or ferrofluid nearby are the colour tiles themselves).
+    /// Without ferrofluid this is the thick-paint / thin-film pass; with it, `litFerro` (see `thick.ts`).
+    func lit(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting, _ viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT, _ ferro: FerroLayerInput? = nil) -> TiledSurface {
+        if let ferro, !ferro.surface.tiles.isEmpty { return litFerro(color, ch, light, viewTilt, ferro) }
+        let hasHeight = !ch.height.tiles.isEmpty && light.relief > 0
+        let hasFilm = !ch.film.tiles.isEmpty
+        if !hasHeight && !hasFilm { return color }
         var out = color.tiles
         var keys = Set<TileKey>()
         for (key, tile) in color.tiles {
             keys.insert(key)
             let (tx, ty) = tileCoord(key)
-            func around(_ dx: Int, _ dy: Int) -> Tile? { ch.height.tiles.get(tileKey(tx + dx, ty + dy)) }
-            var any = false
-            for dy in -1...1 where !any { for dx in -1...1 where !any { if around(dx, dy) != nil { any = true } } }
+            func around(_ dx: Int, _ dy: Int) -> Tile? { hasHeight ? ch.height.tiles.get(tileKey(tx + dx, ty + dy)) : nil }
+            let f = ch.film.tiles.get(key)
+            var any = f != nil
+            if hasHeight {
+                for dy in -1...1 where !any { for dx in -1...1 where !any { if around(dx, dy) != nil { any = true } } }
+            }
             if !any { continue }
-            let h = ch.height.tiles.get(key)
+            let h = hasHeight ? ch.height.tiles.get(key) : nil
             let m = ch.material.tiles.get(key)
-            var inputs: [ObjectIdentifier?] = [ObjectIdentifier(tile), m.map(ObjectIdentifier.init)]
+            var inputs: [ObjectIdentifier?] = [ObjectIdentifier(tile), m.map(ObjectIdentifier.init), f.map(ObjectIdentifier.init)]
             for dy in -1...1 { for dx in -1...1 { inputs.append(around(dx, dy).map(ObjectIdentifier.init)) } }
-            if let cached = tiles[key], cached.inputs == inputs, cached.light == light {
+            if let cached = tiles[key], cached.inputs == inputs, cached.light == light, cached.viewTilt == viewTilt, cached.ferroKey == "" {
                 out.set(key, cached.tile)
                 continue
             }
-            let data = lightTile(tile.data, h?.data, { dx, dy in around(dx, dy)?.data }, m?.data, light)
+            let data = lightTile(tile.data, h?.data, { dx, dy in around(dx, dy)?.data }, m?.data, light, f?.data, viewTilt)
             let litTile = Tile(data: data, uniform: nil)
-            tiles[key] = (inputs, light, litTile)
+            tiles[key] = (inputs, light, viewTilt, "", litTile)
             out.set(key, litTile)
         }
         for key in Array(tiles.keys) where !keys.contains(key) { tiles[key] = nil }
         return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
+    }
+
+    /// The ferrofluid lighting pass: carrier colour, gloss / metal material and (near magnets) spike
+    /// heights blended into the thick relief, lit even when `light.relief` is 0; a thin film on the
+    /// same layer still colours the lit tiles.
+    private func litFerro(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting, _ viewTilt: PaintViewTilt, _ ferro: FerroLayerInput) -> TiledSurface {
+        let hasFerroSpikes = !ferro.magnets.isEmpty
+        let fk = ferroCacheKey(ferro)
+        var out = color.tiles
+        var keys = OrderedMap<TileKey, Bool>()
+        for k in color.tiles.keys { keys.set(k, true) }
+        for k in ferro.surface.tiles.keys { keys.set(k, true) }
+        for (key, _) in keys {
+            let tile = color.tiles.get(key)
+            let (tx, ty) = tileCoord(key)
+            func aroundH(_ dx: Int, _ dy: Int) -> Tile? { ch.height.tiles.get(tileKey(tx + dx, ty + dy)) }
+            func aroundF(_ dx: Int, _ dy: Int) -> Tile? { ferro.surface.tiles.get(tileKey(tx + dx, ty + dy)) }
+            let film = ch.film.tiles.get(key)
+            var any = film != nil
+            for dy in -1...1 where !any {
+                for dx in -1...1 where !any {
+                    if aroundH(dx, dy) != nil || aroundF(dx, dy) != nil { any = true }
+                }
+            }
+            if !any { continue }
+            let m = ch.material.tiles.get(key)
+            let f = ferro.surface.tiles.get(key)
+            if tile == nil && f == nil { continue }
+            var inputs: [ObjectIdentifier?] = [tile.map(ObjectIdentifier.init), m.map(ObjectIdentifier.init), film.map(ObjectIdentifier.init)]
+            for dy in -1...1 { for dx in -1...1 { inputs.append(aroundH(dx, dy).map(ObjectIdentifier.init)) } }
+            for dy in -1...1 { for dx in -1...1 { inputs.append(aroundF(dx, dy).map(ObjectIdentifier.init)) } }
+            if let cached = tiles[key], cached.inputs == inputs, cached.light == light, cached.viewTilt == viewTilt, cached.ferroKey == fk {
+                out.set(key, cached.tile)
+                continue
+            }
+
+            var cd = tile.map { expandTile($0, 4) } ?? [UInt8](repeating: 0, count: TILE * TILE * 4)
+            var md = m.map { expandTile($0, 4) }
+            if let f {
+                let fd = expandTile(f, 1)
+                var mBuf = md ?? [UInt8](repeating: 0, count: TILE * TILE * 4)
+                for p in 0..<fd.count {
+                    let fb = Int(fd[p])
+                    if fb == 0 { continue }
+                    let i = p * 4
+                    if Int(cd[i + 3]) < fb {
+                        let a0 = Double(cd[i + 3]) / Double(fb)
+                        cd[i] = JS.u8c(JS.round(Double(cd[i]) * a0 + Double(FERRO_CARRIER_RGB.0) * (1.0 - a0)))
+                        cd[i + 1] = JS.u8c(JS.round(Double(cd[i + 1]) * a0 + Double(FERRO_CARRIER_RGB.1) * (1.0 - a0)))
+                        cd[i + 2] = JS.u8c(JS.round(Double(cd[i + 2]) * a0 + Double(FERRO_CARRIER_RGB.2) * (1.0 - a0)))
+                        cd[i + 3] = UInt8(fb)
+                    }
+                    let w = Double(fb) / 255.0
+                    mBuf[i] = UInt8(Swift.max(Int(mBuf[i]), Int(JS.round(Double(FERRO_DEFAULT_GLOSS) * w))))
+                    mBuf[i + 1] = UInt8(Swift.max(Int(mBuf[i + 1]), Int(JS.round(Double(FERRO_DEFAULT_METALLIC) * w))))
+                    mBuf[i + 2] = UInt8(Swift.max(Int(mBuf[i + 2]), Int(JS.round(Double(FERRO_DEFAULT_RIM) * w))))
+                    if mBuf[i + 3] == 0 { mBuf[i + 3] = 255 }
+                }
+                md = mBuf
+            }
+
+            func buildHeightTile(_ ntx: Int, _ nty: Int) -> [UInt8]? {
+                let nkey = tileKey(ntx, nty)
+                let ht = ch.height.tiles.get(nkey)
+                let ft = hasFerroSpikes ? ferro.surface.tiles.get(nkey) : nil
+                if ht == nil && ft == nil { return nil }
+                guard let ft else { return expandTile(ht!, 1) }
+                var outH = ht.map { expandTile($0, 1) } ?? [UInt8](repeating: 0, count: TILE * TILE)
+                let fData = expandTile(ft, 1)
+                let ox = Double(ntx * TILE + ferro.offset.x) + 0.5
+                let oy = Double(nty * TILE + ferro.offset.y) + 0.5
+                var p = 0
+                for py in 0..<TILE {
+                    let docY = oy + Double(py)
+                    for px in 0..<TILE {
+                        let fb = Int(fData[p])
+                        if fb != 0 {
+                            let hs = ferroSpikeHeightAt(ox + Double(px), docY, fb, ferro.magnets, ferro.settings)
+                            if hs > 0 { outH[p] = UInt8(Swift.min(255, Int(outH[p]) + hs)) }
+                        }
+                        p += 1
+                    }
+                }
+                return outH
+            }
+
+            let hd = buildHeightTile(tx, ty)
+            let data = lightTile(cd, hd, { dx, dy in buildHeightTile(tx + dx, ty + dy) }, md, light, film.map { expandTile($0, 4) }, viewTilt)
+            let litTile = Tile(data: data, uniform: nil)
+            tiles[key] = (inputs, light, viewTilt, fk, litTile)
+            out.set(key, litTile)
+        }
+        for key in Array(tiles.keys) where !keys.has(key) { tiles[key] = nil }
+        return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
+    }
+}
+
+/**
+ * Live thin-film buffer (`FilmBuffer`) for a stroke: deposits or erases the 4-channel film map
+ * (R thickness 100..1000 nm → 0..255, G IOR 1.2..2.0 → 0..255, B 0, A film amount 0..255) in
+ * layer space and builds a `TiledSurface`.
+ */
+public final class FilmBuffer {
+    private var tiles = OrderedMap<TileKey, ByteTile>()
+    private let base: TiledSurface
+    private let offset: LayerOffset
+    private let mask: PaintSelection?
+
+    public init(_ base: TiledSurface, _ offset: LayerOffset = LayerOffset(x: 0, y: 0), _ mask: PaintSelection? = nil) {
+        self.base = base
+        self.offset = offset
+        self.mask = mask
+    }
+
+    public var changed: Bool { !tiles.isEmpty }
+
+    private func tile(_ tx: Int, _ ty: Int) -> ByteTile {
+        let key = tileKey(tx, ty)
+        if let t = tiles.get(key) { return t }
+        let t = ByteTile(base.tiles.get(key)?.data ?? [UInt8](repeating: 0, count: TILE * TILE * 4))
+        tiles.set(key, t)
+        return t
+    }
+
+    private func maskAt(_ wx: Int, _ wy: Int) -> Double {
+        guard let m = mask else { return 1 }
+        return wx >= 0 && wy >= 0 && wx < m.width && wy < m.height ? Double(m.data[wy * m.width + wx]) / 255 : 0
+    }
+
+    /// Deposits a dab's thin-film coat over `rect` (document pixels) with coverage `cov` and weight `opacity`.
+    public func deposit(_ rect: RasterRect, _ cov: [Float], _ opacity: Double, _ pressure: Double, _ ir: IridescenceSettings) {
+        if !(opacity > 0) { return }
+        let pr = pressure.isFinite ? pressure : 0.5
+        let nm = Swift.min(1000, Swift.max(100, ir.thickness * (1 + ir.pressureToThickness * (pr - 0.5) * 2)))
+        let rVal = JS.round(((nm - 100) / 900) * 255)
+        let gVal = JS.round(((ir.ior - 1.2) / 0.8) * 255)
+        let off = offset
+        var p = 0
+        for yy in 0..<rect.height {
+            for xx in 0..<rect.width {
+                defer { p += 1 }
+                let wx = rect.x + xx, wy = rect.y + yy
+                let c = Swift.min(1, Double(cov[p]) * opacity * maskAt(wx, wy))
+                if !(c > 0) { continue }
+                let lx = wx - off.x, ly = wy - off.y
+                let t = tile(lx >> 8, ly >> 8)
+                let i = ((ly & 255) * TILE + (lx & 255)) * 4
+                let a0 = Double(t.data[i + 3]) / 255
+                let a1 = a0 + c * (1 - a0)
+                let w = a1 > 0 ? c / a1 : 1
+                t.data[i] = JS.u8c(JS.round(Double(t.data[i]) + (rVal - Double(t.data[i])) * w))
+                t.data[i + 1] = JS.u8c(JS.round(Double(t.data[i + 1]) + (gVal - Double(t.data[i + 1])) * w))
+                t.data[i + 2] = 0
+                t.data[i + 3] = JS.u8c(JS.round(a1 * 255))
+            }
+        }
+    }
+
+    /// Erases the thin-film coat over `rect` (document pixels) with coverage `cov` and weight `opacity`.
+    public func erase(_ rect: RasterRect, _ cov: [Float], _ opacity: Double) {
+        if !(opacity > 0) { return }
+        let off = offset
+        var p = 0
+        for yy in 0..<rect.height {
+            for xx in 0..<rect.width {
+                defer { p += 1 }
+                let wx = rect.x + xx, wy = rect.y + yy
+                let c = Swift.min(1, Double(cov[p]) * opacity * maskAt(wx, wy))
+                if !(c > 0) { continue }
+                let lx = wx - off.x, ly = wy - off.y
+                let key = tileKey(lx >> 8, ly >> 8)
+                if !tiles.has(key) && !base.tiles.has(key) { continue }
+                let t = tile(lx >> 8, ly >> 8)
+                let i = ((ly & 255) * TILE + (lx & 255)) * 4
+                if t.data[i + 3] == 0 { continue }
+                let a1 = JS.u8c(JS.round(Double(t.data[i + 3]) * (1 - c)))
+                t.data[i + 3] = a1
+                if a1 == 0 {
+                    t.data[i] = 0
+                    t.data[i + 1] = 0
+                    t.data[i + 2] = 0
+                }
+            }
+        }
+    }
+
+    public func surface() -> TiledSurface {
+        if tiles.isEmpty { return base }
+        var out = base.tiles
+        for (k, d) in tiles {
+            if let t = finishTile(d.data, 4, 0) { out.set(k, t) } else { _ = out.delete(k) }
+        }
+        return TiledSurface(channels: 4, tiles: out, defaultValue: 0)
     }
 }
 
@@ -179,6 +491,7 @@ final class ThickStrokeDriver {
     private let sampler: PaintGradientSampler?
     private var height = OrderedMap<TileKey, ByteTile>()
     private var material = OrderedMap<TileKey, ByteTile>()
+    private let film: FilmBuffer?
     private var paintColor = [0.0, 0.0, 0.0]
     private var centre = [0.0, 0.0, 0.0]
     private var lastRaw: PenPoint?
@@ -198,6 +511,7 @@ final class ThickStrokeDriver {
             )
         }
         medium = TileMedium(i.target, blend: nil)
+        film = b.iridescence != nil ? FilmBuffer(i.channels.film, i.target.offset, i.target.selection) : nil
         if var g = i.paint {
             if g.map.by == "across-tip" { g.map = PaintGradientMapping(by: "distance", length: 300, repeat: "mirror") }
             sampler = PaintGradientSampler(g, seed: i.seed)
@@ -215,7 +529,7 @@ final class ThickStrokeDriver {
         var m = initValues.channels.material.tiles
         for (k, d) in height { if let t = finishTile(d.data, 1, 0) { h.set(k, t) } else { _ = h.delete(k) } }
         for (k, d) in material { if let t = finishTile(d.data, 4, 0) { m.set(k, t) } else { _ = m.delete(k) } }
-        return ThickChannels(height: TiledSurface(channels: 1, tiles: h, defaultValue: 0), material: TiledSurface(channels: 4, tiles: m, defaultValue: 0))
+        return ThickChannels(height: TiledSurface(channels: 1, tiles: h, defaultValue: 0), material: TiledSurface(channels: 4, tiles: m, defaultValue: 0), film: film?.surface() ?? initValues.channels.film)
     }
 
     private func heightTile(_ tx: Int, _ ty: Int, _ write: Bool) -> [UInt8]? {
@@ -318,6 +632,7 @@ final class ThickStrokeDriver {
             st.smudge!.dab(medium, SmudgeDab(x: d.dab.x, y: d.dab.y, radius: d.dab.radius, opacity: k), rect, tip)
             knifeHeight(st, d, rect, tip, k, im.drag)
             paintMaterial(rect, tip, k * 0.6, im.gloss, im.metallic, im.rim, im.clarity)
+            if let ir = b.iridescence { film?.deposit(rect, tip, k * 0.6, d.pressure, ir) }
             return
         }
         let ex = st.exchange
@@ -384,6 +699,7 @@ final class ThickStrokeDriver {
             }
         }
         paintMaterial(rect, tip, k, im.gloss * (1 - 0.3 * im.thinner), im.metallic, im.rim, im.clarity)
+        if let ir = b.iridescence { film?.deposit(rect, tip, k, d.pressure, ir) }
     }
 
     /// The knife: flattens the relief under it and carries some of it along.
@@ -441,19 +757,31 @@ final class ThickStrokeDriver {
     }
 }
 
-/// Height statistics of a layer's relief (for tools).
+/// Height and thin-film statistics of a layer's relief (for tools).
 func reliefInfo(_ ch: ThickChannels) -> (bounds: RasterRect?, maxHeight: Int, tiles: Int) {
     var mx = 0
     for (_, t) in ch.height.tiles {
         if let u = t.uniform { mx = Swift.max(mx, Int(u & 255)) } else { for v in t.data where Int(v) > mx { mx = Int(v) } }
     }
-    return (ch.height.bounds, mx, ch.height.tiles.count)
+    return (
+        bounds: unionRectOpt(ch.height.bounds, ch.film.bounds),
+        maxHeight: mx,
+        tiles: ch.height.tiles.isEmpty ? ch.film.tiles.count : ch.height.tiles.count
+    )
 }
 
-/// Channels → saved form (`{ rect, height, material }`, PNG data URLs), or nil when there is no relief.
+/// Channels → saved form (`{ rect, height, material, film? }`, PNG data URLs), or nil when there is no relief or film.
 func thickToJSON(_ ch: ThickChannels) -> JSONValue? {
-    guard let b = ch.height.bounds else { return nil }
-    return ["rect": b.json, "height": .string(pngDataUrl(b.width, b.height, readRegion(ch.height, b), 1)), "material": .string(pngDataUrl(b.width, b.height, readRegion(ch.material, b), 4))]
+    guard let b = unionRectOpt(ch.height.bounds, ch.film.bounds) else { return nil }
+    var out: JSONObject = [
+        "rect": b.json,
+        "height": .string(pngDataUrl(b.width, b.height, readRegion(ch.height, b), 1)),
+        "material": .string(pngDataUrl(b.width, b.height, readRegion(ch.material, b), 4)),
+    ]
+    if ch.film.bounds != nil {
+        out["film"] = .string(pngDataUrl(b.width, b.height, readRegion(ch.film, b), 4))
+    }
+    return .object(out)
 }
 
 /// How far a bead's surface faces the viewer (0 edge-on .. 1 facing), from the height around a pixel.

@@ -7,10 +7,13 @@
  * `createCanvasChangeFeed` and `createCanvasProposals`.
  */
 
+import { normalizeBrushSpec } from '../brushes/normalize';
+import { resolveBrush } from '../brushes/resolve';
 import type { RasterRect } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { PaintEditorError, type PaintCommitEvent, type PaintEditorController } from './controller';
 import type { PaintEvent } from './document';
+import { liveStrokeRefusal } from './live-strokes';
 import type { RecordedStroke } from './strokes';
 
 // --- Change feed ---------------------------------------------------------------------
@@ -191,7 +194,13 @@ export interface PaintProposalEchoOp {
   color?: string;
 }
 
-export type PaintProposalOp = PaintProposalStrokeOp | PaintProposalWashOp | PaintProposalEchoOp;
+/** Full recorded strokes (`RecordedStroke[]`) to paint with their own brush, colour, points and seed. */
+export interface PaintProposalStrokesOp {
+  kind: 'strokes';
+  strokes: readonly RecordedStroke[];
+}
+
+export type PaintProposalOp = PaintProposalStrokeOp | PaintProposalWashOp | PaintProposalEchoOp | PaintProposalStrokesOp;
 
 /** Where accepted paint goes: a new layer of its own (above a layer, on top, or at the bottom, behind everything). */
 export interface PaintProposalPlacement {
@@ -333,6 +342,16 @@ export function createPaintProposals(options: PaintProposalsOptions): PaintPropo
           if (refusal) throw new PaintEditorError(`${at}: stroke "${id}": ${refusal}`);
           points += stroke.points.length * (op.repeat ?? 1);
         }
+      } else if (op.kind === 'strokes') {
+        if (!Array.isArray(op.strokes) || !op.strokes.length) throw new PaintEditorError(`${at}: strokes needs at least one recorded stroke.`);
+        for (const s of op.strokes) {
+          if (!s.points?.length) throw new PaintEditorError(`${at}: each stroke needs points in document pixels.`);
+          points += s.points.length;
+          if (!HEX.test(s.color ?? '')) throw new PaintEditorError(`${at}: color "${s.color}" is not #rrggbb.`);
+          const brush = 'engine' in s.brush ? s.brush : resolveBrush(normalizeBrushSpec(s.brush));
+          const refusal = liveStrokeRefusal(brush) ?? suggestionBrushRefusal(brush);
+          if (refusal) throw new PaintEditorError(`${at}: ${refusal}`);
+        }
       } else {
         throw new PaintEditorError(`${at}: unknown kind "${(op as { kind?: string }).kind}"; use stroke, wash or echo.`);
       }
@@ -355,6 +374,23 @@ export function createPaintProposals(options: PaintProposalsOptions): PaintPropo
         });
       } else if (op.kind === 'wash') {
         controller.fillLayer({ layerId, color: op.color, opacity: op.opacity ?? 0.35, grain: op.grain ?? 0.4 });
+      } else if (op.kind === 'strokes') {
+        for (const s of op.strokes) {
+          const brush = 'engine' in s.brush ? s.brush : resolveBrush(normalizeBrushSpec(s.brush));
+          controller.paintStroke({
+            layerId,
+            points: s.points,
+            color: s.color,
+            brush,
+            seed: s.seed,
+            ...(s.copies ? { copies: s.copies } : {}),
+            ...(s.load ? { load: s.load } : {}),
+            ...(s.paint ? { paint: s.paint } : {}),
+            snapToPerspective: false,
+            stencils: false,
+            ...(s.stencils ? { maskStencils: s.stencils } : {}),
+          });
+        }
       } else {
         const { kind: _kind, strokeIds: ids, color, repeat, ...variation } = op;
         controller.replayStrokes({ strokeIds: ids, layerId, ...(color ? { color } : {}), ...(repeat ? { repeat } : {}), ...variation });
@@ -377,7 +413,7 @@ export function createPaintProposals(options: PaintProposalsOptions): PaintPropo
   });
   const topLayerId = () => controller.listLayers().find((l) => l.parentId === null)?.id;
 
-  return {
+  const store: PaintProposals = {
     getState: () => state,
     subscribe(listener) {
       listeners.add(listener);
@@ -399,7 +435,7 @@ export function createPaintProposals(options: PaintProposalsOptions): PaintPropo
         title: input.title.trim().slice(0, 120),
         ...(input.rationale ? { rationale: input.rationale } : {}),
         origin: input.origin ?? options.origin ?? 'agent:anonymous',
-        ops: input.ops.map((op) => ({ ...op })) as PaintProposalOp[],
+        ops: input.ops.map((op) => (op.kind === 'strokes' ? { kind: 'strokes', strokes: op.strokes.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p })) })) } : { ...op })) as PaintProposalOp[],
         placement,
         bounds: preview.bounds,
         ghost: preview.composite,
@@ -443,6 +479,8 @@ export function createPaintProposals(options: PaintProposalsOptions): PaintPropo
     get: (id) => state.proposals.find((p) => p.id === id),
     missing,
   };
+  controller.attachProposals?.(store);
+  return store;
 }
 
 /**

@@ -173,6 +173,33 @@
         "none"
       ],
       "description": "Several dabs per spacing step (dynamics.count); missing: none."
+    },
+    "livePatterns": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Gray-Scott reaction-diffusion patterns in wet paint (livePatterns); missing: none."
+    },
+    "iridescence": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Thin-film iridescence (iridescence); missing: none."
+    },
+    "ferro": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Liquid ferrofluid (ferro); missing: none."
     }
   },
   "required": [

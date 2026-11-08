@@ -5,6 +5,9 @@ import PixeratePaint
 import PixerateRaster
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(CoreMotion) && os(iOS)
+import CoreMotion
+#endif
 
 /// Reads `a.b` from a JSON object as a number, 0 when missing (`readPath` in `paint-editor/ui.ts`).
 public func readPath(_ obj: JSONObject, _ path: String) -> Double {
@@ -51,6 +54,9 @@ public let PAINT_PAPER_SLIDER_PATHS: Set<String> = ["depth", "scale", "shading",
 /// Flow map kinds as the wet panel lists them (`WetPanel`'s labels).
 public let WET_FLOW_LABELS: [(kind: String, label: String)] = [("none", "None"), ("linear", "One way"), ("swirl", "Swirl"), ("radial", "Outwards"), ("turbulent", "Eddies")]
 
+/// Live pattern kinds as the wet panel lists them (`WetPanel`'s labels).
+public let WET_LIVE_PATTERN_LABELS: [(kind: String, label: String)] = [("none", "Off"), ("spots", "Spots (mitosis)"), ("stripes", "Stripes"), ("coral", "Coral"), ("maze", "Maze"), ("worms", "Worms")]
+
 /// The side panels of `PaintEditorView`.
 public enum PaintPanelTab: String, CaseIterable, Identifiable, Sendable {
     case color, paper, layers, effects, wet
@@ -90,6 +96,8 @@ public final class PaintEditorModel {
     @ObservationIgnored private var isQuietFrameChange = false
     /// The active tool (`PaintUITables.tools` id).
     public var tool = "brush" { didSet { gesture.tool = tool } }
+    /// Options for the Fill tool (`tool == "fill"`).
+    public var fillOptions = PaintFillOptions() { didSet { gesture.fillOptions = fillOptions } }
     /// The last refusal or error, shown under the canvas.
     public var error: String?
     /// The picked stroke of the active stroke layer.
@@ -102,6 +110,15 @@ public final class PaintEditorModel {
     @ObservationIgnored public private(set) var gesture: PaintGesture!
     @ObservationIgnored private var subscriptions: [Cancellable] = []
     @ObservationIgnored private var fitted: String?
+    #if canImport(CoreMotion) && os(iOS)
+    @ObservationIgnored private var motionManager: CMMotionManager?
+    #endif
+    /// Whether device motion (gyroscope on iPhone / iPad) drives `viewTilt`.
+    public var deviceTiltEnabled = false {
+        didSet {
+            if deviceTiltEnabled != oldValue { updateDeviceMotion() }
+        }
+    }
 
     /// A model over `controller` (default a new 1024 × 768 painting), with its tools in `registry` (default a new one).
     public init(controller: PaintEditorController? = nil, registry: ToolRegistry? = nil) throws {
@@ -301,6 +318,32 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
     }
 
+    /// The mutation-paint sliders (`PaintUITables.sliders.mutation`): settle, patience and fade.
+    public var mutationSliders: [PaintUISlidersMutationItem] { tables.sliders.mutation }
+
+    /// The value of a mutation slider (`mutation.settle`, `mutation.patience` or `mutation.fade`).
+    public func mutationValue(_ path: String) -> Double {
+        track()
+        let m = controller.brush.mutation ?? DEFAULT_MUTATION
+        switch path {
+        case "mutation.settle": return m.settle
+        case "mutation.patience": return m.patience
+        case "mutation.fade": return m.fade
+        default: return 0
+        }
+    }
+
+    /// Sets a mutation slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setMutationValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// Whether an agent listener is connected for mutation requests.
+    public var hasMutationAgent: Bool { track(); return controller.hasMutationAgent }
+
+    /// The count of active mutations waiting for or being answered by an agent.
+    public var pendingMutationsCount: Int { track(); return controller.listMutations().count }
+
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
         let size = controller.brush.tip.size
@@ -336,8 +379,50 @@ public final class PaintEditorModel {
     public func setLighting(_ path: String, _ value: Double) {
         attempt { _ = try controller.setLighting(azimuth: path == "azimuth" ? value : nil, elevation: path == "elevation" ? value : nil, relief: path == "relief" ? value : nil) }
     }
+    /// The view tilt sliders (`PaintUITables.sliders.viewTilt`): viewer X and Y tilt for thin-film iridescence and specular highlights.
+    public var viewTiltSliders: [PaintUISlidersViewTiltItem] { tables.sliders.viewTilt }
+    public var viewTilt: PaintViewTilt { track(); return controller.viewTilt }
+    public func viewTiltValue(_ path: String) -> Double { readPath(viewTilt.json.objectValue ?? [:], path) }
+    /// Tilts the viewer angle (not an undo step: thin-film iridescence and specular highlights shift).
+    public func setViewTilt(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setViewTilt(x: path == "x" ? value : nil, y: path == "y" ? value : nil) }
+    }
+    private func updateDeviceMotion() {
+        #if canImport(CoreMotion) && os(iOS)
+        if deviceTiltEnabled {
+            let mgr = motionManager ?? CMMotionManager()
+            motionManager = mgr
+            guard mgr.isDeviceMotionAvailable else { return }
+            mgr.deviceMotionUpdateInterval = 1.0 / 60.0
+            mgr.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+                guard let self, let attitude = motion?.attitude else { return }
+                let x = Swift.min(1, Swift.max(-1, attitude.roll / (.pi / 4)))
+                let y = Swift.min(1, Swift.max(-1, (attitude.pitch - .pi / 6) / (.pi / 4)))
+                MainActor.assumeIsolated {
+                    _ = try? self.controller.setViewTilt(x: x, y: y)
+                }
+            }
+        } else {
+            motionManager?.stopDeviceMotionUpdates()
+        }
+        #endif
+    }
     /// Flattens the active layer's relief (one undo step).
     public func flattenRelief() { attempt { _ = try controller.flattenRelief() } }
+
+    // MARK: - UV blacklight and thermochromic heat
+
+    public var uvLight: UvLightSettings { track(); return controller.uvLight }
+    public func setUvLight(on: Bool? = nil, strength: Double? = nil, ambient: Double? = nil) {
+        attempt { _ = try controller.setUvLight(on: on, strength: strength, ambient: ambient) }
+    }
+    public var heatSummary: (max: Double, hotCells: Int) {
+        track()
+        let st = try? controller.getHeat()
+        return (st?["max"]?.numberValue ?? 0, Int(st?["hotCells"]?.numberValue ?? 0))
+    }
+    public func advanceHeat(steps: Int = 10) { attempt { _ = try controller.advanceHeat(steps: steps) } }
+    public func clearHeat() { attempt { _ = try controller.clearHeat() } }
 
     /// The active layer's light paint (`get_light`): whether it has any and its spill.
     public var activeLight: (hasLight: Bool, radius: Double, strength: Double)? {
@@ -350,12 +435,39 @@ public final class PaintEditorModel {
     /// Takes the active layer's light away (one undo step).
     public func clearLight() { attempt { _ = try controller.clearLight() } }
 
+    // MARK: - Ferrofluid & Magnets
+
+    /// Magnets placed on the canvas (`list_magnets`).
+    public var magnets: [PaintMagnet] { track(); return controller.listMagnets() }
+    /// The active layer's liquid ferrofluid and Rosensweig spike status (`get_ferrofluid`).
+    public var ferrofluid: JSONObject? { track(); return try? controller.getFerrofluid() }
+    /// Places a magnet on the canvas (one undo step).
+    public func addMagnet(x: Double? = nil, y: Double? = nil, strength: Double? = nil, radius: Double? = nil) {
+        let c = controller.doc.canvas
+        let count = controller.listMagnets().count
+        let offset = Double((count % 5) - 2) * 28
+        attempt { _ = try controller.addMagnet(x: x ?? (Double(c.width) / 2 + offset), y: y ?? (Double(c.height) / 2 + offset), strength: strength, radius: radius) }
+    }
+    /// Moves or adjusts a magnet (one undo step).
+    public func updateMagnet(_ id: String, x: Double? = nil, y: Double? = nil, strength: Double? = nil, radius: Double? = nil) {
+        attempt { _ = try controller.updateMagnet(id, x: x, y: y, strength: strength, radius: radius) }
+    }
+    /// Removes magnets by id, or all magnets when `ids` is nil (one undo step).
+    public func removeMagnets(_ ids: [String]? = nil) {
+        attempt { _ = try controller.removeMagnets(ids) }
+    }
+    /// Cures the active layer's liquid ferrofluid into permanent impasto relief (one undo step).
+    public func cureFerrofluid() {
+        attempt { _ = try controller.cureFerrofluid() }
+    }
+
     // MARK: - Wet media
 
     /// The wet-paint sliders (`PaintUITables.sliders`): the layer's settings, the tilt and the speed.
     public var wetSliders: [PaintUISlidersWetItem] { tables.sliders.wet }
     public var wetTiltSliders: [PaintUISlidersWetTiltItem] { tables.sliders.wetTilt }
     public var wetSpeedSlider: PaintUISlidersWetSpeed { tables.sliders.wetSpeed }
+    public var livePatternSliders: [PaintUISlidersLivePatternsItem] { tables.sliders.livePatterns }
     /// The engine choices (`PaintUITables.wetGpu`).
     public var wetGpuOptions: [PaintUIWetGpuItem] { tables.wetGpu }
     /// Wet media as the panel shows it (`getState().wet`).
@@ -370,6 +482,35 @@ public final class PaintEditorModel {
     public func setWetParam(_ path: String, _ value: Double) { attempt { _ = try controller.setWetParams(nil, [path: .number(value)]) } }
     public func setFlowKind(_ kind: String) { attempt { _ = try controller.setFlowMap(nil, ["kind": .string(kind)]) } }
     public func setFlowStrength(_ value: Double) { attempt { _ = try controller.setFlowMap(nil, ["strength": .number(value)]) } }
+    public var livePatterns: LivePatternsSettings? { wetLayerSettings?.livePatterns }
+    public func livePatternParam(_ path: String) -> Double {
+        let lp = livePatterns ?? DEFAULT_LIVE_PATTERNS
+        return readPath(lp.json.objectValue ?? [:], path)
+    }
+    public func setLivePatternKind(_ kind: String) {
+        if kind == "none" {
+            attempt { _ = try controller.setLivePatterns(nil, ["enabled": .bool(false)]) }
+        } else {
+            attempt { _ = try controller.setLivePatterns(nil, ["enabled": .bool(true), "pattern": .string(kind)]) }
+        }
+    }
+    public func setLivePatternParam(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setLivePatterns(nil, [path: .number(value)]) }
+    }
+    public func setLivePatternSecondColor(_ color: String?) {
+        attempt { _ = try controller.setLivePatterns(nil, ["secondColor": color.map { .string($0) } ?? .null]) }
+    }
+    public func seedLivePattern() {
+        let c = controller.doc.canvas
+        let kind = livePatterns?.pattern ?? "spots"
+        attempt {
+            _ = try controller.seedLivePatterns([
+                "points": .array([["x": .number(Double(c.width / 2)), "y": .number(Double(c.height / 2))]]),
+                "radius": .number(24),
+                "pattern": .string(kind),
+            ])
+        }
+    }
     public func tiltValue(_ path: String) -> Double { readPath(wet.tilt.json.objectValue ?? [:], path) }
     public func setTilt(_ path: String, _ value: Double) {
         attempt { _ = try controller.setCanvasTilt(angle: path == "angle" ? value : nil, direction: path == "direction" ? value : nil) }
@@ -530,7 +671,7 @@ public final class PaintEditorModel {
         switch id {
         case .undo: undo()
         case .redo: redo()
-        case .toolBrush, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
+        case .toolBrush, .toolFill, .toolEyedropper, .toolSticker, .toolStroke, .toolPan, .toolRotate:
             let t = String(command.id.dropFirst(5))
             guard PAINT_UI_TOOLS.contains(t) else { return false }
             tool = t

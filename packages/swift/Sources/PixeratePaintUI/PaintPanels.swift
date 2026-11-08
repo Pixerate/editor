@@ -157,6 +157,22 @@ public struct PaintToolbarView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+                if model.tool == "fill" {
+                    Divider().frame(height: 16)
+                    Picker("Fill reference", selection: Binding(get: { model.fillOptions.reference }, set: { model.fillOptions.reference = $0 })) {
+                        Text("All layers").tag("all")
+                        Text("Active layer").tag("layer")
+                        ForEach(model.layers.filter { $0.type == "pixel" }, id: \.id) { l in Text("Ref: \(l.name)").tag(l.id) }
+                    }
+                    .fixedSize()
+                    Stepper("Tol \(Int(model.fillOptions.tolerance))", value: Binding(get: { model.fillOptions.tolerance }, set: { model.fillOptions.tolerance = $0 }), in: 0...255, step: 4)
+                        .fixedSize()
+                    Stepper("Gap \(Int(model.fillOptions.closeGap))px", value: Binding(get: { model.fillOptions.closeGap }, set: { model.fillOptions.closeGap = $0 }), in: 0...32, step: 1)
+                        .fixedSize()
+                    Stepper("Expand \(Int(model.fillOptions.expand))px", value: Binding(get: { model.fillOptions.expand }, set: { model.fillOptions.expand = $0 }), in: -16...16, step: 1)
+                        .fixedSize()
+                    Toggle("Wet", isOn: Binding(get: { model.fillOptions.wet }, set: { model.fillOptions.wet = $0 })).toggleStyle(.button)
+                }
                 Divider().frame(height: 16)
                 Button("Undo") { model.undo() }.disabled(model.undoLabel == nil).help(model.undoLabel.map { "Undo \($0)" } ?? "Undo")
                 Button("Redo") { model.redo() }.disabled(model.redoLabel == nil).help(model.redoLabel.map { "Redo \($0)" } ?? "Redo")
@@ -239,6 +255,14 @@ public struct PaintBrushPanel: View {
                 ForEach(model.ghostSliders, id: \.path) { item in
                     PaintSliderRow(label: item.label, value: model.ghostValue(item.path), range: item.min...item.max, step: item.step) { model.setGhostValue(item.path, $0) }
                 }
+            }
+            if brush.mutation != nil {
+                ForEach(model.mutationSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.mutationValue(item.path), range: item.min...item.max, step: item.step) { model.setMutationValue(item.path, $0) }
+                }
+                Text(model.hasMutationAgent ? "Agent connected" : "No agent connected — mutation paint will stay as ordinary paint")
+                    .font(.caption2)
+                    .foregroundStyle(model.hasMutationAgent ? Color.secondary : Color.orange)
             }
             if brush.engine == "mixer" || brush.behavior.dirty {
                 HStack(spacing: 6) {
@@ -333,11 +357,80 @@ public struct PaintPaperPanel: View {
             Toggle("Mirror tiling", isOn: Binding(get: { paper.tiling == "mirror" }, set: { on in model.attempt { _ = try model.controller.setPaper(["tiling": .string(on ? "mirror" : "repeat")]) } }))
             Button("New sheet") { model.newSheet() }
             PaintLightPanel(model: model)
+            PaintUvHeatPanel(model: model)
+            PaintFerroPanel(model: model)
         }
     }
 }
 
-/// The light for thick paint and metallic paper (`PaintUITables.sliders.light`; not an undo step), and Flatten relief for the active layer.
+/// Ferrofluid & magnets (`FerroPanel`): add/adjust/remove magnets on the canvas, inspect active spike stats, and cure liquid ferrofluid into permanent impasto relief.
+public struct PaintFerroPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let magnets = model.magnets
+        let ferro = model.ferrofluid
+        let hasFerro = ferro?["ferro"] == .bool(true)
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("Ferrofluid & magnets")
+            HStack(spacing: 4) {
+                Button("Add magnet") { model.addMagnet() }
+                if !magnets.isEmpty {
+                    Button("Clear magnets") { model.removeMagnets() }
+                }
+                Button("Cure ferrofluid") { model.cureFerrofluid() }.disabled(!hasFerro)
+            }
+            .controlSize(.small)
+            if hasFerro, let ferro {
+                let spikes = Int(ferro["activeSpikeArea"]?.numberValue ?? 0)
+                let maxH = Int(ferro["maxSpikeHeight"]?.numberValue ?? 0)
+                Text("Liquid ferrofluid · \(spikes) spike px (max \(maxH))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(magnets, id: \.id) { m in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("\(m.id) (\(Int(m.x.rounded())), \(Int(m.y.rounded())))").font(.caption).bold()
+                        Spacer()
+                        Button { model.removeMagnets([m.id]) } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Remove magnet \(m.id)")
+                    }
+                    PaintSliderRow(label: "Strength", value: m.strength, range: -1...1, step: 0.05, onCommit: { model.updateMagnet(m.id, strength: $0) })
+                    PaintSliderRow(label: "Radius", value: m.radius, range: 8...400, step: 4, unit: "px", onCommit: { model.updateMagnet(m.id, radius: $0) })
+                }
+            }
+        }
+    }
+}
+
+/// The virtual UV blacklight and thermochromic heat controls (`PaperPanel`'s UV & heat section).
+public struct PaintUvHeatPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let uv = model.uvLight
+        let heat = model.heatSummary
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("UV blacklight & heat")
+            Toggle("UV blacklight", isOn: Binding(get: { uv.on }, set: { model.setUvLight(on: $0) }))
+            if uv.on {
+                PaintSliderRow(label: "UV strength", value: uv.strength, range: 0...2, step: 0.05, onChange: { model.setUvLight(strength: $0) })
+                PaintSliderRow(label: "UV ambient", value: uv.ambient, range: 0...1, step: 0.05, onChange: { model.setUvLight(ambient: $0) })
+            }
+            HStack(spacing: 4) {
+                Button("Spread & cool heat") { model.advanceHeat() }.disabled(heat.hotCells == 0)
+                Button("Cool canvas") { model.clearHeat() }.disabled(heat.hotCells == 0)
+            }
+            .controlSize(.small)
+        }
+    }
+}
+
+/// The light for thick paint, thin-film iridescence and metallic paper (`PaintUITables.sliders.light`, `sliders.viewTilt`; not an undo step), and Flatten relief for the active layer.
 public struct PaintLightPanel: View {
     let model: PaintEditorModel
     public init(model: PaintEditorModel) { self.model = model }
@@ -348,6 +441,10 @@ public struct PaintLightPanel: View {
             ForEach(model.lightSliders, id: \.path) { c in
                 PaintSliderRow(label: c.label, value: model.lightingValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setLighting(c.path, $0) })
             }
+            ForEach(model.viewTiltSliders, id: \.path) { c in
+                PaintSliderRow(label: c.label, value: model.viewTiltValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setViewTilt(c.path, $0) })
+            }
+            Toggle("Device tilt", isOn: Binding(get: { model.deviceTiltEnabled }, set: { model.deviceTiltEnabled = $0 }))
             Button("Flatten relief") { model.flattenRelief() }
         }
     }
@@ -416,6 +513,23 @@ public struct PaintWetPanel: View {
                 if layer.flow.kind != "none" {
                     PaintSliderRow(label: "Flow strength", value: layer.flow.strength, range: 0...1, step: 0.01, onCommit: { model.setFlowStrength($0) })
                 }
+                let lp = model.livePatterns
+                Picker("Live patterns", selection: Binding(get: { lp?.pattern ?? "none" }, set: { model.setLivePatternKind($0) })) {
+                    ForEach(WET_LIVE_PATTERN_LABELS, id: \.kind) { Text($0.label).tag($0.kind) }
+                }
+                if let lp {
+                    ForEach(model.livePatternSliders, id: \.path) { c in
+                        PaintSliderRow(label: c.label, value: model.livePatternParam(c.path), range: c.min...c.max, step: c.step, onCommit: { model.setLivePatternParam(c.path, $0) })
+                    }
+                    HStack(spacing: 4) {
+                        HexColorPicker(label: "2nd colour", hex: lp.secondColor ?? "#2563eb", onChange: { model.setLivePatternSecondColor($0) })
+                        if lp.secondColor != nil {
+                            Button("Clear") { model.setLivePatternSecondColor(nil) }
+                        }
+                        Spacer()
+                        Button("Seed") { model.seedLivePattern() }
+                    }
+                }
             }
             Picker("Engine", selection: Binding(get: { wet.gpuMode }, set: { model.setWetEngine($0) })) {
                 ForEach(model.wetGpuOptions, id: \.value) { Text($0.label).tag($0.value) }
@@ -471,6 +585,9 @@ public struct PaintLayersPanel: View {
                         if l.type == "group" { Image(systemName: "folder") }
                         if l.liveStrokes != nil { Image(systemName: "scribble").help("Stroke layer: \(l.liveStrokes!) editable strokes") }
                         Text(l.name).lineLimit(1)
+                        if l.temporary == true {
+                            Text("Temporary").font(.caption2).foregroundStyle(.secondary)
+                        }
                         Spacer()
                         if l.locks["pixels"] == .bool(true) || l.locks["all"] == .bool(true) { Image(systemName: "lock.fill").help("Locked") }
                     }

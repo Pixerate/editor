@@ -6,6 +6,7 @@ import type BrushPanelComponent from './BrushPanel.svelte';
 import type BrushEditorComponent from '../brushes/BrushEditor.svelte';
 import type BrushLibraryBrowserComponent from '../brushes/BrushLibraryBrowser.svelte';
 import type PaperPanelComponent from './PaperPanel.svelte';
+import type FerroPanelComponent from './FerroPanel.svelte';
 import type ColorPanelComponent from './ColorPanel.svelte';
 import type PaintLayersPanelComponent from './PaintLayersPanel.svelte';
 import type WetPanelComponent from './WetPanel.svelte';
@@ -13,6 +14,7 @@ import type StickerPanelComponent from './StickerPanel.svelte';
 import type StickerPickerComponent from './StickerPicker.svelte';
 import type StrokePanelComponent from './StrokePanel.svelte';
 import type PathStrokePanelComponent from './PathStrokePanel.svelte';
+import type EvolutionPanelComponent from './EvolutionPanel.svelte';
 import type PaintEffectsPanelComponent from './PaintEffectsPanel.svelte';
 import type PaintGradientEditorComponent from './PaintGradientEditor.svelte';
 
@@ -25,6 +27,7 @@ export { default as BrushEditor } from '../brushes/BrushEditor.svelte';
 // The library browser moved to `@pixerate/editor-svelte/brushes`; it is exported here too.
 export { default as BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser.svelte';
 export { default as PaperPanel } from './PaperPanel.svelte';
+export { default as FerroPanel } from './FerroPanel.svelte';
 export { default as ColorPanel } from './ColorPanel.svelte';
 export { default as PaintLayersPanel } from './PaintLayersPanel.svelte';
 export { default as WetPanel } from './WetPanel.svelte';
@@ -32,12 +35,20 @@ export { default as StickerPanel } from './StickerPanel.svelte';
 export { default as StickerPicker } from './StickerPicker.svelte';
 export { default as StrokePanel } from './StrokePanel.svelte';
 export { default as PathStrokePanel } from './PathStrokePanel.svelte';
+export { default as EvolutionPanel } from './EvolutionPanel.svelte';
 export { default as PaintEffectsPanel } from './PaintEffectsPanel.svelte';
 export { default as PaintGradientEditor } from './PaintGradientEditor.svelte';
 export { default as PaintSlider } from './PaintSlider.svelte';
 export { default as PaintPresenceLayer } from './PaintPresenceLayer.svelte';
 export { default as PaintProposalGhosts } from './PaintProposalGhosts.svelte';
-export { createPaintChangeWatcher, createPaintProposalState, type PaintChangeWatcherRune, type PaintProposalStateRune } from './paintProposalRune.svelte.js';
+export {
+  createMutationRequests,
+  createPaintChangeWatcher,
+  createPaintProposalState,
+  type PaintChangeWatcherRune,
+  type PaintMutationRequestsRune,
+  type PaintProposalStateRune,
+} from './paintProposalRune.svelte.js';
 export { createPaintDirector, createReactivePaintEditor, paintEditorState, paintEffectsProvider, usePaintEffectsTools } from './paintEditorRune.svelte.js';
 
 export type PaintEditorProps = ComponentProps<typeof PaintEditorComponent>;
@@ -47,6 +58,7 @@ export type BrushPanelProps = ComponentProps<typeof BrushPanelComponent>;
 export type BrushEditorProps = ComponentProps<typeof BrushEditorComponent>;
 export type BrushLibraryBrowserProps = ComponentProps<typeof BrushLibraryBrowserComponent>;
 export type PaperPanelProps = ComponentProps<typeof PaperPanelComponent>;
+export type FerroPanelProps = ComponentProps<typeof FerroPanelComponent>;
 export type ColorPanelProps = ComponentProps<typeof ColorPanelComponent>;
 export type PaintLayersPanelProps = ComponentProps<typeof PaintLayersPanelComponent>;
 export type WetPanelProps = ComponentProps<typeof WetPanelComponent>;
@@ -54,6 +66,7 @@ export type StickerPanelProps = ComponentProps<typeof StickerPanelComponent>;
 export type StickerPickerProps = ComponentProps<typeof StickerPickerComponent>;
 export type StrokePanelProps = ComponentProps<typeof StrokePanelComponent>;
 export type PathStrokePanelProps = ComponentProps<typeof PathStrokePanelComponent>;
+export type EvolutionPanelProps = ComponentProps<typeof EvolutionPanelComponent>;
 export type PaintEffectsPanelProps = ComponentProps<typeof PaintEffectsPanelComponent>;
 
 export type PaintGradientEditorProps = ComponentProps<typeof PaintGradientEditorComponent>;

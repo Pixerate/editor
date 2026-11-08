@@ -30,6 +30,14 @@
  */
 
 import { TILE, TiledSurface, finishTile, tileKey, type RasterRect, type Tile } from '../../raster/surface';
+import {
+  LivePatternField,
+  moveLivePatternSnapshot,
+  type LivePatternFieldSnapshot,
+  type LivePatternStats,
+  type LivePatternsInput,
+  type LivePatternsSettings,
+} from '../live-patterns';
 import { filmPixel, pixelPigment, shadeLightTile, shadeTile } from './film';
 import { stepSlotTs } from './kernel';
 import {
@@ -126,6 +134,8 @@ export interface WetGhostState {
   total: number;
   /** Linger seconds configured for the current ghost fade. */
   linger: number;
+  /** When the fade starts: `immediate` (default, omitted) or `agent` (waits until `releaseGhost`). */
+  trigger?: 'immediate' | 'agent';
 }
 
 export interface WetLaneOptions {
@@ -137,6 +147,8 @@ export interface WetLaneOptions {
   flowStrength?: number;
   /** The layer's light paint under the wet paint (one channel; default none). */
   light?: TiledSurface | null;
+  /** Shared per-layer reaction-diffusion field outside the wet kernel. */
+  livePatterns?: LivePatternField;
   /** Active ghost paint state on the layer, if any. */
   ghost?: WetGhostState | null;
 }
@@ -168,18 +180,52 @@ interface Lane {
   lightShaded: Map<number, { stamp: number; tile: Tile | null }>;
   lightDisplay: TiledSurface | null;
   lightKey: string;
+  /** Half-resolution Gray-Scott reaction-diffusion field outside the wet kernel. */
+  livePatterns: LivePatternField;
 }
 
 const noLight = () => new TiledSurface(1, new Map(), 0);
 
 function cloneGhost(g: WetGhostState | null | undefined): WetGhostState | null {
-  return g ? { pigment: [...g.pigment] as [number, number, number, number], remaining: g.remaining, total: g.total, linger: g.linger } : null;
+  return g ? { pigment: [...g.pigment] as [number, number, number, number], remaining: g.remaining, total: g.total, linger: g.linger, ...(g.trigger === 'agent' ? { trigger: 'agent' } : {}) } : null;
 }
 
-function newLane(id: string, index: number, params: WetParams, flow: WetFlowField | null, flowStrength: number, base: TiledSurface, light: TiledSurface | null | undefined, ghost?: WetGhostState | null): Lane {
+function newLane(
+  id: string,
+  index: number,
+  params: WetParams,
+  flow: WetFlowField | null,
+  flowStrength: number,
+  base: TiledSurface,
+  light: TiledSurface | null | undefined,
+  width: number,
+  height: number,
+  ghost?: WetGhostState | null,
+  livePatterns?: LivePatternField
+): Lane {
   const l = light ?? noLight();
   const g = cloneGhost(ghost);
-  return { id, index, params, flow, flowStrength, base, shaded: new Map(), urgent: new Set(), stamp: 1, display: null, shadedVersion: 0, displayKey: '', light: l, lit: !g && l.tiles.size > 0, ghost: g, lightShaded: new Map(), lightDisplay: null, lightKey: '' };
+  return {
+    id,
+    index,
+    params,
+    flow,
+    flowStrength,
+    base,
+    shaded: new Map(),
+    urgent: new Set(),
+    stamp: 1,
+    display: null,
+    shadedVersion: 0,
+    displayKey: '',
+    light: l,
+    lit: !g && l.tiles.size > 0,
+    ghost: g,
+    lightShaded: new Map(),
+    lightDisplay: null,
+    lightKey: '',
+    livePatterns: livePatterns ?? new LivePatternField(width, height),
+  };
 }
 
 /** Totals for one wet layer. */
@@ -200,9 +246,11 @@ export interface WetLaneStats {
 export interface WetSnapshot {
   readonly clock: number;
   readonly tilt: WetTilt;
-  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean; ghost?: WetGhostState | null }>;
+  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean; ghost?: WetGhostState | null; livePatterns?: LivePatternFieldSnapshot }>;
   /** Per active key: the current set and the deposit planes; and its last flags. */
   readonly slots: ReadonlyMap<number, { planes: Float32Array; last: number }>;
+  /** Per-layer live-pattern snapshots (including layers whose water has already dried). */
+  readonly patterns?: ReadonlyMap<string, LivePatternFieldSnapshot>;
   /** Bytes held. */
   readonly bytes: number;
 }
@@ -388,12 +436,28 @@ export class WetWorld {
       if (options.params) this.setParams(id, options.params);
       if (options.base) this.setBase(id, options.base);
       if (options.light) this.setLight(id, options.light);
+      if (options.livePatterns && existing.livePatterns !== options.livePatterns) {
+        existing.livePatterns = options.livePatterns;
+        this.touchAll(existing);
+      }
       if (options.ghost !== undefined) this.setGhost(id, options.ghost);
       return;
     }
     const index = this.lanes.indexOf(null);
     if (index < 0) throw new WetWorldError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one (dry_paint) first.`);
-    this.lanes[index] = newLane(id, index, normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS), options.flow ?? null, options.flow ? (options.flowStrength ?? 1) : 0, options.base ?? new TiledSurface(4, new Map(), 0), options.light, options.ghost);
+    this.lanes[index] = newLane(
+      id,
+      index,
+      normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS),
+      options.flow ?? null,
+      options.flow ? (options.flowStrength ?? 1) : 0,
+      options.base ?? new TiledSurface(4, new Map(), 0),
+      options.light,
+      this.width,
+      this.height,
+      options.ghost,
+      options.livePatterns
+    );
     this.pack(this.lanes[index]!);
   }
 
@@ -415,6 +479,64 @@ export class WetWorld {
     lane.params = normalizeWetParams(params, lane.params);
     this.pack(lane);
     return { ...lane.params };
+  }
+
+  getLivePatterns(id: string): LivePatternsSettings {
+    return { ...this.laneOf(id).livePatterns.settings };
+  }
+
+  hasLivePatterns(id: string): boolean {
+    const lane = this.laneOf(id);
+    return lane.livePatterns.enabled;
+  }
+
+  livePatternField(id: string): LivePatternField {
+    return this.laneOf(id).livePatterns;
+  }
+
+  setLivePatterns(id: string, settings: LivePatternsInput): LivePatternsSettings {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    const next = lane.livePatterns.configure(settings);
+    this.touchAll(lane);
+    return next;
+  }
+
+  seedLivePatterns(id: string, cx: number, cy: number, radius: number, seed = 1, strength = 1, settings?: LivePatternsInput): number {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (settings) lane.livePatterns.configure(settings);
+    const count = lane.livePatterns.seedDisc(cx, cy, radius, seed, strength);
+    if (count > 0) this.touchAll(lane);
+    return count;
+  }
+
+  livePatternStats(id: string): LivePatternStats {
+    const lane = this.laneOf(id);
+    return lane.livePatterns.stats((tx, ty, lx, ly) => this.isPatternCellWet(lane, tx, ty, lx, ly));
+  }
+
+  private isPatternCellWet(lane: Lane, tx: number, ty: number, lx: number, ly: number): boolean {
+    const { tilesX, tilesY, perLane } = this.layout;
+    if (tx < 0 || ty < 0 || tx >= tilesX || ty >= tilesY) return false;
+    const slot = this.slotOf(lane.index * perLane + ty * tilesX + tx);
+    if (slot < 0) return false;
+    const cur = this.slotBase(slot) + this.parity * SET_PLANES * PLANE;
+    const x0 = lx * 2 + 1;
+    const y0 = ly * 2 + 1;
+    const c00 = y0 * S + x0;
+    const c10 = c00 + 1;
+    const c01 = c00 + S;
+    const c11 = c01 + 1;
+    const rhoBase = cur + P_RHO * PLANE;
+    const swBase = cur + P_SW * PLANE;
+    const f = this.f32;
+    return (
+      f[rhoBase + c00] + f[swBase + c00] > DRY_EPS ||
+      f[rhoBase + c10] + f[swBase + c10] > DRY_EPS ||
+      f[rhoBase + c01] + f[swBase + c01] > DRY_EPS ||
+      f[rhoBase + c11] + f[swBase + c11] > DRY_EPS
+    );
   }
 
   getTilt(): WetTilt {
@@ -507,20 +629,60 @@ export class WetWorld {
 
   /**
    * Starts a ghost paint fade on `id` with `pigment` per unit tracer and `linger` seconds. If an
-   * earlier ghost of a different colour is still fading on the layer, it finishes at once first.
+   * earlier ghost of a different colour is still fading on the layer, it finishes at once first
+   * (or keeps its paint when it was an unclaimed agent-triggered ghost).
    */
-  startGhost(id: string, pigment: readonly [number, number, number, number], linger: number, stepsPerSecond = 120): void {
+  startGhost(id: string, pigment: readonly [number, number, number, number], linger: number, stepsPerSecond = 120, trigger: 'immediate' | 'agent' = 'immediate'): void {
     this.requireIdle();
     const lane = this.laneOf(id);
     const p: [number, number, number, number] = [Math.fround(pigment[0]), Math.fround(pigment[1]), Math.fround(pigment[2]), Math.fround(pigment[3])];
     if (lane.ghost) {
       const g = lane.ghost.pigment;
       const same = Math.abs(g[0] - p[0]) <= 1e-6 && Math.abs(g[1] - p[1]) <= 1e-6 && Math.abs(g[2] - p[2]) <= 1e-6 && Math.abs(g[3] - p[3]) <= 1e-6;
-      if (!same) this.fadeGhost(id, 1);
+      if (!same) {
+        if (lane.ghost.trigger === 'agent') this.keepGhost(id);
+        else this.fadeGhost(id, 1);
+      }
     }
     const total = Math.max(1, Math.round((linger * stepsPerSecond) / FREE_INTERVAL));
-    lane.ghost = { pigment: p, remaining: total, total, linger };
+    lane.ghost = { pigment: p, remaining: total, total, linger, ...(trigger === 'agent' ? { trigger: 'agent' } : {}) };
     lane.lit = false;
+  }
+
+  /**
+   * Releases a held (`trigger: 'agent'`) ghost on `id` so its fade starts counting down on the
+   * simulation clock over `linger` seconds (default: the lane's configured `linger`).
+   */
+  releaseGhost(id: string, linger?: number, stepsPerSecond = 120): void {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (!lane.ghost) return;
+    const l = linger ?? lane.ghost.linger;
+    const total = Math.max(1, Math.round((l * stepsPerSecond) / FREE_INTERVAL));
+    lane.ghost = { pigment: lane.ghost.pigment, remaining: total, total, linger: l };
+  }
+
+  /**
+   * Drops a ghost lane's tracer (`P_L`, `P_DL`) without subtracting its pigment, so an unclaimed
+   * or declined wet mutation stroke stays as ordinary wet paint.
+   */
+  keepGhost(id: string): void {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (!lane.ghost) return;
+    const f = this.f32;
+    for (const key of this.active) {
+      if (this.laneIndexOf(key) !== lane.index) continue;
+      const slot = this.slotOf(key);
+      if (slot < 0) continue;
+      const b = this.slotBase(slot);
+      const cur = b + this.parity * SET_PLANES * PLANE;
+      f.fill(0, cur + P_L * PLANE, cur + (P_L + 1) * PLANE);
+      f.fill(0, b + P_DL * PLANE, b + (P_DL + 1) * PLANE);
+      this.gpuDirtySlot(slot, 1, WET_TILE);
+    }
+    lane.ghost = null;
+    this.refreshHalos();
   }
 
   private pack(lane: Lane): void {
@@ -752,6 +914,14 @@ export class WetWorld {
     const flagsBase = l.flags >> 2;
     const lastBase = l.last >> 2;
     const { tilesX, tilesY, perLane } = l;
+    for (const lane of this.lanes) {
+      if (!lane || !lane.livePatterns.enabled || lane.livePatterns.tiles.size === 0) continue;
+      lane.livePatterns.step(
+        n,
+        (tx, ty, lx, ly) => this.isPatternCellWet(lane, tx, ty, lx, ly),
+        (tx, ty) => this.slotOf(lane.index * perLane + ty * tilesX + tx) >= 0
+      );
+    }
     const wakeups: number[] = [];
     for (const key of this.active) {
       const fl = this.u32[flagsBase + key];
@@ -779,7 +949,7 @@ export class WetWorld {
     for (const key of wakeups) woke = this.activate(key) || woke;
     if (this.clock % FREE_INTERVAL === 0) {
       for (const lane of this.lanes) {
-        if (!lane?.ghost) continue;
+        if (!lane?.ghost || lane.ghost.trigger === 'agent') continue;
         const g = lane.ghost;
         const amount = g.remaining <= 1 ? 1 : 1 / g.remaining;
         g.remaining = Math.max(0, g.remaining - 1);
@@ -1368,12 +1538,16 @@ export class WetWorld {
         continue;
       }
       const f = this.f32;
-      const pig = lane.ghost?.pigment ?? null;
+      const pig = lane.ghost && lane.ghost.trigger !== 'agent' ? lane.ghost.pigment : null;
+      const clearTracer = Boolean(lane.ghost && lane.ghost.trigger === 'agent');
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
           const c = this.cell(lane, x, y);
           const d = this.single(c) + P_D0 * PLANE;
-          if (pig) {
+          if (clearTracer) {
+            f[c + P_L * PLANE] = 0;
+            f[d + 4 * PLANE] = 0;
+          } else if (pig) {
             const tl = f[c + P_L * PLANE];
             const dl = f[d + 4 * PLANE];
             if (tl > 0 || dl > 0) {
@@ -1418,7 +1592,17 @@ export class WetWorld {
   private bakeKey(key: number, all: boolean): boolean {
     const lane = this.lanes[this.laneIndexOf(key)]!;
     if (lane.ghost) {
-      this.fadeGhostKey(key, lane, 1);
+      if (lane.ghost.trigger === 'agent') {
+        const slot = this.slotOf(key);
+        if (slot >= 0) {
+          const b = this.slotBase(slot);
+          const cur = b + this.parity * SET_PLANES * PLANE;
+          this.f32.fill(0, cur + P_L * PLANE, cur + (P_L + 1) * PLANE);
+          this.f32.fill(0, b + P_DL * PLANE, b + (P_DL + 1) * PLANE);
+        }
+      } else {
+        this.fadeGhostKey(key, lane, 1);
+      }
       if (!this.hasGhostTracer(lane)) lane.ghost = null;
     }
     const [tx, ty] = this.tileXY(key);
@@ -1438,6 +1622,7 @@ export class WetWorld {
     }
     const src = lane.base.tiles.get(tk)?.data ?? null;
     const out = this.shadeSlot(key, src, all ? 'bake-all' : 'bake');
+    if (lane.livePatterns.enabled) lane.livePatterns.markBaked(tx, ty);
     if (!out) return lightChanged;
     const tiles = new Map(lane.base.tiles);
     const t = finishTile(out, 4, 0);
@@ -1475,7 +1660,7 @@ export class WetWorld {
     const h = Math.min(WET_TILE, this.height - ty * WET_TILE);
     const lane = this.lanes[this.laneIndexOf(key)]!;
     const lit = lane.lit && !lane.ghost;
-    const changed = shadeTile(
+    let changed = shadeTile(
       this.f32,
       PLANE,
       S,
@@ -1492,6 +1677,9 @@ export class WetWorld {
       lit ? b + P_DL * PLANE : -1,
       lit && mode !== 'bake' ? cur + P_L * PLANE : -1
     );
+    if (lane.livePatterns.enabled && lane.livePatterns.tiles.size > 0) {
+      changed = lane.livePatterns.shadeTile(tx, ty, out, w, h) || changed;
+    }
     return changed ? out : null;
   }
 
@@ -1504,7 +1692,7 @@ export class WetWorld {
       if (this.laneIndexOf(key) !== lane.index) continue;
       const tk = this.tileKeyOf(key);
       let out: Uint8ClampedArray | null;
-      if (lane.ghost) {
+      if (lane.ghost && lane.ghost.trigger !== 'agent') {
         const b = this.slotBase(this.slotOf(key));
         const cur = b + this.parity * SET_PLANES * PLANE;
         const savedP = this.f32.slice(cur + P_P0 * PLANE, cur + (P_P0 + MASS_CHANNELS) * PLANE);
@@ -1977,7 +2165,11 @@ export class WetWorld {
       slots.set(key, { planes, last: this.u32[(this.layout.last >> 2) + key] });
       bytes += planes.byteLength;
     }
-    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => ({ id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: cloneGhost(l.ghost) }));
+    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => {
+      const lp = l.livePatterns.snapshot();
+      bytes += lp.bytes;
+      return { id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: cloneGhost(l.ghost), livePatterns: lp };
+    });
     return { clock: this.clock, tilt: { ...this.tilt }, lanes, slots, bytes };
   }
 
@@ -1988,8 +2180,9 @@ export class WetWorld {
     this.lanes.fill(null);
     this.tilt = { ...snap.tilt };
     for (const l of snap.lanes) {
-      const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light, l.ghost);
+      const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light, this.width, this.height, l.ghost);
       lane.lit = !lane.ghost && (lane.lit || Boolean(l.lit));
+      if (l.livePatterns) lane.livePatterns.restore(l.livePatterns);
       this.lanes[l.index] = lane;
       this.pack(this.lanes[l.index]!);
     }
@@ -2074,9 +2267,19 @@ export function moveWetSnapshot(
   }
   const lanes = snap.lanes.map((l) => {
     const moved = lane(l);
-    return { ...l, base: moved.base ?? l.base, light: moved.light ?? l.light, flow: moved.flow === undefined ? l.flow : moved.flow };
+    const lp = l.livePatterns ? moveLivePatternSnapshot(l.livePatterns, to, tx0, ty0) : undefined;
+    if (lp) bytes += lp.bytes;
+    return { ...l, base: moved.base ?? l.base, light: moved.light ?? l.light, flow: moved.flow === undefined ? l.flow : moved.flow, ...(lp ? { livePatterns: lp } : {}) };
   });
-  return { clock: snap.clock, tilt: { ...snap.tilt }, lanes, slots, bytes };
+  let patterns: Map<string, LivePatternFieldSnapshot> | undefined;
+  if (snap.patterns) {
+    patterns = new Map();
+    for (const [id, p] of snap.patterns) {
+      const mp = moveLivePatternSnapshot(p, to, tx0, ty0);
+      patterns.set(id, mp);
+    }
+  }
+  return { clock: snap.clock, tilt: { ...snap.tilt }, lanes, slots, ...(patterns ? { patterns } : {}), bytes };
 }
 
 function unionRect(a: RasterRect | null, b: RasterRect): RasterRect {

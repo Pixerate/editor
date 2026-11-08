@@ -1,5 +1,53 @@
 # @pixerate/editor
 
+## 0.277.0
+
+### Minor Changes
+
+- 00a53de: Add ferrofluid paint and magnets (`ferro` brush facet with `amount`, `wavelength` and `threshold`, built-in presets `ferrofluid` and `ferro-ink`, per-layer liquid ferrofluid channel `doc.ferro[layerId]`, document magnets `doc.magnets`, analytical dipole magnetic field and tilted hexagonal Rosensweig relief spikes shaded by `LitCache` / `lightTile`, deterministic advection of liquid ferrofluid toward added or moved magnets, `cure_ferrofluid` to bake active spikes into permanent impasto relief, agent tools `add_magnet`, `update_magnet`, `remove_magnets`, `list_magnets`, `get_ferrofluid` and `cure_ferrofluid`, React/Svelte/Swift `<FerroPanel>` / `PaintFerroPanel` and canvas magnet overlays).
+
+## 0.276.0
+
+### Minor Changes
+
+- 25834f2: Add reaction-diffusion live patterns (`livePatterns`) that grow inside wet paint and freeze when the paint dries (#644):
+
+  - Add the `livePatterns` brush facet (`pattern`: `'spots' | 'stripes' | 'coral' | 'maze' | 'worms'`, `feed`, `kill`, `scale`, `contrast`, `secondColor`, `relief`) and built-in brush presets `turing-wash` and `coral-ink`.
+  - Add a per-wet-layer half-resolution Gray-Scott field (`U, V`) in `packages/core/src/paint/live-patterns.ts` (outside the wet kernel) that steps during `advance_wet_paint` only where the wet world still holds water (`rho + sw > DRY_EPS`), shades wet and dried tiles (`secondColor` blend or pigment contrast), and optionally writes impasto height (`relief > 0`) into `doc.thick[layerId]`.
+  - Add agent tools `get_live_patterns`, `set_live_patterns`, and `seed_live_patterns`, wet undo snapshots, document serialization/replay support, React/Svelte/Swift `WetPanel` controls, agent skill references, conformance scenario `live-patterns`, and the full Swift port in `PixeratePaint` and `PixeratePaintUI`.
+
+## 0.275.1
+
+### Patch Changes
+
+- 13ef0ed: Add recorded chart conformance scenarios covering every chart tool and command, and add the TypeScript replay test (#696).
+
+## 0.275.0
+
+### Minor Changes
+
+- 7b7c216: Add mutation paint (`mutation` facet with `settle`, `patience` and `fade`; presets `mutation-wash` and `mutation-ink`): wet or dry paint strokes that settle into a pending mutation request (`onMutationRequest`, React `useMutationRequests`, Svelte `createMutationRequestStore`), sink away when claimed by an agent via `read_mutation` (releasing held wet ghost fade or fading a temporary dry layer), and are answered by the agent's presence cursor via `answer_mutation` (or kept as ordinary paint on `decline_mutation` or timeout). Includes `createMutationTools` (`list_mutations`, `read_mutation`, `answer_mutation`, `decline_mutation`), the `pixerate-paint-mutation` workflow skill with evals, Settle / Patience / Fade brush panel controls and agent connection status in React, Svelte and Swift, and full Swift parity.
+- 59d0cd4: Add structural colour thin-film iridescence brush facet (`iridescence`), `ThickChannels.film` surface channel, built-in iridescent brush presets (`scarab-lacquer`, `soap-film`, `pearl-glaze`), view tilt shading (`set_view_tilt` / `get_view_tilt`), and opt-in `deviceTilt` gyroscope/orientation tracking across TypeScript core, React, Svelte, and Swift.
+- 7809354: Add UV-fluorescent and thermochromic smart inks to the paint editor (`fluorescence` and `thermochromic` brush facets, `uv-marker` and `thermo-ink` presets, virtual UV blacklight view/document settings, coarse canvas heat field with diffusion, Newtonian cooling, and wet-paint drying, plus `set_uv_light`, `get_uv_light`, `paint_heat`, `advance_heat`, `clear_heat`, and `get_heat` agent tools and UI controls across React, Svelte, and Swift).
+
+## 0.274.0
+
+### Minor Changes
+
+- 0a20011: feat(paint): Evolutionary strokes: breed and mutate stroke variants (`RecordedStroke` genomes) as pending paint proposals with smoothed point jitter, OKLCH colour drift, brush facet drift, seed reroll, crossover, agent tools (`breed_strokes`, `breed_proposal`, `get_proposal_genome`), React/Svelte `EvolutionPanel` UI, contact-sheet export, and Swift parity.
+
+## 0.273.0
+
+### Minor Changes
+
+- f8806de: Add reference-layer region fill (`fillRegion` / `fill_region`) with morphological gap closing (`closeGap` 0..32 px), boundary expansion under anti-aliased line art (`expand` -16..16 px), soft boundary antialiasing, paper grain modulation, and optional watercolour wash fill (`wet: true`), plus enclosed region detection (`findUnfilledRegions` / `find_unfilled_regions`) and an interactive Fill tool (`G`, drag to adjust tolerance) across TypeScript, React, Svelte, and Swift.
+
+## 0.272.1
+
+### Patch Changes
+
+- 6ec9a09: Export chart domain contracts (`@pixerate/conformance/domains/chart`) and `createChartConformanceHost` for deterministic chart conformance testing.
+
 ## 0.272.0
 
 ### Minor Changes

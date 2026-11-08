@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { WET_FLOW_KINDS, WET_GPU_OPTIONS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, wetEngineSummary, type PaintEditorController, type WetFlowKind, type WetGpuMode } from '@pixerate/editor/paint-editor';
+  import { LIVE_PATTERN_KINDS, LIVE_PATTERN_LABELS, LIVE_PATTERN_SLIDERS, WET_FLOW_KINDS, WET_GPU_OPTIONS, WET_PARAM_SLIDERS, WET_SPEED_SLIDER, WET_TILT_SLIDERS, readPath, wetEngineSummary, type LivePatternKind, type PaintEditorController, type WetFlowKind, type WetGpuMode } from '@pixerate/editor/paint-editor';
   import PaintSlider from './PaintSlider.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
@@ -14,6 +14,10 @@
   const info = $derived.by(() => {
     void editor.current;
     return layerId ? controller.wetLayerInfo(layerId) : null;
+  });
+  const livePattern = $derived.by(() => {
+    void editor.current;
+    return layerId ? controller.getLivePatterns(layerId).layers[0] ?? null : null;
   });
   const backend = $derived.by(() => {
     void editor.current;
@@ -56,6 +60,23 @@
       {#if info.flow.kind !== 'none'}
         <PaintSlider control={{ path: 'strength', label: 'Flow strength', min: 0, max: 1, step: 0.01 }} value={info.flow.strength} oncommit={(v) => run(async () => (await controller.wetIdle(), controller.setFlowMap(layerId, { strength: v })))} />
       {/if}
+    </div>
+  {/if}
+  {#if livePattern && layerId}
+    <div class="flex flex-col gap-1.5" data-testid="wet-live-patterns">
+      <div class="flex items-center justify-between">
+        <span class="font-medium text-slate-300">Live patterns</span>
+        <button type="button" class={button} onclick={() => run(async () => { await controller.wetIdle(); const cx = Math.round(editor.current.document.canvas.width / 2); const cy = Math.round(editor.current.document.canvas.height / 2); controller.seedLivePatterns({ layerId, points: [{ x: cx, y: cy }] }); })}>Seed pattern</button>
+      </div>
+      <label class="flex items-center justify-between gap-2">
+        <span class="text-slate-400">Pattern</span>
+        <select aria-label="Live pattern" value={livePattern.settings.pattern} onchange={(e) => { const pattern = e.currentTarget.value as LivePatternKind; run(async () => (await controller.wetIdle(), controller.setLivePatterns(layerId, { pattern }))); }} class="rounded bg-slate-800 px-1 py-0.5">
+          {#each LIVE_PATTERN_KINDS as k (k)}<option value={k}>{LIVE_PATTERN_LABELS[k]}</option>{/each}
+        </select>
+      </label>
+      {#each LIVE_PATTERN_SLIDERS as c (c.path)}
+        <PaintSlider control={c} value={readPath(livePattern.settings, c.path)} oncommit={(v) => run(async () => (await controller.wetIdle(), controller.setLivePatterns(layerId, { [c.path]: v })))} />
+      {/each}
     </div>
   {/if}
   {#if backend.message}<p class="text-[10px] text-amber-300" data-testid="wet-message">{backend.message}</p>{/if}

@@ -24,11 +24,14 @@ public struct PaintCanvasView: View {
     private let showGuides: Bool
     /// Take pointer input (default true). Off for still images: `ImageRenderer` draws AppKit and UIKit views as placeholders.
     private let interactive: Bool
+    /// Follow device tilt (gyroscope on iPhone / iPad) to shift `viewTilt` for thin-film iridescence.
+    private let deviceTilt: Bool
 
-    public init(model: PaintEditorModel, showGuides: Bool = true, interactive: Bool = true) {
+    public init(model: PaintEditorModel, showGuides: Bool = true, interactive: Bool = true, deviceTilt: Bool = false) {
         self.model = model
         self.showGuides = showGuides
         self.interactive = interactive
+        self.deviceTilt = deviceTilt
         _presenter = State(initialValue: PaintCanvasPresenter(controller: model.controller))
     }
 
@@ -84,8 +87,12 @@ public struct PaintCanvasView: View {
                 .accessibilityLabel("Painting")
                 if interactive { PaintInputView(model: model) }
             }
-            .onAppear { layout(geo.size) }
+            .onAppear {
+                layout(geo.size)
+                if deviceTilt { model.deviceTiltEnabled = true }
+            }
             .onChange(of: geo.size) { _, size in layout(size) }
+            .onChange(of: deviceTilt) { _, on in model.deviceTiltEnabled = on }
         }
         .background(Color(white: 0.17))
         .clipped()
@@ -136,6 +143,20 @@ public struct PaintCanvasView: View {
         }
         for (a, b) in symmetryAxisSegments(g.symmetry, c) { out.append(GuideLine(from: a, to: b, color: .cyan, dashed: true)) }
         if g.perspective.enabled { for (a, b) in perspectiveGuideLines(g.perspective, c, count: 16) { out.append(GuideLine(from: a, to: b, color: .pink.opacity(0.6))) } }
+        for m in model.magnets {
+            let col: Color = m.strength >= 0 ? .cyan : .orange
+            let steps = 24
+            for i in 0..<steps {
+                let a0 = Double(i) * 2 * .pi / Double(steps)
+                let a1 = Double(i + 1) * 2 * .pi / Double(steps)
+                out.append(GuideLine(
+                    from: Point2(x: m.x + cos(a0) * m.radius, y: m.y + sin(a0) * m.radius),
+                    to: Point2(x: m.x + cos(a1) * m.radius, y: m.y + sin(a1) * m.radius),
+                    color: col.opacity(0.65),
+                    dashed: true
+                ))
+            }
+        }
         return out
     }
 }
