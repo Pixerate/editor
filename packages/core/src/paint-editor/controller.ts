@@ -67,7 +67,7 @@ import { resolveBrush } from '../brushes/resolve';
 import type { Brush } from '../brushes/types';
 import { brushStickerRefs } from './stamp-tip';
 import { brushColourHex } from '../brushes/colour';
-import type { ColorScheme, ColorValue } from '../color/dual';
+import { isDualColor, type ColorScheme, type ColorValue, type DualColor } from '../color/dual';
 import { brushSpecOf, builtinLibraryBrushes, copyJSON, engineChanges, libraryBrush, seededStorage, type LibraryBrush } from './brush-library';
 import {
   createPaintDocument,
@@ -385,8 +385,8 @@ export interface LiveStrokeUpdate {
   brushId?: string;
   /** Brush settings to change (as `setBrush` takes), on top of `brushId` or the stroke's brush. */
   brush?: Omit<PaintBrushInput, 'id'>;
-  /** A new colour #rrggbb (replaces gradient or effect paint). */
-  color?: string;
+  /** A new colour #rrggbb, or a light / dark pair (replaces gradient or effect paint). */
+  color?: ColorValue;
   /** Paint: a colour, gradient paint or effect paint; `null` back to the plain colour. */
   paint?: unknown;
   /** Another jitter seed (particles, scatter and texture fall differently). */
@@ -460,8 +460,12 @@ export interface PaintPreviewPlacement {
 export interface PaintStrokeInit {
   /** Default the active layer. */
   layerId?: string;
-  /** Default the editor colour. */
-  color?: string;
+  /**
+   * Default the editor colour. A light / dark pair (`DualColor`) paints the side of the colour
+   * scheme and is recorded with the stroke (`RecordedStroke.dualColor`), so a stroke layer redraws
+   * it in the other side when the scheme changes.
+   */
+  color?: ColorValue;
   /**
    * What this stroke paints with, instead of the editor's paint: a colour, gradient paint
    * (`@pixerate/editor/paint` `PaintSource`), or effect paint (render it first with
@@ -1103,6 +1107,8 @@ export class PaintEditorController {
 
   private emit(dirty: RasterRect[] | 'all' = 'all'): void {
     if (this.previewing) return;
+    // A document that came back from history, a load or a stroke begun in the other scheme is drawn for this one.
+    if (this.followScheme()) dirty = 'all';
     if (dirty === 'all' || this.dirty === 'all') this.dirty = 'all';
     else this.dirty.push(...dirty);
     this.version++;
@@ -3065,10 +3071,62 @@ export class PaintEditorController {
     this.colorScheme = next;
     const hex = this.brushColour ? brushColourHex(this.brushColour, next) : null;
     if (hex) this.color = hex;
+    // Stroke layers redraw their dual-colour strokes in the new side (`emit` → `followScheme`).
     // The sticker brush sprays dark variants on a dark scheme: load them now.
     const refs = brushStickerRefs(this.brush);
     if (refs.some((r) => !editorStampOf(r))) void this.prepareStickers(refs).catch(() => this.emit([]));
     this.emit([]);
+  }
+
+  /**
+   * Redraws the stroke-layer strokes whose dual colour was drawn in the other scheme's side, in
+   * this scheme's side. Not an undo step: the strokes are the same, drawn for the scheme; the
+   * history entry next to the document follows it, and documents restored from history later
+   * follow again. Waits while a stroke, group or preview is in progress. Returns whether it redrew.
+   */
+  private followScheme(): boolean {
+    if (this.session || this.pathStroke || this.grouping || this.previewing) return false;
+    const live = this.doc.liveStrokes;
+    if (!live) return false;
+    const scheme = this.colorScheme;
+    const was = this.doc;
+    let doc = was;
+    for (const [layerId, list] of Object.entries(live)) {
+      const changed: RecordedStroke[] = [];
+      const next = list.map((st) => {
+        const want = st.dualColor?.[scheme];
+        if (!want || want === st.color) return st;
+        changed.push(st);
+        const out: RecordedStroke = { ...st, color: want };
+        // A Mixer Brush replays from its load, which follows the stroke's colour (as `updateStroke` gives it).
+        if (st.load) {
+          const load = brushLoadForStroke(st.brush, EMPTY_MIXER_LOAD, hexToRgb8(want).map((v) => v / 255) as [number, number, number]);
+          if (load.reservoir || load.pickup) out.load = load;
+          else delete out.load;
+        }
+        if (this.paintedBounds.has(st)) this.paintedBounds.set(out, this.paintedBounds.get(st)!);
+        return out;
+      });
+      if (!changed.length) continue;
+      const layer = findLayer(doc.layers, layerId)?.layer;
+      if (!isPixelLayer(layer)) continue;
+      doc = this.withLiveStrokes(doc, layer, next, this.strokeAreas(changed), { record: false });
+    }
+    if (doc === was) return false;
+    this.doc = doc;
+    this.docRevision++;
+    const undone = this.undoStack[this.undoStack.length - 1];
+    if (undone?.after === was) undone.after = doc;
+    const redone = this.redoStack[this.redoStack.length - 1];
+    if (redone?.before === was) redone.before = doc;
+    return true;
+  }
+
+  /** The paint colour's light / dark pair for a stroke with `brushId`, when the colour came from one (a brush's own or default colour, or `setColor`). */
+  private dualPaint(brushId: string | undefined): DualColor | null {
+    const spec = brushId !== undefined ? this.findEntry(brushId)?.spec : this.brushSpec;
+    if (spec?.colour?.own && spec.colour.default !== undefined) return dualHex(spec.colour.default);
+    return this.brushColour ? dualHex(this.brushColour) : null;
   }
 
   /** Locks the paint colour: choosing a brush with a default colour keeps it. Editor state, not an undo step. */
@@ -3102,10 +3160,16 @@ export class PaintEditorController {
     return d !== undefined ? brushColourHex(d, this.colorScheme) : null;
   }
 
-  /** Sets the paint colour (and goes back to one colour from gradient paint). */
-  setColor(color: string): string {
-    this.color = parseColor(color);
-    this.brushColour = null;
+  /**
+   * Sets the paint colour (and goes back to one colour from gradient paint). A light / dark pair
+   * paints the colour scheme's side, follows `setColorScheme`, and is recorded with each stroke
+   * painted in it. Returns the colour as #rrggbb.
+   */
+  setColor(color: ColorValue): string {
+    const dual = typeof color === 'string' ? null : dualHex(color);
+    if (typeof color !== 'string' && !dual) throw new PaintEditorError(`color ${JSON.stringify(color)} is not a colour; use #rrggbb, or { light, dark } with a colour each.`);
+    this.color = dual ? dual[this.colorScheme] : parseColor(color as string);
+    this.brushColour = dual;
     this.gradient = null;
     this.effectPaint = this.effectPaintPending = null;
     this.paintEpoch++;
@@ -3252,10 +3316,20 @@ export class PaintEditorController {
     return symmetryCopies(this.guides.symmetry);
   }
 
-  private sessionFor(doc: PaintDocumentState, init: PaintStrokeInit, host: StrokeSessionHost, points?: readonly PenPoint[]): PaintStrokeSession {
+  private sessionFor(doc: PaintDocumentState, given: PaintStrokeInit, host: StrokeSessionHost, points?: readonly PenPoint[]): PaintStrokeSession {
+    // A light / dark pair paints the scheme's side and is recorded with the stroke.
+    let dualColor: DualColor | null = null;
+    if (given.color !== undefined && typeof given.color !== 'string') {
+      dualColor = dualHex(given.color);
+      if (!dualColor) throw new PaintEditorError(`color ${JSON.stringify(given.color)} is not a colour; use #rrggbb, or { light, dark } with a colour each.`);
+    }
+    let init = (dualColor ? { ...given, color: dualColor[this.colorScheme] } : given) as PaintStrokeInit & { color?: string };
     if (init.paint !== undefined && !isPaintEffectPaint(init.paint)) {
       const p = this.readStrokePaint(init.paint);
-      if (p.type === 'color') init = { ...init, color: p.color, paint: undefined };
+      if (p.type === 'color') {
+        init = { ...init, color: p.color, paint: undefined };
+        dualColor = null;
+      }
       else init = { ...init, paint: p };
     }
     let layer = (() => {
@@ -3402,7 +3476,9 @@ export class PaintEditorController {
     // A brush with its own colour paints it (resolved for the scheme now, and recorded with the stroke).
     let color = init.color === undefined ? (this.ownColour(init.brushId) ?? this.color) : parseColor(init.color);
     const tracing = this.guides.tracing;
-    if (init.color === undefined && init.start && tracing?.visible && tracing.sampleColors) color = this.sampleTracingColor(init.start.x, init.start.y) ?? color;
+    const traced = init.color === undefined && init.start && tracing?.visible && tracing.sampleColors ? this.sampleTracingColor(init.start.x, init.start.y) : null;
+    if (traced) color = traced;
+    else if (init.color === undefined) dualColor = this.dualPaint(init.brushId);
     const perspective = this.guides.perspective;
     const snapper = init.snapToPerspective && perspective.enabled && perspective.snap ? new PerspectiveSnapper(perspective) : null;
     const useStencils = init.stencils !== false;
@@ -3419,6 +3495,7 @@ export class PaintEditorController {
     const copies = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
     const hasThick = Boolean(doc.thick?.[layer.id]);
     const needThick = brush.engine === 'impasto' || Boolean(brush.iridescence) || (brush.engine === 'eraser' && hasThick) || Boolean(wet?.driver.init.film);
+    const gradient = effect ? null : this.strokeGradient(init, brush, color);
     const session = new PaintStrokeSession(host, {
       layerId: layer.id,
       surface: layer.surface,
@@ -3431,6 +3508,8 @@ export class PaintEditorController {
       paperDepth: doc.paper.depth,
       seed,
       colorHex: color,
+      // Only a stroke that paints its one colour keeps the pair (gradient and effect paint have their own colours).
+      ...(dualColor && !gradient && !effect && dualColor[this.colorScheme] === color ? { dualColor } : {}),
       affineCopies: copies,
       copies: [IDENTITY_AFFINE, ...copies].map(affineCopy),
       inputFilter,
@@ -3447,7 +3526,7 @@ export class PaintEditorController {
       thermo: brush.engine !== 'sticker' && (brush.thermochromic.hotColor !== null || doc.thermo?.[layer.id]) ? { surface: doc.thermo?.[layer.id] ?? emptyThermo() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get, variant: (ref) => this.stickerArt.variantFor(ref, this.colorScheme === 'dark') } : undefined,
       stampArt: this.stampArt,
-      paint: effect ? null : this.strokeGradient(init, brush, color),
+      paint: gradient,
       effect,
     });
     if (wet) this.wet.driver = wet.driver;
@@ -3465,6 +3544,7 @@ export class PaintEditorController {
       points: session.points.map((p) => ({ ...p })),
       seed: init.seed,
     };
+    if (init.dualColor) stroke.dualColor = { ...init.dualColor };
     if (init.affineCopies.length) stroke.copies = init.affineCopies.map((m) => [...m] as unknown as Affine);
     if (init.effect) stroke.paint = JSON.parse(JSON.stringify(init.effect.source));
     else if (init.paint) stroke.paint = JSON.parse(JSON.stringify(init.paint));
@@ -6133,7 +6213,11 @@ export class PaintEditorController {
       next.seed = update.seed;
     }
     if (update.color !== undefined) {
-      next.color = parseColor(update.color);
+      const dual = typeof update.color === 'string' ? null : dualHex(update.color);
+      if (typeof update.color !== 'string' && !dual) throw new PaintEditorError(`color ${JSON.stringify(update.color)} is not a colour; use #rrggbb, or { light, dark } with a colour each.`);
+      next.color = dual ? dual[this.colorScheme] : parseColor(update.color as string);
+      if (dual) next.dualColor = dual;
+      else delete next.dualColor;
       delete next.paint;
     }
     if (update.paint !== undefined) {
@@ -6146,6 +6230,7 @@ export class PaintEditorController {
         const p = this.readStrokePaint(update.paint);
         if (p.type === 'color') {
           next.color = p.color;
+          delete next.dualColor;
           delete next.paint;
         } else next.paint = JSON.parse(JSON.stringify(p));
       }
@@ -6273,8 +6358,13 @@ export class PaintEditorController {
     this.commit(label, this.withLiveStrokes(this.doc, layer, list, dirty));
   }
 
-  private withLiveStrokes(doc: PaintDocumentState, layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): PaintDocumentState {
-    if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it (update_layer locks) first.`);
+  /**
+   * The document with a layer's strokes set and its pixels redrawn. With `record` false (the same
+   * strokes drawn for the colour scheme) the pixel lock doesn't apply and no event is recorded for replays.
+   */
+  private withLiveStrokes(doc: PaintDocumentState, layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null, options: { record?: boolean } = {}): PaintDocumentState {
+    const record = options.record !== false;
+    if (record && isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it (update_layer locks) first.`);
     const current = findLayer(doc.layers, layer.id)?.layer as PaintPixelLayer | undefined;
     const hasFilm = list.some((s) => Boolean(s.brush.iridescence)) || Boolean(doc.thick?.[layer.id]);
     const surface = this.drawLiveStrokes(current ?? layer, list, hasFilm ? null : dirty);
@@ -6294,6 +6384,7 @@ export class PaintEditorController {
       thick = withLayerThick(doc.thick, layer.id, ch);
     }
     const next = { ...doc, layers: mapLayer(doc.layers, layer.id, (l) => ({ ...(l as PaintPixelLayer), surface, offset: { x: 0, y: 0 } })), liveStrokes: { ...(doc.liveStrokes ?? {}), [layer.id]: [...list] }, ...(thick ? { thick } : {}) };
+    if (!record) return next;
     return this.withPaintEvent(next, { kind: 'live-strokes', layerId: layer.id, data: { strokes: list.map((x) => JSON.parse(JSON.stringify(x))) } });
   }
 
@@ -7757,4 +7848,12 @@ function readWetGhost(raw: unknown): WetGhostState | null {
   const total = typeof g.total === 'number' && Number.isFinite(g.total) ? Math.max(1, Math.round(g.total)) : remaining;
   const linger = typeof g.linger === 'number' && Number.isFinite(g.linger) ? Math.max(0.5, Math.min(60, g.linger)) : 4;
   return { pigment: [g.pigment[0], g.pigment[1], g.pigment[2], g.pigment[3]], remaining, total, linger };
+}
+
+/** A light / dark pair as #rrggbb each, or `null` when `value` is not one. */
+function dualHex(value: unknown): DualColor | null {
+  if (!isDualColor(value)) return null;
+  const light = brushColourHex(value.light, 'light');
+  const dark = brushColourHex(value.dark, 'dark');
+  return light && dark ? { light, dark } : null;
 }

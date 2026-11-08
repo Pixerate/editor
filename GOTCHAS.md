@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint-editor] Dual-Colour Strokes Follow the Scheme in `emit`, Outside History
+
+- **Issue / Symptom**: After `setColorScheme('dark')`, undo brought back a stroke layer drawn in the light colours; a scheme change made while a stroke was in progress was lost when that stroke committed.
+- **Root Cause**: A stroke layer's pixels are a cache stored in each history snapshot, and the scheme is editor state, not an undo step. Any document restored from history, loaded, or committed from a document taken before the switch carries caches drawn for the old scheme.
+- **Solution / Workaround**: `followScheme()` runs at the start of `emit()` whenever the editor is idle (no stroke, path stroke, group or preview): it redraws stroke-layer strokes whose `dualColor` side differs from `color`, with `withLiveStrokes(..., { record: false })` (no pixel-lock check, no replay event), and patches the top undo entry's `after` / top redo entry's `before` that point at the old document. Pixel layers are never recoloured: matching colours on pixels also recolours gradients and mixed paint and bypasses undo. Anything that swaps `this.doc` must end in `emit()` for this to hold.
+
 ### [core|swift/paint-editor] A Live-Adjust Gesture Must Only Undo Its Own Commit
 
 - **Issue / Symptom**: Dragging the Fill tool to adjust tolerance (or cancelling the drag) undid the user's previous edit, e.g. a stroke, when the fill itself had painted nothing.
