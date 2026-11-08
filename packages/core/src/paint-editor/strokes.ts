@@ -29,12 +29,15 @@ export interface RecordedStroke {
   id: string;
   layerId: string;
   brush: PaintBrush;
-  /** #rrggbb: the colour the stroke was drawn with (for a dual colour, the side of the scheme it was drawn in). */
+  /**
+   * #rrggbb: the colour the document draws the stroke with. A dual-colour stroke on a stroke layer
+   * keeps its light side here, whoever painted it; on a pixel layer, the side it was painted in.
+   */
   color: string;
   /**
-   * The light / dark pair the colour came from (both #rrggbb), when it came from one. On a stroke
-   * layer the stroke is redrawn in the other side when the colour scheme changes
-   * (`PaintEditorController.setColorScheme`); on a pixel layer its pixels stay as painted.
+   * The light / dark pair the colour came from (both #rrggbb), when it came from one. A stroke
+   * layer shows it in the viewer's side (`PaintEditorController.setColorScheme`) without changing
+   * the document; a pixel layer's pixels stay as painted.
    */
   dualColor?: DualColor;
   /** Raw pen samples in document pixels, before smoothing. */

@@ -21,11 +21,11 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
-### [core/paint-editor] Dual-Colour Strokes Follow the Scheme in `emit`, Outside History
+### [core/paint-editor] Dual-Colour Strokes: Light Side in the Document, the Scheme Only in the View
 
-- **Issue / Symptom**: After `setColorScheme('dark')`, undo brought back a stroke layer drawn in the light colours; a scheme change made while a stroke was in progress was lost when that stroke committed.
-- **Root Cause**: A stroke layer's pixels are a cache stored in each history snapshot, and the scheme is editor state, not an undo step. Any document restored from history, loaded, or committed from a document taken before the switch carries caches drawn for the old scheme.
-- **Solution / Workaround**: `followScheme()` runs at the start of `emit()` whenever the editor is idle (no stroke, path stroke, group or preview): it redraws stroke-layer strokes whose `dualColor` side differs from `color`, with `withLiveStrokes(..., { record: false })` (no pixel-lock check, no replay event), and patches the top undo entry's `after` / top redo entry's `before` that point at the old document. Pixel layers are never recoloured: matching colours on pixels also recolours gradients and mixed paint and bypasses undo. Anything that swaps `this.doc` must end in `emit()` for this to hold.
+- **Issue / Symptom**: Paint shared between viewers with different themes must show each their own side of a dual colour, and a theme switch must not change, save or sync the document.
+- **Root Cause**: A stroke layer's pixels are stored in the document (and in every history snapshot), so redrawing them for a scheme would bake one viewer's theme into shared pixels and make history entries disagree with the view.
+- **Solution / Workaround**: The document always draws a dual-colour stroke on a stroke layer with its light side (`RecordedStroke.color` is `dualColor.light`, however it was painted). `currentLayers()` swaps in a per-layer view surface (`schemeLayers` / `schemeSurface`), cached and brought up to date from the strokes added or removed since (whole redraw on a reorder). `beginStroke` paints on that view so the stroke looks right while drawing, then redraws the stroke area for the document on commit (`withLiveStrokes(..., { record: false })`) and keeps what was painted as the view; `runStroke` paints stroke layers in the light side directly (`paintScheme`). Pixel layers bake the side painted: there are no strokes to redraw them from. Exports and PSD use the view; `toJSON` the document.
 
 ### [core|swift/paint-editor] A Live-Adjust Gesture Must Only Undo Its Own Commit
 

@@ -581,7 +581,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'set_color',
     title: 'Set the paint colour',
-    description: "Sets the paint colour (and optionally the second colour) that strokes and fills use by default, and whether it is locked. Choosing a brush with a default colour (set_brush id, e.g. the highlighter's yellow) makes that the paint colour unless the colour is locked; a brush with colour.own always paints its own. Setting color goes back to one colour from gradient paint (set_paint) or effect paint (set_effect_paint). dualColor sets a light / dark pair instead: strokes paint the side of the host's colour scheme and record the pair, and strokes on a stroke layer are redrawn in the other side when the scheme changes (pixel layers keep their pixels). Editor state, not an undo step. Returns both colours and locked (and dualColor when given).",
+    description: "Sets the paint colour (and optionally the second colour) that strokes and fills use by default, and whether it is locked. Choosing a brush with a default colour (set_brush id, e.g. the highlighter's yellow) makes that the paint colour unless the colour is locked; a brush with colour.own always paints its own. Setting color goes back to one colour from gradient paint (set_paint) or effect paint (set_effect_paint). dualColor sets a light / dark pair instead: strokes record the pair, and on a stroke layer each viewer sees them in the side of their own colour scheme (a pixel layer keeps the side painted). Editor state, not an undo step. Returns both colours and locked (and dualColor when given).",
     inputSchema: {
       type: 'object',
       properties: {
