@@ -656,7 +656,7 @@ export class PaintWetLayers {
 
   /** Resolves when no batch is running. */
   async idle(): Promise<void> {
-    while (this.ticking) await this.ticking;
+    while (this.ticking || this.displaying) await (this.ticking ?? this.displaying);
   }
 
   settingsOf(layerId: string, medium: WetMediumKind = 'watercolor'): WetLayerSettings {
@@ -940,13 +940,14 @@ export class PaintWetLayers {
         this.ticking = null;
       }
       this.flushDriver();
+      if (this.displaying) await this.displaying;
       if (w.gpuActive) {
         const shading = this.syncDisplaysGpu(DISPLAY_TILES_PER_TICK).then(() => undefined);
         this.displaying = shading;
         try {
           await shading;
         } finally {
-          this.displaying = null;
+          if (this.displaying === shading) this.displaying = null;
         }
       } else this.syncDisplays(DISPLAY_TILES_PER_TICK);
       this.retireDry();

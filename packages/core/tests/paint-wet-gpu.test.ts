@@ -59,6 +59,94 @@ describe('Engine B capability check (no GPU needed)', () => {
     const failing = { limits: { maxStorageBufferBindingSize: 2 ** 31, maxBufferSize: 2 ** 31 }, requestDevice: async () => Promise.reject(new Error('lost')) };
     expect((await wetGpuSupport({ requestAdapter: async () => failing })).reason).toMatch(/did not start \(lost\)/);
   });
+
+  it('serializes concurrent shade calls so "wet shaded read" is never submitted while mapped', async () => {
+    interface FakeBuf {
+      size: number;
+      label?: string;
+      mapped: boolean;
+      destroyed: boolean;
+      bytes: ArrayBuffer;
+      mapAsync: () => Promise<void>;
+      getMappedRange: (offset?: number, size?: number) => ArrayBuffer;
+      unmap: () => void;
+      destroy: () => void;
+    }
+    const provider: WetGpuProvider = {
+      requestAdapter: async () => ({
+        limits: { maxStorageBufferBindingSize: 2 ** 30, maxBufferSize: 2 ** 30 },
+        info: { vendor: 'fake' },
+        requestDevice: async () => ({
+          createBuffer: ({ size, label }: { size: number; usage: number; label?: string }): FakeBuf => {
+            const buf: FakeBuf = {
+              size,
+              label,
+              mapped: false,
+              destroyed: false,
+              bytes: new ArrayBuffer(size),
+              mapAsync: async () => {
+                buf.mapped = true;
+                await new Promise((r) => setTimeout(r, 10));
+              },
+              getMappedRange: (offset = 0, len = size) => buf.bytes.slice(offset, offset + len),
+              unmap: () => {
+                buf.mapped = false;
+              },
+              destroy: () => {
+                if (buf.mapped) throw new Error(`[Buffer "${label}"] destroyed while mapped.`);
+                buf.destroyed = true;
+              },
+            };
+            return buf;
+          },
+          createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }),
+          createComputePipelineAsync: async () => ({ getBindGroupLayout: () => ({}) }),
+          createBindGroup: () => ({}),
+          createCommandEncoder: () => {
+            const touched: FakeBuf[] = [];
+            return {
+              beginComputePass: () => ({
+                setPipeline: () => {},
+                setBindGroup: () => {},
+                dispatchWorkgroups: () => {},
+                end: () => {},
+              }),
+              copyBufferToBuffer: (src: FakeBuf, _so: number, dst: FakeBuf) => {
+                touched.push(src, dst);
+              },
+              clearBuffer: (dst: FakeBuf) => {
+                touched.push(dst);
+              },
+              finish: () => ({ touched }),
+            };
+          },
+          queue: {
+            writeBuffer: () => {},
+            submit: (cmds: readonly { touched?: FakeBuf[] }[]) => {
+              for (const cmd of cmds) {
+                for (const b of cmd.touched ?? []) {
+                  if (b.mapped) throw new Error(`[Buffer "${b.label}"] used in submit while mapped.`);
+                }
+              }
+            },
+            onSubmittedWorkDone: async () => {},
+          },
+          destroy: () => {},
+        }),
+      }),
+    };
+
+    const { engine } = await createWetGpuEngine(provider);
+    expect(engine).toBeTruthy();
+    const job: WetGpuJob = { slot: 0, lane: 0, neighbours: [-1, -1, -1, -1, -1, -1, -1, -1], width: 256, height: 256 };
+    const [a, b] = await Promise.all([
+      engine!.shade([job], 0, [null], [247, 243, 234], 'display'),
+      engine!.shade([job, job], 0, [null, null], [247, 243, 234], 'display'),
+    ]);
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(2);
+    engine!.destroy();
+  });
 });
 
 describe('Engine B on a GPU (WET_GPU)', () => {
