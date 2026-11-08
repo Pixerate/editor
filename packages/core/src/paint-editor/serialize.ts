@@ -19,6 +19,7 @@ import {
 } from '../image-editor/layers/serialize';
 import type { ImageLayer } from '../image-editor/layers/model';
 import { findLayer, flattenLayers } from '../raster/layers';
+import { parseDataUrl } from '../raster/png';
 import { normalizeBrushStroke, strokeToJSON } from './strokes';
 import { normalizeCanvas, type PaintDocumentState, type PaintEvent, type PaintLayer } from './document';
 import { normalizePaper, type PaperSettings } from './paper';
@@ -110,10 +111,99 @@ export function serializePaintDocument(state: PaintDocumentState, options: Seria
   return { ...header(state, options), layers, assets } as SerializedPaintDocument;
 }
 
-/** The document as JSON with each PNG uploaded to `store` once (by content). */
+/**
+ * Top-level fields with no PNGs of their own in them (or, for strokes and events, kept inline as
+ * they are), so the external writer leaves them. Every other field (the light, thick paint,
+ * fluorescence, thermochromic, ferrofluid and heat channels, the mixing pad, brush source art,
+ * guides and any later extension) has its PNG data URLs stored as assets.
+ */
+const NO_EXTENSION_PNGS = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'wetEvents', 'paintEvents', 'origin']);
+
+/** How an extension field refers to a PNG in `assets`: `asset:<asset id>`. */
+export const EXTENSION_ASSET_REF = 'asset:';
+
+const PNG_DATA_URL = 'data:image/png;base64,';
+
+/** The PNGs already stored, by store: data URL → the store's reference. */
+const storedPngs = new WeakMap<PaintAssetStore, Map<string, string>>();
+
+/** FNV-1a of a string, as 8 hex digits (an extension PNG's asset id, so equal PNGs share one). */
+function fnv1a(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/** `value` with each PNG data URL in it put in `store` and replaced by `asset:<id>` (the id added to `assets`). */
+async function externalizePngs(value: unknown, assets: Record<string, string>, store: PaintAssetStore): Promise<unknown> {
+  if (typeof value === 'string') {
+    if (!value.startsWith(PNG_DATA_URL)) return value;
+    const id = `ext-${fnv1a(value)}-${value.length.toString(36)}`;
+    if (!assets[id]) {
+      let refs = storedPngs.get(store);
+      if (!refs) storedPngs.set(store, (refs = new Map()));
+      let ref = refs.get(value);
+      if (!ref) {
+        const parsed = parseDataUrl(value);
+        if (!parsed) return value;
+        const b = parsed.bytes;
+        const u32 = (o: number) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+        ref = await store.put(new Blob([b as BlobPart], { type: 'image/png' }), { id, width: b.length >= 24 ? u32(16) : 0, height: b.length >= 24 ? u32(20) : 0 });
+        if (typeof ref !== 'string' || !ref) throw new Error(`The asset store returned no reference for "${id}".`);
+        refs.set(value, ref);
+      }
+      assets[id] = ref;
+    }
+    return `${EXTENSION_ASSET_REF}${id}`;
+  }
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    for (const v of value) out.push(await externalizePngs(v, assets, store));
+    return out;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = await externalizePngs(v, assets, store);
+    return out;
+  }
+  return value;
+}
+
+/**
+ * `value` with each `asset:<id>` replaced by that asset's PNG data URL from `assets`; an id that
+ * is missing (or not a data URL) is reported once in `problems` and left as it is.
+ */
+function inlinePngs(value: unknown, assets: Record<string, string>, problems: string[], field: string, used: Set<string>): unknown {
+  if (typeof value === 'string') {
+    if (!value.startsWith(EXTENSION_ASSET_REF)) return value;
+    const id = value.slice(EXTENSION_ASSET_REF.length);
+    const url = assets[id];
+    if (typeof url === 'string' && url.startsWith('data:')) {
+      used.add(id);
+      return url;
+    }
+    const msg = `"${field}" refers to asset "${id}", which could not be read; that part loads empty.`;
+    if (!problems.includes(msg)) problems.push(msg);
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((v) => inlinePngs(v, assets, problems, field, used));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = inlinePngs(v, assets, problems, field, used);
+    return out;
+  }
+  return value;
+}
+
+/** The document as JSON with each PNG (layers and extension fields alike) uploaded to `store` once (by content). */
 export async function serializePaintDocumentExternal(state: PaintDocumentState, store: PaintAssetStore, options: SerializeOptions = {}): Promise<SerializedPaintDocument> {
   const { layers, assets } = await serializeLayersExternal(state.layers as unknown as ImageLayer[], store);
-  return { ...header(state, options), layers, assets } as SerializedPaintDocument;
+  const out = { ...header(state, options), layers, assets } as SerializedPaintDocument;
+  for (const key of Object.keys(out)) if (!NO_EXTENSION_PNGS.has(key)) out[key] = await externalizePngs(out[key], assets, store);
+  return out;
 }
 
 export interface LoadedPaintDocument {
@@ -165,9 +255,17 @@ export function deserializePaintDocument(raw: unknown): LoadedPaintDocument {
     throw new Error(`Paint document version ${JSON.stringify(r.version)} is newer than this editor reads (${PAINT_SCHEMA_VERSION}); update @pixerate/editor.`);
   }
   const problems: string[] = [];
+  const rawAssets = r.assets && typeof r.assets === 'object' ? (r.assets as Record<string, string>) : {};
+  // Extension fields saved externally refer to their PNGs as `asset:<id>`: put the data URLs back.
+  const used = new Set<string>();
+  const inlined: Record<string, unknown> = { ...r };
+  for (const key of Object.keys(r)) if (!NO_EXTENSION_PNGS.has(key)) inlined[key] = inlinePngs(r[key], rawAssets, problems, key, used);
+  return readDocument(inlined, Object.fromEntries(Object.entries(rawAssets).filter(([id]) => !used.has(id))), problems);
+}
+
+function readDocument(r: Record<string, unknown>, assets: Record<string, string>, problems: string[]): LoadedPaintDocument {
   const canvas = normalizeCanvas({ width: r.width as number, height: r.height as number, dpi: (r.dpi as number | undefined) ?? undefined });
   const paper = normalizePaper((r.paper as Record<string, unknown>) ?? {});
-  const assets = r.assets && typeof r.assets === 'object' ? (r.assets as Record<string, string>) : {};
   const layers = paintLayersOnly(deserializeLayers(r.layers, { assets, problems }), problems);
   const wanted = typeof r.activeLayerId === 'string' ? r.activeLayerId : null;
   const activeLayerId = wanted && findLayer(layers, wanted) ? wanted : (flattenLayers(layers).filter((l) => l.type === 'pixel').pop()?.id ?? null);

@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint-editor] Dual-Colour Strokes: Light Side in the Document, the Scheme Only in the View
+
+- **Issue / Symptom**: Paint shared between viewers with different themes must show each their own side of a dual colour, and a theme switch must not change, save or sync the document.
+- **Root Cause**: A stroke layer's pixels are stored in the document (and in every history snapshot), so redrawing them for a scheme would bake one viewer's theme into shared pixels and make history entries disagree with the view.
+- **Solution / Workaround**: The document always draws a dual-colour stroke on a stroke layer with its light side (`RecordedStroke.color` is `dualColor.light`, however it was painted). `currentLayers()` swaps in a per-layer view surface (`schemeLayers` / `schemeSurface`), cached and brought up to date from the strokes added or removed since (whole redraw on a reorder). `beginStroke` paints on that view so the stroke looks right while drawing, then redraws the stroke area for the document on commit (`withLiveStrokes(..., { record: false })`) and keeps what was painted as the view; `runStroke` paints stroke layers in the light side directly (`paintScheme`). Pixel layers bake the side painted: there are no strokes to redraw them from. Exports and PSD use the view; `toJSON` the document.
+
 ### [core|swift/paint-editor] A Live-Adjust Gesture Must Only Undo Its Own Commit
 
 - **Issue / Symptom**: Dragging the Fill tool to adjust tolerance (or cancelling the drag) undid the user's previous edit, e.g. a stroke, when the fill itself had painted nothing.
