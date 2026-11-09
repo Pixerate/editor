@@ -502,7 +502,7 @@
     "eval:tools": "vitest run --config vitest.eval.config.ts --disableConsoleIntercept"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "1.1.0",
+    "@anthropic-ai/sdk": "1.6.0",
     "@dagrejs/dagre": "^1.1.8",
     "@pixerate/markdown-conformance": "workspace:*",
     "@tiptap/core": "^2.27.3",
@@ -530,17 +530,17 @@
     "@tiptap/suggestion": "^2.27.3",
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "assemblyscript": "0.28.20",
     "fast-check": "^4.10.2",
     "markdown-it": "^15.0.3",
     "markdown-it-task-lists": "^2.1.1",
-    "mermaid": "12.2.0",
+    "mermaid": "12.3.0",
     "prosemirror-markdown": "^1.13.9",
     "tiptap-markdown": "^0.8.10",
     "tsup": "^9.0.0",
     "typescript": "^5.7.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   },
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
