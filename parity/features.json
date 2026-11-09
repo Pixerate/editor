@@ -1067,11 +1067,11 @@
           "swift": "Planned (#533)"
         },
         {
-          "feature": "Vector Image Trace (raster pixels to paths: marching squares at pixel centres, Douglas–Peucker simplification to a tolerance, Bézier fitting with a corner roundness from sharp polygons to smooth curves, minimum area, holes as even-odd subpaths; black-and-white by darkness or alpha with a threshold, or colour by median cut into stacked paths so no gaps open; placed and scaled as one group; PNG data URLs for agents, any browser image in the panels; agent command `vector.traceImage`)",
-          "core": "`traceImage`, `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`",
+          "feature": "Vector Image Trace (raster pixels to paths: marching squares at pixel centres, Douglas–Peucker simplification to a tolerance, Bézier fitting with a corner roundness from sharp polygons to smooth curves, minimum area, holes as even-odd subpaths; black-and-white by darkness or alpha with a threshold, or colour by median cut into stacked paths so no gaps open; placed and scaled as one group; PNG data URLs for agents, or image references (URLs, host ids) a host `resolveImage` loads; any browser image in the panels; agent command `vector.traceImage`)",
+          "core": "`traceImage`, `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`; `createVectorCommands({ resolveImage, imageReferences })`",
           "react": "`<VectorTracePanel>` (in `<VectorToolbar>`)",
           "svelte": "`<VectorTracePanel>` (in `<VectorStylePanel>`)",
-          "swift": "✅ headless (`VectorEditorController.traceImage`, `vector.traceImage`; `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`); the trace panel and the views: Planned (#533)"
+          "swift": "✅ headless (`VectorEditorController.traceImage`, `vector.traceImage`; `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`); host image references (`resolveImage`), the trace panel and the views: Planned (#533)"
         },
         {
           "feature": "Vector Lottie Export & Import (Bodymovin v5 JSON: groups mirroring the nodes, paths with solid and gradient fills and strokes (dashes, caps, joins, blend modes), path effects kept live as Lottie modifiers — trim, round corners, pucker & bloat, twist, zig zag, offset, merge, repeater — live booleans as Merge Paths, masks and frames clipped, text, instances and wiggle / envelope effects as drawn, aligned or arrowed strokes as outlines; import of one frame with eased keyframes, layer parenting, precomps, solids and additive masks, modifiers becoming live effects; notes for what was approximated; agent commands `vector.exportLottie`, `vector.importLottie`)",
