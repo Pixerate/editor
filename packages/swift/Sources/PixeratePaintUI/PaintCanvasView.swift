@@ -160,7 +160,7 @@ public struct PaintCanvasView: View {
         if let active = model.controller.activeStroke, active.open, !active.points.isEmpty {
             let b = active.brush
             if b.engine == "vortex" || (b.engine == "wet" && b.wet.tool == "vortex") {
-                for seg in vortexGuideSegments(active.points, b) {
+                for seg in active.vortexGuides {
                     let isReach = seg.kind == "vortex-reach"
                     out.append(GuideLine(
                         from: seg.from,
