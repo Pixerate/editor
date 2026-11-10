@@ -1633,8 +1633,9 @@ public final class PaintEditorController {
             i.load = load
             wetInit = (driver, { (try? world.displayGpu(id).surface) ?? emptySurface(4) })
         } else if brush.engine == "antimatter" {
-            let visIds = Set(visiblePixelLayers(d.layers).map(\.id))
-            let wetVis = wet.wetLayerIds().filter { visIds.contains($0) || (i.targets?.contains($0) == true) }
+            var targetIds = Set(antimatterTargets(d, i.targets).map(\.id))
+            targetIds.insert(layer.id)
+            let wetVis = wet.wetLayerIds().filter { targetIds.contains($0) }
             if !wetVis.isEmpty {
                 dryLayersFirst(wetVis)
                 didDry = true
@@ -1705,7 +1706,7 @@ public final class PaintEditorController {
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
         if brush.engine == "antimatter" {
             let sourceDoc = didDry ? doc : d
-            withLight.antimatter = antimatterTargets(sourceDoc, layer.id, i.targets)
+            withLight.antimatter = antimatterTargets(sourceDoc, i.targets)
         }
         withLight.stampArt = stampArt
         if wetInit == nil && brush.engine != "sticker" && brush.engine != "antimatter" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
@@ -1718,43 +1719,49 @@ public final class PaintEditorController {
         return session
     }
 
-    func visiblePixelLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
-        var out: [PaintLayer] = []
-        func walk(_ list: [PaintLayer]) {
+    /// The fuel layers of an antimatter stroke: every visible, non-temporary pixel layer (group
+    /// opacity multiplied in), or on a replay exactly the recorded `targetIds` whatever their
+    /// visibility now. The editable ones (not locked, stroke, sticker or effect layers) change.
+    /// A port of the TS core's `antimatterTargetsOf`.
+    func antimatterTargets(_ d: PaintDocumentState, _ targetIds: [String]?) -> [AntimatterTarget] {
+        let targetSet: Set<String>? = targetIds.flatMap { $0.isEmpty ? nil : Set($0) }
+        var out: [AntimatterTarget] = []
+        func hasForcedDescendant(_ list: [PaintLayer]) -> Bool {
+            guard let targetSet else { return false }
+            return list.contains { l in l.type == "group" ? hasForcedDescendant(l.children ?? []) : targetSet.contains(l.id) }
+        }
+        func walk(_ list: [PaintLayer], _ groupOpacity: Double, _ groupVisible: Bool) {
             for l in list {
-                if !l.visible { continue }
-                if let c = l.children { walk(c) } else if l.isPixel { out.append(l) }
+                if l.type == "group" {
+                    let vis = groupVisible && l.visible
+                    let children = l.children ?? []
+                    if vis || hasForcedDescendant(children) {
+                        walk(children, groupOpacity * (l.visible ? l.opacity : 1), vis)
+                    }
+                    continue
+                }
+                if !l.isPixel || l.temporary == true { continue }
+                let vis = groupVisible && l.visible
+                if let targetSet { if !targetSet.contains(l.id) { continue } } else if !vis { continue }
+                let canEdit = !isLayerLocked(l.locks, .pixels)
+                    && d.liveStrokes?.get(l.id) == nil
+                    && d.stickers?.get(l.id)?.isEmpty != false
+                    && d.effectLayers?.get(l.id) == nil
+                let base = wet.isWet(l.id) ? ((try? wet.world?.displayGpu(l.id).surface) ?? l.pixelSurface) : l.pixelSurface
+                out.append(AntimatterTarget(
+                    id: l.id,
+                    editable: canEdit,
+                    lockTransparency: isLayerLocked(l.locks, .transparency),
+                    opacity: groupOpacity * (l.visible ? l.opacity : (l.opacity != 0 ? l.opacity : 1)),
+                    offset: l.pixelOffset,
+                    base: base,
+                    baseLight: d.light?.get(l.id),
+                    baseThick: d.thick?.get(l.id)
+                ))
             }
         }
-        walk(layers)
+        walk(d.layers, 1, true)
         return out
-    }
-
-    func antimatterTargets(_ d: PaintDocumentState, _ activeId: String, _ targetIds: [String]?) -> [AntimatterTarget] {
-        let layers: [PaintLayer]
-        if let targetIds, !targetIds.isEmpty {
-            layers = targetIds.compactMap { findLayer(d.layers, $0)?.layer }.filter(\.isPixel)
-        } else {
-            layers = visiblePixelLayers(d.layers)
-        }
-        return layers.map { l in
-            let isStroke = d.liveStrokes?.get(l.id) != nil
-            let isSticker = d.stickers?.get(l.id)?.isEmpty == false
-            let isEffect = d.effectLayers?.get(l.id) != nil
-            let locked = isLayerLocked(l.locks, .pixels)
-            let editable = l.id == activeId || (!locked && !isStroke && !isSticker && !isEffect)
-            let base = wet.isWet(l.id) ? ((try? wet.world?.displayGpu(l.id).surface) ?? l.pixelSurface) : l.pixelSurface
-            return AntimatterTarget(
-                id: l.id,
-                editable: editable,
-                lockTransparency: isLayerLocked(l.locks, .transparency),
-                opacity: l.opacity,
-                offset: l.pixelOffset,
-                base: base,
-                baseLight: d.light?.get(l.id),
-                baseThick: d.thick?.get(l.id)
-            )
-        }
     }
 
     func record(_ s: PaintStrokeSession) -> RecordedStroke {
@@ -1765,10 +1772,8 @@ public final class PaintEditorController {
         if let e = i.effect { stroke.effect = e.source } else if let p = i.paint { stroke.paint = p }
         if i.mixerLoad.reservoir != nil || i.mixerLoad.pickup != nil { stroke.load = i.mixerLoad }
         if let w = i.wet { stroke.steps = w.driver.steps }
-        if let am = s.antimatterDriver {
-            let targetIds = i.antimatter?.map(\.id) ?? am.stats().layers
-            if !targetIds.isEmpty { stroke.targets = targetIds }
-        }
+        // The fuel layers the stroke read (visible pixel layers at the time, or the replayed ones): a replay reads fuel from exactly these.
+        if s.antimatterDriver != nil, let fuel = i.antimatter, !fuel.isEmpty { stroke.targets = fuel.map(\.id) }
         if i.selection != nil {
             let masks = (s.maskStencils ?? guides.stencils).filter { $0.enabled && $0.mode == "mask" }
             if !masks.isEmpty { stroke.stencils = masks }

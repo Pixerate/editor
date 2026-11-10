@@ -56,7 +56,7 @@ export interface RecordedStroke {
    * readers), or effect paint (the effect it took its colours from; replays render it first).
    */
   paint?: PaintGradientSource | PaintEffectPaint;
-  /** Antimatter brushes: the visible fuel layer ids at the time of the stroke, so a replay reaches the same layers. */
+  /** Antimatter brushes: the visible fuel layer ids at the time of the stroke, so a replay reads fuel from (and changes) exactly the same layers. */
   targets?: string[];
 }
 

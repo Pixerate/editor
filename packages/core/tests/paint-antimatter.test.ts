@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createFakeEffectProvider } from '../src/effects';
 import {
   BUILTIN_BRUSHES,
    DEFAULT_PAPER,
@@ -515,5 +516,167 @@ describe('Antimatter paint (#682)', () => {
     expect(callRes.isError).toBeFalsy();
     const structured = callRes.structuredContent as { antimatter?: { blasts: number } };
     expect(structured.antimatter?.blasts).toBe(1);
+  });
+});
+
+describe('Antimatter review fixes (#714)', () => {
+  const HARD_INK = { tip: { size: 20, hardness: 1 }, dynamics: { smoothing: 0, pressureSize: false, pressureOpacity: false } };
+  const SMALL_BLAST = { tip: { size: 12 }, antimatter: { blastRadius: 2, sparks: 0, crater: 0 } };
+
+  function lightAndInk(): { c: PaintEditorController; layerId: string } {
+    const c = createEditor();
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'neon-marker', color: '#ff00ff', brush: { tip: { size: 16 } }, points: [{ x: 16, y: 20, pressure: 1 }, { x: 44, y: 20, pressure: 1 }] });
+    c.paintStroke({ brushId: 'ink-pen', color: '#0055ff', brush: HARD_INK, points: [{ x: 96, y: 100 }, { x: 104, y: 100 }] });
+    return { c, layerId };
+  }
+
+  it('keeps existing light paint where no blast reaches it (null light output means unchanged)', () => {
+    const { c, layerId } = lightAndInk();
+    const before = c.document.light?.[layerId];
+    expect(before).toBeDefined();
+    const res = c.paintStroke({ brushId: 'antimatter', brush: SMALL_BLAST, seed: 3, points: [{ x: 100, y: 100, pressure: 1 }] });
+    expect(res.antimatter!.blasts).toBe(1);
+    expect(res.antimatter!.layers).toEqual([layerId]);
+    expect(c.document.light?.[layerId]).toBe(before);
+    expect(readPixel(c.document.light![layerId]!, 30, 20)[0]).toBeGreaterThan(100);
+  });
+
+  it('keeps existing impasto relief when the blast leaves it alone (crater 0)', () => {
+    const c = createEditor();
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'impasto-brush', color: '#cc5500', brush: { tip: { size: 24 }, impasto: { depth: 0.9 } }, points: [{ x: 16, y: 20, pressure: 1 }, { x: 44, y: 20, pressure: 1 }] });
+    c.paintStroke({ brushId: 'ink-pen', color: '#0055ff', brush: HARD_INK, points: [{ x: 96, y: 100 }, { x: 104, y: 100 }] });
+    const before = c.document.thick?.[layerId];
+    expect(before).toBeDefined();
+    const res = c.paintStroke({ brushId: 'antimatter', brush: SMALL_BLAST, seed: 3, points: [{ x: 100, y: 100, pressure: 1 }] });
+    expect(res.antimatter!.blasts).toBe(1);
+    expect(c.document.thick?.[layerId]).toBe(before);
+    // Undo and redo keep it too.
+    c.undo();
+    c.redo();
+    expect(c.document.thick?.[layerId]).toBe(before);
+  });
+
+  it('keeps showing existing light while a live antimatter stroke is painted', () => {
+    const { c } = lightAndInk();
+    const at = (img: { data: Uint8ClampedArray; width: number }, x: number, y: number) => Array.from(img.data.slice((y * img.width + x) * 4, (y * img.width + x) * 4 + 4));
+    // The view (display) render, which draws the live stroke.
+    const before = c.renderPreview({ maxSide: 4096 });
+    const session = c.beginStroke({ brushId: 'antimatter', brush: SMALL_BLAST, seed: 3 });
+    session.push([{ x: 98, y: 100, pressure: 1 }, { x: 100, y: 100, pressure: 1 }, { x: 102, y: 100, pressure: 1 }]);
+    const during = c.renderPreview({ maxSide: 4096 });
+    expect(at(during, 100, 100)).not.toEqual(at(before, 100, 100));
+    // The glow and spill of the light far from the blast are drawn as before.
+    for (const [x, y] of [[30, 20], [30, 30], [10, 20]] as const) expect(at(during, x, y)).toEqual(at(before, x, y));
+    session.end();
+  });
+
+  it('records the fuel layers and replays fuel from exactly them (a locked fuel layer under an empty active layer, later hidden)', () => {
+    const c = createEditor(64, 64);
+    const fuelId = c.getState().document.activeLayerId!;
+    c.fillLayer({ layerId: fuelId, color: '#ff0000' });
+    c.updateLayer(fuelId, { locks: { pixels: true } });
+    const top = c.addLayer({ name: 'Top' });
+    const res = c.paintStroke({ brushId: 'antimatter', seed: 7, points: [{ x: 32, y: 32, pressure: 1 }] });
+    expect(res.antimatter!.blasts).toBe(1);
+    expect(res.antimatter!.layers).toEqual([top.id]);
+    expect(res.antimatter!.skippedLayers).toEqual([fuelId]);
+    const stroke = c.getStrokes().at(-1)!;
+    // Every fuel layer, not only the changed ones.
+    expect(stroke.targets).toEqual([fuelId, top.id]);
+    const topAfter = (c.getLayer(top.id) as PaintPixelLayer).surface;
+
+    // Hide the fuel layer and add a new visible layer of paint: the replay still burns on the
+    // recorded fuel and ignores the new layer.
+    c.clearLayer(top.id);
+    c.updateLayer(fuelId, { visible: false });
+    const extra = c.addLayer({ name: 'Extra' });
+    c.fillLayer({ layerId: extra.id, color: '#00ff00' });
+    const extraBefore = (c.getLayer(extra.id) as PaintPixelLayer).surface;
+    c.setActiveLayer(top.id);
+    const replay = c.replayStrokes({ strokeIds: [stroke.id] });
+    expect(replay.layerIds).toEqual([top.id]);
+    expect((c.getLayer(extra.id) as PaintPixelLayer).surface).toBe(extraBefore);
+    const topReplayed = (c.getLayer(top.id) as PaintPixelLayer).surface;
+    for (const [x, y] of [[32, 32], [20, 40], [44, 24]] as const) expect(readPixel(topReplayed, x, y)).toEqual(readPixel(topAfter, x, y));
+    expect(c.getStrokes().at(-1)!.targets).toEqual([fuelId, top.id]);
+  });
+
+  it('weights fuel by group opacity and skips temporary layers', () => {
+    const fuelAt = (groupOpacity: number) => {
+      const c = createEditor(64, 64);
+      const bottom = c.getState().document.activeLayerId!;
+      const group = c.addLayer({ type: 'group', name: 'G' });
+      const inner = c.addLayer({ name: 'Inner', parentId: group.id });
+      c.fillLayer({ layerId: inner.id, color: '#0000ff' });
+      c.updateLayer(group.id, { opacity: groupOpacity });
+      c.setActiveLayer(bottom);
+      return c.paintStroke({ brushId: 'antimatter', seed: 7, points: [{ x: 32, y: 32, pressure: 1 }] }).antimatter!.fuel;
+    };
+    expect(fuelAt(0.5)).toBeCloseTo(fuelAt(1) / 2, 2);
+    expect(fuelAt(0)).toBe(0);
+  });
+
+  it('rebases blast times on the view clock (agent points with t from 0)', () => {
+    const c = createEditor();
+    c.fillLayer({ color: '#ff0000' });
+    const ref = createEditor();
+    ref.fillLayer({ color: '#ff0000' });
+    ref.paintStroke({ brushId: 'antimatter', brush: { antimatter: { duration: 0 } }, seed: 5, points: [{ x: 64, y: 64, pressure: 1, t: 0 }] });
+    const final = Array.from(ref.compositePixels().data);
+
+    let now = 1_000_000;
+    let tick: (() => void) | null = null;
+    const player = c.playEffects({ now: () => now, frame: (cb) => ((tick = cb), () => (tick = null)) });
+    c.paintStroke({ brushId: 'antimatter', brush: { antimatter: { duration: 0.8 } }, seed: 5, points: [{ x: 64, y: 64, pressure: 1, t: 0 }] });
+    // Just after the stroke: the blast is still growing in the view.
+    now += 50;
+    (tick as (() => void) | null)?.();
+    expect(Array.from(c.compositePixels().data)).not.toEqual(final);
+    now += 2000;
+    (tick as (() => void) | null)?.();
+    expect(Array.from(c.compositePixels().data)).toEqual(final);
+    player.stop();
+  });
+
+  it('keeps blast frames and live effect frames apart', async () => {
+    const W = 96;
+    const c = new PaintEditorController({ width: W, height: 64, paper: 'smooth' });
+    c.setEffectsProvider(createFakeEffectProvider());
+    const pixelId = c.getState().document.activeLayerId!;
+    c.fillLayer({ layerId: pixelId, color: '#ff0000' });
+    c.addLayer({ type: 'strokes' });
+    await c.setEffectPaint({ effect: 'fake.gradient', values: { from: '#ff0000', to: '#0000ff', angle: 0, spin: 180 }, live: true });
+    c.paintStroke({ brushId: 'ink-pen', brush: { tip: { size: 10, hardness: 1 }, dynamics: { smoothing: 0, pressureSize: false, pressureOpacity: false } }, points: [{ x: 4, y: 44 }, { x: 92, y: 44 }] });
+    c.setPaint({ type: 'color', color: '#ffffff' });
+    const rows = (img: { data: Uint8ClampedArray }) => Array.from(img.data.slice(38 * W * 4, 51 * W * 4));
+    const blastPx = () => Array.from(c.compositePixels().data.slice((10 * W + 30) * 4, (10 * W + 30) * 4 + 4));
+
+    expect(await c.showEffectTime(1000)).toBe(true);
+    const effect1000 = rows(c.compositePixels());
+    c.setActiveLayer(pixelId);
+    c.setEffectPlayback({ playing: false });
+    c.paintStroke({ brushId: 'antimatter', brush: { tip: { size: 6 }, antimatter: { duration: 0.8, blastRadius: 1.5, sparks: 0 } }, seed: 2, points: [{ x: 30, y: 10, pressure: 1 }] });
+    const committed = blastPx();
+
+    let now = 5000;
+    let tick: (() => void) | null = null;
+    const player = c.playEffects({ now: () => now, frame: (cb) => ((tick = cb), () => (tick = null)) });
+    // The blast frame shows; the effect frame stays.
+    const early = blastPx();
+    expect(early).not.toEqual(committed);
+    expect(rows(c.compositePixels())).toEqual(effect1000);
+    // A new effect frame keeps the blast frame.
+    expect(await c.showEffectTime(500)).toBe(true);
+    const effect500 = rows(c.compositePixels());
+    expect(effect500).not.toEqual(effect1000);
+    expect(blastPx()).toEqual(early);
+    // The blast ends; the effect frame stays.
+    now += 2000;
+    (tick as (() => void) | null)?.();
+    expect(blastPx()).toEqual(committed);
+    expect(rows(c.compositePixels())).toEqual(effect500);
+    player.stop();
   });
 });
