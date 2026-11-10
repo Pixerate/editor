@@ -632,7 +632,7 @@ public struct SetBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?
@@ -3173,7 +3173,7 @@ public struct CreateBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?
@@ -3296,7 +3296,7 @@ public struct UpdateBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?

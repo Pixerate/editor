@@ -63,7 +63,8 @@
           "continuous",
           "scatter",
           "particles",
-          "objects"
+          "objects",
+          "antimatter"
         ]
       },
       "description": "Marks kinds it renders."

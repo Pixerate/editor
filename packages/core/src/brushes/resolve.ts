@@ -22,7 +22,7 @@ import {
 import { editorStampOf } from '../stickers/helpers';
 import type { Brush, BrushTool, ResolvedBrush } from './types';
 
-const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
+const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter'];
 /** Engines that pick up and mix paint dab by dab (the exchange ratios apply). */
 const EXCHANGE: readonly PaintBrushEngine[] = ['dab', 'wet', 'impasto'];
 /** Engines that lay dabs from the pen dab walker: tip grain, count and flip apply. */
@@ -143,6 +143,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('marks.size', 'spray.size', ['dab'], { marks: ['scatter'] }),
   ...each('marks', 'sticker', ['density', 'sizeJitter', 'rotationJitter', 'scatter'], ['sticker']),
   f('marks.colourJitter', 'sticker.colorJitter', ['sticker']),
+  ...each('marks', 'antimatter', ['blastRadius', 'blastSpacing', 'threshold', 'invert', 'invertMode', 'scorch', 'annihilate', 'sparks', 'sparkReach', 'crater', 'duration'], ['antimatter']),
   ...each('tip.bristle', 'bristle', ['count', 'stiffness', 'splay', 'thickness', 'load', 'jitter'], ['bristle']),
 ];
 
@@ -177,6 +178,7 @@ const copy = <T>(v: T): T => (v !== null && typeof v === 'object' ? (JSON.parse(
  */
 export function resolveEngine(brush: Pick<Brush, 'kind' | 'tool' | 'tip' | 'marks' | 'behaviour'>): PaintBrushEngine {
   if (brush.kind === 'tool') return brush.tool === 'eraser' || brush.tool === 'blender' || brush.tool === 'smudge' ? brush.tool : 'wet';
+  if (brush.marks?.kind === 'antimatter') return 'antimatter';
   if (brush.marks?.kind === 'particles') return 'particle';
   if (brush.marks?.kind === 'objects') return 'sticker';
   if (brush.tip.shape === 'bristle') return 'bristle';

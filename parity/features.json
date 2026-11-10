@@ -2182,6 +2182,13 @@
           "react": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
           "svelte": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
           "swift": "✅ `FerroSettings`, `PaintMagnet`, `ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`; `PaintEditorController` `addMagnet`, `updateMagnet`, `removeMagnets`, `listMagnets`, `getFerrofluid`, `cureFerrofluid`; `PaintFerroPanel` (in `PaintPaperPanel`) and magnet guides in `PaintCanvasView`"
+        },
+        {
+          "feature": "Antimatter Paint (a `marks.kind: \"antimatter\"` brush engine that measures quantised coverage-weighted combined alpha (`1 - Π(1 - α_i · opacity_i)`) across all visible layers, firing noise-edged radial blasts that combine by maximum in a per-stroke heat field so overlapping blasts never double-invert; inverts core colours (`rgb` or `oklab`), annihilates alpha (respecting transparency lock), burns a sooty scorch ring, clears `doc.light`, carves impasto relief craters (`doc.thick`), and launches white-hot sparks cooling to the brush colour on the active layer; dries visible wet layers and commits every modified visible editable pixel layer in a single undo step with `RecordedStroke.targets` for exact replay; view-only blast expansion animation (`duration`); presets `antimatter`, `antimatter-flare`, `antimatter-charge`; `antimatter` stats in `PaintStrokeResult`)",
+          "core": "`AntimatterStrokeDriver`, `ANTIMATTER_SLIDERS`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterSettings`, `AntimatterStats` (`/paint-editor`)",
+          "react": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
+          "svelte": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
+          "swift": "✅ `AntimatterStrokeDriver`, `AntimatterSettings`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterStats`; Antimatter controls in `PaintBrushPanel`; the view-only blast animation (`duration`, the blast commits at once): Planned (#732)"
         }
       ]
     },

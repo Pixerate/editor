@@ -140,6 +140,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -291,6 +304,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -467,6 +493,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -618,6 +657,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -794,6 +846,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -945,6 +1010,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -1120,6 +1198,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1271,6 +1362,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -1453,6 +1557,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1604,6 +1721,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -1783,6 +1913,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1934,6 +2077,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -2109,6 +2265,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2260,6 +2429,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -2437,6 +2619,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2589,6 +2784,19 @@
         "rotationJitter": 1,
         "scatter": 0.6,
         "colorJitter": 0.3
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -2764,6 +2972,19 @@
         "scatter": 0.6,
         "colorJitter": 0.3
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2915,6 +3136,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -3158,6 +3392,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3345,6 +3592,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3510,6 +3770,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3661,6 +3934,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -3835,6 +4121,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3986,6 +4285,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -4163,6 +4475,19 @@
         "scatter": 0.5,
         "colorJitter": 0.2
       },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -4317,6 +4642,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
@@ -4483,6 +4821,19 @@
         "rotationJitter": 1,
         "scatter": 0.5,
         "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
       },
       "light": {
         "amount": 0,
