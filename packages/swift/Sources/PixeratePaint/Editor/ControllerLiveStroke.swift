@@ -216,6 +216,21 @@ extension PaintEditorController {
         return Cancellable { [weak self] in self?.listeners[id] = nil }
     }
 
+    /**
+     * Calls `listener` when the document is replaced (`newCanvas`; opening a saved document once
+     * this port reads them), after the new document is in place, so a mounted canvas can run
+     * `catchUpCultures` (`onDocumentReplaced` in `controller.ts`). Returns the handle that stops it.
+     */
+    public func onDocumentReplaced(_ listener: @escaping () -> Void) -> Cancellable {
+        let id = UUID()
+        documentListeners[id] = listener
+        return Cancellable { [weak self] in self?.documentListeners[id] = nil }
+    }
+
+    func notifyDocumentReplaced() {
+        for l in Array(documentListeners.values) { l() }
+    }
+
     /// `dirty`: where the rendered canvas changed (document pixels), or nil for anywhere.
     func emit(_ dirty: [RasterRect]? = nil) {
         if previewing || grouping != nil { return }

@@ -1,6 +1,6 @@
 import Foundation
 import PixerateCore
-import PixeratePaint
+@testable import PixeratePaint
 import XCTest
 @testable import PixeratePaintUI
 
@@ -30,5 +30,29 @@ final class PaintCultureClockTests: XCTestCase {
         again.cancel()
         await again.value
         XCTAssertTrue(c.doc === paused)
+    }
+
+    /// A replaced document is caught up by the model (`onDocumentReplaced`), not only on the view's mount.
+    func testTheModelCatchesUpCulturesWhenTheDocumentIsReplaced() throws {
+        let c = try PaintEditorController(width: 128, height: 128)
+        let model = try PaintEditorModel(controller: c)
+        var replaced: [Int] = []
+        let handle = c.onDocumentReplaced { replaced.append(c.doc.canvas.width) }
+        _ = try c.newCanvas(width: 96, height: 96, dpi: nil, paper: nil)
+        XCTAssertEqual(replaced, [96])
+        handle.cancel()
+        _ = try c.newCanvas(width: 80, height: 80, dpi: nil, paper: nil)
+        XCTAssertEqual(replaced, [96])
+
+        // A growWhileClosed painting last grown ten seconds ago, as an opened file would be.
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "mycelial-ink", seed: 61), points: [PenPoint(x: 30, y: 60), PenPoint(x: 70, y: 60)])
+        _ = c.setCultureOptions(growWhileClosed: true)
+        let tenSecondsAgo = Date().timeIntervalSince1970 * 1000 - 10_000
+        c.doc = c.doc.with { $0.lastGrownAt = tenSecondsAgo }
+        XCTAssertGreaterThan(c.getCultures().pendingCatchUpTicks, 0)
+        c.notifyDocumentReplaced()
+        XCTAssertEqual(c.undoLabel, "Growth while closed")
+        XCTAssertEqual(c.getCultures().pendingCatchUpTicks, 0)
+        XCTAssertNil(model.error)
     }
 }

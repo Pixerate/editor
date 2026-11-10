@@ -21,10 +21,28 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint-editor] A Replay Recorded the Active Brush's Id With the Stroke's Brush
+
+- **Issue / Symptom**: After `replay_strokes`, `list_strokes` showed the replayed stroke with `brushId: "pencil-6b"` (whatever brush was active) but `brushName: "Antimatter"`. Seen in `antimatter-fuel-targets`; TS and Swift agreed, so the scenario recorded the wrong id.
+- **Root Cause**: Replays pass the whole recorded brush as `PaintStrokeInit.brush` (Swift: `fixedBrush`) with no `brushId`. `strokeBrush` lays per-stroke brush changes over `brushId` or the active brush and stamps that brush's id on the result, which is right for changes but wrong for a whole brush.
+- **Solution / Workaround**: `strokeBrush` keeps the given brush's own (valid) id when no `brushId` is passed. When a scenario shows a field that disagrees with its neighbours, check where it is stamped; agreement between ports only proves the port is faithful.
+
+### [swift/paint] `Math.round` Then a Clamped Store Is Not the Same as `JS.u8c` Alone
+
+- **Issue / Symptom**: Once `time-machine.json` scraped real impasto paint, the Swift document after the scraper stroke differed from TS (layer alpha and impasto height off by 1 on a few pixels), though pixels were within tolerance.
+- **Root Cause**: TS wrote `u8[i] = Math.round(x)`: `Math.round` rounds .5 up, then the store is exact. Swift wrote `JS.u8c(x)`, which emulates a bare `Uint8ClampedArray` store and rounds .5 to even. They differ only on exact halves, which `a0 * 255 * keep` hits.
+- **Solution / Workaround**: Port `Math.round(x)` into a clamped array as `JS.u8c(JS.round(x))`. Use `JS.u8c(x)` alone only where TS stores the unrounded value.
+
+### [core|swift/paint-editor] Catch-Up Work on Mount Misses a Document Opened Later
+
+- **Issue / Symptom**: Biopaint `growWhileClosed` growth caught up when `PaintCanvas` mounted, but opening another document into the same mounted controller showed the culture as saved.
+- **Root Cause**: The bindings ran `catchUpCultures()` once in their mount effect, keyed on the controller, which does not change when the document is replaced.
+- **Solution / Workaround**: `controller.onDocumentReplaced` fires after `loadJSON` / `loadJSONAsync` / `newCanvas`; `startCultureCatchUp(controller)` catches up now and on each replace (skipping a refusal) and the bindings use it. Swift: `onDocumentReplaced` (fired by `newCanvas`; Swift paint cannot open documents yet) and `PaintEditorModel` catches up on it. Anything else per-document a host does on mount belongs on this signal too.
+
 ### [core/paint] Replays Re-derived Editor State That Strokes Read at Paint Time; Settings Outside History Were Lost on Undo
 
 - **Issue / Symptom**: (1) `render_xray { strokes: totalStrokes }` differed from `render_xray` when a hidden or locked layer lay under a scraped one: the replay cut layers the live stroke never touched. (2) `set_age` → `undo_paint` of an earlier stroke reset the age in Swift, and in TS kept it in `get_age` but dropped it from the saved document. (3) The first conformance scenario saving a scraper stroke showed the Swift `migrateBrushV1` writing `medium: "paint"` for scraper brushes, which TS does not.
-- **Root Cause**: (1) The scraper picks its layers from current visibility and locks (`collectScrapeableLayers`), and the historical X-ray shows and unlocks every layer before replaying, so the replay derived a different stack. Anything a stroke reads from editor state at paint time and a replay changes must be recorded with the stroke. (2) Undo restores the history entry's document snapshot, which carries whatever `age` it had when the step was made; settings that are not undo steps (`set_age`) must be put back onto the restored document. (3) A gap in Swift coverage: the old time-machine scenario's strokes used unknown brush ids, so no scraper stroke was ever saved in a scenario.
+- **Root Cause**: (1) The scraper picks its layers from current visibility and locks (`collectScrapeableLayers`), and the historical X-ray shows and unlocks every layer before replaying, so the replay derived a different stack. Anything a stroke reads from editor state at paint time and a replay changes must be recorded with the stroke. (2) Undo restores the history entry's document snapshot, which carries whatever `age` it had when the step was made; settings that are not undo steps (`set_age`) must be put back onto the restored document. (3) A gap in Swift coverage: the old time-machine scenario's strokes used unknown brush ids, so no scraper stroke was ever saved in a scenario (`time-machine.json` now paints with real presets).
 - **Solution / Workaround**: (1) Scraper strokes record `scrapeLayerIds` (top to bottom) and replays pass them as `PaintStrokeInit.scrapeLayerIds` (`scrapeLayersByIds`); strokes without the field still derive the stack. (2) Undo/redo move the age only when the entry's `before.age` and `after.age` differ (`bake_age`); otherwise the restored document takes the current age (`withAge`), in both TS and Swift. (3) Check that a scenario's steps succeed (not `isError`) before relying on it; `time-machine-history.json` covers these cases.
 
 ### [core/canvas] Animated Edge Dots Ignored `keyPoints`, and Glows Hid Straight Edges

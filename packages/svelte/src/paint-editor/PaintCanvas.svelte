@@ -8,6 +8,7 @@
     fitZoom,
     startDeviceTilt,
     startWetClock,
+    startCultureCatchUp,
     guideOverlay,
     handlePaintShortcut,
     viewCssTransform,
@@ -143,10 +144,12 @@
   // Live effect paint and biopaint cultures play while the canvas is mounted (idle when nothing is live or paused).
   $effect(() => {
     const c = controller;
-    untrack(() => c.catchUpCultures());
+    // Biopaint grown while closed catches up on mount and whenever another document is opened.
+    const stopCatchUp = untrack(() => startCultureCatchUp(c));
     const player = untrack(() => c.playEffects());
     const cultures = untrack(() => c.playCultures());
     return () => {
+      stopCatchUp();
       player.stop();
       cultures.stop();
     };
