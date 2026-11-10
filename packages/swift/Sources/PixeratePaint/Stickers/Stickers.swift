@@ -8,8 +8,8 @@ import PixerateRaster
  * editable objects on a sticker layer (drawn whole from their list, picked by shape), and the
  * sticker spray of sticker brushes. Pixels match the TS core.
  *
- * Only the editor's stickers (`editor:<stamp>`) are drawn; host sticker libraries
- * (`setStickersProvider`, art loaded from SVG or PNG) are not ported.
+ * Host sticker libraries draw from art loaded through `StickerArtCache` (PNG decoded here, SVG
+ * through a host rasteriser); `renderStickerStamp` renders one stamp as the canvas draws it.
  */
 
 // MARK: - The editor's sticker library
@@ -1090,16 +1090,26 @@ public final class StickerArtCache: @unchecked Sendable {
     }
 }
 
-/// Bilinear RGBA sample of `art` at (x, y) in its pixels (straight alpha, colour weighted by alpha; `sampleArt`).
+/// The pixels drawn for animation frame `frame` of `art` (`stickerArtFrame`): the frame wrapped to
+/// the art's frame count (negative frames count back from the last, so -1 is the last frame), or
+/// `art.data` when the art is static or `frame` is nil. The canvas (`sampleArt`) and
+/// `renderStickerStamp` both choose frames here.
+public func stickerArtFrame(_ art: StickerArt, _ frame: Int?) -> [UInt8] {
+    guard let frame, let frames = art.frames, !frames.isEmpty else { return art.data }
+    return frames[((frame % frames.count) + frames.count) % frames.count]
+}
+
+/// The colour a sample of sticker art is drawn in, 0...1 RGB (`tintStickerArt`): tintable art
+/// becomes a flat silhouette in the paint colour `tint`, shaped only by the art's alpha; other art
+/// keeps its own colour. The canvas (`drawSticker`) and `renderStickerStamp` both tint here.
+public func tintStickerArt(_ art: StickerArt, _ sample: (r: Double, g: Double, b: Double, a: Double), _ tint: [Double]) -> (r: Double, g: Double, b: Double) {
+    art.tintable ? (tint[0], tint[1], tint[2]) : (sample.r, sample.g, sample.b)
+}
+
+/// Bilinear RGBA sample of `art` at (x, y) in its pixels (straight alpha, colour weighted by alpha; `sampleArt`), in frame `frame` (`stickerArtFrame`).
 public func sampleArt(_ art: StickerArt, _ x: Double, _ y: Double, frame: Int? = nil) -> (r: Double, g: Double, b: Double, a: Double) {
     let w = art.width, h = art.height
-    let data: [UInt8]
-    if let frame, let frames = art.frames, !frames.isEmpty {
-        let idx = ((frame % frames.count) + frames.count) % frames.count
-        data = frames[idx]
-    } else {
-        data = art.data
-    }
+    let data = stickerArtFrame(art, frame)
     let fx = x - 0.5, fy = y - 0.5
     let x0 = Int(JS.floor(fx)), y0 = Int(JS.floor(fy))
     let tx = fx - Double(x0), ty = fy - Double(y0)
@@ -1241,13 +1251,71 @@ private func drawArtSticker(_ medium: TileMedium, _ s: Sticker, _ art: StickerAr
             let px = sampleArt(art, ax, ay, frame: s.frame)
             if !(px.a > 0) { continue }
             cov[p] = Float(px.a)
-            field[p * 3] = Float(art.tintable ? rgb[0] : px.r)
-            field[p * 3 + 1] = Float(art.tintable ? rgb[1] : px.g)
-            field[p * 3 + 2] = Float(art.tintable ? rgb[2] : px.b)
+            let c = tintStickerArt(art, px, rgb)
+            field[p * 3] = Float(c.r)
+            field[p * 3 + 1] = Float(c.g)
+            field[p * 3 + 2] = Float(c.b)
         }
     }
     medium.deposit(rect, cov, s.opacity, rgb, nil, field)
     return rect
+}
+
+/// The sticker `renderStickerStamp` draws: centred in a `size` px box at (0, 0), full opacity.
+private func stampSticker(_ ref: String, colour: String, size: Int, frame: Int, rotation: Double) -> Sticker {
+    let hex = colour.utf8.count == 7 && colour.hasPrefix("#") && colour.dropFirst().allSatisfy(\.isHexDigit) ? colour.lowercased() : "#000000"
+    let half = Double(size) / 2
+    return Sticker(
+        id: "stamp", ref: ref, stamp: editorStampOf(ref), x: half, y: half, size: Double(size),
+        rotation: rotation.isFinite ? rotation : 0, color: hex, opacity: 1, seed: 0, frame: frame != 0 ? frame : nil
+    )
+}
+
+/// Draws one sticker through the sticker layer's own redraw (`stickerSurface`) and reads its `size` px box.
+private func stampPixels(_ s: Sticker, _ size: Int, _ art: StickerArtLookup?) -> (width: Int, height: Int, data: [UInt8]) {
+    let surface = stickerSurface([s], art: art)
+    return (size, size, readRegion(surface, RasterRect(x: 0, y: 0, width: size, height: size)))
+}
+
+/// One sticker stamp exactly as the paint canvas draws it (`renderStickerStamp`), for previews (a
+/// swatch, a stroke preview, a sticker picker): `size × size` straight RGBA of a sticker of diameter
+/// `size` centred in the box at full opacity, drawn by the canvas's own code (`drawSticker` through
+/// `stickerSurface`), so tinting, frame choice and sampling can't drift from what a stroke paints.
+///
+/// - Tint: tintable art is a flat silhouette in `colour` (`#rrggbb`, any case), shaped by the
+///   art's alpha; other art keeps its own pixels and ignores `colour`. A colour that isn't
+///   `#rrggbb` draws black.
+/// - Fit: the art's longest side spans `size`, centred, sampled bilinearly from the art.
+/// - Frame: wrapped to the art's frame count (negative frames count back from the last, so -1 is
+///   the last); static art has one frame.
+/// - Rotation: degrees clockwise about the centre, as `Sticker.rotation`; non-finite is 0. The
+///   output stays `size × size`, so the corners of turned art are cut off, as the canvas cuts them
+///   at the sticker's box. (The canvas's box has one more pixel on each side, which only bilinear
+///   bleed of art drawn larger than its own pixels or the corners of turned art reach; the stamp
+///   leaves that ring out.)
+/// - `size <= 0` gives `(0, 0, [])`.
+/// - A pixel of the stamp equals the canvas pixel of a sticker centred at
+///   (x + size / 2, y + size / 2) for whole x, y. The TS core's `renderStickerStamp` gives the same bytes.
+public func renderStickerStamp(_ art: StickerArt, colour: String, size: Int, frame: Int = 0, rotation: Double = 0) -> (width: Int, height: Int, data: [UInt8]) {
+    guard size > 0 else { return (0, 0, []) }
+    return stampPixels(stampSticker("stamp:art", colour: colour, size: size, frame: frame, rotation: rotation), size) { _, _ in art }
+}
+
+/// `renderStickerStamp` for a sticker ref from `provider` (`renderStickerStampFrom`), loading its
+/// art through `StickerArtCache.ensure` (pass the paint editor's cache to share loads; unknown refs
+/// and failed loads throw the cache's errors). `dark` loads the sticker's dark variant when it has
+/// one. An editor stamp (`editor:star`) draws the editor's procedural stamp in `colour` with
+/// texture seed 0; its shading noise is keyed on canvas pixels, so it matches a canvas sticker at
+/// the same position.
+public func renderStickerStamp(
+    _ provider: any StickerProvider, ref: String, colour: String, size: Int, frame: Int = 0, rotation: Double = 0,
+    cache: StickerArtCache = StickerArtCache(), rasterize: StickerRasterizer = defaultStickerRasterizer, dark: Bool = false
+) throws -> (width: Int, height: Int, data: [UInt8]) {
+    let art = try cache.ensure(provider, ref, rasterize: rasterize, dark: dark)
+    guard size > 0 else { return (0, 0, []) }
+    if let art { return renderStickerStamp(art, colour: colour, size: size, frame: frame, rotation: rotation) }
+    let parsed = try parseStickerRefStrict(ref)
+    return stampPixels(stampSticker("\(parsed.provider):\(parsed.id)", colour: colour, size: size, frame: frame, rotation: rotation), size, nil)
 }
 
 /// Draws one sticker into a medium; returns the rectangle it touched (`drawSticker`).
