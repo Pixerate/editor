@@ -13,7 +13,8 @@
 
 import {
   composeDisplacementFields,
-  integrateVelocityField,
+  integrateVelocityFieldFrames,
+  lerpDisplacementFields,
   warpTiledSurfaceChannel,
   warpTiledSurfaceNearest,
   warpTiledSurfaceRgba,
@@ -485,8 +486,9 @@ export function buildVortexVelocityField(
 export function buildVortexDisplacement(
   rawPoints: readonly PenPoint[],
   brush: PaintBrush,
-  copies: readonly StrokeCopy[] = [IDENTITY_COPY]
-): { field: DisplacementField | null; shape: VortexShape; maxDisplacement: number } {
+  copies: readonly StrokeCopy[] = [IDENTITY_COPY],
+  keyframes = 0
+): { field: DisplacementField | null; shape: VortexShape; maxDisplacement: number; frames?: DisplacementField[] } {
   const vortex = brushVortex(brush);
   const tipRadius = Math.max(1, brush.tip.size * 0.5);
   const primaryClass = classifyVortexShape(
@@ -503,6 +505,7 @@ export function buildVortexDisplacement(
   const totalTravel = vortex.turns * 2 * Math.PI * charRadius;
 
   let combined: DisplacementField | null = null;
+  let frames: DisplacementField[] | null = null;
   for (const copy of copies.length ? copies : [IDENTITY_COPY]) {
     const mapped = rawPoints.map((p) => copy.map(p));
     const spinSign = resolveVortexSpinSign(
@@ -512,8 +515,9 @@ export function buildVortexDisplacement(
       copy
     );
     const { velocity } = buildVortexVelocityField(mapped, brush, spinSign);
-    const disp = integrateVelocityField(velocity, totalTravel);
+    const { field: disp, frames: own } = integrateVelocityFieldFrames(velocity, totalTravel, keyframes);
     if (disp.maxDisplacement <= 1e-4) continue;
+    if (keyframes > 0) frames = frames ? frames.map((f, i) => composeDisplacementFields(f, own[i]!)) : own;
     combined = combined ? composeDisplacementFields(combined, disp) : disp;
   }
 
@@ -521,6 +525,7 @@ export function buildVortexDisplacement(
     field: combined,
     shape: primaryClass.shape,
     maxDisplacement: combined ? Math.round(combined.maxDisplacement * 100) / 100 : 0,
+    ...(frames ? { frames } : {}),
   };
 }
 
@@ -741,11 +746,28 @@ function layGradientInk(
   return { surface: new TiledSurface(4, tiles, base.defaultValue), bounds: bounds! };
 }
 
+/** Keyframes a winding animation plays through (the integration snapshotted this many times). */
+export const VORTEX_KEYFRAMES = 12;
+
+/**
+ * The displacement a winding animation shows at `t` (0..1 of the way through): between the two
+ * keyframes around it, so the paint follows its arcs (only a 1/`frames.length` stretch is a chord).
+ */
+export function vortexWindingField(frames: readonly DisplacementField[], t: number): DisplacementField | null {
+  if (!frames.length || !(t > 0)) return null;
+  const s = Math.min(1, t) * frames.length;
+  const i = Math.min(frames.length - 1, Math.floor(s));
+  if (i === frames.length - 1 && s >= frames.length) return frames[i]!;
+  return lerpDisplacementFields(i > 0 ? frames[i - 1]! : null, frames[i]!, s - i);
+}
+
 export class VortexStrokeDriver {
   private readonly rawPoints: PenPoint[] = [];
   private warpedSurface: TiledSurface | null = null;
   private preInkSurface: TiledSurface | null = null;
   private displacementField: DisplacementField | null = null;
+  /** The displacement at `VORTEX_KEYFRAMES` evenly spaced points of the integration (winding animations). */
+  private keyframes: DisplacementField[] | null = null;
   private warpedRelief: ThickChannels | null = null;
   private changedBounds: RasterRect | null = null;
   private summary: VortexStrokeSummary = { shape: 'point', maxDisplacement: 0 };
@@ -770,12 +792,14 @@ export class VortexStrokeDriver {
       return { surface: null, bounds: null };
     }
 
-    const { field, shape, maxDisplacement } = buildVortexDisplacement(
+    const { field, shape, maxDisplacement, frames } = buildVortexDisplacement(
       this.rawPoints,
       brush,
-      init.copies
+      init.copies,
+      vortex.duration > 0 ? VORTEX_KEYFRAMES : 0
     );
     this.displacementField = field;
+    this.keyframes = frames ?? null;
 
     // 1. Optional pre-warp ink deposit into a scratch copy of the layer.
     let preSurface = init.base;
@@ -930,9 +954,13 @@ export class VortexStrokeDriver {
     return this.warpedRelief;
   }
 
-  windingAnimation(): { field: DisplacementField; preInkSurface: TiledSurface; duration: number } | null {
+  /**
+   * What a view needs to wind the stroke over `duration` seconds: the final field and its
+   * keyframes (the paint's positions along its arcs; play them with `vortexWindingField`).
+   */
+  windingAnimation(): { field: DisplacementField; frames: readonly DisplacementField[]; preInkSurface: TiledSurface; duration: number } | null {
     const duration = brushVortex(this.init.brush).duration;
     if (!this.warpedSurface || !this.displacementField || !this.preInkSurface || !(duration > 0)) return null;
-    return { field: this.displacementField, preInkSurface: this.preInkSurface, duration };
+    return { field: this.displacementField, frames: this.keyframes ?? [this.displacementField], preInkSurface: this.preInkSurface, duration };
   }
 }

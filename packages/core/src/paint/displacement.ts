@@ -155,12 +155,27 @@ export function integrateVelocityField(
   totalTravel: number,
   maxSubStepPx = Math.max(0.5, vel.step * 0.45)
 ): DisplacementField {
+  return integrateVelocityFieldFrames(vel, totalTravel, 0, maxSubStepPx).field;
+}
+
+/**
+ * `integrateVelocityField`, also keeping the displacement after `keyframes` evenly spaced points
+ * of the integration (the last is the field itself): the paint's path along its arcs, for an
+ * animation to play back (`lerpDisplacementFields` between neighbours) instead of scaling the
+ * final field, which would move it along chords.
+ */
+export function integrateVelocityFieldFrames(
+  vel: VelocityGridField,
+  totalTravel: number,
+  keyframes: number,
+  maxSubStepPx = Math.max(0.5, vel.step * 0.45)
+): { field: DisplacementField; frames: DisplacementField[] } {
   const { rect, step, cols, rows, vx, vy, maxSpeed } = vel;
   const count = cols * rows;
   let dx = new Float32Array(count);
   let dy = new Float32Array(count);
   if (totalTravel <= 1e-5 || maxSpeed <= 1e-6) {
-    return { rect, step, cols, rows, dx, dy, maxDisplacement: 0 };
+    return { field: { rect, step, cols, rows, dx, dy, maxDisplacement: 0 }, frames: [] };
   }
 
   // As many sub-steps as the fastest cell needs to move at most `maxSubStepPx` each, up to
@@ -209,6 +224,9 @@ export function integrateVelocityField(
 
   let nextDx = new Float32Array(count);
   let nextDy = new Float32Array(count);
+  const kf = Math.max(0, Math.floor(keyframes));
+  const frames: DisplacementField[] = [];
+  let nextFrame = 1;
 
   for (let s = 0; s < steps; s++) {
     for (let r = 0; r < rows; r++) {
@@ -234,15 +252,41 @@ export function integrateVelocityField(
     dy = nextDy;
     nextDx = swapX;
     nextDy = swapY;
+    while (kf > 0 && nextFrame <= kf && s + 1 >= Math.round((steps * nextFrame) / kf)) {
+      frames.push(nextFrame === kf ? fieldOf(rect, step, cols, rows, dx, dy) : fieldOf(rect, step, cols, rows, dx.slice(), dy.slice()));
+      nextFrame++;
+    }
   }
 
+  const field = kf > 0 ? frames[frames.length - 1]! : fieldOf(rect, step, cols, rows, dx, dy);
+  return { field, frames };
+}
+
+function fieldOf(rect: RasterRect, step: number, cols: number, rows: number, dx: Float32Array, dy: Float32Array): DisplacementField {
   let maxDisplacement = 0;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < dx.length; i++) {
     const m = Math.hypot(dx[i]!, dy[i]!);
     if (m > maxDisplacement) maxDisplacement = m;
   }
-
   return { rect, step, cols, rows, dx, dy, maxDisplacement };
+}
+
+/**
+ * The displacement `t` (0..1) of the way from `a` (`null`: none) to `b`, cell by cell. Both are on
+ * the same grid (keyframes of one integration, `integrateVelocityFieldFrames`).
+ */
+export function lerpDisplacementFields(a: DisplacementField | null, b: DisplacementField, t: number): DisplacementField {
+  const k = Math.max(0, Math.min(1, t));
+  const n = b.dx.length;
+  const dx = new Float32Array(n);
+  const dy = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const ax = a ? a.dx[i]! : 0;
+    const ay = a ? a.dy[i]! : 0;
+    dx[i] = ax + (b.dx[i]! - ax) * k;
+    dy[i] = ay + (b.dy[i]! - ay) * k;
+  }
+  return fieldOf(b.rect, b.step, b.cols, b.rows, dx, dy);
 }
 
 /**

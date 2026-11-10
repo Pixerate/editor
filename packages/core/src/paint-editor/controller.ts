@@ -129,7 +129,7 @@ import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view'
 import { brushTakesPaint, brushVortex, isWetBrush } from './brushes';
 import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
 import { warpTiledSurfaceRgba, type DisplacementField } from '../paint/displacement';
-import type { VortexStrokeSummary } from './vortex';
+import { vortexWindingField, type VortexStrokeSummary } from './vortex';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { MAX_WET_LANES, type WetBackendInfo, type WetGhostState, type WetSnapshot } from '../paint/wet/world';
@@ -789,7 +789,8 @@ export class PaintEditorController {
       base: TiledSurface;
       surface: TiledSurface;
       preInkSurface: TiledSurface;
-      field: DisplacementField;
+      /** Keyframes of the winding along the paint's arcs (`vortexWindingField`). */
+      frames: readonly DisplacementField[];
       offset: { x: number; y: number };
       lockTransparency: boolean;
       selection: { width: number; height: number; data: ArrayLike<number> } | null;
@@ -6453,7 +6454,7 @@ export class PaintEditorController {
     lockTransparency: boolean,
     selection: { width: number; height: number; data: ArrayLike<number> } | null,
     bounds: RasterRect | null,
-    anim: { preInkSurface: TiledSurface; field: DisplacementField; duration: number },
+    anim: { preInkSurface: TiledSurface; frames: readonly DisplacementField[]; duration: number },
   ): void {
     if (this.previewing || !(anim.duration > 0)) return;
     const durationMs = Math.round(anim.duration * 1000);
@@ -6462,7 +6463,7 @@ export class PaintEditorController {
       base: committedSurface,
       surface: anim.preInkSurface,
       preInkSurface: anim.preInkSurface,
-      field: anim.field,
+      frames: anim.frames,
       offset: { ...offset },
       lockTransparency,
       selection,
@@ -6503,15 +6504,16 @@ export class PaintEditorController {
       }
       const u = Math.max(0, Math.min(1, elapsed / v.durationMs));
       const t = u * u * (3 - 2 * u);
-      v.surface =
-        t <= 0
-          ? v.preInkSurface
-          : warpTiledSurfaceRgba(v.preInkSurface, v.field, {
-              scale: t,
-              offset: v.offset,
-              lockTransparency: v.lockTransparency,
-              selection: v.selection,
-            }).surface;
+      // Between the keyframes around t, so the paint winds along its arcs (scaling the final
+      // field would slide it along chords).
+      const field = vortexWindingField(v.frames, t);
+      v.surface = field
+        ? warpTiledSurfaceRgba(v.preInkSurface, field, {
+            offset: v.offset,
+            lockTransparency: v.lockTransparency,
+            selection: v.selection,
+          }).surface
+        : v.preInkSurface;
       if (v.bounds) dirty.push(v.bounds);
       anyChanged = true;
     }

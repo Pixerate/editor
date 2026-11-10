@@ -3,12 +3,14 @@ import {
   composeDisplacementFields,
   createDisplacementField,
   integrateVelocityField,
+  integrateVelocityFieldFrames,
   MAX_INTEGRATION_STEPS,
   sampleDisplacement,
   sampleRgbaPremultiplied,
   warpTiledSurfaceChannel,
   warpTiledSurfaceNearest,
   warpTiledSurfaceRgba,
+  type DisplacementField,
   type VelocityGridField,
 } from '../src/paint/displacement';
 import {
@@ -24,6 +26,8 @@ import {
   liveStrokeRefusal,
   PaintEditorController,
   renderBrushThumbnail,
+  VORTEX_KEYFRAMES,
+  vortexWindingField,
   type PenPoint,
 } from '../src/paint-editor';
 import { FREE_INTERVAL, SWIRL_FADE_INTERVALS } from '../src/paint';
@@ -135,6 +139,37 @@ describe('paint/displacement', () => {
     const far = angleAt(4 * R);
     expect(far).toBeGreaterThan(3.85);
     expect(far).toBeLessThan(4.15);
+  });
+
+  it('keyframes wind along arcs: halfway through, paint is halfway round at the same radius', () => {
+    const step = 4;
+    const cols = 101;
+    const rows = 101;
+    const R = Math.hypot(200, 200);
+    const vx = new Float32Array(cols * rows);
+    const vy = new Float32Array(cols * rows);
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++) {
+        vx[r * cols + c] = -(r * step - 200) / R;
+        vy[r * cols + c] = (c * step - 200) / R;
+      }
+    const vel: VelocityGridField = { rect: { x: 0, y: 0, width: 400, height: 400 }, step, cols, rows, vx, vy, maxSpeed: 1 };
+    const { field, frames } = integrateVelocityFieldFrames(vel, 3 * R, VORTEX_KEYFRAMES);
+    expect(frames.length).toBe(VORTEX_KEYFRAMES);
+    expect(frames[frames.length - 1]).toBe(field);
+    expect(vortexWindingField(frames, 0)).toBeNull();
+    expect(vortexWindingField(frames, 1)).toBe(field);
+    const src = (f: DisplacementField) => {
+      const d = sampleDisplacement(f, 300, 200);
+      return { r: Math.hypot(100 + d.dx, d.dy), a: -Math.atan2(d.dy, 100 + d.dx) };
+    };
+    const mid = src(vortexWindingField(frames, 0.5)!);
+    expect(mid.r).toBeGreaterThan(95);
+    expect(mid.a).toBeGreaterThan(1.4);
+    expect(mid.a).toBeLessThan(1.6);
+    // Scaling the final field instead cuts across the chord, far inside the circle.
+    const d = sampleDisplacement(field, 300, 200);
+    expect(Math.hypot(100 + d.dx * 0.5, d.dy * 0.5)).toBeLessThan(20);
   });
 
   it('resamples RGBA with premultiplied bilinear filtering without dark fringes', () => {
