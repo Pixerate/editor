@@ -99,6 +99,11 @@ final class ConformanceRunnerTests: XCTestCase {
     }
 }
 
+/// A document the recording says the editor refused.
+private struct RefusedDocument: LocalizedError {
+    var errorDescription: String?
+}
+
 /// Plays back a scenario's recording: each call returns what the TypeScript core returned, with
 /// every `@n` turned into an id of its own (`gen-n`), as a real implementation's ids would be.
 private final class PlaybackHost: ConformanceHost {
@@ -125,6 +130,15 @@ private final class PlaybackHost: ConformanceHost {
     func pixels(paper: Bool?) throws -> ConformanceImage {
         let file = scenario.steps[step - 1].expect["pixels"]?.objectValue?["file"]?.stringValue ?? ""
         return try decodeConformancePNG(Data(contentsOf: ConformanceContracts.url("domains/paint/fixtures/\(file)")))
+    }
+
+    func save() throws -> JSONValue? { ["saved": true] }
+
+    /// What opening reported for the next step (loading comes before its call): its problems, or its error.
+    func load(_ document: JSONValue) throws -> [String]? {
+        let loaded = Self.realIds(scenario.steps[step].expect["loaded"] ?? .null)
+        if let message = loaded.objectValue?["error"]?.stringValue { throw RefusedDocument(errorDescription: message) }
+        return (loaded.arrayValue ?? []).compactMap(\.stringValue)
     }
 
     func isGeneratedId(_ value: String) -> Bool {
