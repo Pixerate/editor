@@ -25,6 +25,15 @@ const preset = (id: string) => BRUSH_PRESETS.find((b) => b.id === id)!;
 const control = (brush: Brush, path: string, profile = PAINT_PROFILE): BrushEditorControl | undefined => brushEditorSections(brush, profile).flatMap((s) => s.controls).find((c) => c.path === path);
 
 describe('brushEditorSections', () => {
+  it('offers the animated-sticker frame mode on sticker brushes only (perform by default)', () => {
+    const c = control(preset('sticker-stars'), 'marks.frameMode');
+    expect(c).toMatchObject({ kind: 'choice', label: 'Animated frames', ariaLabel: 'Animated sticker frames', value: 'perform' });
+    expect(c?.kind === 'choice' ? c.options.map((o) => o.value) : []).toEqual(['perform', 'random']);
+    const random = { ...preset('sticker-stars'), marks: { ...preset('sticker-stars').marks, frameMode: 'random' } } as Brush;
+    expect(control(random, 'marks.frameMode')).toMatchObject({ value: 'random' });
+    expect(control(preset('highlighter'), 'marks.frameMode')).toBeUndefined();
+  });
+
   it('lists the facets of a brush in order, with values from the brush or its engine defaults', () => {
     const sections = brushEditorSections(preset('highlighter'));
     expect(sections.map((s) => s.id)).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'colour']);

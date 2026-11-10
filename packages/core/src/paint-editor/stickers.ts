@@ -376,6 +376,24 @@ export function normalizeStickerUpdate(u: Partial<Omit<Sticker, 'id'>>): Partial
 }
 
 /**
+ * A placed sticker with its animation frame checked against its art: frame 0 is left out (the saved
+ * form, so a static and a first-frame sticker save the same), and a frame past the art's last is
+ * refused naming how many it has. Editor stamps and static art have one frame. Art that has not
+ * loaded passes unchecked (the redraw refuses it until it has).
+ */
+export function stickerWithFrame<T extends Partial<Sticker> & Pick<Sticker, 'ref'>>(s: T, art: StickerArt | null | undefined): T {
+  const { frame, ...rest } = s;
+  if (frame === undefined || frame === 0) return rest as T;
+  if (!Number.isInteger(frame) || frame < 0) throw new Error(`frame ${JSON.stringify(frame)} must be a whole number >= 0.`);
+  if (!stickerStamp(s) && !art) return s;
+  const count = art?.frames && art.frames.length > 1 ? art.frames.length : 1;
+  if (frame >= count) {
+    throw new Error(count > 1 ? `"${s.ref}" has ${count} frames, so frame is 0..${count - 1}; got ${frame}.` : `"${s.ref}" is not animated, so its only frame is 0; got ${frame} (describe_sticker says whether a sticker is animated and its frameCount).`);
+  }
+  return s;
+}
+
+/**
  * A sticker layer's pixels: its stickers drawn bottom first over a transparent layer. With `base`
  * (the layer's current pixels, at offset 0) and `dirty` rects, only the tiles those rects touch are
  * drawn again, from the stickers that reach them; the rest are kept. The pixels are the same as a
