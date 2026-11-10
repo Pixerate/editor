@@ -700,8 +700,9 @@ public final class PaintEditorModel {
 
     /**
      * Lets wet paint flow with the clock (`tickWet`): call it every frame with the time in ms. It
-     * steps at the wet speed unless paused or dry; the canvas then redraws only the tiles whose wet
-     * paint changed. Returns the steps run.
+     * steps at the wet speed unless paused or dry, and plays vortex winding animations
+     * (`stepVortexAnimations`); the canvas then redraws only the tiles that changed. Returns the
+     * wet steps run.
      */
     @discardableResult
     public func tick(now: Double, maxSteps: Int = 8) -> Int {
@@ -710,6 +711,8 @@ public final class PaintEditorModel {
         let gpuBefore = controller.wet.world?.gpuActive
         isQuietFrameChange = true
         let ran = controller.tickWet(now, maxSteps: maxSteps)
+        // Vortex winding (`marks.duration`) plays in the view while no stroke is open.
+        if controller.activeStroke == nil { controller.stepVortexAnimations(now) }
         isQuietFrameChange = false
         if controller.wet.isWet() != wasWet || controller.wet.wetLayerIds() != wetIdsBefore || controller.wet.world?.gpuActive != gpuBefore {
             stateRevision &+= 1
