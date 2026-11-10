@@ -140,6 +140,137 @@ describe('painting time machine: ageing, X-ray view & scraper brush', () => {
     expect(c.listLayers().some((l) => l.name === 'Museum patina')).toBe(false);
   });
 
+  it('ages the composite once: a Multiply layer is not yellowed twice, and bake_age commits that composite', async () => {
+    const { c, call } = setup(64, 48);
+    const ground = c.getActiveLayer()!.id;
+    expect((await call('fill_layer', { layerId: ground, color: '#d8c090' })).isError).toBe(false);
+    const glaze = (await call('add_layer', { name: 'Glaze' })).data as { id: string };
+    expect((await call('fill_layer', { layerId: glaze.id, color: '#6090d0' })).isError).toBe(false);
+    expect((await call('update_layer', { layerId: glaze.id, blend: 'multiply' })).isError).toBe(false);
+    const age = { years: 300, varnish: 0.8, cracks: 0, fading: 0.6, dust: 0.4, seed: 5 };
+    expect((await call('set_age', age)).isError).toBe(false);
+
+    const plain = c.compositePixels({ paper: true });
+    const aged = c.compositePixels({ paper: true, age: true });
+    const full = { ...DEFAULT_AGE, ...age };
+    for (const [x, y] of [[3, 4], [31, 20], [60, 44]]) {
+      const i = (y * 64 + x) * 4;
+      // Ageing is a function of the composite pixel (two painted layers here, no impasto).
+      const want = agePixel(plain.data[i] / 255, plain.data[i + 1] / 255, plain.data[i + 2] / 255, x, y, full, 2, 0).map((v) => Math.round(v * 255));
+      for (let k = 0; k < 3; k++) expect(Math.abs(aged.data[i + k] - want[k])).toBeLessThanOrEqual(1);
+      // Ageing each layer and then multiplying absorbs the varnish's blue twice.
+      const bottom = agePixel(0xd8 / 255, 0xc0 / 255, 0x90 / 255, x, y, full, 2, 0);
+      const top = agePixel(0x60 / 255, 0x90 / 255, 0xd0 / 255, x, y, full, 2, 0);
+      expect(aged.data[i + 2]).toBeGreaterThan(Math.round(bottom[2] * top[2] * 255) + 8);
+    }
+
+    const baked = await call('bake_age', {});
+    expect(baked.isError).toBe(false);
+    // With years back at 0, the painting with the baked layer on top is the aged preview.
+    const after = c.compositePixels({ paper: true });
+    for (const [x, y] of [[3, 4], [31, 20], [60, 44]]) {
+      const i = (y * 64 + x) * 4;
+      for (let k = 0; k < 3; k++) expect(Math.abs(after.data[i + k] - aged.data[i + k])).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('bake_age over the paper: a translucent wash and a Multiply glaze bake to what the preview showed', async () => {
+    const { c, call } = setup(64, 48);
+    const wash = c.getActiveLayer()!.id;
+    expect((await call('fill_layer', { layerId: wash, color: '#c03020', opacity: 0.4 })).isError).toBe(false);
+    const glaze = (await call('add_layer', { name: 'Glaze' })).data as { id: string };
+    expect((await call('update_layer', { layerId: glaze.id, blend: 'multiply' })).isError).toBe(false);
+    const hard = { tip: { size: 14, hardness: 1, opacity: 1, flow: 1, spacing: 0.05, pressureSize: false, pressureOpacity: false, smoothing: 0 }, grain: 0 };
+    c.paintStroke({ brushId: 'ink-pen', brush: hard, points: line(6, 24, 58, 24, 12), color: '#2050c0' });
+    expect((await call('set_age', { years: 350, varnish: 0.9, cracks: 0.6, fading: 0.7, dust: 0.5, seed: 9 })).isError).toBe(false);
+    const preview = c.compositePixels({ paper: true, age: true });
+    const baked = await call('bake_age', {});
+    expect(baked.isError).toBe(false);
+    const layer = c.getLayer((baked.data.layer as { id: string }).id) as PaintPixelLayer;
+    const after = c.compositePixels({ paper: true });
+    let worst = 0;
+    let glazed = 0;
+    let translucent = 0;
+    for (let y = 0; y < 48; y++) {
+      for (let x = 0; x < 64; x++) {
+        const i = (y * 64 + x) * 4;
+        const a = readPixel(layer.surface, x, y)[3];
+        // The wash covers the canvas: the baked layer keeps the paint's alpha, not the paper's.
+        if (y < 10) expect(a).toBeGreaterThanOrEqual(101);
+        if (a === 0) continue;
+        if (a === 255) glazed++;
+        else translucent++;
+        for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(after.data[i + k] - preview.data[i + k]));
+      }
+    }
+    expect(glazed).toBeGreaterThan(0);
+    // Most of the wash stays a translucent layer (the paper shows through it, not baked in).
+    expect(translucent).toBeGreaterThan(64 * 48 * 0.5);
+    // Solved over the paper (rounding aside), not the wash's colour on its own laid Normal on top.
+    expect(worst).toBeLessThanOrEqual(2);
+  });
+
+  it('ages only the paint that is drawn: hidden groups and unpicked layers do not mark the paper as painted', async () => {
+    const { c, call } = setup(96, 64);
+    const hard = { tip: { size: 10, hardness: 1, opacity: 1, flow: 1, spacing: 0.05, pressureSize: false, pressureOpacity: false, smoothing: 0 }, grain: 0 };
+    const shown = c.getActiveLayer()!.id;
+    c.paintStroke({ brushId: 'ink-pen', brush: hard, points: line(8, 12, 88, 12, 12), color: '#203040' });
+    const group = (await call('add_layer', { type: 'group', name: 'Hidden' })).data as { id: string };
+    const inner = (await call('add_layer', { name: 'Under', parentId: group.id })).data as { id: string };
+    expect((await call('fill_layer', { layerId: inner.id, color: '#806040' })).isError).toBe(false);
+    expect((await call('update_layer', { layerId: group.id, visible: false })).isError).toBe(false);
+    const age = { years: 450, varnish: 0.6, cracks: 1, fading: 0.4, dust: 0.3, seed: 4 };
+    expect((await call('set_age', age)).isError).toBe(false);
+    const full = { ...DEFAULT_AGE, ...age };
+    const plain = c.compositePixels({ paper: true });
+    const aged = c.compositePixels({ paper: true, age: true });
+    // Bare paper (below the stroke) ages as paper, not as paint of the hidden group.
+    let diff = 0;
+    for (let y = 30; y < 64; y++) {
+      for (let x = 0; x < 96; x++) {
+        const i = (y * 96 + x) * 4;
+        const want = agePixel(plain.data[i] / 255, plain.data[i + 1] / 255, plain.data[i + 2] / 255, x, y, full, 1, 0).map((v) => Math.round(v * 255));
+        for (let k = 0; k < 3; k++) diff = Math.max(diff, Math.abs(aged.data[i + k] - want[k]));
+      }
+    }
+    expect(diff).toBeLessThanOrEqual(1);
+
+    // Picking one layer: a visible layer left out does not mark the paper under it as painted.
+    expect((await call('update_layer', { layerId: group.id, visible: true })).isError).toBe(false);
+    const picked = c.compositePixels({ paper: true, layerIds: [shown] });
+    const pickedAged = c.compositePixels({ paper: true, layerIds: [shown], age: true });
+    let pickedDiff = 0;
+    for (let y = 30; y < 64; y++) {
+      for (let x = 0; x < 96; x++) {
+        const i = (y * 96 + x) * 4;
+        const want = agePixel(picked.data[i] / 255, picked.data[i + 1] / 255, picked.data[i + 2] / 255, x, y, full, 1, 0).map((v) => Math.round(v * 255));
+        for (let k = 0; k < 3; k++) pickedDiff = Math.max(pickedDiff, Math.abs(pickedAged.data[i + k] - want[k]));
+      }
+    }
+    expect(pickedDiff).toBeLessThanOrEqual(1);
+  });
+
+  it('ages light spill with the composite: an Add layer takes no dust or bleach of its own', async () => {
+    const { c, call } = setup(160, 100);
+    c.setPaper({ color: '#111111' } as never);
+    const hard = { tip: { size: 12, hardness: 1, opacity: 1, flow: 1, spacing: 0.05, pressureSize: false, pressureOpacity: false, smoothing: 0 }, grain: 0 };
+    c.paintStroke({ brushId: 'neon-marker', brush: hard, points: [{ x: 20, y: 50 }, { x: 140, y: 50 }], color: '#3b82f6' });
+    const age = { years: 400, varnish: 0.5, cracks: 0, fading: 0.7, dust: 0.6, seed: 3 };
+    expect((await call('set_age', age)).isError).toBe(false);
+    const full = { ...DEFAULT_AGE, ...age };
+    const plain = c.compositePixels({ paper: true });
+    const aged = c.compositePixels({ paper: true, age: true });
+    // (80, 62) is bare paper lit only by the spill; (80, 98) is beyond its reach.
+    const spillAt = 62 * 160 + 80;
+    expect(plain.data[spillAt * 4 + 2]).toBeGreaterThan(0x11 + 5);
+    for (const [x, y] of [[80, 62], [80, 98], [80, 50]]) {
+      const i = (y * 160 + x) * 4;
+      const painted = y === 50;
+      const want = agePixel(plain.data[i] / 255, plain.data[i + 1] / 255, plain.data[i + 2] / 255, x, y, full, 1, 0).map((v) => Math.round(v * 255));
+      for (let k = 0; k < 3; k++) expect(Math.abs(aged.data[i + k] - want[k]), `(${x}, ${y}) channel ${k}${painted ? ' (painted)' : ''}`).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('renders X-ray radiographs revealing hidden underpainting and historical stroke counts', async () => {
     const { c, call } = setup();
     const bottomId = c.document.activeLayerId!;

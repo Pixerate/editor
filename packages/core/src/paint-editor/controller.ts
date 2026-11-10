@@ -87,7 +87,7 @@ import { samplePath, type PathSampleOptions } from './path-samples';
 import type { Hand } from './input';
 import { mix32 } from './noise';
 import { clonePaper, grainCatch, hexToRgb8, normalizePaper, paperPreset, type PaperSettings } from './paper';
-import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, PAPER_EFFECT_NODE_ID, TRACING_NODE_ID, XRAY_NODE_ID, type ImageNode, type ViewLayer } from './render';
+import { ageNode, createPaintCompositor, downsampleRgba, paperGrain, paperNode, PAPER_EFFECT_NODE_ID, TRACING_NODE_ID, XRAY_NODE_ID, type AgeNode, type ImageNode, type ViewLayer } from './render';
 import {
   deserializePaintDocument,
   deserializePaintDocumentAsync,
@@ -221,8 +221,9 @@ import {
   type PaintMagnet,
 } from './ferro';
 import {
-  AgeCache,
   DEFAULT_AGE,
+  bakeAgedPixels,
+  type AgeFieldLayer,
   isAgeActive,
   normalizeAge,
   renderXrayPixels,
@@ -785,6 +786,16 @@ function unionRect(a: RasterRect | null, b: RasterRect | null): RasterRect | nul
 
 const isPixelLayer = (l: PaintLayer | undefined): l is PaintPixelLayer => l?.type === 'pixel';
 
+/** The pixel layers that are drawn and hold paint, bottom first: visible, non-empty, not inside a hidden group. */
+function paintedPixelLayers(layers: readonly PaintLayer[], out: PaintPixelLayer[] = []): PaintPixelLayer[] {
+  for (const l of layers) {
+    if (!l.visible) continue;
+    if (l.type === 'group') paintedPixelLayers(l.children, out);
+    else if (isPixelLayer(l) && l.surface.tiles.size > 0) out.push(l);
+  }
+  return out;
+}
+
 export class PaintEditorController {
   private doc: PaintDocumentState;
   private extensions: PaintDocumentExtensions = {};
@@ -942,7 +953,6 @@ export class PaintEditorController {
   private liveThermo: { layerId: string; surface: TiledSurface } | null = null;
   /** Non-destructive time-machine ageing preview settings (saved with the document, not undo steps). */
   private age: PaintAgeSettings = { ...DEFAULT_AGE };
-  private readonly ageCaches = new Map<string, AgeCache>();
   /** Whether the X-ray radiograph view is shown in the viewport (editor state, not saved). */
   private xrayView = false;
   private xrayNodeCache: { version: number; node: ImageNode } | null = null;
@@ -1618,7 +1628,6 @@ export class PaintEditorController {
     this.extensions = {};
     this.nextMagnetId = 1;
     this.age = { ...DEFAULT_AGE };
-    this.ageCaches.clear();
     this.xrayView = false;
     this.xrayNodeCache = null;
     this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
@@ -5022,8 +5031,14 @@ export class PaintEditorController {
     }
     const before = this.doc;
     const bakedAge: PaintAgeSettings = { ...this.age };
-    const agedPixels = this.compositePixels({ paper: false, wet: 'dried', age: true });
-    const surface = surfaceFromPixels(agedPixels, 4);
+    // Laid over the painting as it shows once `years` is 0, the layer must give the aged preview
+    // (backlight aside, which stays on top): the paint's alpha, the colour solved over the paper.
+    const { width, height } = this.doc.canvas;
+    const all = { x: 0, y: 0, width, height };
+    const paint = this.exportCompositor.composite(this.renderLayers({ paper: false, wet: 'dried', age: false }), all, this.sources());
+    const plain = this.exportCompositor.composite(this.renderLayers({ paper: true, wet: 'dried', age: false }, false, false), all, this.sources());
+    const aged = this.exportCompositor.composite(this.renderLayers({ paper: true, wet: 'dried', age: true }, false, false), all, this.sources());
+    const surface = surfaceFromPixels({ width, height, data: bakeAgedPixels(aged, plain, paint) }, 4);
     const bounds = contentBounds(surface);
     const label = options.name?.trim() ? options.name.trim() : `Aged (${Math.round(bakedAge.years)} yr)`;
     const newLayer: PaintPixelLayer = {
@@ -6276,23 +6291,17 @@ export class PaintEditorController {
   }
 
   /**
-   * Time-machine ageing pass over the layers after `lightLayers`: applies pigment fading by hue,
-   * yellowed varnish absorption, Voronoi / stress craquelure darkening, and surface dust grain.
+   * Time-machine ageing as one pass over the composite (above the painted layers, below the
+   * backlight): pigment fading by hue, yellowed varnish, craquelure darkening and dust. `base`
+   * gives where the paint is (crack density by `paintedLayerCount` and thick height there).
    */
-  private ageLayers(layers: PaintLayer[], paintedLayerCount: number): PaintLayer[] {
-    if (!isAgeActive(this.age)) return layers;
-    const visit = (list: PaintLayer[]): PaintLayer[] =>
-      list.map((l) => {
-        if (!l.visible) return l;
-        if (l.type === 'group') return { ...l, children: visit(l.children) };
-        if (!isPixelLayer(l) || !l.surface.tiles.size) return l;
-        let cache = this.ageCaches.get(l.id);
-        if (!cache) this.ageCaches.set(l.id, (cache = new AgeCache()));
-        const ch = this.liveThick?.layerId === l.id ? this.liveThick.channels : this.doc.thick?.[l.id];
-        const aged = cache.render(l.surface, ch?.height, this.age, paintedLayerCount, l.offset);
-        return aged !== l.surface ? { ...l, surface: aged } : l;
-      });
-    return visit(layers);
+  private ageNode(base: PaintLayer[], paintedLayerCount: number): AgeNode {
+    const field: AgeFieldLayer[] = [];
+    for (const l of paintedPixelLayers(base)) {
+      const height = (this.liveThick?.layerId === l.id ? this.liveThick.channels : this.doc.thick?.[l.id])?.height;
+      field.push({ surface: l.surface, ...(height ? { height } : {}), offset: l.offset });
+    }
+    return ageNode(this.age, field, paintedLayerCount);
   }
 
   /**
@@ -6360,24 +6369,30 @@ export class PaintEditorController {
     return { type: 'pixel', id: BACKLIGHT_LAYER_ID, name: 'Backlight', visible: true, opacity: 1, blend: 'linear-dodge', surface, offset: { x: 0, y: 0 } } as PaintPixelLayer;
   }
 
-  private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
+  private renderLayers(options: RenderOptions, view = false, withBacklight = true): ViewLayer[] {
     const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers(this.currentLayers(view)) : this.currentLayers(view);
     const useAge = (options.age ?? view) && isAgeActive(this.age);
-    const paintedCount = useAge ? Math.max(1, flattenLayers(base).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).length) : 1;
+    const paintedCount = useAge ? Math.max(1, paintedPixelLayers(base).length) : 1;
     let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base), useAge, paintedCount)));
-    if (useAge) layers = this.ageLayers(layers, paintedCount);
-    const backlight = options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
-    if (backlight) layers = [...layers, backlight];
     if (options.layerIds) {
       const picked: PaintLayer[] = [];
       for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
       layers = picked.map((l) => ({ ...l, visible: true }) as PaintLayer);
     }
-    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting, useAge ? this.age : null)];
+    // Ageing is one pass over the composite (paper and paint), not inside each layer: a Multiply
+    // layer is not yellowed twice and an Add (light spill) layer does not take the dust and bleach.
+    // A copy: `layers` can be the document's own array.
+    // Only the layers drawn mark the paint (`layerIds` picks some, shown whatever their visibility).
+    const fieldBase = options.layerIds ? options.layerIds.map((id) => ({ ...(findLayer(base, id)?.layer ?? this.requireLayer(id)), visible: true }) as PaintLayer) : base;
+    const top: ViewLayer[] = useAge ? [...layers, this.ageNode(fieldBase, paintedCount)] : [...layers];
+    // Backlit paper shines through everything, the aged painting included: its light goes on top.
+    const backlight = withBacklight && options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
+    if (backlight) top.push(backlight);
+    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting)];
     if (options.paper !== false && this.doc.paperEffect) under.push(this.paperEffectNode(this.doc.paperEffect));
     if (view) under.push(...this.underlayLayers());
-    if (view && this.xrayView) return [...under, ...layers, this.xrayNode(base)];
-    return [...under, ...layers];
+    if (view && this.xrayView) return [...under, ...top, this.xrayNode(base)];
+    return [...under, ...top];
   }
 
   /**
@@ -6607,7 +6622,6 @@ export class PaintEditorController {
     this.litCaches.clear();
     this.uvCaches.clear();
     this.thermoCaches.clear();
-    this.ageCaches.clear();
     this.xrayNodeCache = null;
     if (ext.stickers && typeof ext.stickers === 'object') {
       const stickers: Record<string, Sticker[]> = {};
