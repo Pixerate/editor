@@ -385,6 +385,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               }
             ],
             "value": "continuous"
@@ -2334,6 +2338,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               }
             ],
             "value": "continuous"
@@ -4103,6 +4111,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               }
             ],
             "value": "continuous"
@@ -5653,6 +5665,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               }
             ],
             "value": "particles"
@@ -7210,6 +7226,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               }
             ],
             "value": "continuous"
@@ -9920,6 +9940,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               }
             ],
             "value": "scatter"

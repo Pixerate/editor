@@ -26,12 +26,14 @@ import { createPaintEffectsToolProvider } from './effect-tools';
 import { PAINT_FORMAT, PAINT_SCHEMA_VERSION } from './serialize';
 import { createPaintEditorToolProvider } from './tools';
 import {
+  ANTIMATTER_SLIDERS,
   BLEND_MENU_GROUPS,
   CULTURE_SLIDERS,
   DOT_ROTATION_LABELS,
   DOT_TEXTURE_ORDER_LABELS,
   GHOST_SLIDERS,
   IMPASTO_TOOL_LABELS,
+  INVERT_MODE_LABELS,
   LIGHT_SLIDERS,
   LIVE_PATTERN_LABELS,
   LIVE_PATTERN_SLIDERS,
@@ -217,7 +219,7 @@ function uiTables() {
     brushOptions: BRUSH_OPTION_CONTROLS,
     blendMenu: BLEND_MENU_GROUPS,
     layerEffects: LAYER_EFFECT_MENU.map(({ kind, label }) => ({ kind, label, controls: layerEffectControls(defaultLayerEffect(kind, kind)) })),
-    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, culture: CULTURE_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS, magnet: MAGNET_SLIDERS },
+    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, culture: CULTURE_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS, magnet: MAGNET_SLIDERS, antimatter: ANTIMATTER_SLIDERS },
     pathStrokeTapers: PATH_STROKE_TAPERS,
     padSampleSizes: PAD_SAMPLE_SIZES,
     wetGpu: WET_GPU_OPTIONS,
@@ -231,6 +233,7 @@ function uiTables() {
       ribbonPairs: RIBBON_PAIR_LABELS,
       dotTextureOrders: DOT_TEXTURE_ORDER_LABELS,
       dotRotations: DOT_ROTATION_LABELS,
+      invertModes: INVERT_MODE_LABELS,
       stamps: STAMP_LABELS,
     },
   };

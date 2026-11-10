@@ -582,24 +582,33 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'set_color',
     title: 'Set the paint colour',
-    description: "Sets the paint colour (and optionally the second colour) that strokes and fills use by default, and whether it is locked. Choosing a brush with a default colour (set_brush id, e.g. the highlighter's yellow) makes that the paint colour unless the colour is locked; a brush with colour.own always paints its own. Setting color goes back to one colour from gradient paint (set_paint) or effect paint (set_effect_paint). Editor state, not an undo step. Returns both colours and locked.",
+    description: "Sets the paint colour (and optionally the second colour) that strokes and fills use by default, and whether it is locked. Choosing a brush with a default colour (set_brush id, e.g. the highlighter's yellow) makes that the paint colour unless the colour is locked; a brush with colour.own always paints its own. Setting color goes back to one colour from gradient paint (set_paint) or effect paint (set_effect_paint). dualColor sets a light / dark pair instead: strokes record the pair, and on a stroke layer each viewer sees them in the side of their own colour scheme (a pixel layer keeps the side painted). Editor state, not an undo step. Returns both colours and locked (and dualColor when given).",
     inputSchema: {
       type: 'object',
       properties: {
         color: { ...COLOR, description: 'Paint colour #rrggbb.' },
+        dualColor: {
+          type: 'object',
+          description: 'A light / dark pair as the paint colour, instead of color: each side a colour #rrggbb.',
+          properties: { light: { ...COLOR, description: 'The colour in the light scheme, #rrggbb.' }, dark: { ...COLOR, description: 'The colour in the dark scheme, #rrggbb.' } },
+          required: ['light', 'dark'],
+          additionalProperties: false,
+        },
         secondaryColor: { ...COLOR, description: 'Second colour #rrggbb.' },
         locked: { type: 'boolean', description: "Lock the paint colour: brushes chosen later keep it instead of taking their default colour (default: unchanged; the editor starts unlocked)." },
       },
       additionalProperties: false,
     },
     annotations: { title: 'Set the paint colour', ...SET },
-    handler: ({ color, secondaryColor, locked }) => {
-      if (color === undefined && secondaryColor === undefined && locked === undefined) throw new Error('Pass color, secondaryColor or locked.');
+    handler: ({ color, dualColor, secondaryColor, locked }) => {
+      if (color === undefined && dualColor === undefined && secondaryColor === undefined && locked === undefined) throw new Error('Pass color, dualColor, secondaryColor or locked.');
+      if (color !== undefined && dualColor !== undefined) throw new Error('Pass color or dualColor, not both.');
       if (color !== undefined) c.setColor(color);
+      if (dualColor !== undefined) c.setColor(dualColor as { light: string; dark: string });
       if (secondaryColor !== undefined) c.setSecondaryColor(secondaryColor);
       if (locked !== undefined) c.setColorLocked(locked as boolean);
       const s = c.getState();
-      return { color: s.color, secondaryColor: s.secondaryColor, locked: s.colorLocked };
+      return { color: s.color, secondaryColor: s.secondaryColor, locked: s.colorLocked, ...(dualColor !== undefined ? { dualColor: { light: (dualColor as { light: string }).light.toLowerCase(), dark: (dualColor as { dark: string }).dark.toLowerCase() } } : {}) };
     },
   });
 
@@ -670,7 +679,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, brushes with a culture facet (mycelial-ink, rot, foxfire) seed spores along the stroke (`culture: { seeds }` in the result; see grow_cultures), and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet), for culture brushes culture ({ seeds }) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, brushes with a culture facet (mycelial-ink, rot, foxfire) seed spores along the stroke (`culture: { seeds }` in the result; see grow_cultures), sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers), and antimatter brushes (engine antimatter: antimatter, antimatter-flare, antimatter-charge) detonate where they touch paint across every visible layer, inverting colours in the core, removing alpha, scorching a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer (returning antimatter: { blasts, sparks, fuel, layers, skippedLayers }). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet), for culture brushes culture ({ seeds }), for antimatter brushes antimatter, and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {

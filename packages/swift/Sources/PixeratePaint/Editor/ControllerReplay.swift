@@ -78,6 +78,7 @@ extension PaintEditorController {
         var out: JSONObject = ["layerId": .string(layerId), "bounds": rectJSON(bounds), "dabs": .number(Double(dabs)), "strokeIds": .array(strokeIds.map { .string($0) })]
         if let load = last?.result.mixerLoad { out["mixerLoad"] = loadResult(load) }
         if let w = last?.result.wet { out["wet"] = .bool(w) }
+        if let am = last?.result.antimatter { out["antimatter"] = am.json }
         return out
     }
 
@@ -131,6 +132,7 @@ extension PaintEditorController {
                 i.fixedBrush = brush
                 i.stencils = false
                 i.maskStencils = []
+                if options.layerId == nil, let targets = s.targets { i.targets = targets }
                 // Gradient paint replays as recorded; a recolour paints the one new colour.
                 if let e = v.effect, options.color == nil { i.paint = e.json } else if let p = v.paint, options.color == nil { i.paint = p.json }
                 if let load, options.brushId == nil { i.load = load }

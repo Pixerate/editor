@@ -1,0 +1,228 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "antimatter-group-opacity",
+  "description": "Antimatter fuel multiplies group opacity in: paint inside a half-opaque group gives about half the fuel, and the blast still changes the layer inside the group.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "type": "group",
+        "name": "Group"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "pass-through",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Group",
+          "opacity": 1,
+          "parentId": null,
+          "type": "group",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Inner",
+        "parentId": "@2"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 1,
+          "id": "@3",
+          "locks": {},
+          "name": "Inner",
+          "opacity": 1,
+          "parentId": "@2",
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "layerId": "@3",
+        "color": "#0055ff"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@3"
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@2",
+        "opacity": 0.5
+      },
+      "expect": {
+        "result": {
+          "active": false,
+          "blend": "pass-through",
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Group",
+          "opacity": 0.5,
+          "parentId": null,
+          "type": "group",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "set_active_layer",
+      "arguments": {
+        "layerId": "@1"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Layer 1",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "antimatter",
+        "color": "#ff3864",
+        "seed": 42,
+        "points": [
+          {
+            "x": 32,
+            "y": 32,
+            "pressure": 1
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "antimatter": {
+            "blasts": 1,
+            "fuel": 0.2773,
+            "layers": [
+              "@1",
+              "@3"
+            ],
+            "skippedLayers": [],
+            "sparks": 4
+          },
+          "bounds": {
+            "height": 227,
+            "width": 227,
+            "x": -81,
+            "y": -81
+          },
+          "dabs": 1,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/antimatter-group-opacity.7.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "3c0cb25b5718da8c22ef9bf442bc2522149dcdcbad676d5caa8ca1ad4e3a668e",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_strokes",
+      "arguments": {
+        "last": 1
+      },
+      "expect": {
+        "result": {
+          "strokes": [
+            {
+              "bounds": {
+                "height": 24,
+                "width": 24,
+                "x": 20,
+                "y": 20
+              },
+              "brushId": "antimatter",
+              "brushName": "Antimatter",
+              "color": "#ff3864",
+              "copies": 0,
+              "id": "s1",
+              "layerId": "@1",
+              "live": false,
+              "points": 1,
+              "seed": 42
+            }
+          ],
+          "total": 1
+        }
+      }
+    }
+  ]
+}

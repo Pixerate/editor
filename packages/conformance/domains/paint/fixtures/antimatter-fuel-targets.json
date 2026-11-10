@@ -1,0 +1,333 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "antimatter-fuel-targets",
+  "description": "An antimatter stroke records its fuel layers (RecordedStroke.targets: every visible pixel layer, locked ones included) and a replay reads fuel from exactly them: a locked fuel layer under an empty active layer still detonates on replay after it is hidden, and a layer added later is neither fuel nor changed.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#ff2200"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@1",
+        "locks": {
+          "pixels": true
+        }
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {
+            "pixels": true
+          },
+          "name": "Layer 1",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Top"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Top",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "antimatter",
+        "color": "#ff3864",
+        "seed": 42,
+        "points": [
+          {
+            "x": 32,
+            "y": 32,
+            "pressure": 1
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "antimatter": {
+            "blasts": 1,
+            "fuel": 0.5547,
+            "layers": [
+              "@2"
+            ],
+            "skippedLayers": [
+              "@1"
+            ],
+            "sparks": 6
+          },
+          "bounds": {
+            "height": 231,
+            "width": 231,
+            "x": -83,
+            "y": -83
+          },
+          "dabs": 1,
+          "layerId": "@2",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/antimatter-fuel-targets.4.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "90f9b91962c5b2fe0d491db781118a44508163f5a1767277c2f77f3be93e50eb",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_strokes",
+      "arguments": {
+        "last": 1
+      },
+      "expect": {
+        "result": {
+          "strokes": [
+            {
+              "bounds": {
+                "height": 24,
+                "width": 24,
+                "x": 20,
+                "y": 20
+              },
+              "brushId": "antimatter",
+              "brushName": "Antimatter",
+              "color": "#ff3864",
+              "copies": 0,
+              "id": "s1",
+              "layerId": "@2",
+              "live": false,
+              "points": 1,
+              "seed": 42
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@1",
+        "visible": false
+      },
+      "expect": {
+        "result": {
+          "active": false,
+          "blend": "normal",
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {
+            "pixels": true
+          },
+          "name": "Layer 1",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": false
+        }
+      }
+    },
+    {
+      "tool": "clear_layer",
+      "arguments": {
+        "layerId": "@2"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 125,
+            "width": 164,
+            "x": -37,
+            "y": 6
+          },
+          "layerId": "@2"
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Extra"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@3",
+          "locks": {},
+          "name": "Extra",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "layerId": "@3",
+        "color": "#00ff00"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@3"
+        }
+      }
+    },
+    {
+      "tool": "set_active_layer",
+      "arguments": {
+        "layerId": "@2"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Top",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "replay_strokes",
+      "arguments": {
+        "strokeIds": [
+          "s1"
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 231,
+            "width": 231,
+            "x": -83,
+            "y": -83
+          },
+          "layerIds": [
+            "@2"
+          ],
+          "strokeIds": [
+            "s2"
+          ]
+        },
+        "pixels": {
+          "file": "png/antimatter-fuel-targets.11.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "3d558540e8c59a9e6915aaa700c8d714c8927167920bf0bcf84c4ece2589f368",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_strokes",
+      "arguments": {
+        "last": 1
+      },
+      "expect": {
+        "result": {
+          "strokes": [
+            {
+              "bounds": {
+                "height": 24,
+                "width": 24,
+                "x": 20,
+                "y": 20
+              },
+              "brushId": "pencil-6b",
+              "brushName": "Antimatter",
+              "color": "#ff3864",
+              "copies": 0,
+              "id": "s2",
+              "layerId": "@2",
+              "live": false,
+              "points": 1,
+              "seed": 42
+            }
+          ],
+          "total": 2
+        }
+      }
+    }
+  ]
+}

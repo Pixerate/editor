@@ -633,7 +633,7 @@ public struct SetBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?
@@ -697,6 +697,8 @@ public struct SetBrushArguments: Sendable {
 public struct SetColorArguments: Sendable {
     /// Paint colour #rrggbb.
     public var color: String?
+    /// A light / dark pair as the paint colour, instead of color: each side a colour #rrggbb.
+    public var dualColor: JSONValue?
     /// Second colour #rrggbb.
     public var secondaryColor: String?
     /// Lock the paint colour: brushes chosen later keep it instead of taking their default colour (default: unchanged; the editor starts unlocked).
@@ -705,6 +707,7 @@ public struct SetColorArguments: Sendable {
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
     public init(_ args: JSONObject) throws {
         color = try args.string("color")
+        dualColor = args.argument("dualColor")
         secondaryColor = try args.string("secondaryColor")
         locked = try args.bool("locked")
     }
@@ -3217,7 +3220,7 @@ public struct CreateBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?
@@ -3344,7 +3347,7 @@ public struct UpdateBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?

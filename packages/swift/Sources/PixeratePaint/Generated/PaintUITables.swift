@@ -371,6 +371,23 @@ public struct PaintUISlidersMagnetItem: Equatable, Sendable {
     }
 }
 
+public struct PaintUISlidersAntimatterItem: Equatable, Sendable {
+    public var path: String
+    public var label: String
+    public var min: Double
+    public var max: Double
+    public var step: Double
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISlidersAntimatterItem")
+        path = try ContractTable.field(o["path"]?.stringValue, "path", "PaintUISlidersAntimatterItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISlidersAntimatterItem")
+        min = try ContractTable.field(o["min"]?.numberValue, "min", "PaintUISlidersAntimatterItem")
+        max = try ContractTable.field(o["max"]?.numberValue, "max", "PaintUISlidersAntimatterItem")
+        step = try ContractTable.field(o["step"]?.numberValue, "step", "PaintUISlidersAntimatterItem")
+    }
+}
+
 public struct PaintUISliders: Equatable, Sendable {
     public var paper: [PaintUISlidersPaperItem]
     public var wet: [PaintUISlidersWetItem]
@@ -386,6 +403,7 @@ public struct PaintUISliders: Equatable, Sendable {
     public var stroke: [PaintUISlidersStrokeItem]
     public var sticker: [PaintUISlidersStickerItem]
     public var magnet: [PaintUISlidersMagnetItem]
+    public var antimatter: [PaintUISlidersAntimatterItem]
 
     public init(json: JSONValue) throws {
         let o = try ContractTable.object(json, "PaintUISliders")
@@ -403,6 +421,7 @@ public struct PaintUISliders: Equatable, Sendable {
         stroke = try ContractTable.field(try o["stroke"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStrokeItem") { v in try v.map(PaintUISlidersStrokeItem.init(json:)) } }, "stroke", "PaintUISliders")
         sticker = try ContractTable.field(try o["sticker"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersStickerItem") { v in try v.map(PaintUISlidersStickerItem.init(json:)) } }, "sticker", "PaintUISliders")
         magnet = try ContractTable.field(try o["magnet"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersMagnetItem") { v in try v.map(PaintUISlidersMagnetItem.init(json:)) } }, "magnet", "PaintUISliders")
+        antimatter = try ContractTable.field(try o["antimatter"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISlidersAntimatterItem") { v in try v.map(PaintUISlidersAntimatterItem.init(json:)) } }, "antimatter", "PaintUISliders")
     }
 }
 
@@ -556,6 +575,17 @@ public struct PaintUILabelsDotRotations: Equatable, Sendable {
     }
 }
 
+public struct PaintUILabelsInvertModes: Equatable, Sendable {
+    public var rgb: String
+    public var oklab: String
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUILabelsInvertModes")
+        rgb = try ContractTable.field(o["rgb"]?.stringValue, "rgb", "PaintUILabelsInvertModes")
+        oklab = try ContractTable.field(o["oklab"]?.stringValue, "oklab", "PaintUILabelsInvertModes")
+    }
+}
+
 public struct PaintUILabelsStamps: Equatable, Sendable {
     public var dot: String
     public var star: String
@@ -591,6 +621,7 @@ public struct PaintUILabels: Equatable, Sendable {
     public var ribbonPairs: [String: String]
     public var dotTextureOrders: PaintUILabelsDotTextureOrders
     public var dotRotations: PaintUILabelsDotRotations
+    public var invertModes: PaintUILabelsInvertModes
     public var stamps: PaintUILabelsStamps
 
     public init(json: JSONValue) throws {
@@ -604,6 +635,7 @@ public struct PaintUILabels: Equatable, Sendable {
         ribbonPairs = try ContractTable.field(try o["ribbonPairs"]?.objectValue.map { try ContractTable.dictionary($0) { v in v?.stringValue } }, "ribbonPairs", "PaintUILabels")
         dotTextureOrders = try ContractTable.field(try o["dotTextureOrders"].map(PaintUILabelsDotTextureOrders.init(json:)), "dotTextureOrders", "PaintUILabels")
         dotRotations = try ContractTable.field(try o["dotRotations"].map(PaintUILabelsDotRotations.init(json:)), "dotRotations", "PaintUILabels")
+        invertModes = try ContractTable.field(try o["invertModes"].map(PaintUILabelsInvertModes.init(json:)), "invertModes", "PaintUILabels")
         stamps = try ContractTable.field(try o["stamps"].map(PaintUILabelsStamps.init(json:)), "stamps", "PaintUILabels")
     }
 }

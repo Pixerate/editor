@@ -3468,5 +3468,125 @@
         ]
       }
     }
+  },
+  {
+    "id": "antimatter",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "antimatter-flare",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "antimatter-charge",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
   }
 ]

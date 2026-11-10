@@ -2951,6 +2951,78 @@
         "max": 512,
         "step": 1
       }
+    ],
+    "antimatter": [
+      {
+        "path": "antimatter.blastRadius",
+        "label": "Blast size",
+        "min": 1,
+        "max": 6,
+        "step": 0.1
+      },
+      {
+        "path": "antimatter.blastSpacing",
+        "label": "Blast spacing",
+        "min": 0.5,
+        "max": 8,
+        "step": 0.1
+      },
+      {
+        "path": "antimatter.threshold",
+        "label": "Fuel threshold",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "antimatter.invert",
+        "label": "Inversion",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "antimatter.scorch",
+        "label": "Scorch",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "antimatter.annihilate",
+        "label": "Annihilate",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "antimatter.sparks",
+        "label": "Sparks",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "antimatter.sparkReach",
+        "label": "Spark reach",
+        "min": 0.5,
+        "max": 8,
+        "step": 0.1
+      },
+      {
+        "path": "antimatter.crater",
+        "label": "Crater depth",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "antimatter.duration",
+        "label": "Blast duration",
+        "min": 0,
+        "max": 2,
+        "step": 0.05
+      }
     ]
   },
   "pathStrokeTapers": [
@@ -3056,6 +3128,10 @@
       "follow": "Follow motion",
       "random": "Random",
       "fixed": "Tip angle"
+    },
+    "invertModes": {
+      "rgb": "RGB",
+      "oklab": "OKLab"
     },
     "stamps": {
       "dot": "Dot",

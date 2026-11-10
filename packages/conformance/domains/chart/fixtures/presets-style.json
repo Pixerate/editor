@@ -26,9 +26,6 @@
       ]
     }
   },
-  "skip": {
-    "swift": "chart not ported yet (#697)"
-  },
   "steps": [
     {
       "tool": "set_chart_data",

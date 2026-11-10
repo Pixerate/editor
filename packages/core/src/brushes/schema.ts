@@ -8,7 +8,7 @@ import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ID, BRUSH_ROTATIONS, CULTURE_SPECIES, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
 
@@ -146,6 +146,25 @@ const OBJECTS = object(
     rotationJitter: unit('Random turn as a fraction of ±180° (default 1).'),
     scatter: num(0, 2, 'How far from the path marks land, in tip diameters (default 0.5).'),
     colourJitter: unit('Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2).'),
+  },
+  ['kind'],
+);
+
+const ANTIMATTER = object(
+  'Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.',
+  {
+    kind: { type: 'string', const: 'antimatter', description: 'Always "antimatter".' },
+    blastRadius: num(1, 6, 'Blast size, in tip radii (default 2.5).'),
+    blastSpacing: num(0.5, 8, 'Stroke travel between blasts, in tip diameters (default 2).'),
+    threshold: unit('Paint needed under the tip to fire (default 0.1).'),
+    invert: unit('Strength of the colour inversion in the blast core (default 1).'),
+    invertMode: oneOf(INVERT_MODES, 'Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too).'),
+    scorch: unit('Strength of the soot ring around the blast (default 0.6).'),
+    annihilate: unit('Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25).'),
+    sparks: unit('How many sparks fly out from each blast on the active layer (default 0.5; 0: none).'),
+    sparkReach: num(0.5, 8, 'How far sparks fly, in tip diameters (default 3).'),
+    crater: unit('Depth of the crater dent and raised rim on layers with thick relief (default 0.5).'),
+    duration: num(0, 2, 'Seconds a blast plays on screen (default 0.7; 0 shows the result at once).'),
   },
   ['kind'],
 );
@@ -352,7 +371,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
       'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.',
     ),
     tip: TIP,
-    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS] },
+    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, ANTIMATTER] },
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
@@ -374,7 +393,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
 export const BRUSH_FACET_SCHEMAS = {
   tip: TIP,
   tipGrain: TIP_GRAIN,
-  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS },
+  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS, antimatter: ANTIMATTER },
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,

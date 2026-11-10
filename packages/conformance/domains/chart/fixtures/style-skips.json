@@ -1,0 +1,55 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-skips",
+  "description": "check_chart_style reports a check it cannot run (a palette check with no palette in the profile) as skipped with the reason.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "style": {
+      "checks": [
+        "palette-only",
+        "distinguishable",
+        "min-contrast"
+      ]
+    },
+    "spec": {
+      "type": "bar",
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "Revenue",
+          "values": [
+            100,
+            120
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "ok": true,
+          "ran": [
+            "distinguishable",
+            "min-contrast"
+          ],
+          "skipped": [
+            {
+              "check": "palette-only",
+              "reason": "The check could not run: the profile has no palette."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

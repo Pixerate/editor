@@ -153,7 +153,7 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   if (rawMarks !== undefined) {
     const k = isObject(rawMarks) ? rawMarks.kind : undefined;
     const schema = BRUSH_FACET_SCHEMAS.marks[k as keyof typeof BRUSH_FACET_SCHEMAS.marks];
-    if (!schema) problems.push(`marks.kind ${JSON.stringify(k)} is not valid; use continuous, scatter, particles or objects. marks dropped.`);
+    if (!schema) problems.push(`marks.kind ${JSON.stringify(k)} is not valid; use continuous, scatter, particles, objects or antimatter. marks dropped.`);
     else brush.marks = readObject(rawMarks, schema, 'brush.marks', problems) as unknown as Brush['marks'];
   }
 
@@ -212,8 +212,8 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       delete brush.culture;
     }
   }
-  if (brush.iridescence && brush.marks?.kind === 'objects') {
-    drop('iridescence', 'object marks are stickers, not film');
+  if (brush.iridescence && (brush.marks?.kind === 'objects' || brush.marks?.kind === 'antimatter')) {
+    drop('iridescence', brush.marks.kind === 'antimatter' ? 'antimatter marks detonate paint, not film' : 'object marks are stickers, not film');
     delete brush.iridescence;
   }
   if (brush.culture && brush.marks?.kind === 'objects') {
@@ -264,7 +264,7 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       ? 'it needs a source (a grain pattern or source:<id>)'
       : brush.tip.shape === 'bristle'
         ? 'bristle tips lay their own marks'
-        : marks === 'particles' || marks === 'objects'
+        : marks === 'particles' || marks === 'objects' || marks === 'antimatter'
           ? `${marks} marks are not dabs`
           : surface === 'wet' || surface === 'thick'
             ? `${surface} paint lays its own texture`
@@ -306,12 +306,12 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
     if (b.exchange && kind === 'tool' && !wetTool) {
       drop('behaviour.exchange', `the ${brush.tool} does not pick paint up`);
       delete b.exchange;
-    } else if (b.exchange && (brush.marks?.kind === 'particles' || brush.marks?.kind === 'objects' || brush.tip.shape === 'bristle')) {
-      drop('behaviour.exchange', 'particle, object and bristle marks do not pick paint up');
+    } else if (b.exchange && (brush.marks?.kind === 'particles' || brush.marks?.kind === 'objects' || brush.marks?.kind === 'antimatter' || brush.tip.shape === 'bristle')) {
+      drop('behaviour.exchange', 'particle, object, antimatter and bristle marks do not pick paint up');
       delete b.exchange;
     }
   }
-  if (brush.livePatterns && (kind !== 'mark' || brush.behaviour?.surface !== 'wet' || brush.marks?.kind === 'particles' || brush.marks?.kind === 'objects' || brush.tip.shape === 'bristle')) {
+  if (brush.livePatterns && (kind !== 'mark' || brush.behaviour?.surface !== 'wet' || brush.marks?.kind === 'particles' || brush.marks?.kind === 'objects' || brush.marks?.kind === 'antimatter' || brush.tip.shape === 'bristle')) {
     drop('livePatterns', 'only wet paint brushes grow live patterns (set behaviour.surface to wet)');
     delete brush.livePatterns;
   }

@@ -338,6 +338,45 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
     }
 
+    /// The antimatter-paint sliders (`PaintUITables.sliders.antimatter`).
+    public var antimatterSliders: [PaintUISlidersAntimatterItem] { tables.sliders.antimatter }
+
+    /// The value of an antimatter slider (`antimatter.<key>`).
+    public func antimatterValue(_ path: String) -> Double {
+        track()
+        let a = controller.brush.antimatter
+        switch path {
+        case "antimatter.blastRadius": return a.blastRadius
+        case "antimatter.blastSpacing": return a.blastSpacing
+        case "antimatter.threshold": return a.threshold
+        case "antimatter.invert": return a.invert
+        case "antimatter.scorch": return a.scorch
+        case "antimatter.annihilate": return a.annihilate
+        case "antimatter.sparks": return a.sparks
+        case "antimatter.sparkReach": return a.sparkReach
+        case "antimatter.crater": return a.crater
+        case "antimatter.duration": return a.duration
+        default: return 0
+        }
+    }
+
+    /// Sets an antimatter slider (`set_brush` with `marks.<key>`; editor state, not an undo step).
+    public func setAntimatterValue(_ path: String, _ value: Double) {
+        let key = path.replacingOccurrences(of: "antimatter.", with: "marks.")
+        attempt { _ = try controller.setBrushFacets(patchPath([:], key, .number(value))) }
+    }
+
+    /// The active antimatter brush's colour inversion mode (`rgb` or `oklab`).
+    public var antimatterInvertMode: String {
+        track()
+        return controller.brush.antimatter.invertMode
+    }
+
+    /// Sets the active antimatter brush's colour inversion mode (`marks.invertMode`).
+    public func setAntimatterInvertMode(_ mode: String) {
+        attempt { _ = try controller.setBrushFacets(["marks": ["kind": "antimatter", "invertMode": .string(mode)]]) }
+    }
+
     /// Whether an agent listener is connected for mutation requests.
     public var hasMutationAgent: Bool { track(); return controller.hasMutationAgent }
 

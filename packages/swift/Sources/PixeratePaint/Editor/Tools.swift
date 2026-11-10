@@ -28,6 +28,7 @@ func strokeResultJSON(_ r: PaintStrokeResult) -> JSONValue {
     if let load = r.mixerLoad { o["mixerLoad"] = loadResult(load) }
     if let wet = r.wet { o["wet"] = .bool(wet) }
     if let seeds = r.culture { o["culture"] = ["seeds": .number(Double(seeds))] }
+    if let am = r.antimatter { o["antimatter"] = am.json }
     return .object(o)
 }
 

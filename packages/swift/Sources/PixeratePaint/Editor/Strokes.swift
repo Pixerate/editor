@@ -42,6 +42,8 @@ public struct RecordedStroke {
     public var effect: PaintEffectPaint?
     /// Wet brushes: the wet simulation's clock (steps) at which each point was applied.
     public var steps: [Int]?
+    /// Antimatter brushes: the layer ids in stack order that were visible when the stroke was painted.
+    public var targets: [String]?
 }
 
 func applyAffine(_ m: Affine, _ x: Double, _ y: Double) -> (x: Double, y: Double) {
@@ -84,6 +86,7 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     if let copies = s.copies { o["copies"] = .array(copies.map { .array($0.map { .number($0) }) }) }
     if let load = s.load { o["load"] = loadJSON(load) }
     if let steps = s.steps { o["steps"] = .array(steps.map { .number(Double($0)) }) }
+    if let targets = s.targets { o["targets"] = .array(targets.map { .string($0) }) }
     if let stencils = s.stencils { o["stencils"] = .array(stencils.map { .object($0.json) }) }
     if let paint = s.paint { o["paint"] = paint.json }
     if let effect = s.effect { o["paint"] = effect.json }

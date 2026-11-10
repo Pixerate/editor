@@ -12,7 +12,7 @@
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { BRUSH_SLIDERS, brushEngineControls, type SliderControl } from '../paint-editor/brush-controls';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
 import { BrushLibraryError, type AddBrushSourceResult, type BrushLibrary, type BrushLibraryEntry, type SaveBrushResult } from './library';
 import { normalizeBrushSpec } from './normalize';
 import { brushColourKind, checkBrush, checkBrushEdit, degrade, PAINT_PROFILE, type BrushHostProfile, type BrushIssue, type BrushSupport } from './profiles';
@@ -73,7 +73,7 @@ const options = (values: readonly string[], labels: Readonly<Record<string, stri
 const MEDIUM_LABELS: Readonly<Record<BrushMedium, string>> = { paint: 'Paint', ink: 'Ink', dry: 'Dry media', spray: 'Spray' };
 const TOOL_LABELS: Readonly<Record<BrushTool, string>> = { eraser: 'Eraser', blender: 'Blender', smudge: 'Smudge', water: 'Add water', dryer: 'Dry', blow: 'Blow', blot: 'Blot', 'wet-blend': 'Wet blend', 'wet-drag': 'Wet smudge' };
 const SHAPE_LABELS: Readonly<Record<string, string>> = { round: 'Round', flat: 'Flat', chisel: 'Chisel', bristle: 'Bristle', stamp: 'Stamp' };
-const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', particles: 'Particles', objects: 'Stickers' };
+const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', particles: 'Particles', objects: 'Stickers', antimatter: 'Antimatter' };
 const SURFACE_LABELS: Readonly<Record<string, string>> = { dry: 'Dry', wet: 'Wet (flows)', thick: 'Thick (impasto)' };
 const ROTATION_LABELS: Readonly<Record<string, string>> = { fixed: 'Fixed', stroke: 'Follow stroke', barrel: 'Pen barrel' };
 const PHYSICS_LABELS: Readonly<Record<string, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow', elastic: 'Elastic', fuzzy: 'Fuzzy' };
@@ -97,6 +97,7 @@ const ARIA: Readonly<Record<string, string>> = {
   'marks.ribbonPairs': 'Ribbon pairs',
   'marks.stampOrder': 'Dot texture order',
   'marks.stampRotation': 'Dot rotation',
+  'marks.invertMode': 'Inversion mode',
   'behaviour.wet.medium': 'Wet medium',
   'behaviour.thick.applicator': 'Impasto tool',
   'light.pressure': 'Light follows pressure',
@@ -192,6 +193,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   if (!isTool && profile.marks.length > 1 && engineOk) {
     const particles = marks === 'particles' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('particle.') && c.path !== 'particle.waveSpeed') : [];
     const objects = marks === 'objects' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('sticker.')) : [];
+    const antimatter = marks === 'antimatter' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('antimatter.')) : [];
     const render = value('marks.render');
     add('marks', 'Marks', [
       choice('marks.kind', 'Laid as', options(profile.marks, MARKS_LABELS), 'continuous'),
@@ -200,8 +202,10 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       marks === 'particles' && render === 'ribbon' && choice('marks.ribbonPairs', 'Ribbon joins', options(RIBBON_PAIRS, { adjacent: 'Neighbours', 'first-last': 'Outermost' })),
       marks === 'particles' && shape === 'stamp' && choice('marks.stampOrder', 'Texture order', options(DOT_TEXTURE_ORDERS, { sequence: 'In turn', random: 'Random' })),
       marks === 'particles' && shape === 'stamp' && choice('marks.stampRotation', 'Texture turn', options(DOT_ROTATIONS, { follow: 'Follow motion', random: 'Random', fixed: 'Tip angle' })),
+      marks === 'antimatter' && choice('marks.invertMode', 'Inversion mode', options(INVERT_MODES, { rgb: 'RGB', oklab: 'OKLab' }), 'rgb'),
       ...particles.map((c) => slider(c)),
       ...objects.map((c) => slider(c)),
+      ...antimatter.map((c) => slider(c)),
     ]);
   }
 
@@ -222,7 +226,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|iridescence|culture)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|antimatter|iridescence|culture)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
   const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
@@ -263,7 +267,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       toggle('fluorescence.invisible', 'Invisible in daylight'),
       withNote({ kind: 'colour', path: 'thermochromic.hotColor', label: 'Hot colour', ariaLabel: 'Brush thermochromic hot colour', value: brush.thermochromic?.hotColor ?? null, dark: null, gradient: false }),
       withNote({ kind: 'slider', path: 'thermochromic.threshold', label: 'Heat threshold', ariaLabel: 'Brush thermochromic threshold', min: 0.05, max: 0.95, step: 0.01, value: brush.thermochromic?.threshold ?? 0.5 }),
-      full(profile.iridescence ?? 'none') && marks !== 'objects' && withNote({ kind: 'toggle', path: 'iridescence', label: 'Thin-film iridescence', ariaLabel: 'Brush thin-film iridescence', value: Boolean(brush.iridescence) }),
+      full(profile.iridescence ?? 'none') && marks !== 'objects' && marks !== 'antimatter' && withNote({ kind: 'toggle', path: 'iridescence', label: 'Thin-film iridescence', ariaLabel: 'Brush thin-film iridescence', value: Boolean(brush.iridescence) }),
       ...(brush.iridescence && full(profile.iridescence ?? 'none')
         ? [
             slider({ path: 'iridescence.thickness', label: 'Film (nm)', min: 100, max: 1000, step: 5 }),
@@ -310,7 +314,7 @@ export interface BrushEditorScope {
   note: string | null;
 }
 
-const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', continuous: 'continuous marks' };
+const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', continuous: 'continuous marks', antimatter: 'antimatter marks' };
 
 function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
   switch (issue.facet) {

@@ -34,6 +34,8 @@ export interface RecoveryMeta {
   time?: number;
   /** Document name, for the "Restore unsaved changes from …?" prompt. */
   name?: string;
+  /** The server / host version the edits in the snapshot were made on (`baseVersion` option). */
+  baseVersion?: number;
 }
 
 export interface AutosaveRecovery<T = unknown> {
@@ -78,6 +80,19 @@ export interface AutosaveControllerOptions<T> {
   clearTimeout?: (handle: any) => void;
   /** Start hydrated, i.e. as if `ready()` was already called (default `false`). */
   ready?: boolean;
+  /**
+   * The server / host version of the document that is loaded now. It is stored in each
+   * snapshot's meta, and `checkRecovery` retires (deletes and does not return) a snapshot whose
+   * edits were made on an older version, so it never overwrites newer server state. A snapshot
+   * without a stored version counts as version 0.
+   */
+  baseVersion?: number | (() => number | undefined);
+}
+
+/** Options for `AutosaveController.checkRecovery`. */
+export interface CheckRecoveryOptions {
+  /** Retire snapshots made on a version older than this (default the `baseVersion` option). */
+  minimumBaseVersion?: number;
 }
 
 export interface AutosaveController<T = unknown> {
@@ -105,7 +120,7 @@ export interface AutosaveController<T = unknown> {
    * A dirty snapshot left by an earlier session, or `null`. Returns `null` once
    * this session has written its own snapshot.
    */
-  checkRecovery(): Promise<AutosaveRecovery<T> | null>;
+  checkRecovery(options?: CheckRecoveryOptions): Promise<AutosaveRecovery<T> | null>;
   /** Deletes an earlier session's snapshot. No-op once this session wrote its own. */
   discardRecovery(): Promise<boolean>;
   /** Runs one scheduling step now (normally driven by `notify` and timers). */
@@ -245,6 +260,10 @@ export function createAutosaveController<T>(
 
   const docName = () =>
     typeof options.name === "function" ? options.name() : options.name;
+  const readBaseVersion = (): number | undefined => {
+    const v = typeof options.baseVersion === "function" ? options.baseVersion() : options.baseVersion;
+    return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  };
 
   const run = (action: RecoveryAction, rev: number) => {
     if (action.type === "writeSnapshot") {
@@ -255,11 +274,13 @@ export function createAutosaveController<T>(
         try {
           const text = serialize(getSnapshot());
           await storage.set(key, text);
+          const baseVersion = readBaseVersion();
           const meta: RecoveryMeta = {
             dirty: true,
             revision: action.revision,
             time: wallClock(),
             name: docName(),
+            ...(baseVersion !== undefined ? { baseVersion } : {}),
           };
           await storage.set(metaKey, JSON.stringify(meta));
           ok = true;
@@ -387,7 +408,7 @@ export function createAutosaveController<T>(
       tick();
       await whenIdle();
     },
-    async checkRecovery() {
+    async checkRecovery(checkOptions?: CheckRecoveryOptions) {
       if (policy.ownsSnapshot) return null;
       let meta: RecoveryMeta;
       try {
@@ -398,6 +419,13 @@ export function createAutosaveController<T>(
         return null;
       }
       if (!meta || meta.dirty !== true) return null;
+      const required = checkOptions?.minimumBaseVersion ?? readBaseVersion();
+      if (required !== undefined && (typeof meta.baseVersion === "number" ? meta.baseVersion : 0) < required) {
+        // Made on an older server version: restoring it would overwrite newer work.
+        await storage.remove(metaKey).catch(() => undefined);
+        await storage.remove(key).catch(() => undefined);
+        return null;
+      }
       const text = await storage.get(key).catch(() => null);
       if (text === null) return null;
       try {

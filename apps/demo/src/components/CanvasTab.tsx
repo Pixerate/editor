@@ -41,6 +41,11 @@ import {
   createCanvasProposalToolProvider,
   useCanvasProposals,
   PresenceLayer,
+  AnimatedEdge,
+  createCanvasEdgeAnimationToolProvider,
+  setCanvasEdgeAnimation,
+  CANVAS_EDGE_ANIMATION_KINDS,
+  type CanvasEdgeAnimationKind,
   type CanvasBrushPaint,
   DEFAULT_ARRANGE_SHORTCUTS,
   type AlignEdge,
@@ -141,6 +146,9 @@ const BoxNodeView: React.FC<NodeProps<BoxNode>> = ({ data, selected }) => (
 );
 
 const NODE_TYPES = { box: BoxNodeView, shape: ShapeNode };
+// Edges draw with <AnimatedEdge>: `data.animation` plays travelling dots, dashes, beams or a pulse.
+const EDGE_TYPES = { animated: AnimatedEdge };
+const DEFAULT_EDGE_OPTIONS = { type: "animated" };
 
 /** Gradient paint choices for brushed freehand strokes (`style.paint`, a `PaintSource`). */
 const BRUSH_PAINTS: { id: string; name: string; paint: CanvasBrushPaint }[] = [
@@ -228,11 +236,11 @@ const INITIAL_NODES: BoxNode[] = [
 ];
 
 const INITIAL_EDGES: Edge[] = [
-  { id: "e1", source: "brief", target: "research" },
-  { id: "e2", source: "brief", target: "sketch" },
-  { id: "e3", source: "research", target: "review" },
-  { id: "e4", source: "sketch", target: "review" },
-  { id: "e5", source: "review", target: "ship" },
+  { id: "e1", source: "brief", target: "research", type: "animated", data: { animation: { kind: "dots", color: "#a78bfa" } } },
+  { id: "e2", source: "brief", target: "sketch", type: "animated", data: { animation: { kind: "dash" } } },
+  { id: "e3", source: "research", target: "review", type: "animated", data: { animation: { kind: "beam", color: "#34d399" } } },
+  { id: "e4", source: "sketch", target: "review", type: "animated" },
+  { id: "e5", source: "review", target: "ship", type: "animated", data: { animation: { kind: "pulse", color: "#fbbf24" } } },
 ];
 
 const ALIGN_BUTTONS: Array<{ edge: AlignEdge; label: string; icon: React.ElementType }> = [
@@ -638,6 +646,27 @@ const CanvasDemo: React.FC = () => {
     [explodeCard]
   );
   useAgentToolProvider(demoToolRegistry, explosionTools);
+
+  // Animated edges: agents get canvas__list_edge_animations / canvas__set_edge_animation /
+  // canvas__clear_edge_animation; the picker in the toolbar does the same for the selected edges.
+  const edgeAnimationTools = useMemo(
+    () => createCanvasEdgeAnimationToolProvider({ getEdges: () => live.current.edges, setEdges, history: history.manager }, { id: "canvas-edge-animation", namespace: "canvas" }),
+    [history.manager]
+  );
+  useAgentToolProvider(demoToolRegistry, edgeAnimationTools);
+  const selectedEdges = edges.filter((e) => e.selected);
+  const selectedEdgeKind = selectedEdges.length ? ((selectedEdges[0].data as any)?.animation?.kind ?? "none") : "none";
+  const animateSelectedEdges = (kind: CanvasEdgeAnimationKind | "none") => {
+    const ids = new Set(selectedEdges.map((e) => e.id));
+    const before = new Map(selectedEdges.map((e) => [e.id, (e.data as any)?.animation ?? null]));
+    const write = (pick: (id: string) => any) => () =>
+      setEdges((current) => current.map((e) => (ids.has(e.id) ? setCanvasEdgeAnimation(e, pick(e.id)) : e)));
+    history.manager.execute({
+      name: kind === "none" ? "Stop edge animation" : "Animate edge",
+      execute: write(() => (kind === "none" ? null : { kind })),
+      undo: write((id) => before.get(id) ?? null),
+    });
+  };
   const selectedCard = nodes.length && selectedCount === 1 ? nodes.find((n) => n.selected && n.type === "box" && !isExplosionStep(n.id)) : undefined;
   // The agent's cursor on the canvas: every canvas__* and canvas.* call is acted out here.
   const agentPresence = useCanvasPlaybackSurface(demoPlayback, "canvas", {
@@ -928,6 +957,21 @@ const CanvasDemo: React.FC = () => {
         >
           <Network className="w-4 h-4" />
         </button>
+        <select
+          className="bg-slate-900 border border-slate-700 rounded-md text-xs text-slate-200 px-1.5 py-1 disabled:opacity-40"
+          disabled={selectedEdges.length === 0}
+          value={selectedEdgeKind}
+          onChange={(e) => animateSelectedEdges(e.target.value as CanvasEdgeAnimationKind | "none")}
+          title="Animate the selected edges"
+          aria-label="Edge animation"
+        >
+          <option value="none">Edge: still</option>
+          {CANVAS_EDGE_ANIMATION_KINDS.map((k) => (
+            <option key={k.kind} value={k.kind}>
+              Edge: {k.title}
+            </option>
+          ))}
+        </select>
         <div className="w-px h-5 bg-slate-800 mx-1" />
         <button type="button" className={btn} disabled={!history.canUndo} onClick={() => history.undo()} title="Undo (Mod+Z)" aria-label="Undo">
           <Undo2 className="w-4 h-4" />
@@ -944,6 +988,8 @@ const CanvasDemo: React.FC = () => {
           nodes={proposals.view.nodes}
           edges={proposals.view.edges}
           nodeTypes={NODE_TYPES}
+          edgeTypes={EDGE_TYPES}
+          defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeDragStart={() => dragUndo.begin()}
