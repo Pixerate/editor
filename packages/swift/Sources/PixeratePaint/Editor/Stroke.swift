@@ -62,6 +62,8 @@ struct StrokeSessionInit {
     var stampArt: StampArtLookup? = nil
     /// Antimatter brushes: every visible layer that supplies fuel (and is edited if editable).
     var antimatter: [AntimatterTarget]? = nil
+    /// Scraper brushes: the driver that cuts down through visible paint layers.
+    var scraper: ScraperStrokeDriver? = nil
 }
 
 public struct PaintStrokeResult {
@@ -110,6 +112,7 @@ final class PaintStrokeSession: PaintTileTarget {
     private var wetDriver: WetStrokeDriver?
     private var thickDriver: ThickStrokeDriver?
     private var antimatter: AntimatterStrokeDriver?
+    private var scraperDriver: ScraperStrokeDriver?
     private var vortexDriver: VortexStrokeDriver?
     private var filmBuffer: FilmBuffer?
     private let apply: StrokeApply
@@ -282,6 +285,11 @@ final class PaintStrokeSession: PaintTileTarget {
         if let f = i.film {
             filmBuffer = FilmBuffer(f, i.offset, i.selection)
         }
+        if let s = i.scraper {
+            dry = nil
+            scraperDriver = s
+            return
+        }
         if let w = i.wet {
             dry = nil
             wetDriver = w.driver
@@ -418,6 +426,11 @@ final class PaintStrokeSession: PaintTileTarget {
         if closed || pts.isEmpty { return [] }
         let filtered = initValues.inputFilter.map { pts.map($0) } ?? pts
         points += filtered
+        if let s = scraperDriver {
+            let rects = s.push(filtered)
+            for r in rects { bounds = unionRect(bounds, r) }
+            return rects
+        }
         if let w = wetDriver {
             let rects = try w.push(filtered)
             for r in rects { bounds = unionRect(bounds, r) }
@@ -504,6 +517,15 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Ends the stroke and returns what changed.
     func end() throws -> PaintStrokeResult {
         if closed { throw PaintEditorError("This stroke has already ended.") }
+        if let s = scraperDriver {
+            for r in s.finish() { bounds = unionRect(bounds, r) }
+            closed = true
+            let changed = s.hasChanges
+            surfaceAfter = changed ? (s.liveSurfaces()[layerId] ?? base) : nil
+            let r = PaintStrokeResult(layerId: layerId, bounds: changed ? bounds : nil, dabs: s.dabCount, strokeId: nil)
+            result = r
+            return r
+        }
         if let w = wetDriver {
             for r in try w.finish() { bounds = unionRect(bounds, r) }
             closed = true

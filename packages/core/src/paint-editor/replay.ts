@@ -260,7 +260,7 @@ export async function replayPainting(
     strokes++;
     if (!target.getLayer(st.layerId)) continue;
     if (st.paint?.type === 'effect' && st.paint.map?.by === 'path') await target.prepareEffectPaints([st.paint]);
-    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), ...(st.targets ? { targets: st.targets } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))) };
+    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), ...(st.targets ? { targets: st.targets } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))), ...(st.scrapeLayerIds ? { scrapeLayerIds: st.scrapeLayerIds } : {}) };
     if (st.brush.engine === 'wet' && st.steps?.length === st.points.length) {
       // Each point at the clock it was recorded at, the simulation stepped in between.
       await target.wetIdle();

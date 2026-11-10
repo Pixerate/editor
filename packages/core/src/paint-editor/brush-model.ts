@@ -68,9 +68,9 @@ export {
  * `antimatter` (animated blasts that invert, scorch and destroy paint across every visible layer) or
  * `vortex` (winds surrounding paint into a vortex around the drawn shape).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'vortex';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'vortex';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter', 'vortex'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter', 'scraper', 'vortex'];
 
 export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'light' | 'custom';
 
@@ -312,6 +312,24 @@ export function normalizeFerro(raw: number | Partial<FerroSettings> | null | und
   };
 }
 
+/** Scraper engine settings (`engine: 'scraper'`). */
+export interface ScraperSettings {
+  /** Layers removed per full-pressure pass, 0..1 (default 0.5). */
+  depth: number;
+  /** Blade edge sharpness, 0 (feathered) .. 1 (razor-sharp, default 0.7). */
+  sharpness: number;
+}
+
+export const DEFAULT_SCRAPER: Readonly<ScraperSettings> = { depth: 0.5, sharpness: 0.7 };
+
+export function normalizeScraper(raw: Partial<ScraperSettings> | null | undefined = {}, base: ScraperSettings = DEFAULT_SCRAPER): ScraperSettings {
+  const r = raw ?? {};
+  return {
+    depth: unit(r.depth, base.depth),
+    sharpness: unit(r.sharpness, base.sharpness),
+  };
+}
+
 export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
   return {
     tool: IMPASTO_TOOLS.includes(raw.tool as ImpastoTool) ? (raw.tool as ImpastoTool) : base.tool,
@@ -475,6 +493,8 @@ export interface PaintBrush {
   sticker: StickerSettings;
   /** Antimatter engine only: blast size, spacing, threshold, inversion, scorch, annihilation, sparks, crater and duration. */
   antimatter: AntimatterSettings;
+  /** Scraper engine only: how deep and sharp the blade cuts through the paint stack. */
+  scraper: ScraperSettings;
   /** Vortex engine (or wet vortex tool): reach, turns, pull, direction, ink and winding duration. */
   vortex?: VortexSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
@@ -622,7 +642,7 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'vortex' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'vortex' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -638,6 +658,7 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   /** Thin-film iridescence (`null` removes it). */
   iridescence?: Partial<IridescenceSettings> | null;
   ferro?: number | Partial<FerroSettings>;
+  scraper?: Partial<ScraperSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
@@ -678,9 +699,9 @@ export function usesPaintExchange(brush: PaintBrush, gradient = brush.paint !== 
   return brush.engine === 'dab' && (brush.behavior.pickup > 0 || gradient);
 }
 
-/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, blenders, smudges or the wet tools other than paint). */
+/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, scrapers, blenders, smudges, colourless vortices or the wet tools other than paint). */
 export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet' | 'vortex'>): boolean {
-  if (brush.engine === 'eraser' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
+  if (brush.engine === 'eraser' || brush.engine === 'scraper' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
   if (brush.engine === 'vortex') return (brush.vortex?.ink ?? 0) > 0;
   if (brush.engine === 'wet') return brush.wet.tool === 'paint' || (brush.wet.tool === 'vortex' && (brush.vortex?.ink ?? 0) > 0);
   if (brush.engine === 'mixer') return brush.loadsColor;
@@ -812,6 +833,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     antimatter: normalizeAntimatter(raw.antimatter ?? {}, b.antimatter ?? DEFAULT_ANTIMATTER),
+    scraper: normalizeScraper(raw.scraper, b.scraper ?? DEFAULT_SCRAPER),
     ...(vortex ? { vortex } : {}),
     light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     fluorescence: normalizeFluorescence(raw.fluorescence ?? {}, b.fluorescence ?? DEFAULT_FLUORESCENCE),
@@ -850,6 +872,7 @@ const BASE_BRUSH: PaintBrush = {
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
   antimatter: { ...DEFAULT_ANTIMATTER },
+  scraper: { ...DEFAULT_SCRAPER },
   light: { ...DEFAULT_LIGHT },
   fluorescence: { ...DEFAULT_FLUORESCENCE },
   thermochromic: { ...DEFAULT_THERMOCHROMIC },

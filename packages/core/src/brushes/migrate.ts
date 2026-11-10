@@ -61,6 +61,8 @@ function skeleton(b: ResolvedBrush): Brush {
       return { ...brush, medium: 'paint', marks: { kind: 'antimatter' }, ...mut };
     case 'sticker':
       return { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) }, marks: { kind: 'objects' }, ...mut };
+    case 'scraper':
+      return { ...brush, marks: { kind: 'scraper' } };
     case 'vortex': {
       const [medium, variety] = CATEGORY_MEDIUM[b.category] ?? ['paint'];
       return { ...brush, ...(medium ? { medium } : {}), ...(variety ? { variety } : {}), marks: { kind: 'vortex' }, ...mut };

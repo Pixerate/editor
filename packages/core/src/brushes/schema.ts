@@ -169,6 +169,16 @@ const ANTIMATTER = object(
   ['kind'],
 );
 
+const SCRAPER = object(
+  'A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.',
+  {
+    kind: { type: 'string', const: 'scraper', description: 'Always "scraper".' },
+    depth: unit('Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below.'),
+    sharpness: unit('Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7).'),
+  },
+  ['kind'],
+);
+
 const VORTEX = object(
   'Vortex paint: the stroke you draw is the shape of a vortex (a point whirlpool, an open racetrack, or a closed loop) that pulls in and winds surrounding paint at pen-up. Missing fields take their defaults.',
   {
@@ -373,7 +383,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
       'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.',
     ),
     tip: TIP,
-    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer) or vortex (winds surrounding paint into a vortex of the drawn shape).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, ANTIMATTER, VORTEX] },
+    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, ANTIMATTER, SCRAPER, VORTEX] },
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
@@ -394,7 +404,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
 export const BRUSH_FACET_SCHEMAS = {
   tip: TIP,
   tipGrain: TIP_GRAIN,
-  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS, antimatter: ANTIMATTER, vortex: VORTEX },
+  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS, antimatter: ANTIMATTER, scraper: SCRAPER, vortex: VORTEX },
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,

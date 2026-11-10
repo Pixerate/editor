@@ -391,6 +391,10 @@
                 "label": "Antimatter"
               },
               {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
                 "value": "vortex",
                 "label": "Vortex"
               }
@@ -2341,6 +2345,10 @@
                 "label": "Antimatter"
               },
               {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
                 "value": "vortex",
                 "label": "Vortex"
               }
@@ -4109,6 +4117,10 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
               },
               {
                 "value": "vortex",
@@ -5660,6 +5672,10 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
               },
               {
                 "value": "vortex",
@@ -7218,6 +7234,10 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
               },
               {
                 "value": "vortex",
@@ -9929,6 +9949,10 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
               },
               {
                 "value": "vortex",

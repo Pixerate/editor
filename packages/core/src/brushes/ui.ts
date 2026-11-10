@@ -73,7 +73,7 @@ const options = (values: readonly string[], labels: Readonly<Record<string, stri
 const MEDIUM_LABELS: Readonly<Record<BrushMedium, string>> = { paint: 'Paint', ink: 'Ink', dry: 'Dry media', spray: 'Spray' };
 const TOOL_LABELS: Readonly<Record<BrushTool, string>> = { eraser: 'Eraser', blender: 'Blender', smudge: 'Smudge', water: 'Add water', dryer: 'Dry', blow: 'Blow', blot: 'Blot', 'wet-blend': 'Wet blend', 'wet-drag': 'Wet smudge' };
 const SHAPE_LABELS: Readonly<Record<string, string>> = { round: 'Round', flat: 'Flat', chisel: 'Chisel', bristle: 'Bristle', stamp: 'Stamp' };
-const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', scatter: 'Spray', particles: 'Particles', objects: 'Stickers', antimatter: 'Antimatter', vortex: 'Vortex' };
+const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', scatter: 'Spray', particles: 'Particles', objects: 'Stickers', antimatter: 'Antimatter', scraper: 'Scraper', vortex: 'Vortex' };
 const VORTEX_DIRECTION_LABELS: Readonly<Record<string, string>> = { follow: 'Follow stroke', cw: 'Clockwise', ccw: 'Counter-clockwise' };
 const SURFACE_LABELS: Readonly<Record<string, string>> = { dry: 'Dry', wet: 'Wet (flows)', thick: 'Thick (impasto)' };
 const ROTATION_LABELS: Readonly<Record<string, string>> = { fixed: 'Fixed', stroke: 'Follow stroke', barrel: 'Pen barrel' };
@@ -196,6 +196,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     const particles = marks === 'particles' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('particle.') && c.path !== 'particle.waveSpeed') : [];
     const objects = marks === 'objects' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('sticker.')) : [];
     const antimatter = marks === 'antimatter' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('antimatter.')) : [];
+    const scraper = marks === 'scraper' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('scraper.')) : [];
     const vortex = marks === 'vortex' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('vortex.')) : [];
     const render = value('marks.render');
     add('marks', 'Marks', [
@@ -210,6 +211,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       ...particles.map((c) => slider(c)),
       ...objects.map((c) => slider(c)),
       ...antimatter.map((c) => slider(c)),
+      ...scraper.map((c) => slider(c)),
       ...vortex.map((c) => slider(c)),
     ]);
   }
@@ -231,7 +233,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|antimatter|vortex|iridescence)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|antimatter|scraper|vortex|iridescence)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
   const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
@@ -306,7 +308,7 @@ export interface BrushEditorScope {
   note: string | null;
 }
 
-const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', vortex: 'vortex marks', continuous: 'continuous marks', antimatter: 'antimatter marks' };
+const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', continuous: 'continuous marks', antimatter: 'antimatter marks', scraper: 'scraper marks', vortex: 'vortex marks' };
 
 function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
   switch (issue.facet) {

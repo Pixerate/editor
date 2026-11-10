@@ -632,7 +632,7 @@ public struct SetBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer) or vortex (winds surrounding paint into a vortex of the drawn shape).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?
@@ -2228,6 +2228,75 @@ public struct CureFerrofluidArguments: Sendable {
     }
 }
 
+/// Arguments of `set_age`.
+public struct SetAgeArguments: Sendable {
+    /// Simulated age in years, 0..500 (0 turns ageing off; 300 is three centuries; default 0).
+    public var years: Double?
+    /// Yellowed varnish absorption over the composite, 0..1 (default 0.5).
+    public var varnish: Double?
+    /// Craquelure crack network density and depth, 0..1 (default 0.5).
+    public var cracks: Double?
+    /// Fugitive pigment fading by hue (reds and violets fastest), 0..1 (default 0.5).
+    public var fading: Double?
+    /// Low-frequency surface dust grain, 0..1 (default 0.25).
+    public var dust: Double?
+    /// Deterministic craquelure and dust seed, >= 0 (default 1).
+    public var seed: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        years = try args.number("years")
+        varnish = try args.number("varnish")
+        cracks = try args.number("cracks")
+        fading = try args.number("fading")
+        dust = try args.number("dust")
+        seed = try args.integer("seed")
+    }
+}
+
+/// Arguments of `get_age`.
+public struct GetAgeArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `bake_age`.
+public struct BakeAgeArguments: Sendable {
+    /// Name for the new baked layer (default "Aged (<years> yr)").
+    public var name: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        name = try args.string("name")
+    }
+}
+
+/// Arguments of `render_xray`.
+public struct RenderXrayArguments: Sendable {
+    /// Show the painting as it was after this many recorded strokes (default: current state with all strokes).
+    public var strokes: Int?
+    /// Longest side of the returned X-ray PNG in pixels, 16..2048 (default 512).
+    public var maxSide: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        strokes = try args.integer("strokes")
+        maxSide = try args.integer("maxSide")
+    }
+}
+
+/// Arguments of `set_xray_view`.
+public struct SetXrayViewArguments: Sendable {
+    /// true shows the X-ray radiograph in the viewport; false returns to the normal painting view.
+    public var on: Bool
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        on = try args.required(try args.bool("on"), "on")
+    }
+}
+
 /// Arguments of `export_time_lapse`.
 public struct ExportTimeLapseArguments: Sendable {
     /// About how many frames (default 120); one after every few strokes.
@@ -3173,7 +3242,7 @@ public struct CreateBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer) or vortex (winds surrounding paint into a vortex of the drawn shape).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?
@@ -3296,7 +3365,7 @@ public struct UpdateBrushArguments: Sendable {
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
-    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer) or vortex (winds surrounding paint into a vortex of the drawn shape).
+    /// How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).
     public var marks: JSONValue?
     /// Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing.
     public var dynamics: JSONValue?
@@ -3641,6 +3710,11 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .listMagnets: try ListMagnetsArguments(args)
     case .getFerrofluid: try GetFerrofluidArguments(args)
     case .cureFerrofluid: try CureFerrofluidArguments(args)
+    case .setAge: try SetAgeArguments(args)
+    case .getAge: try GetAgeArguments(args)
+    case .bakeAge: try BakeAgeArguments(args)
+    case .renderXray: try RenderXrayArguments(args)
+    case .setXrayView: try SetXrayViewArguments(args)
     case .exportTimeLapse: try ExportTimeLapseArguments(args)
     case .exportHighRes: try ExportHighResArguments(args)
     case .breedStrokes: try BreedStrokesArguments(args)

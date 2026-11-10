@@ -1290,6 +1290,20 @@
             },
             {
               "builtin": true,
+              "category": "eraser",
+              "engine": "scraper",
+              "id": "paint-scraper",
+              "kind": "mark",
+              "marks": "scraper",
+              "medium": "paint",
+              "name": "Paint scraper",
+              "size": 28,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "scraper"
+            },
+            {
+              "builtin": true,
               "category": "paint",
               "engine": "vortex",
               "id": "vortex",
@@ -1345,7 +1359,7 @@
             }
           ],
           "host": "paint",
-          "total": 95
+          "total": 96
         }
       }
     },

@@ -380,6 +380,34 @@ public struct PaintPaperPanel: View {
             PaintLightPanel(model: model)
             PaintUvHeatPanel(model: model)
             PaintFerroPanel(model: model)
+            PaintTimeMachinePanel(model: model)
+        }
+    }
+}
+
+/// Time machine (`TimeMachinePanel`): non-destructive ageing preview (years, varnish, cracks, fading, dust, seed), Bake age, X-ray radiograph view toggle, and a quick button to select the `paint-scraper` brush preset.
+public struct PaintTimeMachinePanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let age = model.age
+        let isAged = age.years > 0 && (age.varnish > 0 || age.cracks > 0 || age.fading > 0 || age.dust > 0)
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("Time machine")
+            Toggle("X-ray radiograph view", isOn: Binding(get: { model.xrayView }, set: { model.setXrayView($0) }))
+            ForEach(model.ageSliders, id: \.path) { c in
+                PaintSliderRow(label: c.label, value: model.ageValue(c.path), range: c.min...c.max, step: c.step, unit: c.path == "years" ? "yr" : "", onChange: { model.setAge(c.path, $0) })
+            }
+            HStack(spacing: 4) {
+                Button("Fresh (0 yr)") { model.setAgeYears(0) }.disabled(age.years == 0)
+                Button("Age 300 yr") { model.setAgeYears(300) }
+                Button("New crack seed") { model.newAgeSeed() }
+                Button("Bake age") { model.bakeAge() }.disabled(!isAged)
+            }
+            .controlSize(.small)
+            Button("Use Paint Scraper brush") { model.selectBrush("paint-scraper") }
+                .controlSize(.small)
         }
     }
 }

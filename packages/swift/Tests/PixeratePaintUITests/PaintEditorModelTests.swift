@@ -397,15 +397,23 @@ final class PaintEditorModelTests: XCTestCase {
             XCTAssertEqual(controls.map(\.key), row.controls.map(\.key), row.kind)
             XCTAssertEqual(controls.map { $0.json["label"]?.stringValue }, row.controls.map(\.label), row.kind)
         }
-        // Every built-in brush is in the picker, stamp tips included (they lay the editor's stamps); wet, impasto, particle, bristle and sticker brushes too.
+        // Every built-in brush is in the picker, stamp tips included (they lay the editor's stamps); wet, impasto, particle, bristle, sticker and scraper brushes too.
         XCTAssertFalse(model.brushes.isEmpty)
-        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "vortex"].contains($0.engine) })
+        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"].contains($0.engine) })
         XCTAssertEqual(model.brushes.count, model.controller.brushes.count)
         XCTAssertTrue(model.brushes.contains { $0.engine == "wet" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "impasto" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "particle" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "bristle" })
+        XCTAssertTrue(model.brushes.contains { $0.engine == "scraper" })
         XCTAssertLessThanOrEqual(model.brushes.count, model.controller.brushes.count)
+        XCTAssertEqual(model.ageSliders.map(\.path), ["years", "varnish", "cracks", "fading", "dust"])
+        model.setAge("years", 300)
+        XCTAssertEqual(model.ageValue("years"), 300)
+        model.setXrayView(true)
+        XCTAssertEqual(model.xrayView, true)
+        model.setXrayView(false)
+        XCTAssertEqual(model.xrayView, false)
     }
 
     func testReadPathAndPatchPath() {

@@ -22,11 +22,11 @@ import {
 import { editorStampOf } from '../stickers/helpers';
 import type { Brush, BrushTool, ResolvedBrush } from './types';
 
-const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter', 'vortex'];
+const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter', 'scraper', 'vortex'];
 /** Engines that pick up and mix paint dab by dab (the exchange ratios apply). */
 const EXCHANGE: readonly PaintBrushEngine[] = ['dab', 'wet', 'impasto'];
 /** Engines that lay dabs from the pen dab walker: tip grain, count and flip apply. */
-const DABS: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge'];
+const DABS: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'scraper'];
 /** Mark engines that can deposit a thin-film iridescence channel. */
 const FILM: readonly PaintBrushEngine[] = ['dab', 'mixer', 'wet', 'impasto', 'particle', 'bristle', 'vortex'];
 
@@ -144,6 +144,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   ...each('marks', 'sticker', ['density', 'sizeJitter', 'rotationJitter', 'scatter'], ['sticker']),
   f('marks.colourJitter', 'sticker.colorJitter', ['sticker']),
   ...each('marks', 'antimatter', ['blastRadius', 'blastSpacing', 'threshold', 'invert', 'invertMode', 'scorch', 'annihilate', 'sparks', 'sparkReach', 'crater', 'duration'], ['antimatter']),
+  ...each('marks', 'scraper', ['depth', 'sharpness'], ['scraper']),
   ...each('marks', 'vortex', ['reach', 'turns', 'pull', 'direction', 'ink', 'duration'], ['vortex', 'wet']).map((field) => ({ ...field, marks: ['vortex'] })),
   ...each('tip.bristle', 'bristle', ['count', 'stiffness', 'splay', 'thickness', 'load', 'jitter'], ['bristle']),
 ];
@@ -183,6 +184,7 @@ export function resolveEngine(brush: Pick<Brush, 'kind' | 'tool' | 'tip' | 'mark
   if (brush.marks?.kind === 'vortex') return brush.behaviour?.surface === 'wet' ? 'wet' : 'vortex';
   if (brush.marks?.kind === 'particles') return 'particle';
   if (brush.marks?.kind === 'objects') return 'sticker';
+  if (brush.marks?.kind === 'scraper') return 'scraper';
   if (brush.tip.shape === 'bristle') return 'bristle';
   const surface = brush.behaviour?.surface;
   if (surface === 'thick') return 'impasto';
@@ -224,6 +226,8 @@ export function resolveCategory(brush: Brush, engine: PaintBrushEngine = resolve
       return 'procedural';
     case 'sticker':
       return 'sticker';
+    case 'scraper':
+      return 'eraser';
     case 'bristle':
       return 'bristle';
     case 'impasto':
@@ -267,8 +271,8 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
     if (brush.kind !== 'tool' && brush.ghost) input.ghost = { ...((input.ghost as object | undefined) ?? {}) };
   }
   if (brush.kind !== 'tool' && brush.mutation) input.mutation = { ...((input.mutation as object | undefined) ?? {}) };
-  // Blenders and smudges only move paint already down.
-  if (engine === 'blender' || engine === 'smudge') input.loadsColor = false;
+  // Blenders, smudges and scrapers only work on paint already down.
+  if (engine === 'blender' || engine === 'smudge' || engine === 'scraper') input.loadsColor = false;
   const paint = brush.colour?.default;
   if (paint && typeof paint === 'object' && 'type' in paint && paint.type === 'gradient') input.paint = copy(paint);
   return normalizePaintBrush({ ...(input as PaintBrushInput), ...(options.builtin ? { builtin: true } : {}) });

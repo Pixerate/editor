@@ -16,6 +16,7 @@ func liveStrokeRefusal(_ brush: PaintBrush) -> String? {
     case "sticker": return "The \(brush.name) brush sprays stickers, which are their own objects; spray them on an empty pixel layer (add_layer)."
     case "antimatter": return "The \(brush.name) brush detonates across every visible layer, which a stroke layer can't redraw; paint it on a pixel layer (add_layer)."
     case "eraser": return "Erasers don't paint on a stroke layer; delete strokes instead (remove_strokes), or rasterize the layer first (rasterize_stroke_layer)."
+    case "scraper": return "The \(brush.name) brush scrapes down through pixel layers, so it can't paint on a stroke layer; rasterize the layer first (rasterize_stroke_layer) or scrape on a pixel layer."
     case "blender", "smudge", "vortex": return "The \(brush.name) brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer."
     default: break
     }

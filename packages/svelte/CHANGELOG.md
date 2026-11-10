@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.210.0
+
+### Minor Changes
+
+- c45467b: feat(paint): add antimatter paint engine (`marks.kind: 'antimatter'`) with multi-layer fuel sensing, noise-edged radial blast fields, RGB and OKLab colour inversion, alpha annihilation, scorch rings, relief craters, ballistic sparks, view-only blast expansion animation, and presets (`antimatter`, `antimatter-flare`, `antimatter-charge`) (#682)
+
+### Patch Changes
+
+- Updated dependencies [c45467b]
+  - @pixerate/editor@0.282.0
+
 ## 0.209.0
 
 ### Minor Changes

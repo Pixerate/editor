@@ -87,7 +87,7 @@ import { samplePath, type PathSampleOptions } from './path-samples';
 import type { Hand } from './input';
 import { mix32 } from './noise';
 import { clonePaper, grainCatch, hexToRgb8, normalizePaper, paperPreset, type PaperSettings } from './paper';
-import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, PAPER_EFFECT_NODE_ID, TRACING_NODE_ID, type ImageNode, type ViewLayer } from './render';
+import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, PAPER_EFFECT_NODE_ID, TRACING_NODE_ID, XRAY_NODE_ID, type ImageNode, type ViewLayer } from './render';
 import {
   deserializePaintDocument,
   deserializePaintDocumentAsync,
@@ -220,6 +220,18 @@ import {
   type FerroSettings,
   type PaintMagnet,
 } from './ferro';
+import {
+  AgeCache,
+  DEFAULT_AGE,
+  isAgeActive,
+  normalizeAge,
+  renderXrayPixels,
+  validateAgeInput,
+  type PaintAgeInput,
+  type PaintAgeSettings,
+  type XrayResult,
+} from './age';
+import { collectScrapeableLayers, scrapeLayersByIds, ScraperStrokeDriver } from './scraper';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -376,6 +388,10 @@ export interface PaintEditorState {
   mutations: readonly PaintMutationInfo[];
   /** Whether an agent is listening for mutation requests (`onMutationRequest` or `setMutationAgentConnected`). */
   hasMutationAgent: boolean;
+  /** Non-destructive time-machine ageing preview settings (saved with the document, not undo steps). */
+  age: PaintAgeSettings;
+  /** Whether the X-ray radiograph view is switched on in the viewport (editor state, not saved with the document). */
+  xrayView: boolean;
   /** Increments on every change. */
   version: number;
 }
@@ -494,6 +510,11 @@ export interface PaintStrokeInit {
   maskStencils?: readonly Stencil[];
   /** Antimatter strokes: the fuel layer ids (the visible pixel layers when painted). A replay reads fuel from exactly these and changes the editable ones, whatever is visible now. */
   targets?: readonly string[];
+  /**
+   * Scraper brushes: the layers to cut through, top to bottom, instead of the visible unlocked
+   * pixel layers from the top (replays pass `RecordedStroke.scrapeLayerIds`).
+   */
+  scrapeLayerIds?: readonly string[];
 }
 
 export interface LayerUpdate {
@@ -631,6 +652,11 @@ export interface RenderOptions {
    * for previews and picks.
    */
   wet?: 'display' | 'dried';
+  /**
+   * Apply the non-destructive ageing preview (`set_age`); on by default for the view, opt-in
+   * (`true`) for exports.
+   */
+  age?: boolean;
 }
 
 export interface PixelImage {
@@ -856,6 +882,14 @@ export class PaintEditorController {
   private readonly thermoCaches = new Map<string, ThermoCache>();
   private liveFluor: { layerId: string; surface: TiledSurface } | null = null;
   private liveThermo: { layerId: string; surface: TiledSurface } | null = null;
+  /** Non-destructive time-machine ageing preview settings (saved with the document, not undo steps). */
+  private age: PaintAgeSettings = { ...DEFAULT_AGE };
+  private readonly ageCaches = new Map<string, AgeCache>();
+  /** Whether the X-ray radiograph view is shown in the viewport (editor state, not saved). */
+  private xrayView = false;
+  private xrayNodeCache: { version: number; node: ImageNode } | null = null;
+  /** Live scraper surfaces while a scraper stroke is in progress. */
+  private liveScraper: Map<string, TiledSurface> | null = null;
   /** Set while an operation that changes wet paint runs: the simulation before it (for undo). */
   private wetOp: { before: WetSnapshot | null } | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
@@ -1199,6 +1233,8 @@ export class PaintEditorController {
       heat: heatStats(this.doc.heat),
       mutations: this.mutations.map((m) => this.toMutationInfo(m)),
       hasMutationAgent: this.mutationListeners.size > 0 || this.mutationAgentConnected,
+      age: { ...this.age },
+      xrayView: this.xrayView,
       version: this.version,
     };
     return this.cached;
@@ -1359,6 +1395,10 @@ export class PaintEditorController {
     this.redoStack.push(e);
     const paper = this.doc.paper;
     this.doc = e.before;
+    // Only a step that changed the age (bake_age) moves it; set_age is not an undo step, so the
+    // restored document takes the current age and a save after undo keeps it.
+    if (e.before.age !== e.after.age) this.age = normalizeAge(e.before.age, DEFAULT_AGE);
+    else this.doc = this.withAge(this.doc);
     this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.before);
     if (e.wet) {
@@ -1382,6 +1422,8 @@ export class PaintEditorController {
     this.undoStack.push(e);
     const paper = this.doc.paper;
     this.doc = e.after;
+    if (e.before.age !== e.after.age) this.age = normalizeAge(e.after.age, DEFAULT_AGE);
+    else this.doc = this.withAge(this.doc);
     this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.after);
     if (e.wet) {
@@ -1426,6 +1468,10 @@ export class PaintEditorController {
     });
     this.extensions = {};
     this.nextMagnetId = 1;
+    this.age = { ...DEFAULT_AGE };
+    this.ageCaches.clear();
+    this.xrayView = false;
+    this.xrayNodeCache = null;
     this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
     this.tracingVersion++;
     if (this.wet.world || this.wet.patterns.size) {
@@ -3467,7 +3513,45 @@ export class PaintEditorController {
       throw new PaintEditorError(`Layer "${layer.name}" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).`);
     }
     let wet: { driver: WetStrokeDriver; surface: () => TiledSurface } | undefined;
-    if (isWetBrush(brush)) {
+    let scraper: { driver: ScraperStrokeDriver } | undefined;
+    if (brush.engine === 'scraper') {
+      const { layers: scrapeLayers, stoppedAtLocked } = init.scrapeLayerIds ? { layers: scrapeLayersByIds(doc, init.scrapeLayerIds), stoppedAtLocked: null } : collectScrapeableLayers(doc);
+      const wetIds = this.wet.wetLayerIds();
+      const wetLayerId = scrapeLayers.find((l) => wetIds.includes(l.id))?.id ?? (wetIds.includes(layer.id) ? layer.id : undefined);
+      if (wetLayerId) {
+        const w = findLayer(doc.layers, wetLayerId)?.layer;
+        throw new PaintEditorError(`Layer "${w?.name ?? wetLayerId}" holds wet paint; dry it first (dry_paint) before scraping.`);
+      }
+      if (!scrapeLayers.length) {
+        if (stoppedAtLocked) {
+          throw new PaintEditorError(`Layer "${stoppedAtLocked.name}" is locked; unlock it (update_layer locks) before scraping.`);
+        }
+        throw new PaintEditorError('There are no visible unlocked pixel layers to scrape.');
+      }
+      layer = scrapeLayers[0]!;
+      const scrapeMask = init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null;
+      const seedSc = init.seed ?? mix32((this.seedCounter * 0x9e3779b1) >>> 0) & 0x7fffffff;
+      const copiesSc = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
+      const perspectiveSc = this.guides.perspective;
+      const snapperSc = init.snapToPerspective && perspectiveSc.enabled && perspectiveSc.snap ? new PerspectiveSnapper(perspectiveSc) : null;
+      const useStencilsSc = init.stencils !== false;
+      const stencilSnapperSc = useStencilsSc && this.guides.stencils.some((x) => x.enabled && x.mode === 'guide') ? new StencilSnapper(this.guides.stencils) : null;
+      const filterSc = snapperSc || stencilSnapperSc ? (p: PenPoint) => (stencilSnapperSc ? stencilSnapperSc.snap(snapperSc ? snapperSc.snap(p) : p) : snapperSc!.snap(p)) : undefined;
+      scraper = {
+        driver: new ScraperStrokeDriver(
+          {
+            brush,
+            seed: seedSc,
+            copies: [IDENTITY_AFFINE, ...copiesSc].map(affineCopy),
+            selection: scrapeMask,
+            inputFilter: filterSc,
+          },
+          scrapeLayers,
+          doc.thick,
+        ),
+      };
+      init = { ...init, seed: seedSc };
+    } else if (isWetBrush(brush)) {
       this.requireWetIdle('painting');
       if (layer.offset.x || layer.offset.y) {
         // The wet simulation works in canvas space: move the pixels into it (same picture, not an undo step).
@@ -3598,6 +3682,7 @@ export class PaintEditorController {
       mixerLoad: init.load ?? brushLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]),
       secondary: rgbaOf(this.secondaryColor),
       wet,
+      scraper,
       thick: needThick ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       relief: needRelief ? { channels: doc.thick![layer.id]! } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
@@ -3640,6 +3725,7 @@ export class PaintEditorController {
     // The fuel layers the stroke read (visible pixel layers at the time, or the replayed ones): a replay reads fuel from exactly these.
     const fuel = init.antimatter?.targets;
     if (fuel?.length) stroke.targets = fuel.map((t) => t.id);
+    if (init.scraper) stroke.scrapeLayerIds = [...init.scraper.driver.layerIds];
     if (init.selection) {
       const masks = (session.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask');
       if (masks.length) stroke.stencils = masks.map((x) => ({ ...x }));
@@ -3682,6 +3768,11 @@ export class PaintEditorController {
           this.emit(rects);
           return;
         }
+        if (this.session?.init.scraper) {
+          this.liveScraper = this.session.init.scraper.driver.liveSurfaces();
+          this.emit(rects);
+          return;
+        }
         this.live = { layerId, surface };
         const ch = this.session?.thickChannels();
         this.liveThick = ch ? { layerId, channels: ch } : null;
@@ -3720,6 +3811,7 @@ export class PaintEditorController {
         this.liveFerro = null;
         this.liveFluor = null;
         this.liveThermo = null;
+        this.liveScraper = null;
         const wetStroke = Boolean(s.init.wet);
         if (wetStroke) this.wet.driver = null;
         const brush = s.init.brush;
@@ -3755,6 +3847,12 @@ export class PaintEditorController {
             this.startBlastAnimation(amDriver, s.result?.bounds ?? null);
           }
           this.recordMutationStroke(stroke, s.result?.bounds ?? null);
+          this.notifySample('end', s, [], stroke.id);
+          return;
+        }
+        if (s.init.scraper) {
+          const scraped = s.init.scraper.driver.commitToDocument(this.doc);
+          this.commit(`${brush.name} stroke`, { ...scraped.doc, strokes: [...this.doc.strokes, stroke] }, before);
           this.notifySample('end', s, [], stroke.id);
           return;
         }
@@ -3959,6 +4057,11 @@ export class PaintEditorController {
         const amOutputs = s.antimatterOutputs();
         if (amOutputs) {
           out = this.applyAntimatterOutputs(out, amOutputs, stroke);
+          return;
+        }
+        if (s.init.scraper) {
+          const scraped = s.init.scraper.driver.commitToDocument(out);
+          out = { ...scraped.doc, strokes: [...out.strokes, stroke] };
           return;
         }
         const targetId = this.tempLayerTargets.get(s.layerId);
@@ -4681,6 +4784,202 @@ export class PaintEditorController {
     };
   }
 
+  // --- Time machine: ageing and X-ray ---------------------------------------------
+
+  /** `doc` carrying the editor's current ageing settings (none when they are the defaults). */
+  private withAge(doc: PaintDocumentState): PaintDocumentState {
+    const a = this.age;
+    const hasAge =
+      a.years !== DEFAULT_AGE.years ||
+      a.varnish !== DEFAULT_AGE.varnish ||
+      a.cracks !== DEFAULT_AGE.cracks ||
+      a.fading !== DEFAULT_AGE.fading ||
+      a.dust !== DEFAULT_AGE.dust ||
+      a.seed !== DEFAULT_AGE.seed;
+    if (!hasAge) return doc.age === undefined ? doc : { ...doc, age: undefined };
+    const cur = doc.age;
+    if (cur && cur.years === a.years && cur.varnish === a.varnish && cur.cracks === a.cracks && cur.fading === a.fading && cur.dust === a.dust && cur.seed === a.seed) return doc;
+    return { ...doc, age: { ...a } };
+  }
+
+  /** Reads the document's non-destructive ageing preview settings. */
+  getAge(): PaintAgeSettings {
+    return { ...this.age };
+  }
+
+  /**
+   * Sets the non-destructive ageing preview (`years` 0..500, `varnish` 0..1, `cracks` 0..1,
+   * `fading` 0..1, `dust` 0..1, `seed` >= 0). Saved with the document, not an undo step.
+   */
+  setAge(update: PaintAgeInput): PaintAgeSettings {
+    try {
+      validateAgeInput(update);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    this.age = normalizeAge(update, this.age);
+    this.doc = this.withAge(this.doc);
+    this.emit('all');
+    return { ...this.age };
+  }
+
+  /**
+   * Commits the current aged look into a new pixel layer at the top of the stack and resets the
+   * preview `years` to 0 so the painting is not aged twice. One undo step.
+   */
+  bakeAge(options: { name?: string } = {}): { layer: PaintLayerInfo; age: PaintAgeSettings; bounds: RasterRect | null } {
+    this.requireIdle('baking ageing');
+    this.requireWetIdle('baking ageing');
+    if (options.name !== undefined && typeof options.name !== 'string') {
+      throw new PaintEditorError('name must be a string.');
+    }
+    if (!isAgeActive(this.age)) {
+      throw new PaintEditorError('Ageing is off (years is 0 or all effects are 0); call set_age with years above 0 before baking.');
+    }
+    const before = this.doc;
+    const bakedAge: PaintAgeSettings = { ...this.age };
+    const agedPixels = this.compositePixels({ paper: false, wet: 'dried', age: true });
+    const surface = surfaceFromPixels(agedPixels, 4);
+    const bounds = contentBounds(surface);
+    const label = options.name?.trim() ? options.name.trim() : `Aged (${Math.round(bakedAge.years)} yr)`;
+    const newLayer: PaintPixelLayer = {
+      ...createPaintLayer(label),
+      surface,
+    };
+    const nextAge: PaintAgeSettings = { ...this.age, years: 0 };
+    this.age = nextAge;
+    const hasAge =
+      nextAge.varnish !== DEFAULT_AGE.varnish ||
+      nextAge.cracks !== DEFAULT_AGE.cracks ||
+      nextAge.fading !== DEFAULT_AGE.fading ||
+      nextAge.dust !== DEFAULT_AGE.dust ||
+      nextAge.seed !== DEFAULT_AGE.seed;
+    const nextDoc: PaintDocumentState = {
+      ...this.doc,
+      layers: [...this.doc.layers, newLayer],
+      activeLayerId: newLayer.id,
+      ...(hasAge ? { age: { ...nextAge } } : { age: undefined }),
+    };
+    this.commit('Bake age', nextDoc, before);
+    return {
+      layer: this.describeLayer(newLayer),
+      age: bakedAge,
+      bounds,
+    };
+  }
+
+  /** Whether the X-ray radiograph view is switched on in the viewport. */
+  getXrayView(): boolean {
+    return this.xrayView;
+  }
+
+  /** Switches the X-ray radiograph view on or off in the viewport (editor state, not an undo step). */
+  setXrayView(on: boolean): boolean {
+    if (typeof on !== 'boolean') throw new PaintEditorError('on must be true or false.');
+    if (this.xrayView === on) return on;
+    this.xrayView = on;
+    this.emit('all');
+    return on;
+  }
+
+  /**
+   * Renders a read-only X-ray radiograph of the painting, compositing every pixel layer (visible
+   * and hidden) with density = `opacity × (thick height + lightness weight)`. With `strokes: k`,
+   * replays the painting from its recorded strokes up to `k` strokes first.
+   */
+  async renderXray(options: { strokes?: number; maxSide?: number } = {}): Promise<XrayResult> {
+    this.requireWetIdle('rendering X-ray');
+    const maxSide = options.maxSide ?? 512;
+    if (!(Number.isInteger(maxSide) && maxSide >= 16 && maxSide <= 2048)) {
+      throw new PaintEditorError(`maxSide ${options.maxSide} is out of range; use a whole number 16..2048.`);
+    }
+    const totalStrokes = this.doc.strokes.length;
+    if (options.strokes !== undefined) {
+      if (!(Number.isInteger(options.strokes) && options.strokes >= 0 && options.strokes <= totalStrokes)) {
+        throw new PaintEditorError(`strokes ${options.strokes} is out of range; the painting has ${totalStrokes} recorded strokes, so use 0..${totalStrokes}.`);
+      }
+      const target = this.createReplayTarget(1);
+      try {
+        const hiddenIds = new Set(flattenLayers(this.doc.layers).filter((l) => !l.visible).map((l) => l.id));
+        const unlockAll = (list: readonly PaintLayer[]): PaintLayer[] =>
+          list.map((l) =>
+            l.type === 'group'
+              ? { ...l, visible: true, locks: undefined, children: unlockAll(l.children) }
+              : { ...l, visible: true, locks: undefined }
+          );
+        const restoreVis = (list: readonly PaintLayer[]): PaintLayer[] =>
+          list.map((l) =>
+            l.type === 'group'
+              ? { ...l, visible: !hiddenIds.has(l.id), children: restoreVis(l.children) }
+              : { ...l, visible: !hiddenIds.has(l.id) }
+          );
+        target.doc = { ...target.doc, layers: unlockAll(target.doc.layers) };
+        await replayPainting(this.doc, target, { strokes: options.strokes });
+        await target.wetIdle();
+        const dried = restoreVis(target.driedLayers(target.doc.layers));
+        const full = renderXrayPixels(
+          target.doc.canvas.width,
+          target.doc.canvas.height,
+          dried,
+          target.doc.thick,
+          options.strokes,
+          totalStrokes
+        );
+        return this.scaleXray(full, maxSide);
+      } finally {
+        target.dispose();
+      }
+    }
+    const dried = this.driedLayers(this.currentLayers());
+    const full = renderXrayPixels(
+      this.doc.canvas.width,
+      this.doc.canvas.height,
+      dried,
+      this.doc.thick,
+      totalStrokes,
+      totalStrokes
+    );
+    return this.scaleXray(full, maxSide);
+  }
+
+  private scaleXray(full: XrayResult, maxSide: number): XrayResult {
+    const k = Math.min(1, maxSide / Math.max(full.width, full.height));
+    if (k >= 1) return full;
+    const w = Math.max(1, Math.round(full.width * k));
+    const h = Math.max(1, Math.round(full.height * k));
+    return {
+      ...full,
+      width: w,
+      height: h,
+      data: downsampleRgba(full.data, full.width, full.height, w, h),
+    };
+  }
+
+  private xrayNode(base: PaintLayer[]): ImageNode {
+    const version = this.version;
+    if (this.xrayNodeCache?.version === version) return this.xrayNodeCache.node;
+    const x = renderXrayPixels(
+      this.doc.canvas.width,
+      this.doc.canvas.height,
+      base,
+      this.doc.thick,
+      this.doc.strokes.length,
+      this.doc.strokes.length
+    );
+    const node: ImageNode = {
+      type: 'image',
+      id: XRAY_NODE_ID,
+      name: 'X-ray',
+      visible: true,
+      opacity: 1,
+      blend: 'normal',
+      image: { width: x.width, height: x.height, data: x.data },
+      version,
+    };
+    this.xrayNodeCache = { version, node };
+    return node;
+  }
+
   // --- Replay: time-lapse and high-resolution export ------------------------------
 
   /**
@@ -4701,6 +5000,7 @@ export class PaintEditorController {
     target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
     target.uvLight = { ...this.uvLight };
+    target.age = { ...this.age };
     // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
     target.effects.set(this.effects.provider);
     if (w === width && h === height) for (const [key, img] of this.effectPaintPixels) target.effectPaintPixels.set(key, img);
@@ -5152,9 +5452,10 @@ export class PaintEditorController {
   private currentLayers(view = false): PaintLayer[] {
     const override = this.frameOverride;
     if (override) return Array.from(override).reduce((ls, [id, surface]) => mapLayer(ls, id, (l) => ({ ...(l as PaintPixelLayer), surface })), this.doc.layers);
-    if (this.liveMulti) {
+    const liveMulti = this.liveScraper ?? this.liveMulti;
+    if (liveMulti) {
       let layers = this.doc.layers;
-      for (const [id, surface] of this.liveMulti) {
+      for (const [id, surface] of liveMulti) {
         layers = mapLayer(layers, id, (l) => ({ ...(l as PaintPixelLayer), surface }));
       }
       return layers;
@@ -5259,15 +5560,16 @@ export class PaintEditorController {
     return visit(layers);
   }
 
-  /** The layers with thick paint and ferrofluid spikes lit (each thick or ferrofluid layer's pixels replaced by its lit tiles). */
-  private litLayers(layers: PaintLayer[]): PaintLayer[] {
+  /** The layers with thick paint, ferrofluid spikes and craquelure crack relief lit. */
+  private litLayers(layers: PaintLayer[], useAge = false, paintedLayerCount = 1): PaintLayer[] {
     const thick = this.doc.thick;
     const live = this.liveThick;
     const liveMulti = this.liveThickMulti;
     const animThick = this.animatedThick;
     const ferro = this.doc.ferro;
     const liveFerro = this.liveFerro;
-    if (!thick && !live && !liveMulti && !animThick.size && !ferro && !liveFerro) return layers;
+    const ageCracks = useAge && isAgeActive(this.age) && this.age.cracks > 0 && this.lighting.relief > 0 ? this.age : null;
+    if (!thick && !live && !liveMulti && !animThick.size && !ferro && !liveFerro && !ageCracks) return layers;
     let out = layers;
     const ids = new Set([
       ...Object.keys(thick ?? {}),
@@ -5276,6 +5578,7 @@ export class PaintEditorController {
       ...animThick.keys(),
       ...Object.keys(ferro ?? {}),
       ...(liveFerro ? [liveFerro.layerId] : []),
+      ...(ageCracks ? flattenLayers(layers).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).map((l) => l.id) : []),
     ]);
     const magnets = this.doc.magnets ?? [];
     for (const id of ids) {
@@ -5286,13 +5589,43 @@ export class PaintEditorController {
       const fSet = (liveFerro?.layerId === id ? liveFerro.settings : this.doc.ferroSettings?.[id]) ?? DEFAULT_FERRO;
       const hasThick = ch.height.tiles.size > 0 || ch.material.tiles.size > 0 || ch.film.tiles.size > 0;
       const hasFerro = Boolean(fSurf && fSurf.tiles.size > 0);
-      if (!hasThick && !hasFerro) continue;
+      const hasCracks = Boolean(ageCracks && l.surface.tiles.size > 0);
+      if (!hasThick && !hasFerro && !hasCracks) continue;
       let cache = this.litCaches.get(id);
       if (!cache) this.litCaches.set(id, (cache = new LitCache()));
-      const lit = cache.lit(l.surface, ch, this.lighting, this.viewTilt, hasFerro ? { surface: fSurf!, magnets, settings: fSet, offset: l.offset } : null);
+      const lit = cache.lit(
+        l.surface,
+        ch,
+        this.lighting,
+        this.viewTilt,
+        hasFerro ? { surface: fSurf!, magnets, settings: fSet, offset: l.offset } : null,
+        ageCracks,
+        paintedLayerCount,
+        l.offset
+      );
       if (lit !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: lit }));
     }
     return out;
+  }
+
+  /**
+   * Time-machine ageing pass over the layers after `lightLayers`: applies pigment fading by hue,
+   * yellowed varnish absorption, Voronoi / stress craquelure darkening, and surface dust grain.
+   */
+  private ageLayers(layers: PaintLayer[], paintedLayerCount: number): PaintLayer[] {
+    if (!isAgeActive(this.age)) return layers;
+    const visit = (list: PaintLayer[]): PaintLayer[] =>
+      list.map((l) => {
+        if (!l.visible) return l;
+        if (l.type === 'group') return { ...l, children: visit(l.children) };
+        if (!isPixelLayer(l) || !l.surface.tiles.size) return l;
+        let cache = this.ageCaches.get(l.id);
+        if (!cache) this.ageCaches.set(l.id, (cache = new AgeCache()));
+        const ch = this.liveThick?.layerId === l.id ? this.liveThick.channels : this.doc.thick?.[l.id];
+        const aged = cache.render(l.surface, ch?.height, this.age, paintedLayerCount, l.offset);
+        return aged !== l.surface ? { ...l, surface: aged } : l;
+      });
+    return visit(layers);
   }
 
   /**
@@ -5362,7 +5695,10 @@ export class PaintEditorController {
 
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
     const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers(this.currentLayers(view)) : this.currentLayers(view);
-    let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base))));
+    const useAge = (options.age ?? view) && isAgeActive(this.age);
+    const paintedCount = useAge ? Math.max(1, flattenLayers(base).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).length) : 1;
+    let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base), useAge, paintedCount)));
+    if (useAge) layers = this.ageLayers(layers, paintedCount);
     const backlight = options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
     if (backlight) layers = [...layers, backlight];
     if (options.layerIds) {
@@ -5370,9 +5706,10 @@ export class PaintEditorController {
       for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
       layers = picked.map((l) => ({ ...l, visible: true }) as PaintLayer);
     }
-    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting)];
+    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting, useAge ? this.age : null)];
     if (options.paper !== false && this.doc.paperEffect) under.push(this.paperEffectNode(this.doc.paperEffect));
     if (view) under.push(...this.underlayLayers());
+    if (view && this.xrayView) return [...under, ...layers, this.xrayNode(base)];
     return [...under, ...layers];
   }
 
@@ -5564,6 +5901,18 @@ export class PaintEditorController {
     else delete ext.heat;
     if (this.uvLight.on !== DEFAULT_UV_LIGHT.on || this.uvLight.strength !== DEFAULT_UV_LIGHT.strength || this.uvLight.ambient !== DEFAULT_UV_LIGHT.ambient) ext.uvLight = { ...this.uvLight };
     else delete ext.uvLight;
+    if (
+      this.age.years !== DEFAULT_AGE.years ||
+      this.age.varnish !== DEFAULT_AGE.varnish ||
+      this.age.cracks !== DEFAULT_AGE.cracks ||
+      this.age.fading !== DEFAULT_AGE.fading ||
+      this.age.dust !== DEFAULT_AGE.dust ||
+      this.age.seed !== DEFAULT_AGE.seed
+    ) {
+      ext.age = { ...this.age };
+    } else {
+      delete ext.age;
+    }
     return ext;
   }
 
@@ -5572,9 +5921,22 @@ export class PaintEditorController {
     if (Array.isArray(ext.brushSources)) this.brushSources.set(ext.brushSources.map((x, i) => readBrushSource(x, `brushSources[${i}]`, problems)).filter((x) => x !== null));
     this.lighting = normalizeLighting((ext.lighting as Partial<PaintLighting>) ?? {}, DEFAULT_LIGHTING);
     this.uvLight = normalizeUvLight((ext.uvLight as Partial<UvLightSettings>) ?? {}, DEFAULT_UV_LIGHT);
+    this.age = normalizeAge((ext.age as PaintAgeInput) ?? state.age, DEFAULT_AGE);
+    if (
+      this.age.years !== DEFAULT_AGE.years ||
+      this.age.varnish !== DEFAULT_AGE.varnish ||
+      this.age.cracks !== DEFAULT_AGE.cracks ||
+      this.age.fading !== DEFAULT_AGE.fading ||
+      this.age.dust !== DEFAULT_AGE.dust ||
+      this.age.seed !== DEFAULT_AGE.seed
+    ) {
+      state = { ...state, age: { ...this.age } };
+    }
     this.litCaches.clear();
     this.uvCaches.clear();
     this.thermoCaches.clear();
+    this.ageCaches.clear();
+    this.xrayNodeCache = null;
     if (ext.stickers && typeof ext.stickers === 'object') {
       const stickers: Record<string, Sticker[]> = {};
       for (const [id, list] of Object.entries(ext.stickers as Record<string, unknown>)) {
@@ -5758,6 +6120,7 @@ export class PaintEditorController {
     delete this.extensions.thermo;
     delete this.extensions.heat;
     delete this.extensions.uvLight;
+    delete this.extensions.age;
     this.viewCompositor.clear();
     this.schemeViews.clear();
     this.emit();

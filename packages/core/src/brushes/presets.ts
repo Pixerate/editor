@@ -620,6 +620,13 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     dynamics: { smoothing: 0.3, minSize: 0.5 },
     colour: { default: '#fb923c', palette: ['#fb923c', '#ef4444', '#38bdf8', '#a855f7'] },
   },
+  // --- Scraper: cuts down through the paint stack layer by layer ---
+  {
+    id: 'paint-scraper', name: 'Paint scraper', kind: 'mark', medium: 'paint', variety: 'scraper',
+    tip: { shape: 'flat', size: 28, hardness: 0.9, spacing: 0.06, angle: 30, roundness: 0.35 },
+    marks: { kind: 'scraper' },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5 },
+  },
   // --- Vortex paint: draw a shape and the paint around it winds into a vortex of that shape ---
   {
     id: 'vortex', name: 'Vortex', kind: 'mark', medium: 'paint', variety: 'vortex',

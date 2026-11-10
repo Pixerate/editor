@@ -22,6 +22,7 @@ import type { EffectPaintPixels, PaintEffectPaint } from './effect-paint';
 import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
 import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
+import type { ScraperStrokeDriver } from './scraper';
 import { FilmBuffer, ThickStrokeDriver, type ThickChannels } from './thick';
 import { VortexStrokeDriver, type VortexStrokeSummary } from './vortex';
 import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
@@ -80,6 +81,8 @@ export interface StrokeSessionInit {
    * pixels (the wet layer's display). The session's own surface is not used.
    */
   wet?: { driver: WetStrokeDriver; surface: () => TiledSurface };
+  /** Scraper brushes: the driver that cuts down through visible unlocked layers. */
+  scraper?: { driver: ScraperStrokeDriver };
   /** Impasto brushes: the layer's thick-paint channels before the stroke. */
   thick?: { channels: ThickChannels };
   /** Vortex brushes: the layer's thick-paint relief channels before the stroke (warped alongside colour). */
@@ -178,6 +181,7 @@ export class PaintStrokeSession {
   private dry: CoverageStroke | null = null;
   private wet: PaintDabStroke | null = null;
   private readonly wetDriver: WetStrokeDriver | null = null;
+  private readonly scraperDriver: ScraperStrokeDriver | null = null;
   private thickDriver: ThickStrokeDriver | null = null;
   private vortexDriver: VortexStrokeDriver | null = null;
   private filmBuffer: FilmBuffer | null = null;
@@ -216,10 +220,11 @@ export class PaintStrokeSession {
     this.invisibleDaylight = brush.fluorescence.amount > 0 && brush.fluorescence.invisible && brush.engine !== 'eraser' && brush.engine !== 'blender' && brush.engine !== 'smudge';
     const isAntimatter = brush.engine === 'antimatter';
     if (init.wet) this.wetDriver = init.wet.driver;
-    if (init.light && !init.wet && !init.sticker && !isAntimatter) this.lightTwin = this.makeLightTwin(init.light.surface);
-    if (init.ferro && !init.wet && !init.sticker && !isAntimatter) this.ferroTwin = this.makeFerroTwin(init.ferro.surface);
-    if (init.fluor && !init.wet && !init.sticker && !isAntimatter) this.fluorTwin = this.makeFluorTwin(init.fluor.surface);
-    if (init.thermo && !init.wet && !init.sticker && !isAntimatter) this.thermoTwin = this.makeThermoTwin(init.thermo.surface);
+    if (init.scraper) this.scraperDriver = init.scraper.driver;
+    if (init.light && !init.wet && !init.scraper && !init.sticker && !isAntimatter) this.lightTwin = this.makeLightTwin(init.light.surface);
+    if (init.ferro && !init.wet && !init.scraper && !init.sticker && !isAntimatter) this.ferroTwin = this.makeFerroTwin(init.ferro.surface);
+    if (init.fluor && !init.wet && !init.scraper && !init.sticker && !isAntimatter) this.fluorTwin = this.makeFluorTwin(init.fluor.surface);
+    if (init.thermo && !init.wet && !init.scraper && !init.sticker && !isAntimatter) this.thermoTwin = this.makeThermoTwin(init.thermo.surface);
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -230,7 +235,7 @@ export class PaintStrokeSession {
       selection: init.selection ?? null,
       offset: init.offset,
     };
-    if (!this.wetDriver) this.build(init.effect?.pixels ?? null);
+    if (!this.wetDriver && !this.scraperDriver) this.build(init.effect?.pixels ?? null);
   }
 
   /** Sets up the marks' engine (every kind but wet, which the wet layer paints), sampling `effect` for effect paint. */
@@ -527,6 +532,14 @@ export class PaintStrokeSession {
       this.vortexDriver.push(points);
       return;
     }
+    if (this.scraperDriver) {
+      const rects = this.scraperDriver.push(points);
+      if (rects.length) {
+        for (const r of rects) this.bounds = union(this.bounds, r);
+        this.host.update(this.layerId, this.scraperDriver.liveSurfaces().get(this.layerId) ?? this.base, rects);
+      }
+      return;
+    }
     this.update(
       this.dry
         ? this.dry.push(points)
@@ -680,6 +693,16 @@ export class PaintStrokeSession {
           maxDisplacement: changed ? Math.max(vSummary.maxDisplacement, this.lightTwin?.result?.vortex?.maxDisplacement ?? 0) : 0,
         },
       };
+      this.host.commit(this, surface, false);
+      return this.result;
+    }
+    if (this.scraperDriver) {
+      const rects = this.scraperDriver.finish();
+      for (const r of rects) this.bounds = union(this.bounds, r);
+      this.closed = true;
+      const changed = this.scraperDriver.hasChanges;
+      const surface = changed ? (this.scraperDriver.liveSurfaces().get(this.layerId) ?? this.base) : null;
+      this.result = { layerId: this.layerId, bounds: changed ? this.bounds : null, dabs: this.scraperDriver.dabCount, strokeId: null };
       this.host.commit(this, surface, false);
       return this.result;
     }

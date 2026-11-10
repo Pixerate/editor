@@ -67,6 +67,8 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
     case "antimatter":
         brush["medium"] = "paint"
         brush["marks"] = ["kind": "antimatter"]
+    case "scraper":
+        brush["marks"] = ["kind": "scraper"]
     case "vortex":
         let (medium, variety) = CATEGORY_MEDIUM[b.category] ?? ("paint", nil)
         brush["medium"] = .string(medium)

@@ -41,8 +41,8 @@ export type BrushTipShape = 'round' | 'flat' | 'chisel' | 'bristle' | 'stamp';
 export const BRUSH_TIP_SHAPES: readonly BrushTipShape[] = ['round', 'flat', 'chisel', 'bristle', 'stamp'];
 
 /** How the tip is laid along the path. */
-export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects' | 'antimatter' | 'vortex';
-export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects', 'antimatter', 'vortex'];
+export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects' | 'antimatter' | 'scraper' | 'vortex';
+export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects', 'antimatter', 'scraper', 'vortex'];
 
 /** What the material does on the surface: stays where it lands (`dry`), flows and dries (`wet`) or stands up in relief (`thick`). */
 export type BrushSurface = 'dry' | 'wet' | 'thick';
@@ -223,6 +223,15 @@ export interface BrushAntimatterMarks {
   duration?: number;
 }
 
+/** Cuts down through the paint stack, layer by layer, stopping at locked layers or the paper. */
+export interface BrushScraperMarks {
+  kind: 'scraper';
+  /** Layers removed per full-pressure pass, 0..1 (default 0.5). */
+  depth?: number;
+  /** Blade edge sharpness, 0 (feathered) .. 1 (razor-sharp, default 0.7). */
+  sharpness?: number;
+}
+
 /** Vortex marks: the drawn path shapes a flow field that pulls and winds surrounding paint at pen-up. */
 export interface BrushVortexMarks {
   kind: 'vortex';
@@ -240,7 +249,7 @@ export interface BrushVortexMarks {
   duration?: number;
 }
 
-export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks | BrushAntimatterMarks | BrushVortexMarks;
+export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks | BrushAntimatterMarks | BrushScraperMarks | BrushVortexMarks;
 
 /** Pen feel. Every amount is 0 (off) .. 1 unless noted. */
 export interface BrushDynamics {
