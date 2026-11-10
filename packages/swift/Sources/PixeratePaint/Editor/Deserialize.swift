@@ -43,6 +43,17 @@ func jsTemplate(_ v: JSONValue?) -> String {
     }
 }
 
+/// JavaScript truthiness of a saved value (`if (r.deep)`); a missing value is falsy.
+func jsTruthy(_ v: JSONValue?) -> Bool {
+    switch v {
+    case nil, .null?: return false
+    case .bool(let b)?: return b
+    case .number(let n)?: return n != 0 && !n.isNaN
+    case .string(let s)?: return !s.isEmpty
+    case .array?, .object?: return true
+    }
+}
+
 /// `JSON.stringify(value)` for messages (`undefined` when missing).
 func jsStringify(_ v: JSONValue?) -> String { v.map { $0.stringified() } ?? "undefined" }
 
@@ -130,7 +141,7 @@ private func readMask(_ raw: JSONValue?, _ ctx: inout LayerReadContext, _ what: 
     if case .number(let f)? = r["feather"], f > 0 { mask.feather = num(r["feather"], 0, 1000, 0) }
     if r["enabled"] == .bool(false) { mask.enabled = false }
     if r["linked"] == .bool(false) { mask.linked = false }
-    if r["deep"] != nil && source == nil { ctx.problems.append("\(what) mask: its deep (16- or 32-bit) pixels are not read by the Swift paint editor; it loads at 8 bits") }
+    if jsTruthy(r["deep"]) && source == nil { ctx.problems.append("\(what) mask: its deep (16- or 32-bit) pixels are not read by the Swift paint editor; it loads at 8 bits") }
     if let s = source?.objectValue {
         var merged = DEFAULT_DEPTH_MASK_VALUES
         for (k, v) in s { merged[k] = v }
@@ -195,7 +206,7 @@ private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -
     case "pixel":
         let isDocumentSource = r["source"] == .string("document")
         let surface = isDocumentSource ? emptySurface(4) : readSurface(r["asset"], r["x"], r["y"], channels: 4, defaultValue: 0, &ctx, label)
-        if !isDocumentSource && r["deep"] != nil { ctx.problems.append("\(label): its deep (16- or 32-bit) pixels are not read by the Swift paint editor; it loads at 8 bits") }
+        if !isDocumentSource && jsTruthy(r["deep"]) { ctx.problems.append("\(label): its deep (16- or 32-bit) pixels are not read by the Swift paint editor; it loads at 8 bits") }
         let offset = r["offset"]?.objectValue
         var fill: Double?
         if case .number(let f)? = r["fillOpacity"], f != 1 { fill = num(r["fillOpacity"], 0, 1, 1) }

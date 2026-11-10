@@ -152,4 +152,37 @@ final class PaintDocumentReadersTests: XCTestCase {
         }
         XCTAssertEqual(replaced, 1)
     }
+    /// Opening inside a `group` (as TS allows) keeps the group open: no crash, and no undo step for the open.
+    func testLoadJSONInsideAGroupRecordsNoStep() throws {
+        let c = try PaintEditorController(width: 16, height: 16)
+        _ = try c.addLayer(name: "Second")
+        let saved = JSONValue.object(c.toJSON())
+        let other = try PaintEditorController(width: 8, height: 8)
+        _ = try other.addLayer(name: "Before")
+        var heard = 0
+        let handle = other.subscribe { heard += 1 }
+        defer { handle.cancel() }
+        let problems = try other.group("Open") { try other.loadJSON(saved) }
+        XCTAssertEqual(problems, [])
+        XCTAssertNil(other.undoLabel)
+        XCTAssertEqual(other.toJSON(), c.toJSON())
+        XCTAssertGreaterThan(heard, 0)
+    }
+
+    /// Empty `deep` fields (null, false, 0) are not deep pixels, as `if (r.deep)` reads them in TS: nothing to report.
+    func testEmptyDeepFieldsReportNothing() throws {
+        let c = try PaintEditorController(width: 8, height: 8)
+        var saved = c.toJSON()
+        var layers = saved["layers"]?.arrayValue ?? []
+        var layer = try XCTUnwrap(layers.first?.objectValue)
+        layer["deep"] = .null
+        layer["mask"] = ["defaultValue": 255, "deep": false]
+        layers[0] = .object(layer)
+        saved["layers"] = .array(layers)
+        XCTAssertEqual(try c.loadJSON(.object(saved)), [])
+        layer["deep"] = ["bits": 16]
+        layers[0] = .object(layer)
+        saved["layers"] = .array(layers)
+        XCTAssertEqual(try c.loadJSON(.object(saved)).count, 1)
+    }
 }

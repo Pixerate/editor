@@ -34,7 +34,7 @@ extension PaintEditorController {
         undoStack = []
         redoStack = []
         resetMutations()
-        grouping = nil
+        // An open `group` stays open (as in TS): opening records no step, and the group ends as usual.
         wetOp = nil
         pendingWetEvents = []
         paintedBounds = [:]

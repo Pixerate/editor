@@ -21,11 +21,14 @@ final class PaintConformanceTests: XCTestCase {
                 skipped.append((scenario.id, reason))
                 continue
             }
-            guard let host = makePaintHost(scenario.setup) else {
+            guard let paint = try? PaintConformanceHost(setup: scenario.setup) else {
                 XCTFail("\(scenario.id) is not skipped, but there is no Swift paint editor to run it against.")
                 continue
             }
+            // Also checks Swift's own save → load → save at each reload step (`RoundTripHost`).
+            let host = RoundTripHost(paint, scenario.id)
             let outputs = try await runConformanceScenario(scenario, host: host)
+            XCTAssertEqual(host.checked, scenario.steps.filter(\.reload).count, "\(scenario.id) reloads checked")
             let mismatches = compareConformance(scenario, outputs) { try decodeConformancePNG(Data(contentsOf: $0)) }
             if mismatches.isEmpty { passed.append(scenario.id) } else { failures += mismatches }
         }
@@ -34,9 +37,72 @@ final class PaintConformanceTests: XCTestCase {
     }
 }
 
-/// A fresh Swift paint editor for a scenario's `setup`.
-private func makePaintHost(_ setup: JSONObject) -> (any ConformanceHost)? {
-    try? PaintConformanceHost(setup: setup)
+/**
+ * The paint host, checking Swift's own save → load → save at every reload step: the save after
+ * reopening is the save that was opened, and the pixels are the same. The recorded comparison
+ * leaves the document out of two reload steps (`culture`, `culture-replay`; see GOTCHAS), so this
+ * is what checks them; the TS core checks itself the same way (`reopens what it saved unchanged`
+ * in `paint-conformance.test.ts`).
+ */
+private final class RoundTripHost: ConformanceHost {
+    let inner: PaintConformanceHost
+    let id: String
+    var checked = 0
+    private var pending: [UInt8]?
+
+    init(_ inner: PaintConformanceHost, _ id: String) {
+        self.inner = inner
+        self.id = id
+    }
+
+    func callTool(_ name: String, _ args: JSONObject) async -> McpToolResult { await inner.callTool(name, args) }
+    func document() throws -> JSONValue { try inner.document() }
+    func pixels(paper: Bool?) throws -> ConformanceImage { try inner.pixels(paper: paper) }
+    func isGeneratedId(_ value: String) -> Bool { inner.isGeneratedId(value) }
+
+    func save() throws -> JSONValue? {
+        pending = try inner.pixels(paper: nil).data
+        return try inner.save()
+    }
+
+    func load(_ document: JSONValue) throws -> [String]? {
+        let before = pending
+        pending = nil
+        let problems = try inner.load(document)
+        // A `load` step opens another document on purpose; only reloads must change nothing.
+        guard let before else { return problems }
+        checked += 1
+        XCTAssertEqual(problems, [], "\(id): problems reopening its own save")
+        let again = comparable(try inner.save())
+        let opened = comparable(document)
+        if again != opened { XCTFail("\(id): the save after reopening differs from the one opened at \(firstDifference(again, opened))") }
+        XCTAssertTrue(try inner.pixels(paper: nil).data == before, "\(id): the pixels changed on reopening")
+        return problems
+    }
+
+    /// `lastGrownAt` is the clock at save time (growWhileClosed); everything else must come back.
+    private func comparable(_ doc: JSONValue?) -> JSONValue {
+        guard var o = doc?.objectValue else { return doc ?? .null }
+        if var c = o["cultures"]?.objectValue {
+            c["lastGrownAt"] = nil
+            o["cultures"] = .object(c)
+        }
+        return .object(o)
+    }
+}
+
+/// Where two JSON values first differ, as a JSON pointer and both values (for failure messages).
+private func firstDifference(_ a: JSONValue, _ b: JSONValue, _ path: String = "") -> String {
+    switch (a, b) {
+    case (.object(let x), .object(let y)):
+        for k in Set(x.keys).union(y.keys).sorted() where x[k] != y[k] {
+            return firstDifference(x[k] ?? .null, y[k] ?? .null, "\(path)/\(k)")
+        }
+    case (.array(let x), .array(let y)) where x.count == y.count:
+        for (i, (u, v)) in zip(x, y).enumerated() where u != v { return firstDifference(u, v, "\(path)/\(i)") }
+    default: break
+    }
+    return "\(path.isEmpty ? "/" : path): \(String(a.stringified().prefix(200))) ≠ \(String(b.stringified().prefix(200)))"
 }
 
 /// Prints the summary and adds it to the GitHub job summary when there is one.

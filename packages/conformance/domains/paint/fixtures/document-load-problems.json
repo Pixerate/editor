@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "document-load-problems",
-  "description": "Opening documents the editor cannot fully read: a file that is not a painting and one from a newer version are refused with the reason; otherwise every part that cannot be read is left out and reported (missing and undecodable assets, image editor filters and source images, unknown layer types, strokes, wet settings, saved pads, stencils, extension assets, light, thick paint, effect layers, heat and light spill), repeated layer ids get new ones, fields the editor does not know are kept and written back, and the result saves and reopens cleanly.",
+  "description": "Opening documents the editor cannot fully read: a file that is not a painting and one from a newer version are refused with the reason; otherwise every part that cannot be read is left out and reported (missing and undecodable assets, image editor filters and source images, unknown layer types, strokes, wet settings, saved pads, stencils, extension assets, light, thick paint, effect layers, heat and light spill), repeated layer ids get new ones, fields the editor does not know are kept and written back, and the result saves and reopens cleanly. Empty `deep` fields (null, false, 0) are not deep pixels and report nothing.",
   "setup": {
     "width": 32,
     "height": 32
@@ -1260,6 +1260,221 @@
           "width": 40,
           "height": 30,
           "sha256": "16a1b14f0ac0d44acbd109846fb68d2b0648e116d35d985b78144586d20fc900",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 8,
+        "height": 6,
+        "paper": {
+          "color": "#ffffff"
+        },
+        "layers": [
+          {
+            "id": "flat",
+            "name": "Flat",
+            "type": "pixel",
+            "asset": "a",
+            "x": 1,
+            "y": 1,
+            "deep": null,
+            "mask": {
+              "defaultValue": 255,
+              "asset": "a",
+              "x": 0,
+              "y": 0,
+              "deep": false
+            }
+          },
+          {
+            "id": "plain",
+            "name": "Plain",
+            "type": "pixel",
+            "asset": "a",
+            "x": 4,
+            "y": 2,
+            "deep": 0
+          }
+        ],
+        "assets": {
+          "a": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+        },
+        "activeLayerId": "plain"
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "plain",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 4,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "plain",
+              "locks": {},
+              "name": "Plain",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 1,
+                "y": 1
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "flat",
+              "locks": {},
+              "name": "Flat",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "plain",
+            "assets": {
+              "flat": "<binary>",
+              "flat-mask": "<binary>",
+              "plain": "<binary>"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 4,
+                  "y": 3
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 6,
+            "layers": [
+              {
+                "asset": "flat",
+                "blend": "normal",
+                "id": "flat",
+                "mask": {
+                  "asset": "flat-mask",
+                  "defaultValue": 255,
+                  "x": 0,
+                  "y": 0
+                },
+                "name": "Flat",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 1
+              },
+              {
+                "asset": "plain",
+                "blend": "normal",
+                "id": "plain",
+                "name": "Plain",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 4,
+                "y": 2
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#ffffff",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#ff0000"
+              },
+              {
+                "color": "#3b82f6",
+                "name": "Sky"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {},
+              "tilt": {
+                "angle": 10,
+                "direction": 90
+              }
+            },
+            "width": 8
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-load-problems.6.png",
+          "width": 8,
+          "height": 6,
+          "sha256": "35d38c57f36ea88f8fa9a583bdcd67bd1deab42d8cb26a7750f005368b7c0540",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
