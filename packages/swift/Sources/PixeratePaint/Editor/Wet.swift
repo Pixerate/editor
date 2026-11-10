@@ -494,6 +494,20 @@ public struct WetEvent: Equatable {
     }
 }
 
+/// `Number.isInteger(v)` as an `Int` (nil for anything else, or past what `Int` holds).
+func savedInteger(_ v: JSONValue?) -> Int? {
+    guard let n = v?.finite, n.rounded(.towardZero) == n else { return nil }
+    return Int(exactly: n)
+}
+
+extension WetEvent {
+    /// A saved wet event as `readDocument` keeps it: an integer `clock` and a string `kind`; nil otherwise.
+    public init?(json raw: JSONValue) {
+        guard let r = raw.objectValue, let clock = savedInteger(r["clock"]), let kind = r["kind"]?.stringValue else { return nil }
+        self.init(clock: clock, at: savedInteger(r["at"]), kind: kind, layerId: r["layerId"]?.stringValue, data: r["data"])
+    }
+}
+
 /// Engine B as panels and tools show it. This port has no GPU engine: `auto` stays `not-started`.
 public struct WetEngineInfo {
     public var mode: String

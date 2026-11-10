@@ -47,6 +47,21 @@ public struct RecordedStroke {
     /// Scraper strokes: the layers it cut through, top to bottom, so a replay cuts the same ones
     /// whatever is hidden or locked when it runs (strokes without it derive them again).
     public var scrapeLayerIds: [String]?
+    /// The light / dark pair the colour came from (both #rrggbb), when it came from one (`dualColor`).
+    public var dualColor: PaintDualColor?
+}
+
+/// A colour for each scheme, both #rrggbb (`DualColor` of `color/dual.ts`, as strokes keep it).
+public struct PaintDualColor: Equatable, Sendable {
+    public var light: String
+    public var dark: String
+
+    public init(light: String, dark: String) {
+        self.light = light
+        self.dark = dark
+    }
+
+    public var json: JSONValue { ["light": .string(light), "dark": .string(dark)] }
 }
 
 func applyAffine(_ m: Affine, _ x: Double, _ y: Double) -> (x: Double, y: Double) {
@@ -86,6 +101,7 @@ func loadJSON(_ l: MixerLoad) -> JSONValue {
 /// A recorded stroke as saved: plain JSON with its brush as a facet brush.
 func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     var o: JSONObject = ["id": .string(s.id), "layerId": .string(s.layerId), "color": .string(s.color), "points": .array(s.points.map(\.json)), "seed": .number(Double(s.seed))]
+    if let dual = s.dualColor { o["dualColor"] = dual.json }
     if let copies = s.copies { o["copies"] = .array(copies.map { .array($0.map { .number($0) }) }) }
     if let load = s.load { o["load"] = loadJSON(load) }
     if let steps = s.steps { o["steps"] = .array(steps.map { .number(Double($0)) }) }
@@ -96,6 +112,128 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     if let ids = s.scrapeLayerIds { o["scrapeLayerIds"] = .array(ids.map { .string($0) }) }
     o["brush"] = .object(migrateBrushV1(s.brush))
     return .object(o)
+}
+
+// MARK: - Reading
+
+/// `readAffine`: six finite numbers, or nil.
+private func readAffine(_ raw: JSONValue) -> Affine? {
+    guard let a = raw.arrayValue, a.count == 6 else { return nil }
+    let ns = a.compactMap(\.finite)
+    return ns.count == 6 ? ns : nil
+}
+
+/// `readRgb`: three finite numbers clamped to 0..1, or nil.
+private func readRgb(_ raw: JSONValue?) -> [Double]? {
+    guard let a = raw?.arrayValue, a.count == 3 else { return nil }
+    let ns = a.compactMap(\.finite)
+    return ns.count == 3 ? ns.map { Swift.min(1, Swift.max(0, $0)) } : nil
+}
+
+/// `readLoad`: what the brush carried, or nil when it carried nothing.
+private func readLoad(_ raw: JSONValue?) -> MixerLoad? {
+    guard let r = raw?.objectValue else { return nil }
+    let reservoir = readRgb(r["reservoir"])
+    let pickup = readRgb(r["pickup"])
+    if reservoir == nil && pickup == nil { return nil }
+    let amount = reservoir != nil ? r["amount"]?.finite.map { Swift.min(1, Swift.max(0, $0)) } ?? 0 : 0
+    return MixerLoad(reservoir: reservoir, amount: amount, pickup: pickup)
+}
+
+/// A saved stroke's brush: a facet brush (version 2), else the flat engine brush of version 1 (`readStrokeBrush`).
+func readStrokeBrush(_ raw: JSONValue?) -> PaintBrush {
+    if let o = raw?.objectValue, o.contains("kind"), !o.contains("engine") {
+        var problems: [String] = []
+        if let spec = try? normalizeBrushSpec(.object(o), &problems) { return resolveBrush(spec) }
+        // Not a facet brush after all: read it as a flat one.
+    }
+    return normalizePaintBrush(raw?.objectValue ?? [:])
+}
+
+/// One side of a dual colour as `normalizeColor` gives it, for hex input (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`).
+private func dualColorSide(_ raw: String) -> String? {
+    let h = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard h.range(of: "^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$", options: .regularExpression) != nil else { return nil }
+    var digits = Array(h.dropFirst())
+    if digits.count <= 4 { digits = digits.flatMap { [$0, $0] } }
+    return "#" + String(digits)
+}
+
+/**
+ * `normalizeDualColor` for the colours strokes keep: `{ light, dark }`, `light-dark(a, b)` or one
+ * colour for both, each side read as hex. Sides with alpha below 1 keep it (`#rrggbbaa`), as TS does.
+ */
+func normalizePaintDualColor(_ raw: JSONValue?) -> PaintDualColor? {
+    var pair: (String, String)?
+    if let o = raw?.objectValue, let l = o["light"]?.stringValue, let d = o["dark"]?.stringValue {
+        pair = (l, d)
+    } else if let s = raw?.stringValue {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.lowercased().hasPrefix("light-dark("), t.hasSuffix(")") {
+            let inner = t.dropFirst("light-dark(".count).dropLast()
+            if inner.lowercased().contains("light-dark(") { return nil }
+            var depth = 0
+            var comma: String.Index?
+            for i in inner.indices {
+                let ch = inner[i]
+                if ch == "(" { depth += 1 } else if ch == ")" { depth -= 1 } else if ch == ",", depth == 0 { comma = i; break }
+            }
+            guard let comma else { return nil }
+            pair = (String(inner[..<comma]), String(inner[inner.index(after: comma)...]))
+        } else {
+            pair = (t, t)
+        }
+    }
+    guard let (l, d) = pair, let light = dualColorSide(l), let dark = dualColorSide(d) else { return nil }
+    let a = light.hasSuffix("ff") && light.count == 9 ? String(light.prefix(7)) : light
+    let b = dark.hasSuffix("ff") && dark.count == 9 ? String(dark.prefix(7)) : dark
+    return PaintDualColor(light: a, dark: b)
+}
+
+private func isHex6(_ s: String) -> Bool { s.range(of: "^#[0-9a-f]{6}$", options: .regularExpression) != nil }
+
+/// A recorded stroke read from JSON (its brush version 1 or 2), or nil when it is not one (`normalizeBrushStroke`).
+func normalizeBrushStroke(_ raw: JSONValue) -> RecordedStroke? {
+    guard let r = raw.objectValue, let id = r["id"]?.stringValue, let layerId = r["layerId"]?.stringValue, let rawPoints = r["points"]?.arrayValue else { return nil }
+    let points = rawPoints.compactMap { PenPoint(json: $0) }
+    if points.isEmpty { return nil }
+    let colorRaw = r["color"]?.stringValue
+    let color = colorRaw.flatMap { $0.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil ? $0.lowercased() : nil } ?? "#000000"
+    var out = RecordedStroke(id: id, layerId: layerId, brush: readStrokeBrush(r["brush"]), color: color, points: points, seed: r["seed"]?.finite.map { Int(JS.i32($0)) } ?? 0)
+    if let raw = r["dualColor"], let dual = normalizePaintDualColor(raw), isHex6(dual.light), isHex6(dual.dark) { out.dualColor = dual }
+    let copies = (r["copies"]?.arrayValue ?? []).compactMap(readAffine)
+    if !copies.isEmpty { out.copies = copies }
+    if let load = readLoad(r["load"]) { out.load = load }
+    if let list = r["stencils"]?.arrayValue {
+        var st: [Stencil] = []
+        for item in list {
+            // An unreadable stencil is dropped.
+            guard let o = item.objectValue, let s = try? normalizeStencil(o, o["id"]?.stringValue ?? "stencil") else { continue }
+            st.append(s)
+        }
+        if !st.isEmpty { out.stencils = st }
+    }
+    if let effect = readPaintEffectPaint(r["paint"]) {
+        out.effect = effect
+    } else if case .gradient(let g)? = readPaintSource(r["paint"]) {
+        out.paint = g
+    }
+    if let ids = r["scrapeLayerIds"]?.arrayValue {
+        let strings = ids.compactMap(\.stringValue)
+        if strings.count == ids.count { out.scrapeLayerIds = strings }
+    }
+    if let steps = r["steps"]?.arrayValue, steps.count == points.count {
+        let ints = steps.compactMap { v -> Int? in
+            guard let n = v.finite, n >= 0, n == n.rounded(.towardZero), n <= 9_007_199_254_740_991 else { return nil }
+            return Int(n)
+        }
+        if ints.count == steps.count { out.steps = ints }
+    }
+    if let list = r["targets"]?.arrayValue {
+        let targets = list.compactMap { $0.stringValue.flatMap { $0.isEmpty ? nil : $0 } }
+        if !targets.isEmpty { out.targets = targets }
+    }
+    return out
 }
 
 /// A recorded stroke as plain JSON with its engine brush (`JSON.parse(JSON.stringify(stroke))`), as paint events keep it.

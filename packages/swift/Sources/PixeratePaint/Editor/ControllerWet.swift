@@ -469,6 +469,24 @@ extension PaintEditorController {
         if layers.isEmpty && wet.tilt.angle == 0 { return nil }
         return ["tilt": wet.tilt.json, "layers": .object(layers)]
     }
+}
+
+/// A whole count from a saved number, kept inside the range `Int` holds.
+private func savedCount(_ v: Double) -> Int { Int(Swift.min(9.007199254740991e15, Swift.max(-9.007199254740991e15, JS.round(v)))) }
+
+/// A saved wet layer's ghost paint (`readWetGhost`), or nil when it is not one or has faded.
+func readWetGhost(_ raw: JSONValue?) -> WetGhostState? {
+    guard let g = raw?.objectValue, let arr = g["pigment"]?.arrayValue, arr.count == 4 else { return nil }
+    let pigment = arr.compactMap(\.finite)
+    guard pigment.count == 4 else { return nil }
+    let remaining = g["remaining"]?.finite.map { Swift.max(0, savedCount($0)) } ?? 0
+    if remaining <= 0 { return nil }
+    let total = g["total"]?.finite.map { Swift.max(1, savedCount($0)) } ?? remaining
+    let linger = g["linger"]?.finite.map { Swift.max(0.5, Swift.min(60, $0)) } ?? 4
+    return WetGhostState(pigment: pigment, remaining: remaining, total: total, linger: linger)
+}
+
+extension PaintEditorController {
 
     // MARK: - Light paint
 

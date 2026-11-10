@@ -83,6 +83,30 @@ public struct PaintPaperEffect {
 private let paperEffectVersion = Locked(1.0)
 func nextPaperEffectVersion() -> Double { paperEffectVersion.with { v in defer { v += 1 }; return v } }
 
+/// A saved effect source (`readPaintEffectSource`), or nil when it is not one.
+func readPaintEffectSource(_ raw: JSONValue?) -> PaintEffectSource? {
+    guard let r = raw?.objectValue, let effect = r["effect"]?.stringValue, !effect.isEmpty,
+          let values = r["values"]?.objectValue else { return nil }
+    var time: Double? = nil
+    if let t = r["time"]?.numberValue, t > 0 { time = t }
+    return PaintEffectSource(effect: effect, provider: r["provider"]?.stringValue, name: r["name"]?.stringValue, values: values, time: time)
+}
+
+/// Reads saved effect paper for a `width × height` canvas (`paperEffectFromJSON`; throws saying what is wrong).
+func paperEffectFromJSON(_ raw: JSONValue, width: Int, height: Int) throws -> PaintPaperEffect {
+    guard let source = readPaintEffectSource(raw), let r = raw.objectValue else { throw PaintEditorError("it is not an effect (effect id and values)") }
+    guard let png = r["png"]?.stringValue, let parsed = parseDataUrl(png) else { throw PaintEditorError("its pixels are missing") }
+    let image = try decodePng(parsed.bytes)
+    if image.width != width || image.height != height {
+        throw PaintEditorError("its pixels are \(image.width)×\(image.height), not the canvas size \(width)×\(height)")
+    }
+    var opacity = 1.0
+    if let o = r["opacity"]?.numberValue, o >= 0, o <= 1 { opacity = o }
+    let b = r["blend"]?.stringValue
+    let blend = b.map { PAPER_EFFECT_BLENDS.contains($0) } == true ? b! : "multiply"
+    return PaintPaperEffect(source: source, opacity: opacity, blend: blend, image: ImageNodeImage(width: width, height: height, data: image.data), version: nextPaperEffectVersion())
+}
+
 /// Over-composites `top` onto `base` at `opacity` (`overPixels`).
 func overPixels(_ base: [UInt8], _ top: [UInt8], _ opacity: Double = 1) -> [UInt8] {
     var out = [UInt8](repeating: 0, count: base.count)

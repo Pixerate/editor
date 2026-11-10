@@ -1346,6 +1346,136 @@ func cultureToJSON(_ c: LayerCultureState) -> JSONValue {
     return .object(o)
 }
 
+/// `Number(v)` for a saved value (undefined is NaN), as `Math.round` and the bit operators coerce it.
+private func cultureNumber(_ v: JSONValue?) -> Double {
+    switch v {
+    case nil: return .nan
+    case .null?: return 0
+    case .bool(let b)?: return b ? 1 : 0
+    case .number(let n)?: return n
+    case .string(let s)?:
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? 0 : Double(t) ?? .nan
+    case .array(let a)?: return a.isEmpty ? 0 : a.count == 1 ? cultureNumber(a[0]) : .nan
+    case .object?: return .nan
+    }
+}
+
+/// `Math.round(v)` as an Int. A value that is not a number (NaN in TS) reads as 0.
+private func cultureRound(_ v: JSONValue?) -> Int {
+    let n = JS.round(cultureNumber(v))
+    if n.isNaN { return 0 }
+    return Int(Swift.min(9_007_199_254_740_991, Swift.max(-9_007_199_254_740_991, n)))
+}
+
+/// JavaScript truthiness of a saved value.
+private func cultureTruthy(_ v: JSONValue) -> Bool {
+    switch v {
+    case .null: return false
+    case .bool(let b): return b
+    case .number(let n): return n != 0 && !n.isNaN
+    case .string(let s): return !s.isEmpty
+    case .array, .object: return true
+    }
+}
+
+/// What `(e as Error).message` reads for a culture that cannot be read.
+private func cultureErrorMessage(_ e: Error) -> String {
+    if let p = e as? PngError { return p.message }
+    if let c = e as? CustomStringConvertible { return c.description }
+    return e.localizedDescription
+}
+
+private struct CultureReadError: Error, CustomStringConvertible {
+    let description: String
+    init(_ message: String) { description = message }
+}
+
+/// A saved layer culture (`cultureFromJSON`); throws when it is not one or its occupancy cannot be decoded.
+func cultureFromJSON(_ raw: JSONValue?) throws -> LayerCultureState {
+    guard let r = raw?.objectValue else {
+        // `!raw || typeof raw !== 'object'`: arrays are objects in TS and read as an empty culture.
+        if case .array? = raw { return LayerCultureState() }
+        throw CultureReadError("not a saved layer culture")
+    }
+    var occupancy = emptySurface(1, 0)
+    if case .string(let url)? = r["occupancy"], !url.isEmpty, let rect = r["occupancyRect"], cultureTruthy(rect) {
+        guard let parsed = parseDataUrl(url) else { throw CultureReadError("culture occupancy is not a PNG data URL") }
+        let decoded = try decodePng(parsed.bytes, keepGray: true)
+        let gray = decoded.channels == 1 ? decoded.data : (0..<(decoded.width * decoded.height)).map { decoded.data[$0 * 4] }
+        let ro = rect.objectValue
+        occupancy = surfaceFromPixels(width: decoded.width, height: decoded.height, data: gray, channels: 1, x: cultureRound(ro?["x"]), y: cultureRound(ro?["y"]))
+    }
+    var tips: [CultureTip] = []
+    if let list = r["tips"]?.arrayValue {
+        for item in list {
+            guard tips.count < MAX_CULTURE_TIPS else { break }
+            guard let t = item.objectValue, case .number? = t["id"] else { continue }
+            let permille = { (k: String) in Swift.min(1000, Swift.max(0, cultureRound(t[k]))) }
+            let byte = { (k: String) in Swift.min(255, Swift.max(0, cultureRound(t[k]))) }
+            tips.append(CultureTip(
+                id: cultureRound(t["id"]),
+                x: cultureRound(t["x"]),
+                y: cultureRound(t["y"]),
+                angle: Int(JS.i32(cultureNumber(t["angle"]))) & CULTURE_ANGLE_MASK,
+                energy: cultureRound(t["energy"]),
+                widthFp: Swift.max(32, cultureRound(t["widthFp"])),
+                r: byte("r"),
+                g: byte("g"),
+                b: byte("b"),
+                age: Swift.max(0, cultureRound(t["age"])),
+                seed: JS.u32(cultureNumber(t["seed"])),
+                reachPx: Swift.max(1, cultureRound(t["reachPx"])),
+                branchPermille: permille("branchPermille"),
+                wanderPermille: permille("wanderPermille"),
+                appetitePermille: permille("appetitePermille"),
+                digestPermille: permille("digestPermille"),
+                fusePermille: permille("fusePermille"),
+                glowPermille: permille("glowPermille")
+            ))
+        }
+    }
+    let segmentsTotal = r["segmentsTotal"]?.finite.map { Swift.max(0, cultureRound(.number($0))) } ?? 0
+    let status = r["status"] == .string("capped") || tips.count >= MAX_CULTURE_TIPS || segmentsTotal >= MAX_CULTURE_SEGMENTS ? "capped" : !tips.isEmpty ? "growing" : "extinct"
+    return LayerCultureState(
+        tick: r["tick"]?.finite.map { Swift.max(0, cultureRound(.number($0))) } ?? 0,
+        nextId: r["nextId"]?.finite.map { Swift.max(1, cultureRound(.number($0))) } ?? 1,
+        tips: tips,
+        occupancy: occupancy,
+        segmentsTotal: segmentsTotal,
+        status: status
+    )
+}
+
+/**
+ * The `cultures` document extension read back (`culturesExtensionFromJSON`): the cultures of
+ * layers in `validLayerIds` (others are dropped silently), whether they grow while closed, and
+ * when they last grew. A culture that cannot be read is skipped and reported in `problems`.
+ */
+func culturesExtensionFromJSON(_ raw: JSONValue?, validLayerIds: Set<String>, problems: inout [String]) -> (cultures: OrderedMap<String, LayerCultureState>?, growWhileClosed: Bool?, lastGrownAt: Double?) {
+    guard let r = raw?.objectValue else { return (nil, nil, nil) }
+    var cultures = OrderedMap<String, LayerCultureState>()
+    var entries: [(String, JSONValue)] = []
+    if let layers = r["layers"]?.objectValue {
+        entries = layers.map { ($0.key, $0.value) }
+    } else if let layers = r["layers"]?.arrayValue {
+        // `Object.entries` of an array: its indices.
+        entries = layers.enumerated().map { (String($0.offset), $0.element) }
+    }
+    for (id, entry) in entries where validLayerIds.contains(id) {
+        do {
+            cultures.set(id, try cultureFromJSON(entry))
+        } catch {
+            problems.append("Layer \"\(id)\" culture could not be read (\(cultureErrorMessage(error))); skipped.")
+        }
+    }
+    return (
+        cultures.isEmpty ? nil : cultures,
+        r["growWhileClosed"] == .bool(true) ? true : nil,
+        r["lastGrownAt"]?.finite.map { JS.round($0) }
+    )
+}
+
 func cultureGrowEventDataFromJSON(_ raw: JSONObject) -> CultureGrowEventData {
     let steps = Int(raw["steps"]?.numberValue ?? 0)
     let fades: [CultureRecordedFade] = (raw["fades"]?.arrayValue ?? []).compactMap { v in

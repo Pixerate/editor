@@ -44,6 +44,21 @@ public struct PaintEvent: Equatable {
     }
 }
 
+/// The kinds of paint event a saved document may hold (`readDocument`).
+let PAINT_EVENT_KINDS = ["fill", "fill-region", "clear", "flatten", "stickers", "live-strokes", "magnets", "cure-ferrofluid", "culture-grow"]
+
+extension PaintEvent {
+    /// A saved paint event as `readDocument` keeps it: an integer `at`, a string `layerId` and a known
+    /// `kind`; nil otherwise. A `live-strokes` event's strokes are read from `data.strokes`, which replays paint.
+    public init?(json raw: JSONValue) {
+        guard let r = raw.objectValue, let at = savedInteger(r["at"]), let layerId = r["layerId"]?.stringValue,
+              let kind = r["kind"]?.stringValue, PAINT_EVENT_KINDS.contains(kind) else { return nil }
+        let data = r["data"]?.objectValue
+        let strokes = kind == "live-strokes" ? data?["strokes"]?.arrayValue?.compactMap(normalizeBrushStroke) : nil
+        self.init(at: at, kind: kind, layerId: layerId, data: data, strokes: strokes)
+    }
+}
+
 /// Everything one undo step restores. Treated as immutable: changes make a copy (`with`).
 public final class PaintDocumentState {
     public var canvas: PaintCanvas
