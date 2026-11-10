@@ -814,4 +814,14 @@ final class VortexStrokeDriver {
         guard let _ = warpedSurface, let field = displacementField, let preInk = preInkSurface, duration > 0 else { return nil }
         return (field, preInk, duration)
     }
+
+    /// The layer before the warp, with the stroke's ink laid (`nil` when the stroke changed nothing).
+    func preWarpSurface() -> TiledSurface? { warpedSurface != nil ? preInkSurface : nil }
+
+    /// A 1-channel mask (biopaint culture `occupancy`) moved with the paint: bilinear like impasto
+    /// height, so 1-px threads stay connected where the swirl stretches them. Unchanged without a warp.
+    func warpMask(_ mask: TiledSurface) -> TiledSurface {
+        guard warpedSurface != nil, let field = displacementField, field.maxDisplacement > 1e-4, mask.channels == 1, mask.tileCount > 0 else { return mask }
+        return warpTiledSurfaceChannel(mask, field, WarpSurfaceOptions(scale: 1.0, offset: initValues.offset, selection: initValues.selection)).surface
+    }
 }

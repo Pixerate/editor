@@ -585,6 +585,11 @@ export class PaintStrokeSession {
     return this.vortexDriver ? this.vortexDriver.windingAnimation() : null;
   }
 
+  /** Dry vortex strokes: the driver, to move per-layer masks (biopaint occupancy) with the paint. */
+  vortexWarp(): VortexStrokeDriver | null {
+    return this.vortexDriver?.preWarpSurface() ? this.vortexDriver : null;
+  }
+
   /** Shows a wet stroke's progress (the wet layer's display). */
   wetUpdate(rects: RasterRect[]): void {
     if (!rects.length || !this.init.wet) return;

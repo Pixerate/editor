@@ -808,4 +808,86 @@ describe('Biopaint mycelial ink (#684)', () => {
     expect(c.redo()).toBe('Bake age');
     expect(c.getAge().years).toBe(0);
   });
+
+  it('21. a vortex winds the colony with its threads: occupancy moves with the paint, and growth, undo and replay stay exact', async () => {
+    const c = new PaintEditorController({ width: 96, height: 96 });
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'ink-pen', color: '#dc2626', seed: 11, brush: { tip: { size: 16, hardness: 1 } }, points: [{ x: 62, y: 48 }, { x: 72, y: 48 }] });
+    c.paintStroke({ brushId: 'rot', seed: 5, points: [{ x: 30, y: 40 }, { x: 30, y: 56 }] });
+    c.growCultures({ steps: 20 });
+    const threads = () => {
+      let n = 0;
+      for (const t of c.document.cultures![layerId]!.occupancy.tiles.values()) for (const v of t.data) if (v >= 2) n++;
+      return n;
+    };
+    const before = threads();
+    const cultureBefore = c.document.cultures![layerId];
+    const res = c.paintStroke({ brushId: 'vortex', brush: { tip: { size: 28 }, marks: { kind: 'vortex', reach: 3, turns: 1, duration: 0 } }, seed: 7, points: [{ x: 32, y: 48, pressure: 1 }] });
+    expect(res.vortex!.maxDisplacement).toBeGreaterThan(1);
+    // The threads moved with the paint and stay the colony's own (a plain clear would free most of them as food).
+    expect(threads()).toBeGreaterThan(before * 0.8);
+    const occ = c.document.cultures![layerId]!.occupancy;
+    const surf = (c.getLayer(layerId) as PaintPixelLayer).surface;
+    // Where the warp left thread occupancy, there is paint.
+    let orphan = 0;
+    let marked = 0;
+    for (const [key, t] of occ.tiles) {
+      const tx = (key % (1 << 16)) - (1 << 15);
+      const ty = Math.floor(key / (1 << 16)) - (1 << 15);
+      for (let i = 0; i < t.data.length; i++) {
+        if (t.data[i]! < 2) continue;
+        marked++;
+        if (readPixel(surf, tx * 256 + (i % 256), ty * 256 + Math.floor(i / 256))[3] === 0) orphan++;
+      }
+    }
+    expect(orphan).toBeLessThan(marked * 0.1);
+    c.growCultures({ steps: 16 });
+    const target = c.createReplayTarget(1);
+    await replayPainting(c.document, target, { scale: 1 });
+    const b = (target.getLayer(layerId) as PaintPixelLayer).surface;
+    const a = (c.getLayer(layerId) as PaintPixelLayer).surface;
+    let diff = 0;
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+      const u = readPixel(a, x, y);
+      const v = readPixel(b, x, y);
+      for (let k = 0; k < 4; k++) diff = Math.max(diff, Math.abs(u[k]! - v[k]!));
+    }
+    expect(diff).toBe(0);
+    expect(c.undo()).toBe('Grow culture');
+    expect(c.undo()).toMatch(/stroke$/);
+    expect(c.document.cultures![layerId]).toBe(cultureBefore);
+  });
+
+  it('22. live growth waits while a layer winds a vortex animation, then resumes', () => {
+    const c = new PaintEditorController({ width: 96, height: 96 });
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'mycelial-ink', seed: 5, points: [{ x: 30, y: 48 }, { x: 60, y: 48 }] });
+    let nowMs = 1000;
+    let effectCb: (() => void) | null = null;
+    const effects = c.playEffects({ now: () => nowMs, frame: (cb) => { effectCb = cb; return () => {}; } });
+    let cultureCb: (() => void) | null = null;
+    const growth = c.playCultures({ now: () => nowMs, frame: (cb) => { cultureCb = cb; return () => { if (cultureCb === cb) cultureCb = null; }; } });
+    c.paintStroke({ brushId: 'vortex', brush: { marks: { kind: 'vortex', duration: 1, turns: 1, reach: 3 } }, seed: 3, points: [{ x: 44, y: 48, pressure: 1 }] });
+    const committed = (c.document.layers[0] as PaintPixelLayer).surface;
+    expect(c.hasActiveVortexAnimations()).toBe(true);
+    for (let i = 0; i < 4; i++) {
+      nowMs += 100;
+      cultureCb?.();
+      effectCb?.();
+    }
+    // The culture did not grow over the winding paint, so the animation plays on.
+    expect((c.getLayer(layerId) as PaintPixelLayer).surface).toBe(committed);
+    expect(c.hasActiveVortexAnimations()).toBe(true);
+    nowMs += 1200;
+    c.stepVortexAnimations(nowMs);
+    expect(c.hasActiveVortexAnimations()).toBe(false);
+    for (let i = 0; i < 4; i++) {
+      nowMs += 100;
+      cultureCb?.();
+    }
+    expect((c.getLayer(layerId) as PaintPixelLayer).surface).not.toBe(committed);
+    growth.stop();
+    effects.stop();
+    expect((c.document.paintEvents ?? []).some((e) => e.kind === 'culture-grow')).toBe(true);
+  });
 });

@@ -5157,6 +5157,13 @@ export class PaintEditorController {
     const existing = doc.cultures?.[layer.id];
     if (!brush.culture) {
       if (!existing) return doc.cultures;
+      const vortex = s.vortexWarp();
+      if (vortex) {
+        // A vortex moves the threads with the paint: ink it laid frees what it covered, then the
+        // colony's occupancy winds along with its threads (so they stay its own, not food).
+        const inked = clearOccupancyUnderStroke(existing, layer.surface, vortex.preWarpSurface()!);
+        return { ...(doc.cultures ?? {}), [layer.id]: { ...inked, occupancy: vortex.warpMask(inked.occupancy) } };
+      }
       const cleared = clearOccupancyUnderStroke(existing, layer.surface, afterSurface);
       return cleared === existing ? doc.cultures : { ...(doc.cultures ?? {}), [layer.id]: cleared };
     }
@@ -5511,6 +5518,8 @@ export class PaintEditorController {
         cancel = clock.frame(tick);
         return;
       }
+      // A layer still winding a vortex or playing a blast waits: growing would change its pixels and cut the animation short.
+      const animating = this.hasActiveVortexAnimations() ? new Set([...this.vortexAnimations.keys(), ...this.blastLayers.keys()]) : new Set(this.blastLayers.keys());
       const targetIds = flattenLayers(this.doc.layers)
         .filter(
           (l): l is PaintPixelLayer =>
@@ -5521,7 +5530,8 @@ export class PaintEditorController {
             !this.doc.effectLayers?.[l.id] &&
             !this.wet.wetLayerIds().includes(l.id) &&
             Boolean(this.doc.cultures?.[l.id]?.tips.length) &&
-            this.doc.cultures?.[l.id]?.status === 'growing'
+            this.doc.cultures?.[l.id]?.status === 'growing' &&
+            !animating.has(l.id)
         )
         .map((l) => l.id);
       if (!targetIds.length) {

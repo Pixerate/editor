@@ -1467,6 +1467,15 @@ extension PaintEditorController {
         let existing = doc.cultures?.get(layer.id)
         guard let cultureSettings = brush.culture else {
             guard let existing else { return doc.cultures }
+            if let vortex = s.vortexWarp(), let preWarp = vortex.preWarpSurface() {
+                // A vortex moves the threads with the paint: ink it laid frees what it covered, then the
+                // colony's occupancy winds along with its threads (so they stay its own, not food).
+                var inked = clearOccupancyUnderStroke(existing, layer.pixelSurface, preWarp)
+                inked.occupancy = vortex.warpMask(inked.occupancy)
+                var next = doc.cultures ?? OrderedMap()
+                next.set(layer.id, inked)
+                return next
+            }
             let cleared = clearOccupancyUnderStroke(existing, layer.pixelSurface, afterSurface)
             var next = doc.cultures ?? OrderedMap()
             next.set(layer.id, cleared)

@@ -20,7 +20,10 @@ fade what they eat (`digest`), and carry the digested colour out into new territ
   over (as opaque or more), or inverted and scorched by an antimatter blast on any layer it hits,
   they become foreign paint the culture can feed on and digest. Threads the stroke left alone stay
   the culture's own, wherever the stroke lands. The `paint-scraper` cuts threads like an eraser:
-  ground it scrapes bare is free to regrow into, and what it leaves stays the colony's. Antimatter
+  ground it scrapes bare is free to regrow into, and what it leaves stays the colony's. A `vortex`
+  stroke winds the threads with the paint and the colony's occupancy moves with them, so swirled
+  threads stay its own; live growth on that layer waits until the winding animation ends. Vortex
+  brushes carry no spores. Antimatter
   brushes carry no spores themselves.
 - **Anastomosis (`fuse`).** When a growing tip meets an existing thread outside a food source, it
   rolls against `fuse`: on success it draws a connecting bridge segment and stops cleanly, forming

@@ -414,6 +414,9 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Impasto strokes: the layer's thick-paint channels with the stroke so far.
     func thickChannels() -> ThickChannels? { thickDriver?.channels() ?? vortexDriver?.reliefChannels() }
 
+    /// Dry vortex strokes: the driver, to move per-layer masks (biopaint occupancy) with the paint.
+    func vortexWarp() -> VortexStrokeDriver? { vortexDriver?.preWarpSurface() != nil ? vortexDriver : nil }
+
     /// Vortex strokes: winding animation parameters (`(field, preInkSurface, duration)`).
     func windingAnimation() -> (field: DisplacementField, preInkSurface: TiledSurface, duration: Double)? {
         vortexDriver?.windingAnimation()
