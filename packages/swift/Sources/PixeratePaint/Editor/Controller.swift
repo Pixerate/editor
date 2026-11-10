@@ -140,6 +140,9 @@ public struct PaintStrokeInit {
     /// Use the editor's stencils (default true); `maskStencils` replaces its mask stencils.
     public var stencils: Bool?
     public var maskStencils: [Stencil]?
+    /// Scraper brushes: the layers to cut through, top to bottom, instead of the visible unlocked
+    /// pixel layers from the top (replays pass `RecordedStroke.scrapeLayerIds`).
+    public var scrapeLayerIds: [String]?
     /// Where the stroke starts (a tracing image that samples colours gives a stroke without colour its colour there).
     public var start: Point2?
     /// The stroke's points, when known ahead of time (for path-mapped effect paint).
@@ -404,7 +407,9 @@ public final class PaintEditorController {
         redoStack.append(e)
         let paper = doc.paper
         doc = e.before
-        age = doc.age ?? DEFAULT_AGE
+        // Only a step that changed the age (bake_age) moves it; set_age is not an undo step, so the
+        // restored document takes the current age and a save after undo keeps it.
+        if e.before.age != e.after.age { age = e.before.age ?? DEFAULT_AGE } else { doc = withAge(doc) }
         if let g = e.guides { guides = g.before }
         if let w = e.wet {
             if paper != doc.paper { wet.paperChanged() }
@@ -421,7 +426,7 @@ public final class PaintEditorController {
         undoStack.append(e)
         let paper = doc.paper
         doc = e.after
-        age = doc.age ?? DEFAULT_AGE
+        if e.before.age != e.after.age { age = e.after.age ?? DEFAULT_AGE } else { doc = withAge(doc) }
         if let g = e.guides { guides = g.after }
         if let w = e.wet {
             try? wet.restore(w.lost ? nil : w.after)
@@ -1600,7 +1605,7 @@ public final class PaintEditorController {
         var wetInit: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
         var scraperDriver: ScraperStrokeDriver? = nil
         if brush.engine == "scraper" {
-            let (scrapeLayers, stoppedAtLocked) = collectScrapeableLayers(d)
+            let (scrapeLayers, stoppedAtLocked) = i.scrapeLayerIds.map { (scrapeLayersByIds(d, $0), nil) } ?? collectScrapeableLayers(d)
             let wetIds = wet.wetLayerIds()
             let wetLayerId = scrapeLayers.first(where: { wetIds.contains($0.id) })?.id ?? (wetIds.contains(layer.id) ? layer.id : nil)
             if let wetLayerId {
@@ -1763,6 +1768,7 @@ public final class PaintEditorController {
         if let e = i.effect { stroke.effect = e.source } else if let p = i.paint { stroke.paint = p }
         if i.mixerLoad.reservoir != nil || i.mixerLoad.pickup != nil { stroke.load = i.mixerLoad }
         if let w = i.wet { stroke.steps = w.driver.steps }
+        if let sc = i.scraper { stroke.scrapeLayerIds = sc.layerIds }
         if i.selection != nil {
             let masks = (s.maskStencils ?? guides.stencils).filter { $0.enabled && $0.mode == "mask" }
             if !masks.isEmpty { stroke.stencils = masks }

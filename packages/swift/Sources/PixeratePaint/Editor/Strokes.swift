@@ -42,6 +42,9 @@ public struct RecordedStroke {
     public var effect: PaintEffectPaint?
     /// Wet brushes: the wet simulation's clock (steps) at which each point was applied.
     public var steps: [Int]?
+    /// Scraper strokes: the layers it cut through, top to bottom, so a replay cuts the same ones
+    /// whatever is hidden or locked when it runs (strokes without it derive them again).
+    public var scrapeLayerIds: [String]?
 }
 
 func applyAffine(_ m: Affine, _ x: Double, _ y: Double) -> (x: Double, y: Double) {
@@ -87,6 +90,7 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     if let stencils = s.stencils { o["stencils"] = .array(stencils.map { .object($0.json) }) }
     if let paint = s.paint { o["paint"] = paint.json }
     if let effect = s.effect { o["paint"] = effect.json }
+    if let ids = s.scrapeLayerIds { o["scrapeLayerIds"] = .array(ids.map { .string($0) }) }
     o["brush"] = .object(migrateBrushV1(s.brush))
     return .object(o)
 }

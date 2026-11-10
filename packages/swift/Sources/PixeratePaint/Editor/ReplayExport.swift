@@ -328,6 +328,7 @@ extension PaintEditorController {
                 i.snapToPerspective = false
                 i.stencils = false
                 i.maskStencils = (st.stencils ?? []).map { s == 1 ? $0 : scaleStencil($0, s) }
+                i.scrapeLayerIds = st.scrapeLayerIds
                 if st.brush.engine == "wet", let steps = st.steps, steps.count == st.points.count, !steps.isEmpty {
                     // Each point at the clock it was recorded at, the simulation stepped in between.
                     try advanceTo(steps[0])

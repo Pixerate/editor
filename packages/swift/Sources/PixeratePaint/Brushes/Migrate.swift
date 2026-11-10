@@ -56,7 +56,6 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
     case "sticker":
         brush["marks"] = ["kind": "objects"]
     case "scraper":
-        brush["medium"] = "paint"
         brush["marks"] = ["kind": "scraper"]
     default:
         if let (medium, variety) = CATEGORY_MEDIUM[b.category] {

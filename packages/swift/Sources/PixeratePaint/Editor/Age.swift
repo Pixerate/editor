@@ -584,10 +584,24 @@ public func collectScrapeableLayers(_ doc: PaintDocumentState) -> (layers: [Pain
     return (result, stoppedAtLocked)
 }
 
+/// The pixel layers a recorded scraper stroke cut through (`RecordedStroke.scrapeLayerIds`, top to
+/// bottom), as they are in `doc`. Replays use these instead of `collectScrapeableLayers`, so a replay
+/// that shows and unlocks every layer cuts only what the live stroke cut. Ids that are gone or no
+/// longer plain pixel layers are skipped.
+public func scrapeLayersByIds(_ doc: PaintDocumentState, _ ids: [String]) -> [PaintLayer] {
+    ids.compactMap { id -> PaintLayer? in
+        guard let l = findLayer(doc.layers, id)?.layer, l.isPixel, l.children == nil else { return nil }
+        if doc.liveStrokes?.get(l.id) != nil || !(doc.stickers?.get(l.id)?.isEmpty ?? true) { return nil }
+        return l
+    }
+}
+
 /// Driver that scrapes through `doc`'s visible unlocked pixel layers from top to bottom.
 public final class ScraperStrokeDriver {
     public var dabCount = 0
     let initValues: ScraperStrokeInit
+    /// The layers this stroke cuts through, top to bottom (recorded with the stroke).
+    public let layerIds: [String]
     private let smoother: PenSmoother
     private let walkers: [PenDabWalker]
     private let copies: [StrokeCopy]
@@ -598,6 +612,7 @@ public final class ScraperStrokeDriver {
 
     init(_ i: ScraperStrokeInit, scrapeLayers: [PaintLayer], thickMap: OrderedMap<String, ThickChannels>?) {
         initValues = i
+        layerIds = scrapeLayers.map(\.id)
         let b = i.brush
         smoother = PenSmoother(b.tip.smoothing, b.pressureSmoothing)
         copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
@@ -804,6 +819,12 @@ public final class ScraperStrokeDriver {
 // MARK: - PaintEditorController Time Machine
 
 extension PaintEditorController {
+    /// `d` carrying the editor's current ageing settings (none when they are the defaults).
+    func withAge(_ d: PaintDocumentState) -> PaintDocumentState {
+        let want: PaintAgeSettings? = age != DEFAULT_AGE ? age : nil
+        return d.age == want ? d : d.with { $0.age = want }
+    }
+
     /// Reads the document's non-destructive ageing preview settings (`get_age`).
     public func getAge() -> PaintAgeSettings { age }
 
@@ -812,13 +833,14 @@ extension PaintEditorController {
     public func setAge(_ update: JSONObject) throws -> PaintAgeSettings {
         try validateAgeInput(update)
         age = normalizeAge(update, age)
-        let hasAge = age != DEFAULT_AGE
-        doc = doc.with { $0.age = hasAge ? age : nil }
+        doc = withAge(doc)
         return age
     }
 
     /// Commits the current aged look into a new pixel layer at the top of the stack and resets `years` to 0 (`bake_age`, one undo step).
     public func bakeAge(name: String? = nil) throws -> (layer: PaintLayerInfo, age: PaintAgeSettings, bounds: RasterRect?) {
+        // The TS core also refuses while wet paint is mid-step (`requireWetIdle`); the Swift wet simulation steps synchronously, so there is no such state here.
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before baking ageing.") }
         if !isAgeActive(age) {
             throw PaintEditorError("Ageing is off (years is 0 or all effects are 0); call set_age with years above 0 before baking.")
         }
