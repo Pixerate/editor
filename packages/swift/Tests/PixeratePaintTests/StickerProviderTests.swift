@@ -77,6 +77,39 @@ final class StickerProviderTests: XCTestCase {
             "frame": 0,
         ])
         XCTAssertFalse(updated.isError, "\(updated.content)")
-        XCTAssertNil(updated.structuredContent?["sticker"]?.objectValue?["frame"])
+        // update_sticker returns the sticker itself; frame 0 is left out, not saved as 0.
+        XCTAssertEqual(updated.structuredContent?["id"]?.stringValue, id)
+        XCTAssertNil(updated.structuredContent?["frame"])
+
+        // A frame past the art's last is refused, naming how many it has, and nothing changes.
+        let tooFar = await host.callTool("update_sticker", ["id": .string(id), "frame": 4])
+        XCTAssertTrue(tooFar.isError)
+        XCTAssertTrue("\(tooFar.content)".contains("has 4 frames, so frame is 0..3; got 4"), "\(tooFar.content)")
+        let still = await host.callTool("list_stickers", [:])
+        XCTAssertNil(still.structuredContent?["stickers"]?.arrayValue?.first?.objectValue?["frame"])
+
+        // A static sticker has only frame 0.
+        let star = await host.callTool("add_stickers", ["stickers": [["ref": "editor:star", "x": 10, "y": 10, "frame": 1]]])
+        XCTAssertTrue(star.isError)
+        XCTAssertTrue("\(star.content)".contains("is not animated, so its only frame is 0; got 1"), "\(star.content)")
+
+        // Restamping without a frame starts the new sticker at its first frame.
+        _ = await host.callTool("update_sticker", ["id": .string(id), "frame": 3])
+        let restamped = await host.callTool("update_sticker", ["id": .string(id), "ref": "editor:heart"])
+        XCTAssertFalse(restamped.isError, "\(restamped.content)")
+        XCTAssertNil(restamped.structuredContent?["frame"])
+    }
+
+    func testSavedStickerFrameZeroIsLeftOut() throws {
+        let zero = try XCTUnwrap(Sticker(json: ["id": "st1", "ref": "fake:weather-wind", "x": 1, "y": 2, "frame": 0]))
+        XCTAssertNil(zero.frame)
+        XCTAssertNil(zero.json["frame"])
+        XCTAssertNil(Sticker(json: ["id": "st1", "ref": "editor:star", "x": 1, "y": 2, "frame": -1])?.frame)
+        XCTAssertNil(Sticker(json: ["id": "st1", "ref": "editor:star", "x": 1, "y": 2, "frame": 1.5])?.frame)
+        XCTAssertEqual(Sticker(json: ["id": "st1", "ref": "fake:weather-wind", "x": 1, "y": 2, "frame": 3])?.json["frame"], 3)
+        var s = zero
+        s.frame = 0
+        XCTAssertNil(s.json["frame"])
+        XCTAssertNil(s.applying(["frame": 0]).frame)
     }
 }

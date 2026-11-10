@@ -138,13 +138,19 @@ extension PaintEditorController {
 
     private func readStickerUpdate(_ u: JSONObject) throws -> JSONObject { try normalizeStickerUpdate(u) }
 
+    /// A sticker with a checked change applied: a new ref takes the scheme's variant and starts at its first frame unless the change names one; the frame is checked against the art (`stickerUpdated`).
+    private func stickerUpdated(_ s: Sticker, _ u: JSONObject) throws -> Sticker {
+        var applied = s.applying(u)
+        if u["ref"] != nil && u["frame"] == nil { applied.frame = nil }
+        let next = u["ref"] != nil ? withStickerVariant(applied) : applied
+        return try stickerWithFrame(next, stickerArt.get(next.ref, next.variant))
+    }
+
     /// Moves, turns, resizes, recolours or restamps one sticker (one undo step). Returns it.
     public func updateSticker(_ layerId: String?, _ id: String, _ update: JSONObject) throws -> Sticker {
         let (layer, stickers) = try stickerLayer(layerId)
         guard let i = stickers.firstIndex(where: { $0.id == id }) else { throw PaintEditorError("Layer \"\(layer.name)\" has no sticker \"\(id)\". Call list_stickers for the ids.") }
-        let u = try readStickerUpdate(update)
-        let applied = stickers[i].applying(u)
-        let next = u["ref"] != nil ? withStickerVariant(applied) : applied
+        let next = try stickerUpdated(stickers[i], try readStickerUpdate(update))
         try commitStickers("Edit sticker", layer, stickers.enumerated().map { $0.offset == i ? next : $0.element }, dirty: [stickerRect(stickers[i]), stickerRect(next)])
         return next
     }
@@ -167,7 +173,8 @@ extension PaintEditorController {
             n += 1
             let seed = raw["seed"]?.numberValue.map { Int($0) } ?? Int(PixerateRandom.mix32(UInt32(truncatingIfNeeded: id &* 0x9E37_79B1)) & 0x7FFF_FFFF)
             let base = Sticker(id: "st\(id)", ref: "", stamp: nil, x: 0, y: 0, size: 48, rotation: 0, color: color, opacity: 1, seed: seed)
-            return withStickerVariant(base.applying(u))
+            let placed = withStickerVariant(base.applying(u))
+            do { return try stickerWithFrame(placed, stickerArt.get(placed.ref, placed.variant)) } catch let e as PaintEditorError { throw PaintEditorError("Sticker \(i): \(e.message)") }
         }
         try commitStickers("Add stickers", layer, existing + added, dirty: existing.isEmpty ? nil : added.map(stickerRect))
         return added

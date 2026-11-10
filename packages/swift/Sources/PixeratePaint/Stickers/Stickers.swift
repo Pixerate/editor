@@ -1196,7 +1196,7 @@ public struct Sticker: Equatable, Sendable {
         o["x"] = .number(x); o["y"] = .number(y); o["size"] = .number(size); o["rotation"] = .number(rotation)
         o["color"] = .string(color); o["opacity"] = .number(opacity); o["seed"] = .number(Double(seed))
         if let variant, variant == "dark" { o["variant"] = .string(variant) }
-        if let frame { o["frame"] = .number(Double(frame)) }
+        if let frame, frame > 0 { o["frame"] = .number(Double(frame)) }
         return o
     }
 }
@@ -1448,7 +1448,8 @@ extension Sticker {
     init?(json: JSONValue) {
         guard let o = json.objectValue, let id = o["id"]?.stringValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue else { return nil }
         let variant = o["variant"]?.stringValue == "dark" ? "dark" : nil
-        let frame = o["frame"]?.numberValue.flatMap { $0.isFinite && $0.rounded() == $0 && $0 >= 0 ? Int($0) : nil }
+        // A frame is saved only past the first (`frame` 0 is left out); anything else is not a frame.
+        let frame = o["frame"]?.numberValue.flatMap { $0.isFinite && $0.rounded() == $0 && $0 > 0 ? Int($0) : nil }
         self.init(
             id: id,
             ref: o["ref"]?.stringValue ?? o["stamp"]?.stringValue.map { "editor:\($0)" } ?? "",
@@ -1475,9 +1476,27 @@ extension Sticker {
         if let v = u["rotation"]?.numberValue { s.rotation = v }
         if let v = u["color"]?.stringValue { s.color = v }
         if let v = u["opacity"]?.numberValue { s.opacity = v }
-        if let v = u["frame"]?.numberValue { s.frame = Int(v) }
+        if let v = u["frame"]?.numberValue { s.frame = v > 0 ? Int(v) : nil }
         return s
     }
+}
+
+/**
+ * A placed sticker with its animation frame checked against its art (`stickerWithFrame`): frame 0
+ * is left out (the saved form), and a frame past the art's last is refused naming how many it has.
+ * Editor stamps and static art have one frame; art that has not loaded passes unchecked (the
+ * redraw refuses it until it has).
+ */
+func stickerWithFrame(_ s: Sticker, _ art: StickerArt?) throws -> Sticker {
+    var out = s
+    guard let frame = s.frame, frame != 0 else { out.frame = nil; return out }
+    if frame < 0 { throw PaintEditorError("frame \(frame) must be a whole number >= 0.") }
+    if stickerStamp(s) == nil && art == nil { return out }
+    let count = (art?.frames?.count ?? 1) > 1 ? art!.frames!.count : 1
+    if frame >= count {
+        throw PaintEditorError(count > 1 ? "\"\(s.ref)\" has \(count) frames, so frame is 0..\(count - 1); got \(frame)." : "\"\(s.ref)\" is not animated, so its only frame is 0; got \(frame) (describe_sticker says whether a sticker is animated and its frameCount).")
+    }
+    return out
 }
 
 // MARK: - Sticker spray
