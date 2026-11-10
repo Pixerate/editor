@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint] Save → Load Conformance: Clocks, Asset Hashes and Fields Swift Doesn't Model
+
+- **Issue / Symptom**: Adding a `reload` step to every paint scenario (save, then `loadJSON`, then compare the document) failed in three ways that were not loader bugs. (1) `culture` was not deterministic between two TS runs. (2) `culture-replay` matched pixels within tolerance but its document differed in one asset reference. (3) A hand-written wet event with a field outside `data` came back in TS but not in Swift.
+- **Root Cause**: (1) `cultures.lastGrownAt` is wall-clock time, written on save when `growWhileClosed` is on. (2) Editor-document asset references are content hashes of the PNG bytes (`pixerate-asset:<len>-<hash>`), so a layer one level off anywhere changes the reference even though pixel comparison tolerates it. (3) TS keeps a saved event object verbatim; Swift's `WetEvent` / `PaintEvent` keep only the fields they model (`clock`, `at`, `kind`, `layerId`, `data`).
+- **Solution / Workaround**: Leave `document` off a reload step whose document carries a clock (`culture`) or whose pixels already differ within tolerance (`culture-replay`); keep `pixels` and `expect.loaded` on it. Write test documents in the schema's shape (event payloads under `data`). Any other document difference after a reload is a real loader gap.
+
+### [swift/paint] `loadJSON` Pairs With `toJSON`, Not `editorDocument()`
+
+- **Issue / Symptom**: Opening the output of `editorDocument()` loads every layer empty.
+- **Root Cause**: `editorDocument()` replaces each inline PNG with a content-addressed reference (`pixerate-asset:…`) and doesn't carry the bytes; the TS envelope gets them from its asset registry. Swift has no registry or async asset store yet.
+- **Solution / Workaround**: Persist `toJSON()` (assets inline) and reopen it with `loadJSON`. External asset stores (`loadJSONAsync`) are not ported.
+
 ### [core/paint] Replays Re-derived Editor State That Strokes Read at Paint Time; Settings Outside History Were Lost on Undo
 
 - **Issue / Symptom**: (1) `render_xray { strokes: totalStrokes }` differed from `render_xray` when a hidden or locked layer lay under a scraped one: the replay cut layers the live stroke never touched. (2) `set_age` → `undo_paint` of an earlier stroke reset the age in Swift, and in TS kept it in `get_age` but dropped it from the saved document. (3) The first conformance scenario saving a scraper stroke showed the Swift `migrateBrushV1` writing `medium: "paint"` for scraper brushes, which TS does not.
