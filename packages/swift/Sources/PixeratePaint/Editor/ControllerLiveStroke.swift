@@ -256,6 +256,7 @@ extension PaintEditorController {
      */
     public func beginStroke(_ initIn: PaintStrokeInit = PaintStrokeInit()) throws -> PaintLiveStroke {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before starting another.") }
+        flushCulturePreview()
         var i = initIn
         if i.snapToPerspective == nil { i.snapToPerspective = true }
         let before = doc

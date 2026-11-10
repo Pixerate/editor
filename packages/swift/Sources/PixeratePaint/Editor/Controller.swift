@@ -307,6 +307,10 @@ public final class PaintEditorController {
     /// Biopaint (`culture`) playback state (paused after undo until next stroke or Grow).
     var culturePaused = false
     var cultureSpeed = 1.0
+    /// The uncommitted live growth run (`playCultures`, ControllerCultureLive.swift), if any.
+    var culturePreview: CulturePreview?
+    /// Extra sources of layers live growth must skip for now, by name (`animatingLayerIds`, which the vortex and blast animations wire into).
+    var cultureGrowthHolds: [String: () -> Set<String>] = [:]
     /// Pending paint proposals (`PaintProposals`), shared between proposal tools and evolutionary stroke tools.
     private var attachedProposals: PaintProposals?
     public var proposals: PaintProposals {
@@ -352,21 +356,21 @@ public final class PaintEditorController {
                 var layers = doc.layers
                 for (id, surface) in surfaces where findLayer(layers, id) != nil { layers = mapLayer(layers, id) { $0.withSurface(surface) } }
                 // Wet paint moving is not an undo step: keep the history's documents.
-                if !surfaces.isEmpty { setDocSilently(doc.with { $0.layers = layers }) }
+                if !surfaces.isEmpty { setDocSilentlyKeepingGrowth(doc.with { $0.layers = layers }) }
                 emit(rects.isEmpty ? nil : rects)
             },
             layerLight: { [unowned self] id in doc.light?.get(id) },
             updateLights: { [unowned self] lights in
                 let d = doc
                 // Wet light moving is not an undo step either.
-                setDocSilently(d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } })
+                setDocSilentlyKeepingGrowth(d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } })
                 // Anywhere: light spills past its tiles (`computeSpill`), so tile rectangles would miss the glow around them.
                 emit(nil)
             },
             layerHeight: { [unowned self] id in doc.thick?.get(id)?.height },
             updateHeights: { [unowned self] heights in
                 let d = doc
-                setDocSilently(d.with { o in
+                setDocSilentlyKeepingGrowth(d.with { o in
                     var t = o.thick ?? OrderedMap()
                     for (id, height) in heights where findLayer(d.layers, id) != nil {
                         var ch = t.get(id) ?? emptyThickChannels()
@@ -387,14 +391,16 @@ public final class PaintEditorController {
     public var undoLabel: String? { undoStack.last?.label }
     public var redoLabel: String? { redoStack.last?.label }
 
-    func commit(_ label: String, _ next: PaintDocumentState, before: PaintDocumentState? = nil) {
+    func commit(_ label: String, _ nextIn: PaintDocumentState, before beforeIn: PaintDocumentState? = nil) {
+        // Live growth commits first as its own step, and its replay events carry into `next`.
+        let (next, before) = flushCultureInto(nextIn, before: beforeIn ?? doc)
         if grouping != nil {
             // Inside `group`: the change joins the group's one step.
             grouping!.changed = true
             doc = next
             return
         }
-        let entry = HistoryEntry(label: label, before: before ?? doc, after: next)
+        let entry = HistoryEntry(label: label, before: before, after: next)
         if let op = wetOp {
             entry.wet = (op.before, wet.snapshot(), false)
             wetOp = nil
@@ -408,6 +414,8 @@ public final class PaintEditorController {
 
     public func undo() -> String? {
         if liveStroke != nil { return nil }
+        flushCulturePreview()
+        culturePaused = true
         guard let e = undoStack.popLast() else { return nil }
         redoStack.append(e)
         let paper = doc.paper
@@ -422,12 +430,12 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
-        culturePaused = true
         return e.label
     }
 
     public func redo() -> String? {
         if liveStroke != nil { return nil }
+        flushCulturePreview()
         guard let e = redoStack.popLast() else { return nil }
         undoStack.append(e)
         let paper = doc.paper
@@ -439,7 +447,6 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
-        culturePaused = true
         return e.label
     }
 
@@ -2013,6 +2020,7 @@ public final class PaintEditorController {
     /// Paints one stroke from data (one undo step).
     public func paintStroke(_ i: PaintStrokeInit, points rawPoints: [PenPoint]) throws -> PaintStrokeResult {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before painting another.") }
+        flushCulturePreview()
         let points = try checkPoints(rawPoints)
         let before = doc
         var i = i
@@ -2190,6 +2198,7 @@ public final class PaintEditorController {
 
     /// The document as JSON with inline PNG data URLs (`toJSON`).
     public func toJSON(strokes withStrokes: Bool = true) -> JSONObject {
+        flushCulturePreview()
         let d = savedDocumentState()
         var out: JSONObject = [
             "format": .string(PAINT_FORMAT), "version": .number(Double(PAINT_SCHEMA_VERSION)),

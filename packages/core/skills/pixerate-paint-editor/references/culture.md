@@ -36,7 +36,11 @@ fade what they eat (`digest`), and carry the digested colour out into new territ
 - **Stepping and undo.** In headless/agent use, nothing grows until you call `grow_cultures`
   (`steps` 1..2000, default 40), which commits as a single undo step and records a `'culture-grow'`
   event for exact scaled replay in `export_high_res` and `render_xray` with `strokes` (digest fades
-  included; live growth not yet committed is replayed too). `remove_cultures` kills living tips while
+  included; live growth not yet committed is replayed too). In the editors (React, Svelte, Swift),
+  colonies also grow live on the clock at the culture speed; each uninterrupted run becomes one
+  `"Culture growth"` undo step, committed before your next tool call changes anything, so call
+  `get_cultures` for the current ticks rather than assuming growth stopped. Undo pauses live
+  growth until the next biopaint stroke or `grow_cultures`. `remove_cultures` kills living tips while
   leaving threads already drawn as paint. `set_culture_options({ growWhileClosed: true })` records a
   timestamp on save so reopening catches up elapsed growth as one `"Growth while closed"` undo step.
 - **Presets.**

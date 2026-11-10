@@ -6,7 +6,8 @@ import SwiftUI
  * The paint editor (`PaintEditor`): the toolbar, the brush panel on the left, the canvas, and
  * colour, paper (with the light for thick paint), layers (with light spill and the stroke layer's
  * strokes), layer styles and wet paint on the right. Wet paint keeps flowing: the view ticks the
- * simulation every frame (`runWetClock`). Agents drive the same editor through `model.registry`.
+ * simulation every frame (`runWetClock`), and living biopaint grows live (`runCultureClock`).
+ * Agents drive the same editor through `model.registry`.
  */
 public struct PaintEditorView: View {
     private let model: PaintEditorModel
@@ -75,5 +76,6 @@ public struct PaintEditorView: View {
             model.catchUpCultures()
             await model.runWetClock()
         }
+        .task { await model.runCultureClock() }
     }
 }

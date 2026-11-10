@@ -1545,7 +1545,7 @@ extension PaintEditorController {
         )
     }
 
-    private func stepCulturesInternal(_ targetLayerIds: [String], _ steps: Int) -> (
+    func stepCulturesInternal(_ targetLayerIds: [String], _ steps: Int) -> (
         nextDoc: PaintDocumentState,
         layerResults: [GrowCulturesLayerResult],
         events: [(String, CultureGrowEventData)],
@@ -1635,6 +1635,7 @@ extension PaintEditorController {
 
     public func growCultures(layerId: String? = nil, steps stepsIn: Int? = nil) throws -> GrowCulturesResult {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before growing cultures.") }
+        flushCulturePreview()
         let steps = stepsIn ?? 40
         if !(steps >= 1 && steps <= 2000) {
             throw PaintEditorError("steps \(steps) is out of range; use a whole number 1..2000.")
@@ -1700,6 +1701,7 @@ extension PaintEditorController {
 
     public func removeCultures(_ layerId: String? = nil) throws -> JSONObject {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before removing cultures.") }
+        flushCulturePreview()
         let l = try paintTarget(layerId, "remove the cultures of")
         guard let c = doc.cultures?.get(l.id), (!c.tips.isEmpty || c.status == "growing") else {
             let st = doc.cultures?.get(l.id)?.status ?? "extinct"
@@ -1716,6 +1718,7 @@ extension PaintEditorController {
     }
 
     public func setCultureOptions(growWhileClosed: Bool) -> JSONObject {
+        flushCulturePreview()
         doc = doc.with { d in
             d.growWhileClosed = growWhileClosed ? true : nil
             if !growWhileClosed { d.lastGrownAt = nil }
@@ -1724,6 +1727,7 @@ extension PaintEditorController {
     }
 
     public func setCulturePaused(_ paused: Bool) -> Bool {
+        if paused { flushCulturePreview() }
         culturePaused = paused
         emit([])
         return culturePaused
@@ -1741,6 +1745,7 @@ extension PaintEditorController {
     @discardableResult
     public func catchUpCultures(now: Double = Date().timeIntervalSince1970 * 1000) throws -> GrowCulturesResult? {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before catching up cultures.") }
+        flushCulturePreview()
         let state = getCultures(now: now)
         let ticks = state.pendingCatchUpTicks
         if ticks <= 0 { return nil }
