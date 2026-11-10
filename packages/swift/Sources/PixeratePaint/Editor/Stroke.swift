@@ -417,8 +417,8 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Dry vortex strokes: the driver, to move per-layer masks (biopaint occupancy) with the paint.
     func vortexWarp() -> VortexStrokeDriver? { vortexDriver?.preWarpSurface() != nil ? vortexDriver : nil }
 
-    /// Vortex strokes: winding animation parameters (`(field, preInkSurface, duration)`).
-    func windingAnimation() -> (field: DisplacementField, preInkSurface: TiledSurface, duration: Double)? {
+    /// Vortex strokes: the view-only winding animation (final field, keyframes, pre-ink surface, duration).
+    func windingAnimation() -> VortexWindingAnimation? {
         vortexDriver?.windingAnimation()
     }
 

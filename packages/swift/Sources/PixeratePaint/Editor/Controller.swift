@@ -234,6 +234,8 @@ public final class PaintEditorController {
     /// Each layer's light spill (missing: the default).
     var lightSpills: [String: LightSpill] = [:]
     var previewing = false
+    /// View-only vortex winding animations (`ControllerVortexAnimation.swift`).
+    let vortexPlayback = VortexPlayback()
     /// The mixing pad and the pads kept by name.
     let pad = MixingPad()
     var savedPads: [SavedMixingPad] = []
@@ -1937,6 +1939,7 @@ public final class PaintEditorController {
             let stroke = record(session)
             result.strokeId = stroke.id
             paintedBounds[stroke.key] = .some(result.bounds)
+            noteVortexAnimation(session, strokeId: stroke.id)
             if let scraper = session.initValues.scraper {
                 let scraped = scraper.commitToDocument(d)
                 out = scraped.doc.with { $0.strokes = d.strokes + [stroke] }
@@ -2041,6 +2044,7 @@ public final class PaintEditorController {
         if let load = run.result.mixerLoad { keepLoad(run.brush, load) }
         if run.doc !== before || wetOp != nil {
             commit("\(run.brush.name) stroke", withWetEvents(run.doc), before: before)
+            queueVortexAnimation(after: run.result)
             startPendingBlastAnimation(run.result.bounds)
             if let sid = run.result.strokeId, let stroke = doc.strokes.last(where: { $0.id == sid }) {
                 recordMutationStroke(stroke, run.result.bounds)
@@ -2099,7 +2103,8 @@ public final class PaintEditorController {
 
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
     func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display", view: Bool = false, age ageOpt: Bool? = nil) -> [ViewLayer] {
-        let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
+        let (shown, winding) = view ? vortexViewLayers(currentLayers()) : (currentLayers(), false)
+        let base = wetMode == "dried" ? driedLayers(shown) : shown
         let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in
             guard l.open else { return nil }
             if let ch = l.shown.thickChannels() { return (l.layerId, ch) }
@@ -2119,7 +2124,7 @@ public final class PaintEditorController {
         var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live, liveFerro: liveFerro, useAge: useAge, paintedLayerCount: paintedCount)), liveThick: live)
         if useAge { layers = ageLayers(layers, paintedLayerCount: paintedCount, liveThick: live) }
         // Backlit paper shines through everything: its light goes on top.
-        let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && !hasActiveBlastAnimation && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
+        let baseIsCommitted = !winding && (liveStroke?.open != true || liveStroke!.isWet) && !hasActiveBlastAnimation && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
         if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
         if let layerIds {
             layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }

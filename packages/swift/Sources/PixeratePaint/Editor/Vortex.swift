@@ -429,8 +429,9 @@ public func buildVortexVelocityField(
 func buildVortexDisplacement(
     _ rawPoints: [PenPoint],
     _ brush: PaintBrush,
-    _ copies: [StrokeCopy] = [IDENTITY_COPY]
-) -> (field: DisplacementField?, shape: String, maxDisplacement: Double) {
+    _ copies: [StrokeCopy] = [IDENTITY_COPY],
+    keyframes: Int = 0
+) -> (field: DisplacementField?, shape: String, maxDisplacement: Double, frames: [DisplacementField]?) {
     let vortex = brushVortex(brush)
     let tipRadius = Swift.max(1.0, brush.tip.size * 0.5)
     let primaryClass = classifyVortexShape(
@@ -440,27 +441,30 @@ func buildVortexDisplacement(
         brush.pressureSmoothing
     )
     if rawPoints.isEmpty {
-        return (nil, "point", 0)
+        return (nil, "point", 0, nil)
     }
 
     let charRadius = tipRadius * (0.35 + 0.22 * vortex.reach)
     let totalTravel = vortex.turns * 2.0 * Double.pi * charRadius
 
     var combined: DisplacementField? = nil
+    var frames: [DisplacementField]? = nil
     let activeCopies = copies.isEmpty ? [IDENTITY_COPY] : copies
     for copy in activeCopies {
         let mapped = rawPoints.map { copy.map($0) }
         let spinSign = resolveVortexSpinSign(vortex.direction, primaryClass.shape, primaryClass.signedArea, copy)
         let (velocity, _) = buildVortexVelocityField(mapped, brush, spinSignOverride: spinSign)
-        let disp = integrateVelocityField(velocity, totalTravel)
+        let (disp, own) = integrateVelocityFieldFrames(velocity, totalTravel, keyframes)
         if disp.maxDisplacement <= 1e-4 { continue }
+        if keyframes > 0 { frames = frames.map { f in f.indices.map { composeDisplacementFields(f[$0], own[$0]) } } ?? own }
         combined = combined.map { composeDisplacementFields($0, disp) } ?? disp
     }
 
     return (
         combined,
         primaryClass.shape,
-        combined.map { JS.round($0.maxDisplacement * 100.0) / 100.0 } ?? 0
+        combined.map { JS.round($0.maxDisplacement * 100.0) / 100.0 } ?? 0,
+        frames
     )
 }
 
@@ -648,12 +652,38 @@ private func layGradientInk(_ i: VortexStrokeDriverInit, _ inkBrush: PaintBrush,
     return (TiledSurface(channels: 4, tiles: tiles, defaultValue: i.base.defaultValue), bounds!)
 }
 
+/// Keyframes a winding animation plays through (the integration snapshotted this many times).
+public let VORTEX_KEYFRAMES = 12
+
+/**
+ * The displacement a winding animation shows at `t` (0..1 of the way through): between the two
+ * keyframes around it, so the paint follows its arcs (only a 1/`frames.count` stretch is a chord).
+ */
+public func vortexWindingField(_ frames: [DisplacementField], _ t: Double) -> DisplacementField? {
+    if frames.isEmpty || !(t > 0) { return nil }
+    let s = Swift.min(1, t) * Double(frames.count)
+    let i = Swift.min(frames.count - 1, Int(floor(s)))
+    if i == frames.count - 1 && s >= Double(frames.count) { return frames[i] }
+    return lerpDisplacementFields(i > 0 ? frames[i - 1] : nil, frames[i], s - Double(i))
+}
+
+/// A vortex stroke's view-only winding: the final field, its keyframes, the layer before the warp
+/// (with the stroke's ink), and how long it plays (seconds).
+public struct VortexWindingAnimation: Sendable {
+    public var field: DisplacementField
+    public var frames: [DisplacementField]
+    public var preInkSurface: TiledSurface
+    public var duration: Double
+}
+
 final class VortexStrokeDriver {
     private let initValues: VortexStrokeDriverInit
     private var rawPoints: [PenPoint] = []
     private var warpedSurface: TiledSurface? = nil
     private var preInkSurface: TiledSurface? = nil
     private var displacementField: DisplacementField? = nil
+    /// The displacement at `VORTEX_KEYFRAMES` evenly spaced points of the integration (winding animations).
+    private var keyframes: [DisplacementField]? = nil
     private var warpedRelief: ThickChannels? = nil
     private var changedBounds: RasterRect? = nil
     private var summary = VortexStrokeSummary(shape: "point", maxDisplacement: 0)
@@ -678,8 +708,9 @@ final class VortexStrokeDriver {
             return (nil, nil)
         }
 
-        let (field, shape, maxDisplacement) = buildVortexDisplacement(rawPoints, brush, i.copies)
+        let (field, shape, maxDisplacement, frames) = buildVortexDisplacement(rawPoints, brush, i.copies, keyframes: vortex.duration > 0 ? VORTEX_KEYFRAMES : 0)
         displacementField = field
+        keyframes = frames
 
         var preSurface = i.base
         var preFilm = i.relief?.film
@@ -809,10 +840,12 @@ final class VortexStrokeDriver {
 
     func reliefChannels() -> ThickChannels? { warpedRelief }
 
-    func windingAnimation() -> (field: DisplacementField, preInkSurface: TiledSurface, duration: Double)? {
+    /// What a view needs to wind the stroke over `duration` seconds: the final field and its
+    /// keyframes (the paint's positions along its arcs; play them with `vortexWindingField`).
+    func windingAnimation() -> VortexWindingAnimation? {
         let duration = brushVortex(initValues.brush).duration
         guard let _ = warpedSurface, let field = displacementField, let preInk = preInkSurface, duration > 0 else { return nil }
-        return (field, preInk, duration)
+        return VortexWindingAnimation(field: field, frames: keyframes ?? [field], preInkSurface: preInk, duration: duration)
     }
 
     /// The layer before the warp, with the stroke's ink laid (`nil` when the stroke changed nothing).
