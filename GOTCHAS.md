@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/canvas] Animated Edge Dots Ignored `keyPoints`, and Glows Hid Straight Edges
+
+- **Issue / Symptom**: Dots on a reversed or back-and-forth edge (`direction: "reverse"` / `"alternate"`) ran source to target anyway, and a glowing beam or pulse on a perfectly horizontal or vertical edge (a `straight` or `step` edge between aligned nodes) did not draw at all.
+- **Root Cause**: `<animateMotion>` defaults to `calcMode="paced"`, which ignores `keyPoints` / `keyTimes`. SVG filters default to `filterUnits="objectBoundingBox"`, and a straight line's box has zero height (or width), so the filter region is empty and the element disappears.
+- **Solution / Workaround**: `<EdgeAnimation>` (React and Svelte) always sets `calcMode="linear"` on `<animateMotion>`, and `getCanvasEdgeAnimationRender` gives the glow filter a region in user space (`filterUnits="userSpaceOnUse"`, the path's bounds plus a margin for size and glow). Keep both if you render `CanvasEdgeAnimationRender` yourself.
+
 ### [core/paint-editor] Dual-Colour Strokes: Light Side in the Document, the Scheme Only in the View
 
 - **Issue / Symptom**: Paint shared between viewers with different themes must show each their own side of a dual colour, and a theme switch must not change, save or sync the document.
