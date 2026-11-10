@@ -10,7 +10,7 @@ import PixerateRaster
  * tips, spray marks and gradient paint.
  */
 
-public let PAINT_BRUSH_ENGINES = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter"]
+public let PAINT_BRUSH_ENGINES = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper"]
 public let ANTIMATTER_INVERT_MODES = ["rgb", "oklab"]
 public let PAINT_BRUSH_CATEGORIES = ["pencil", "pastel", "charcoal", "airbrush", "marker", "ink", "paint", "eraser", "blender", "smudge", "mixer", "watercolor", "wet-tool", "oil", "impasto", "procedural", "bristle", "sticker", "light", "custom"]
 public let WET_TOOLS = ["paint", "water", "dry", "blow", "blend", "smudge", "blot"]
@@ -491,6 +491,28 @@ func normalizeStickerSettings(_ raw: JSONObject, _ base: JSONObject) -> JSONObje
     ]
 }
 
+/// Scraper engine settings: how many layers per pass (0..1) and bevel sharpness (0..1).
+public struct ScraperSettings: Equatable, Sendable {
+    public var depth: Double
+    public var sharpness: Double
+
+    public init(depth: Double = 0.5, sharpness: Double = 0.7) {
+        self.depth = depth
+        self.sharpness = sharpness
+    }
+
+    var json: JSONValue { ["depth": .number(depth), "sharpness": .number(sharpness)] }
+}
+
+public let DEFAULT_SCRAPER = ScraperSettings(depth: 0.5, sharpness: 0.7)
+
+func normalizeScraper(_ raw: JSONObject, _ base: ScraperSettings = DEFAULT_SCRAPER) -> ScraperSettings {
+    ScraperSettings(
+        depth: unitValue(raw["depth"], base.depth),
+        sharpness: unitValue(raw["sharpness"], base.sharpness)
+    )
+}
+
 // MARK: - The brush
 
 /// The flat form the paint engine reads: every engine block, filled.
@@ -515,6 +537,7 @@ public struct PaintBrush: Equatable, Sendable {
     public var bristle: JSONObject
     public var sticker: JSONObject
     public var antimatter: AntimatterSettings = DEFAULT_ANTIMATTER
+    public var scraper: ScraperSettings = DEFAULT_SCRAPER
     public var light: LightSettings
     public var fluorescence: FluorescenceSettings
     public var thermochromic: ThermochromicSettings
@@ -546,6 +569,7 @@ public struct PaintBrush: Equatable, Sendable {
             "wet": wet.json, "impasto": impasto.json,
             "particle": .object(particle), "bristle": .object(bristle), "sticker": .object(sticker),
             "antimatter": antimatter.json,
+            "scraper": scraper.json,
             "light": light.json,
             "fluorescence": fluorescence.json,
             "thermochromic": thermochromic.json,
@@ -572,7 +596,7 @@ public func usesPaintExchange(_ brush: PaintBrush, _ gradient: Bool? = nil) -> B
 
 /// Whether strokes of a brush paint colour, so gradient paint applies.
 public func brushTakesPaint(_ brush: PaintBrush) -> Bool {
-    if brush.engine == "eraser" || brush.engine == "blender" || brush.engine == "smudge" { return false }
+    if brush.engine == "eraser" || brush.engine == "blender" || brush.engine == "smudge" || brush.engine == "scraper" { return false }
     if brush.engine == "wet" { return brush.wet.tool == "paint" }
     if brush.engine == "mixer" { return brush.loadsColor }
     return true
@@ -775,6 +799,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         bristle: normalizeBristle(raw["bristle"]?.objectValue ?? [:], b.bristle),
         sticker: normalizeStickerSettings(raw["sticker"]?.objectValue ?? [:], b.sticker),
         antimatter: normalizeAntimatter(raw["antimatter"]?.objectValue ?? [:], b.antimatter),
+        scraper: normalizeScraper(raw["scraper"]?.objectValue ?? [:], b.scraper),
         light: ghost != nil && !wantsLight ? DEFAULT_LIGHT : LightSettings(amount: unitValue(rl["amount"], b.light.amount), pressure: boolValue(rl["pressure"], b.light.pressure)),
         fluorescence: FluorescenceSettings(amount: unitValue(rfl["amount"], b.fluorescence.amount), invisible: boolValue(rfl["invisible"], b.fluorescence.invisible)),
         thermochromic: ThermochromicSettings(hotColor: hotColor, threshold: rangeValue(rth["threshold"], 0.05, 0.95, b.thermochromic.threshold)),

@@ -4,6 +4,7 @@
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
   import FerroPanel from './FerroPanel.svelte';
+  import TimeMachinePanel from './TimeMachinePanel.svelte';
   import CulturePanel from './CulturePanel.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
@@ -105,6 +106,7 @@
     </div>
   </div>
   <FerroPanel {controller} />
+  <TimeMachinePanel {controller} />
   <CulturePanel {controller} />
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
 </div>

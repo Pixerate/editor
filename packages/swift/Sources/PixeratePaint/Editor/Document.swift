@@ -89,6 +89,8 @@ public final class PaintDocumentState {
     public var thick: OrderedMap<String, ThickChannels>?
     /// Wet-media events (tilt, settings, drying, wet paper) with the clock they happened at, for replays.
     public var wetEvents: [WetEvent]?
+    /// Time-machine ageing setting persisted with the document.
+    public var age: PaintAgeSettings?
 
     public init(canvas: PaintCanvas, paper: PaperSettings, layers: [PaintLayer], activeLayerId: String?, strokes: [RecordedStroke]) {
         self.canvas = canvas
@@ -119,6 +121,7 @@ public final class PaintDocumentState {
         d.stickers = stickers
         d.thick = thick
         d.wetEvents = wetEvents
+        d.age = age
         change(d)
         return d
     }

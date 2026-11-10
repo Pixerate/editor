@@ -30,6 +30,7 @@ import { createLayerEffectTools } from '../image-editor/effect-tools';
 import { createPaintWetTools } from './wet-tools';
 import { createPaintThickTools } from './thick-tools';
 import { createFerroTools } from './ferro-tools';
+import { createTimeMachineTools } from './time-machine-tools';
 import { createCultureTools } from './culture-tools';
 import { createPaintReplayTools } from './replay-tools';
 import { createMutationTools } from './mutation-tools';
@@ -1132,6 +1133,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   tools.push(...createPaintWetTools(c));
   tools.push(...createPaintThickTools(c));
   tools.push(...createFerroTools(c));
+  tools.push(...createTimeMachineTools(c));
   tools.push(...createCultureTools(c));
   tools.push(...createPaintReplayTools(c));
   tools.push(...createPaintEvolutionTools(c));

@@ -286,6 +286,7 @@ const FACTORIES: Record<string, string> = {
 	createImageSegmentationToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
 	createFerroTools: 'pixerate-paint-editor',
+	createTimeMachineTools: 'pixerate-paint-editor',
 	createPaintEffectsToolProvider: 'pixerate-paint-editor',
 	createPaintProposalToolProvider: 'pixerate-paint-editor',
 	createPaintEvolutionToolProvider: 'pixerate-paint-editor',

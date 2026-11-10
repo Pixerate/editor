@@ -29,7 +29,8 @@
       "scatter",
       "particles",
       "objects",
-      "antimatter"
+      "antimatter",
+      "scraper"
     ],
     "surfaces": [
       "dry",

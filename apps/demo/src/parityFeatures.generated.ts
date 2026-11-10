@@ -2206,6 +2206,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
         "svelte": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
         "swift": "✅ `AntimatterStrokeDriver`, `AntimatterSettings`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterStats`; Antimatter controls in `PaintBrushPanel`; the view-only blast animation (`duration`, the blast commits at once): Planned (#732)"
+      },
+      {
+        "feature": "Painting Time Machine: Ageing, X-Ray & Scraper (non-destructive museum ageing preview `doc.age` (`years` 0..500, `varnish`, `cracks`, `fading`, `dust`, `seed`) applied in `renderLayers` with deterministic pigment lightfastness fading by hue, yellowed varnish absorption, seeded Voronoi + stress craquelure crack network that scales with layer count and impasto height and carves relief into `lightTile`, and low-frequency dust grain; `bake_age` commits the aged look into a new layer as one undo step; X-ray view (`render_xray`, `set_xray_view`) that composites every pixel layer including hidden ones by `opacity × (thickHeight + lightnessWeight)` so lead white and thick paint read bright and buried pentimenti show through, optionally after `strokes: k` via `replayPainting`; `scraper` brush engine (`marks.kind: 'scraper'`, preset `paint-scraper`) that excavates alpha and thick height from the topmost visible unlocked paint layer and carries remaining depth down through layers below, stopping at locked layers or the paper; agent tools `set_age`, `get_age`, `bake_age`, `render_xray`, `set_xray_view`)",
+        "core": "`DEFAULT_AGE`, `normalizeAge`, `craquelureAt`, `agePixel`, `renderXrayPixels`, `ScraperStrokeDriver`, `createTimeMachineTools`, `AGE_SLIDERS` (`/paint-editor`)",
+        "react": "`<TimeMachinePanel>` (in `<PaperPanel>`) (`/paint-editor`)",
+        "svelte": "`<TimeMachinePanel>` (in `<PaperPanel>`) (`/paint-editor`)",
+        "swift": "✅ `PaintAgeSettings`, `DEFAULT_AGE`, `craquelureAt`, `agePixel`, `renderXrayPixels`, `ScraperStrokeDriver`; `PaintEditorController` `setAge`, `getAge`, `bakeAge`, `renderXray`, `setXrayView`; `PaintTimeMachinePanel` (in `PaintPaperPanel`)"
       }
     ]
   },

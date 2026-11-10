@@ -20,6 +20,7 @@ import { DEFAULT_LIGHTING, emptyThickChannels, FilmBuffer, LitCache, type ThickC
 import { computeSpill, emptyLight, LightCache } from './light';
 import { computeUvSpill, emptyFluor, UvCache } from './heat';
 import { seedCultureFromStroke, stepLayerCulture } from '../paint/culture';
+import { ScraperStrokeDriver } from './scraper';
 import type { StickerArtLookup } from './sticker-art';
 
 /** One small wet world reused for wet brush thumbnails (by size). */
@@ -118,6 +119,16 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
       thick: brush.engine === 'impasto' || brush.iridescence ? { channels: emptyThickChannels() } : undefined,
       sticker: brush.engine === 'sticker' ? { nextId: 1 } : undefined,
+      scraper:
+        brush.engine === 'scraper'
+          ? {
+              driver: new ScraperStrokeDriver(
+                { brush, seed: 7, copies: [IDENTITY_COPY], selection: null },
+                [{ type: 'pixel', id: 'thumbnail', name: 'thumbnail', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 } }],
+                undefined
+              ),
+            }
+          : undefined,
       light: brush.light.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' && brush.engine !== 'antimatter' ? { surface: emptyLight() } : null,
       fluor: brush.fluorescence.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' && brush.engine !== 'antimatter' ? { surface: emptyFluor() } : null,
       antimatter:
@@ -186,7 +197,7 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
   const b = brush.tip.size > maxSize ? normalizePaintBrush({ tip: { ...brush.tip, size: maxSize } }, brush) : brush;
   const rgba = [...hexToRgb8(options.color), 255];
   let surface: TiledSurface = emptySurface(4);
-  if (b.engine === 'eraser') {
+  if (b.engine === 'eraser' || b.engine === 'scraper') {
     // Something to erase: a band of the colour.
     surface = fillRect(surface, { x: 0, y: 0, width, height }, rgba);
   } else if (b.engine === 'wet') {

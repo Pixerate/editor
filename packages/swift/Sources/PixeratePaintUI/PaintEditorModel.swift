@@ -569,6 +569,36 @@ public final class PaintEditorModel {
         attempt { _ = try controller.cureFerrofluid() }
     }
 
+    // MARK: - Time machine (ageing & X-ray)
+
+    /// The ageing sliders (`PaintUITables.sliders.age`): years, varnish, cracks, fading and dust.
+    public var ageSliders: [PaintUISlidersAgeItem] { tables.sliders.age }
+    /// The current non-destructive ageing preview settings (`get_age`).
+    public var age: PaintAgeSettings { track(); return controller.age }
+    public func ageValue(_ path: String) -> Double { readPath(age.json.objectValue ?? [:], path) }
+    /// Sets a slider of the ageing preview (saved with the painting, not an undo step).
+    public func setAge(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setAge([path: .number(value)]) }
+    }
+    /// Sets the ageing preview's `years` directly (`set_age`).
+    public func setAgeYears(_ years: Double) {
+        attempt { _ = try controller.setAge(["years": .number(years)]) }
+    }
+    /// Randomizes the craquelure & dust seed (`set_age`).
+    public func newAgeSeed() {
+        attempt { _ = try controller.setAge(["seed": .number(Double(controller.age.seed + 1))]) }
+    }
+    /// Commits the aged look into a new layer at the top of the stack (one undo step).
+    public func bakeAge() {
+        attempt { _ = try controller.bakeAge() }
+    }
+    /// Whether the X-ray radiograph view is switched on in the viewport.
+    public var xrayView: Bool { track(); return controller.xrayView }
+    /// Switches the X-ray radiograph view on or off in the viewport (`set_xray_view`).
+    public func setXrayView(_ on: Bool) {
+        _ = controller.setXrayView(on)
+    }
+
     // MARK: - Wet media
 
     /// The wet-paint sliders (`PaintUITables.sliders`): the layer's settings, the tilt and the speed.

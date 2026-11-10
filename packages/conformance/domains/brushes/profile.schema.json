@@ -64,7 +64,8 @@
           "scatter",
           "particles",
           "objects",
-          "antimatter"
+          "antimatter",
+          "scraper"
         ]
       },
       "description": "Marks kinds it renders."

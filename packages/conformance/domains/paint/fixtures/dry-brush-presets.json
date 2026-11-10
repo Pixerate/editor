@@ -1329,10 +1329,24 @@
               "surface": "dry",
               "tip": "round",
               "variety": "antimatter"
+            },
+            {
+              "builtin": true,
+              "category": "eraser",
+              "engine": "scraper",
+              "id": "paint-scraper",
+              "kind": "mark",
+              "marks": "scraper",
+              "medium": "paint",
+              "name": "Paint scraper",
+              "size": 28,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "scraper"
             }
           ],
           "host": "paint",
-          "total": 94
+          "total": 95
         }
       }
     },

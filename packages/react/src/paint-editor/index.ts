@@ -8,6 +8,7 @@ export * from '../brushes/BrushEditor';
 export { BrushLibraryBrowser, type BrushLibraryBrowserProps } from '../brushes/BrushLibraryBrowser';
 export * from './PaperPanel';
 export * from './FerroPanel';
+export * from './TimeMachinePanel';
 export * from './CulturePanel';
 export * from './ColorPanel';
 export * from './PaintLayersPanel';

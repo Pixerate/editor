@@ -1269,7 +1269,7 @@
                 "additionalProperties": false
               },
               "marks": {
-                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                 "oneOf": [
                   {
                     "type": "object",
@@ -1574,6 +1574,33 @@
                         "minimum": 0,
                         "maximum": 2,
                         "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "scraper",
+                        "description": "Always \"scraper\"."
+                      },
+                      "depth": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                      },
+                      "sharpness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                       }
                     },
                     "required": [
@@ -3442,7 +3469,7 @@
                     "additionalProperties": false
                   },
                   "marks": {
-                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                     "oneOf": [
                       {
                         "type": "object",
@@ -3747,6 +3774,33 @@
                             "minimum": 0,
                             "maximum": 2,
                             "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "scraper",
+                            "description": "Always \"scraper\"."
+                          },
+                          "depth": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                          },
+                          "sharpness": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                           }
                         },
                         "required": [
@@ -5399,7 +5453,7 @@
                     "additionalProperties": false
                   },
                   "marks": {
-                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                     "oneOf": [
                       {
                         "type": "object",
@@ -5704,6 +5758,33 @@
                             "minimum": 0,
                             "maximum": 2,
                             "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "scraper",
+                            "description": "Always \"scraper\"."
+                          },
+                          "depth": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                          },
+                          "sharpness": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                           }
                         },
                         "required": [
@@ -7421,7 +7502,7 @@
                     "additionalProperties": false
                   },
                   "marks": {
-                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                     "oneOf": [
                       {
                         "type": "object",
@@ -7726,6 +7807,33 @@
                             "minimum": 0,
                             "maximum": 2,
                             "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "scraper",
+                            "description": "Always \"scraper\"."
+                          },
+                          "depth": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                          },
+                          "sharpness": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                           }
                         },
                         "required": [
@@ -12352,6 +12460,152 @@
           }
         },
         {
+          "name": "set_age",
+          "title": "Age the painting (preview)",
+          "description": "Sets the non-destructive ageing preview on the painting: years (0..500, default 0), varnish (0..1 yellowing absorption over the composite, default 0.5), cracks (0..1 Voronoi / stress craquelure network that gets denser with layer count and thick height, darkens and carves height into lightTile so cracks catch the light, default 0.5), fading (0..1 deterministic hue-dependent lightfastness fading where reds and violets fade fastest, default 0.5), dust (0..1 low-frequency surface grain, default 0.25) and seed (integer >= 0, default 1). Saved with the document, not an undo step (use bake_age to commit the aged look into a layer). Returns the age settings and active (whether years > 0 and any effect is above 0).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "years": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 500,
+                "description": "Simulated age in years, 0..500 (0 turns ageing off; 300 is three centuries; default 0)."
+              },
+              "varnish": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Yellowed varnish absorption over the composite, 0..1 (default 0.5)."
+              },
+              "cracks": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Craquelure crack network density and depth, 0..1 (default 0.5)."
+              },
+              "fading": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Fugitive pigment fading by hue (reds and violets fastest), 0..1 (default 0.5)."
+              },
+              "dust": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Low-frequency surface dust grain, 0..1 (default 0.25)."
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Deterministic craquelure and dust seed, >= 0 (default 1)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Age the painting (preview)",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "get_age",
+          "title": "Read the ageing settings",
+          "description": "Reads the document’s non-destructive ageing preview settings (years, varnish, cracks, fading, dust, seed), whether ageing is active, and whether X-ray view is on (xrayView). Changes nothing.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read the ageing settings",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "bake_age",
+          "title": "Bake ageing into a layer",
+          "description": "Commits the current aged look (fading, yellowed varnish, craquelure cracks with their carved relief lighting, and dust) into a new pixel layer at the top of the stack and resets the preview years to 0 so the painting is not aged twice. One undo step. Refused when years is 0 or all ageing effects are 0 (call set_age with years > 0 first). Returns the new layer, the baked age settings, and bounds.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name for the new baked layer (default \"Aged (<years> yr)\")."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Bake ageing into a layer",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "render_xray",
+          "title": "Render an X-ray of the painting",
+          "description": "Renders a read-only X-ray radiograph of the painting that reveals buried and hidden layers (pentimento). Every pixel layer—visible or hidden—contributes density = opacity × (thick height + lightness weight), so dense impasto and lead-white highlights read bright. With strokes: k, replays the painting from its recorded strokes up to stroke k first, showing the painting as it was after k strokes. Changes nothing. Returns the X-ray PNG image and its density summary (width, height, strokes, totalStrokes, layerCount, hiddenLayerCount, maxDensity, meanDensity).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "strokes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Show the painting as it was after this many recorded strokes (default: current state with all strokes)."
+              },
+              "maxSide": {
+                "type": "integer",
+                "minimum": 16,
+                "maximum": 2048,
+                "description": "Longest side of the returned X-ray PNG in pixels, 16..2048 (default 512)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Render an X-ray of the painting",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_xray_view",
+          "title": "Switch X-ray view",
+          "description": "Turns the X-ray radiograph view on or off in the viewport, revealing hidden and buried layers (pentimento) without changing the document or exports. Editor state, not an undo step. Returns { xrayView }.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "on": {
+                "type": "boolean",
+                "description": "true shows the X-ray radiograph in the viewport; false returns to the normal painting view."
+              }
+            },
+            "required": [
+              "on"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Switch X-ray view",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
           "name": "get_cultures",
           "title": "Read living biopaint cultures",
           "description": "Reads every pixel layer’s biopaint colony (seeded by brushes with a culture facet, such as mycelial-ink, rot and foxfire): tick count, living tips count, total segments drawn, bounds in document pixels, and status (\"growing\", \"extinct\", or \"capped\"), plus whether growWhileClosed is enabled and pendingCatchUpTicks. Changes nothing.",
@@ -13408,7 +13662,7 @@
                           "additionalProperties": false
                         },
                         "marks": {
-                          "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+                          "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                           "oneOf": [
                             {
                               "type": "object",
@@ -13713,6 +13967,33 @@
                                   "minimum": 0,
                                   "maximum": 2,
                                   "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "scraper",
+                                  "description": "Always \"scraper\"."
+                                },
+                                "depth": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                                },
+                                "sharpness": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                                 }
                               },
                               "required": [
@@ -17882,7 +18163,7 @@
                 "additionalProperties": false
               },
               "marks": {
-                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                 "oneOf": [
                   {
                     "type": "object",
@@ -18187,6 +18468,33 @@
                         "minimum": 0,
                         "maximum": 2,
                         "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "scraper",
+                        "description": "Always \"scraper\"."
+                      },
+                      "depth": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                      },
+                      "sharpness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                       }
                     },
                     "required": [
@@ -19634,7 +19942,7 @@
                 "additionalProperties": false
               },
               "marks": {
-                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                 "oneOf": [
                   {
                     "type": "object",
@@ -19939,6 +20247,33 @@
                         "minimum": 0,
                         "maximum": 2,
                         "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "scraper",
+                        "description": "Always \"scraper\"."
+                      },
+                      "depth": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                      },
+                      "sharpness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                       }
                     },
                     "required": [

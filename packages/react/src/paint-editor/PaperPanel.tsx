@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, UV_LIGHT_SLIDERS, VIEW_TILT_SLIDERS, patchPath, readPath, renderPaper, requestDeviceTiltPermission, startDeviceTilt, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { FerroPanel } from './FerroPanel';
+import { TimeMachinePanel } from './TimeMachinePanel';
 import { CulturePanel } from './CulturePanel';
 import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, chip, panel, useAttempt } from './shared';
 
@@ -112,6 +113,7 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
         </div>
       </div>
       <FerroPanel controller={controller} />
+      <TimeMachinePanel controller={controller} />
       <CulturePanel controller={controller} />
       <ErrorLine error={error} />
     </div>

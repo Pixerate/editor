@@ -8,6 +8,7 @@ import { RasterCompositor, type CompositorLayer, type CompositorProfile, type Ra
 import type { RasterRect } from '../raster/surface';
 import type { PaintLayer } from './document';
 import { PaperGrain, renderPaper, type PaperSettings } from './paper';
+import { ageKey, agePaperTile, isAgeActive, type PaintAgeSettings } from './age';
 
 /** The paper as a layer of the compositor (generated, never stored). */
 export interface PaperNode extends CompositorLayer {
@@ -20,6 +21,8 @@ export interface PaperNode extends CompositorLayer {
   paper: PaperSettings;
   /** The light, for metallic paper. */
   light?: { azimuth: number; elevation: number };
+  /** Optional time-machine ageing preview on the paper. */
+  age?: PaintAgeSettings;
 }
 
 /** An RGBA image under the paint (the tracing image, effect paper), drawn at its opacity and blend. */
@@ -41,20 +44,35 @@ export type ViewLayer = PaintLayer | PaperNode | ImageNode;
 export const PAPER_NODE_ID = '__paper';
 export const TRACING_NODE_ID = '__tracing';
 export const PAPER_EFFECT_NODE_ID = '__paper_effect';
+export const XRAY_NODE_ID = '__xray';
 
-export function paperKey(p: PaperSettings, light?: { azimuth: number; elevation: number }): string {
+export function paperKey(p: PaperSettings, light?: { azimuth: number; elevation: number }, age?: PaintAgeSettings | null): string {
   const metal = p.metallic ?? 0;
-  return JSON.stringify([p.pattern, p.seed, p.color, p.scale, p.tiling, p.shading, p.dry, p.offset ?? null, metal, metal > 0 && light ? [light.azimuth, light.elevation] : null]);
+  const activeAge = age && isAgeActive(age) ? ageKey(age) : null;
+  return JSON.stringify([p.pattern, p.seed, p.color, p.scale, p.tiling, p.shading, p.dry, p.offset ?? null, metal, metal > 0 && light ? [light.azimuth, light.elevation] : null, activeAge]);
 }
 
 const paperNodes = new WeakMap<PaperSettings, PaperNode>();
 
 /** The paper as a compositor layer (one object per paper settings object and light, so caches hold). */
-export function paperNode(paper: PaperSettings, light?: { azimuth: number; elevation: number }): PaperNode {
+export function paperNode(paper: PaperSettings, light?: { azimuth: number; elevation: number }, age?: PaintAgeSettings | null): PaperNode {
   let n = paperNodes.get(paper);
   const metal = (paper.metallic ?? 0) > 0;
-  if (!n || (metal && (n.light?.azimuth !== light?.azimuth || n.light?.elevation !== light?.elevation))) {
-    n = { type: 'paper', id: PAPER_NODE_ID, name: 'Paper', visible: true, opacity: 1, blend: 'normal', paper, ...(metal && light ? { light: { azimuth: light.azimuth, elevation: light.elevation } } : {}) };
+  const activeAge = age && isAgeActive(age) ? age : undefined;
+  const prevAgeKey = n?.age ? ageKey(n.age) : null;
+  const nextAgeKey = activeAge ? ageKey(activeAge) : null;
+  if (!n || prevAgeKey !== nextAgeKey || (metal && (n.light?.azimuth !== light?.azimuth || n.light?.elevation !== light?.elevation))) {
+    n = {
+      type: 'paper',
+      id: PAPER_NODE_ID,
+      name: 'Paper',
+      visible: true,
+      opacity: 1,
+      blend: 'normal',
+      paper,
+      ...(metal && light ? { light: { azimuth: light.azimuth, elevation: light.elevation } } : {}),
+      ...(activeAge ? { age: { ...activeAge } } : {}),
+    };
     paperNodes.set(paper, n);
   }
   return n;
@@ -75,11 +93,14 @@ export function paperGrain(paper: PaperSettings): PaperGrain {
   return g;
 }
 
-function paperTile(paper: PaperSettings, r: RasterRect, light?: { azimuth: number; elevation: number }): Uint8ClampedArray {
-  const key = `${paperKey(paper, light)}|${r.x},${r.y},${r.width},${r.height}`;
+function paperTile(paper: PaperSettings, r: RasterRect, light?: { azimuth: number; elevation: number }, age?: PaintAgeSettings | null): Uint8ClampedArray {
+  const key = `${paperKey(paper, light, age)}|${r.x},${r.y},${r.width},${r.height}`;
   let t = tileCache.get(key);
   if (!t) {
     t = renderPaper(paper, r, paperGrain(paper), light);
+    if (age && isAgeActive(age)) {
+      t = agePaperTile(t, r.x, r.y, r.width, r.height, age);
+    }
     if (tileCache.size > 512) tileCache.delete(tileCache.keys().next().value as string);
     tileCache.set(key, t);
   }
@@ -88,7 +109,7 @@ function paperTile(paper: PaperSettings, r: RasterRect, light?: { azimuth: numbe
 
 const PROFILE: CompositorProfile<ViewLayer, RasterSources> = {
   contentTile(layer, r) {
-    if (layer.type === 'paper') return paperTile((layer as PaperNode).paper, r, (layer as PaperNode).light);
+    if (layer.type === 'paper') return paperTile((layer as PaperNode).paper, r, (layer as PaperNode).light, (layer as PaperNode).age);
     if (layer.type === 'image') {
       const { image } = layer as ImageNode;
       const out = new Uint8ClampedArray(r.width * r.height * 4);
@@ -103,7 +124,7 @@ const PROFILE: CompositorProfile<ViewLayer, RasterSources> = {
     return null;
   },
   layerKey(layer) {
-    if (layer.type === 'paper') return paperKey((layer as PaperNode).paper, (layer as PaperNode).light);
+    if (layer.type === 'paper') return paperKey((layer as PaperNode).paper, (layer as PaperNode).light, (layer as PaperNode).age);
     if (layer.type === 'image') return (layer as ImageNode).version;
     return undefined;
   },
