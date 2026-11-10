@@ -12,6 +12,7 @@ import {
   TiledSurface,
   finishTile,
   readPixel,
+  readRegion,
   tileCoord,
   type RasterRect,
   type Tile,
@@ -343,7 +344,7 @@ export function carveAgeCrackHeightTile(
   return any ? out : baseHeightData ? new Uint8ClampedArray(baseHeightData) : null;
 }
 
-/** Ages one 256×256 RGBA tile of a paint layer. */
+/** Ages one 256×256 RGBA tile of a paint layer on its own (the editor ages the composite: `ageCompositeRegion`). */
 export function ageTile(
   colorData: Uint8Array | Uint8ClampedArray,
   heightData: Uint8Array | Uint8ClampedArray | null,
@@ -417,7 +418,104 @@ export function agePaperTile(
   return out;
 }
 
-/** Per-layer cache of aged colour tiles. */
+/** A painted layer as the composite ageing pass reads it: its alpha marks paint, its thick height feeds the cracks. */
+export interface AgeFieldLayer {
+  /** The layer's RGBA pixels (only alpha is read). */
+  surface: TiledSurface;
+  /** The layer's thick paint height (one channel, `0..255`), when it has impasto. */
+  height?: TiledSurface;
+  /** Where the layer sits on the canvas. */
+  offset: { x: number; y: number };
+}
+
+/**
+ * The time machine's single ageing pass over the composite: ages straight-alpha RGBA `data`
+ * (`rect.width × rect.height`, document pixels `rect`) in place, as varnish, fading and dust sit
+ * over the finished painting. Where any `layers` pixel is painted the craquelure uses
+ * `layerCount` and the tallest thick height there; bare ground (paper) ages as one layer with no
+ * impasto. Transparent pixels are left alone.
+ */
+export function ageCompositeRegion(
+  data: Uint8ClampedArray,
+  rect: RasterRect,
+  age: PaintAgeSettings,
+  layers: readonly AgeFieldLayer[],
+  layerCount: number
+): void {
+  if (!isAgeActive(age)) return;
+  const n = rect.width * rect.height;
+  const covered = new Uint8Array(n);
+  const tallest = new Uint8Array(n);
+  for (const l of layers) {
+    const r = { x: rect.x - l.offset.x, y: rect.y - l.offset.y, width: rect.width, height: rect.height };
+    const color = readRegion(l.surface, r);
+    const height = l.height ? readRegion(l.height, r) : null;
+    for (let p = 0; p < n; p++) {
+      if (color[p * 4 + 3] === 0) continue;
+      covered[p] = 1;
+      if (height && height[p] > tallest[p]) tallest[p] = height[p];
+    }
+  }
+  let p = 0;
+  for (let y = 0; y < rect.height; y++) {
+    const wy = rect.y + y;
+    for (let x = 0; x < rect.width; x++, p++) {
+      const i = p * 4;
+      if (data[i + 3] === 0) continue;
+      const paint = covered[p] === 1;
+      const [r, g, b] = agePixel(
+        data[i] / 255,
+        data[i + 1] / 255,
+        data[i + 2] / 255,
+        rect.x + x,
+        wy,
+        age,
+        paint ? layerCount : 1,
+        paint ? tallest[p] / 255 : 0
+      );
+      data[i] = Math.round(r * 255);
+      data[i + 1] = Math.round(g * 255);
+      data[i + 2] = Math.round(b * 255);
+    }
+  }
+}
+
+/**
+ * The pixels `bake_age` commits: a layer that, laid Normal over the painting as it will show
+ * without ageing (`plain`, opaque: paper and paint), gives the aged composite (`aged`). Its alpha
+ * is the paint's own (`paint`, the composite without the paper; raised where the ageing needs more
+ * to reach), so bare paper stays clear, and its colour solves `plain · (1 − a) + colour · a = aged`,
+ * so a translucent wash or a Multiply /
+ * Add layer over the paper bakes to what the preview shows rather than to its colour on its own.
+ * All three are canvas-sized RGBA (straight alpha).
+ */
+export function bakeAgedPixels(aged: Uint8ClampedArray, plain: Uint8ClampedArray, paint: Uint8ClampedArray): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(paint.length);
+  for (let i = 0; i < paint.length; i += 4) {
+    let a = paint[i + 3];
+    if (a === 0) continue;
+    // A thin layer can only move the pixel so far: raise the alpha to what the change needs
+    // (dark cracks under a light wash), so the colour stays within 0..255 and the result is exact.
+    for (let k = 0; k < 3 && a < 255; k++) {
+      const v = aged[i + k];
+      const u = plain[i + k];
+      const need = v < u ? (255 * (u - v)) / u : v > u ? (255 * (v - u)) / (255 - u) : 0;
+      if (need > a) a = Math.min(255, Math.ceil(need));
+    }
+    out[i + 3] = a;
+    for (let k = 0; k < 3; k++) {
+      // Uint8ClampedArray clamps to 0..255 (and rounds half to even, so round first as Swift does).
+      out[i + k] = a === 255 ? aged[i + k] : Math.round((aged[i + k] * 255 - plain[i + k] * (255 - a)) / a);
+    }
+  }
+  return out;
+}
+
+/**
+ * Per-layer cache of aged colour tiles.
+ * @deprecated The editor ages the composite in one pass (`ageCompositeRegion`); ageing each layer
+ * yellows Multiply / Overlay layers twice and brightens Add layers.
+ */
 export class AgeCache {
   private tiles = new Map<
     TileKey,

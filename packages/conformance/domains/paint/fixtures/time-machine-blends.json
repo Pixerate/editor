@@ -1,0 +1,483 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "time-machine-blends",
+  "description": "Ageing is one pass over the composite: a Multiply glaze and a light paint stroke's Linear Dodge spill under set_age, baked with bake_age, age like the flat composite (the glaze is not yellowed twice, the spill takes no dust of its own).",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#d8c090"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Glaze"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Glaze",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#6090d0",
+        "opacity": 0.85
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@2"
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@2",
+        "blend": "multiply"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "multiply",
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Glaze",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Neon"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@3",
+          "locks": {},
+          "name": "Neon",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "neon-marker",
+        "color": "#3b82f6",
+        "seed": 7,
+        "points": [
+          {
+            "x": 8,
+            "y": 44
+          },
+          {
+            "x": 56,
+            "y": 44
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 18,
+            "width": 66,
+            "x": -1,
+            "y": 35
+          },
+          "dabs": 97,
+          "layerId": "@3",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/time-machine-blends.6.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "876be11d40a7818f029b5339ac24efdc0944c31f19dc88da5a69fc478aa690b3",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_age",
+      "arguments": {
+        "years": 320,
+        "varnish": 0.8,
+        "cracks": 0.5,
+        "fading": 0.6,
+        "dust": 0.5,
+        "seed": 4
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "age": {
+            "cracks": 0.5,
+            "dust": 0.5,
+            "fading": 0.6,
+            "seed": 4,
+            "varnish": 0.8,
+            "years": 320
+          }
+        }
+      }
+    },
+    {
+      "tool": "bake_age",
+      "arguments": {
+        "name": "Patina"
+      },
+      "pixels": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "age": {
+            "cracks": 0.5,
+            "dust": 0.5,
+            "fading": 0.6,
+            "seed": 4,
+            "varnish": 0.8,
+            "years": 320
+          },
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layer": {
+            "active": true,
+            "blend": "normal",
+            "bounds": {
+              "height": 64,
+              "width": 64,
+              "x": 0,
+              "y": 0
+            },
+            "clipped": false,
+            "depth": 0,
+            "id": "@4",
+            "locks": {},
+            "name": "Patina",
+            "opacity": 1,
+            "parentId": null,
+            "type": "pixel",
+            "visible": true
+          }
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@4",
+            "age": {
+              "cracks": 0.5,
+              "dust": 0.5,
+              "fading": 0.6,
+              "seed": 4,
+              "varnish": 0.8,
+              "years": 0
+            },
+            "assets": {
+              "@1": "<binary>",
+              "@2": "<binary>",
+              "@3": "<binary>",
+              "@4": "pixerate-asset:8ky-ucehwa1d8i"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              },
+              {
+                "asset": "@2",
+                "blend": "multiply",
+                "id": "@2",
+                "name": "Glaze",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              },
+              {
+                "asset": "@3",
+                "blend": "normal",
+                "id": "@3",
+                "name": "Neon",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 37
+              },
+              {
+                "asset": "@4",
+                "blend": "normal",
+                "id": "@4",
+                "name": "Patina",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "light": {
+              "@3": {
+                "light": "pixerate-asset:ea-1w5t8yx47to",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#d8c090",
+                  "grain": 0,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@1"
+              },
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#6090d0",
+                  "grain": 0,
+                  "opacity": 0.85,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@2"
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.45
+                  },
+                  "id": "neon-marker",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 1
+                  },
+                  "name": "Neon marker",
+                  "tip": {
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 10,
+                    "spacing": 0.04
+                  }
+                },
+                "color": "#3b82f6",
+                "id": "s1",
+                "layerId": "@3",
+                "points": [
+                  {
+                    "x": 8,
+                    "y": 44
+                  },
+                  {
+                    "x": 56,
+                    "y": 44
+                  }
+                ],
+                "seed": 7
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/time-machine-blends.8.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "bcd8a758a7514487fdaf5bf3a8d7ca982c2f271c05ae916475dfe86a88e8ec75",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}
