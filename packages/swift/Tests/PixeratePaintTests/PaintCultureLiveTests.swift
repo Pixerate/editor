@@ -175,6 +175,27 @@ final class PaintCultureLiveTests: XCTestCase {
         player.stop()
     }
 
+    // TS 22 with a vortex: a winding animation still playing on the layer holds its growth.
+    func testAVortexAnimationHoldsGrowthOnItsLayer() throws {
+        let c = try PaintEditorController(width: 96, height: 96)
+        let layerId = c.doc.activeLayerId!
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "mycelial-ink", seed: 5), points: pts([(20, 48), (76, 48)]))
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "vortex", brush: ["marks": ["kind": "vortex", "duration": 1, "turns": 1.5, "reach": 2]], seed: 5), points: [PenPoint(x: 48, y: 48, pressure: 1)])
+        var now = 1000.0
+        c.stepVortexAnimations(now)
+        XCTAssertTrue(c.vortexAnimatingLayerIds().contains(layerId))
+        let committed = c.getLayer(layerId)!.pixelSurface
+        let player = c.playCultures(now: now)
+        run(player, &now, frames: 4)
+        XCTAssertTrue(c.getLayer(layerId)!.pixelSurface === committed, "growth waits while the vortex winds")
+        now += 2000
+        c.stepVortexAnimations(now)
+        XCTAssertFalse(c.hasActiveVortexAnimations())
+        run(player, &now, frames: 4)
+        XCTAssertFalse(c.getLayer(layerId)!.pixelSurface === committed, "growth resumes once the winding ends")
+        player.stop()
+    }
+
     // TS 23: wet paint flowing on another layer replaces the document, but the run goes on as one step.
     func testWetFlowDuringGrowthKeepsOneRun() throws {
         let c = try PaintEditorController(width: 96, height: 96)

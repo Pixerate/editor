@@ -72,7 +72,7 @@ extension PaintEditorController {
      * animation short. `cultureGrowthHolds` adds any other registered sources (tests use it).
      */
     func animatingLayerIds() -> Set<String> {
-        var out = blastAnimatingLayerIds
+        var out = blastAnimatingLayerIds.union(vortexAnimatingLayerIds())
         for source in cultureGrowthHolds.values { out.formUnion(source()) }
         return out
     }
