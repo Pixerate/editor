@@ -14,6 +14,7 @@ import {
   renderBrushThumbnail,
 } from '../src/paint-editor';
 import { ToolRegistry } from '../src/tools/registry';
+import { isqrt } from '../src/paint';
 
 describe('Biopaint mycelial ink (#684)', () => {
   it('1. validates culture facet & presets (mycelial-ink, rot, foxfire), round-trips PaintBrush, and unsets via null', async () => {
@@ -582,5 +583,36 @@ describe('Biopaint mycelial ink (#684)', () => {
     expect(readRes.isError).toBeFalsy();
     const killRes = await reg.callTool('remove_cultures', {});
     expect(killRes.isError).toBeFalsy();
+  });
+
+  it('15. isqrt stays exact past int32 (long seed segments seed like Swift)', () => {
+    for (const px of [181, 182, 300, 500, 4000]) {
+      const fp = px * 256;
+      expect(isqrt(fp * fp), `${px}px`).toBe(fp);
+      expect(isqrt(fp * fp + 1)).toBe(fp);
+      expect(isqrt(fp * fp - 1)).toBe(fp - 1);
+    }
+    // Two points 500 px apart: the gap is seeded along its length, not as one station.
+    const c = new PaintEditorController({ width: 600, height: 120 });
+    const r = c.paintStroke({ brushId: 'mycelial-ink', seed: 3, points: [{ x: 50, y: 60 }, { x: 550, y: 60 }] });
+    expect(r.culture!.seeds).toBeGreaterThan(8);
+  });
+
+  it('16. a command during live growth keeps the growth as its own undo step, with its replay events', () => {
+    const c = new PaintEditorController({ width: 140, height: 140 });
+    c.paintStroke({ brushId: 'mycelial-ink', seed: 5, points: [{ x: 30, y: 50 }, { x: 30, y: 90 }] });
+    let nowMs = 1000;
+    let frameCb: (() => void) | null = null;
+    const player = c.playCultures({ now: () => nowMs, frame: (cb) => { frameCb = cb; return () => { if (frameCb === cb) frameCb = null; }; } });
+    for (let i = 0; i < 6; i++) {
+      nowMs += 100;
+      frameCb?.();
+    }
+    c.addLayer({ name: 'Over' });
+    player.stop();
+    const events = JSON.stringify(c.toJSON().paintEvents ?? []);
+    expect(events).toContain('culture-grow');
+    expect(c.undo()).not.toBe('Culture growth');
+    expect(c.undo()).toBe('Culture growth');
   });
 });

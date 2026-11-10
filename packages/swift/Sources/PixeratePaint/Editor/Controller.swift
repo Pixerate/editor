@@ -2011,7 +2011,7 @@ public final class PaintEditorController {
         if let events = d.wetEvents, !events.isEmpty { out["wetEvents"] = .array(events.map(\.json)) }
         for (k, v) in thickJSON() { out[k] = v }
         for (k, v) in ferroJSON() { out[k] = v }
-        for (k, v) in culturesJSON() { out[k] = v }
+        for (k, v) in culturesJSON(d) { out[k] = v }
         if let events = d.paintEvents, !events.isEmpty { out["paintEvents"] = .array(events.map(\.json)) }
         if let o = d.origin, o.x != 0 || o.y != 0 { out["origin"] = pointJSON(Double(o.x), Double(o.y)) }
         if let light = d.light {

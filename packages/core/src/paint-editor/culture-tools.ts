@@ -67,7 +67,7 @@ export function createCultureTools(c: PaintEditorController): PaintAgentTool[] {
         },
         additionalProperties: false,
       },
-      annotations: { title: 'Kill a layer’s biopaint colony', ...WRITE },
+      annotations: { title: 'Kill a layer’s biopaint colony', ...WRITE, destructiveHint: true },
       handler: ({ layerId }) => c.removeCultures(layerId as string | undefined),
     },
     {

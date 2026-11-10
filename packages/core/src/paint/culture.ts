@@ -1288,10 +1288,10 @@ export function layerCultureSummary(layerId: string, culture: LayerCulture | und
 export function isqrt(n: number): number {
   if (n <= 0) return 0;
   let x = n;
-  let y = (x + 1) >> 1;
+  let y = Math.floor((x + 1) / 2);
   while (y < x) {
     x = y;
-    y = (x + Math.floor(n / x)) >> 1;
+    y = Math.floor((x + Math.floor(n / x)) / 2);
   }
   return x;
 }

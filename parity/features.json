@@ -2181,7 +2181,7 @@
           "core": "`seedCultureFromStroke`, `stepLayerCulture`, `applyCultureGrowReplay`, `CULTURE_SLIDERS`, `createCultureTools` (`/paint`, `/paint-editor`)",
           "react": "`<CulturePanel>` (in `<PaperPanel>`), live playback in `<PaintCanvas>`, `culture` controls in `<BrushEditor>` (`/paint-editor`)",
           "svelte": "`<CulturePanel>` (in `<PaperPanel>`), live playback in `<PaintCanvas>`, `culture` controls in `<BrushEditor>` (`/paint-editor`)",
-          "swift": "✅ `CultureSettings`, `LayerCultureState`, `seedCultureFromStroke`, `stepLayerCulture`, `applyCultureGrowReplay`; `PaintEditorController` `getCultures`, `growCultures`, `removeCultures`, `setCultureOptions`, `catchUpCultures`; `PaintCulturePanel` (in `PaintPaperPanel`)"
+          "swift": "`CultureSettings`, `LayerCultureState`, `seedCultureFromStroke`, `stepLayerCulture`, `applyCultureGrowReplay`; `PaintEditorController` `getCultures`, `growCultures`, `removeCultures`, `setCultureOptions`, `catchUpCultures` (run when `PaintEditorView` appears); `PaintCulturePanel` (in `PaintPaperPanel`); live growth playback not ported yet (#731)"
         }
       ]
     },

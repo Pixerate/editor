@@ -607,7 +607,7 @@ export const BRUSH_PRESETS: readonly Brush[] = [
   },
   {
     id: 'rot', name: 'Rot', kind: 'mark', medium: 'ink', variety: 'biopaint',
-    tip: { shape: 'round', size: 12, hardness: 0.75, spacing: 0.1 },
+    tip: { shape: 'round', size: 12, hardness: 0.75 },
     dynamics: { smoothing: 0.3, minSize: 0.35 },
     culture: { reach: 16, branching: 0.5, appetite: 0.8, digest: 0.75, thickness: 0.12 },
     colour: { default: '#3f2e21' },

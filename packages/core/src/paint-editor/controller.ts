@@ -1287,8 +1287,27 @@ export class PaintEditorController {
     this.notifyCommit({ kind: 'execute', label: entry.label, origin: entry.origin });
   }
 
-  private commit(label: string, next: PaintDocumentState, before = this.doc): void {
+  /**
+   * Flushes live culture growth before a change that was built from the live document, and carries
+   * the flushed `culture-grow` events into it: otherwise `next` (built from the preview) would replace
+   * the flushed document and drop the events replay needs.
+   */
+  private flushCultureInto(next: PaintDocumentState, before: PaintDocumentState): { next: PaintDocumentState; before: PaintDocumentState } {
+    const shown = this.doc;
     this.flushCulturePreview();
+    if (this.doc === shown) return { next, before };
+    const flushed = this.doc;
+    const base = shown.paintEvents ?? [];
+    const added = (flushed.paintEvents ?? []).slice(base.length);
+    if (next !== shown && added.length) {
+      const own = next.paintEvents ?? [];
+      next = { ...next, paintEvents: [...own.slice(0, base.length), ...added, ...own.slice(base.length)] };
+    } else if (next === shown) next = flushed;
+    return { next, before: before === shown ? flushed : before };
+  }
+
+  private commit(label: string, nextIn: PaintDocumentState, beforeIn = this.doc): void {
+    const { next, before } = this.flushCultureInto(nextIn, beforeIn);
     if (this.grouping) {
       // Inside `group`: the change joins the group's one step, and listeners hear it when the group ends.
       this.grouping.changed = true;
@@ -1316,7 +1335,9 @@ export class PaintEditorController {
    * Commits `next` as a new undo step, or with `commitToHistory` false folds it into the last step
    * when that step has the same label (the later values of one slider drag).
    */
-  private commitOrAmend(label: string, next: PaintDocumentState, commitToHistory: boolean): void {
+  private commitOrAmend(label: string, nextIn: PaintDocumentState, commitToHistory: boolean): void {
+    // A flushed growth run becomes the last step, so the change below commits as its own step.
+    const { next } = this.flushCultureInto(nextIn, this.doc);
     const last = this.undoStack[this.undoStack.length - 1];
     if (commitToHistory || !last || last.label !== label || last.wet || this.wetOp || this.grouping) {
       this.commit(label, next);
@@ -1419,6 +1440,7 @@ export class PaintEditorController {
 
   redo(): string | null {
     this.requireIdle('redoing');
+    this.flushCulturePreview();
     const e = this.redoStack[this.redoStack.length - 1];
     if (!e) return null;
     if (e.wet) this.requireWetIdle('redoing');
@@ -4800,7 +4822,9 @@ export class PaintEditorController {
     if (options.growWhileClosed !== undefined && typeof options.growWhileClosed !== 'boolean') {
       throw new PaintEditorError('growWhileClosed must be true or false.');
     }
+    this.flushCulturePreview();
     const growWhileClosed = options.growWhileClosed ?? (this.doc.growWhileClosed === true);
+    this.docRevision++;
     this.doc = {
       ...this.doc,
       ...(growWhileClosed ? { growWhileClosed: true } : { growWhileClosed: undefined, lastGrownAt: undefined }),

@@ -398,6 +398,11 @@ public final class PaintEditorModel {
         attempt { _ = try controller.removeCultures(layerId) }
     }
 
+    /// Runs the growth a `growWhileClosed` document missed while it was closed (one undo step), as React and Svelte do when the canvas mounts.
+    public func catchUpCultures() {
+        attempt { _ = try controller.catchUpCultures() }
+    }
+
     /// Sets document-level biopaint options (`set_culture_options`).
     public func setCultureOptions(growWhileClosed: Bool) {
         _ = controller.setCultureOptions(growWhileClosed: growWhileClosed)

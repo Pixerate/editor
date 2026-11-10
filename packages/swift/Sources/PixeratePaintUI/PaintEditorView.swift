@@ -71,6 +71,9 @@ public struct PaintEditorView: View {
             }
         }
         .controlSize(.small)
-        .task { await model.runWetClock() }
+        .task {
+            model.catchUpCultures()
+            await model.runWetClock()
+        }
     }
 }

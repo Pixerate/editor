@@ -1768,7 +1768,7 @@ extension PaintEditorController {
         })
     }
 
-    func culturesJSON() -> JSONObject {
+    func culturesJSON(_ doc: PaintDocumentState) -> JSONObject {
         var out = JSONObject()
         var layers = JSONObject()
         if let cultures = doc.cultures {
