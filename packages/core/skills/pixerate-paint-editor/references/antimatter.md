@@ -41,6 +41,12 @@ canvas, and detonates wherever it touches existing paint across every visible la
   replays read fuel from exactly those layers, even if they are hidden now, and change the editable
   ones. Layers added later are neither fuel nor changed. Passing `layerId` to `replay_strokes`
   drops the recorded targets and uses the layers visible now.
+- **Blast animation (`duration`).** `duration` (seconds, default `0.7`; `0` for none) only animates
+  the editor view: while the canvas is shown (React, Svelte and the Swift `PaintEditorView`), each
+  blast expands from its first dab over `duration`, then the view settles on the committed pixels.
+  The stroke result, the document, undo and replays hold every blast at once, so read the result
+  right after the stroke; there is nothing to wait for. Undo, redo or the next stroke stops a
+  playing animation.
 - **Presets.**
   - `antimatter`: balanced blast (`blastRadius` 2.5, `scorch` 0.6, `annihilate` 0.25, `sparks` 0.5).
   - `antimatter-flare`: bright spark burst with glowing light trails (`sparks` 0.9, `sparkReach` 4.5,

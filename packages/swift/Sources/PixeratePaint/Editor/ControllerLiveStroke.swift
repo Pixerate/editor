@@ -171,6 +171,7 @@ public final class PaintLiveStroke {
         if let load = run.result.mixerLoad { c.keepLoad(run.brush, load) }
         if run.doc !== current || c.wetOp != nil {
             c.commit("\(run.brush.name) stroke", c.withWetEvents(run.doc), before: before)
+            c.startPendingBlastAnimation(run.result.bounds)
             if let sid = run.result.strokeId, let stroke = c.doc.strokes.last(where: { $0.id == sid }) {
                 c.recordMutationStroke(stroke, run.result.bounds)
             }
@@ -259,6 +260,7 @@ extension PaintEditorController {
         var i = initIn
         if i.snapToPerspective == nil { i.snapToPerspective = true }
         let before = doc
+        clearBlastAnimation()
         let session: PaintStrokeSession
         do { session = try sessionFor(doc, i) } catch {
             wetOp = nil
@@ -285,7 +287,7 @@ extension PaintEditorController {
         // Changed tiles recomposite only where the canvas changed since this compositor's last call.
         let dirty = compositedVersions[id].flatMap(dirtySince)
         compositedVersions[id] = version
-        c.compositeTiles(renderLayers(view: true), rect, sources(), onTile, CompositeCallOptions(checkpointLayerId: liveStroke?.layerId ?? doc.activeLayerId, dirty: dirty.map { $0.map(DirtyRect.init) }))
+        c.compositeTiles(renderLayers(view: true), rect, sources(), onTile, CompositeCallOptions(checkpointLayerId: hasActiveBlastAnimation ? nil : (liveStroke?.layerId ?? doc.activeLayerId), dirty: dirty.map { $0.map(DirtyRect.init) }))
     }
 
     /// Where a stroke of a stroke layer painted (document pixels), for drawing its pick box; nil when unknown.
