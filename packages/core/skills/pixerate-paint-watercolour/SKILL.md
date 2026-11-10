@@ -85,6 +85,7 @@ coverage). See `references/live-patterns.md` in `pixerate-paint-editor`.
 | Stained glass, a lightbox | `set_paper` `stained-glass` (or `backlight`); strong glazes for panes, opaque black lines above |
 | Organic spots, coral dendrites or Turing stripes in a wash | Paint with `turing-wash` or `coral-ink` (or `seed_live_patterns` into a wet wash), `advance_wet_paint` to let it grow, then `dry_paint` to freeze it |
 | Disturb or smear a wash without adding colour | `ghost-wash`, `ghost-gouache` or `invisible-ink` (`ghost` `linger`, `smear`) on the same layer; see `references/ghost.md` |
+| Swirl a wet wash around a tap, line or loop | `wet-vortex` (or any `vortex` brush on a wet layer), then `advance_wet_paint` to let the fluid keep spinning; see `references/vortex.md` |
 
 ## Recipes
 

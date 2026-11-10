@@ -65,7 +65,8 @@
           "particles",
           "objects",
           "antimatter",
-          "scraper"
+          "scraper",
+          "vortex"
         ]
       },
       "description": "Marks kinds it renders."

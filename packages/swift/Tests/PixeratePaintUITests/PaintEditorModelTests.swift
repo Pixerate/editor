@@ -399,7 +399,7 @@ final class PaintEditorModelTests: XCTestCase {
         }
         // Every built-in brush is in the picker, stamp tips included (they lay the editor's stamps); wet, impasto, particle, bristle, sticker and scraper brushes too.
         XCTAssertFalse(model.brushes.isEmpty)
-        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper"].contains($0.engine) })
+        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"].contains($0.engine) })
         XCTAssertEqual(model.brushes.count, model.controller.brushes.count)
         XCTAssertTrue(model.brushes.contains { $0.engine == "wet" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "impasto" })

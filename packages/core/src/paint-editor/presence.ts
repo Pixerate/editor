@@ -18,6 +18,7 @@ import type { RasterRect } from '../raster/surface';
 import { PaintEditorError, type FillLayerOptions, type FillRegionOptions, type PaintEditorController, type PaintStrokeInit, type ReplayOptions } from './controller';
 import type { PenPoint } from './engine';
 import type { PaintStrokeResult } from './stroke';
+import type { VortexStrokeSummary } from './vortex';
 
 export type PaintPresenceActor = PresenceActor;
 export type PaintPresenceState = PresenceState;
@@ -33,6 +34,7 @@ export interface PaintStrokesResult {
   strokeIds: string[];
   mixerLoad?: MixerLoad;
   wet?: boolean;
+  vortex?: VortexStrokeSummary;
 }
 
 /** What an agent asks for. Each command that paints commits as one undo step. */
@@ -332,6 +334,7 @@ export class PaintDirector {
         strokeIds,
         ...(last?.mixerLoad ? { mixerLoad: last.mixerLoad } : {}),
         ...(last?.wet !== undefined ? { wet: last.wet } : {}),
+        ...(last?.vortex ? { vortex: last.vortex } : {}),
       };
     });
   }

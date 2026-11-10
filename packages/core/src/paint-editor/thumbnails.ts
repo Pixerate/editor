@@ -58,8 +58,8 @@ function paintWetTestStroke(brush: PaintBrush, paper: PaperSettings, color: stri
   });
   driver.push(thumbnailStroke(width, height));
   driver.finish();
-  // Blowing only shows once the water has moved.
-  if (brush.wet.tool === 'blow') w.stepSync(4);
+  // Blowing and wet vortex only show once the water has moved.
+  if (brush.wet.tool === 'blow' || brush.wet.tool === 'vortex') w.stepSync(4);
   const surf = w.display('thumb').surface;
   return film ? new LitCache().lit(surf, { ...emptyThickChannels(), film: film.surface() }, DEFAULT_LIGHTING) : surf;
 }
@@ -202,7 +202,7 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
     surface = fillRect(surface, { x: 0, y: 0, width, height }, rgba);
   } else if (b.engine === 'wet') {
     // the wet layer draws its own band
-  } else if (b.engine === 'blender' || b.engine === 'smudge' || b.engine === 'antimatter' || (b.engine === 'mixer' && !b.loadsColor) || b.behavior.pickup > 0) {
+  } else if (b.engine === 'blender' || b.engine === 'smudge' || b.engine === 'antimatter' || b.engine === 'vortex' || (b.engine === 'mixer' && !b.loadsColor) || b.behavior.pickup > 0) {
     // Something to move: two bands, the colour over ochre.
     const half = Math.ceil(height / 2);
     surface = fillRect(surface, { x: 0, y: 0, width, height: half }, rgba);

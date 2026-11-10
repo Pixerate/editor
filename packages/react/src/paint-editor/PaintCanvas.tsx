@@ -206,10 +206,10 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
             y1={l.from.y}
             x2={l.to.x}
             y2={l.to.y}
-            stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' || l.kind === 'sticker' ? '#818cf8' : '#f472b6'}
-            strokeOpacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' || l.kind === 'sticker' ? 0.8 : 0.35}
-            strokeWidth={1 / state.view.zoom}
-            strokeDasharray={l.kind === 'symmetry' ? `${6 / state.view.zoom} ${4 / state.view.zoom}` : undefined}
+            stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' || l.kind === 'sticker' ? '#818cf8' : l.kind === 'vortex' || l.kind === 'vortex-reach' ? '#38bdf8' : '#f472b6'}
+            strokeOpacity={l.kind === 'vortex' ? 0.9 : l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' || l.kind === 'sticker' ? 0.8 : l.kind === 'vortex-reach' ? 0.45 : 0.35}
+            strokeWidth={(l.kind === 'vortex' ? 1.5 : 1) / state.view.zoom}
+            strokeDasharray={l.kind === 'symmetry' ? `${6 / state.view.zoom} ${4 / state.view.zoom}` : l.kind === 'vortex-reach' ? `${4 / state.view.zoom} ${4 / state.view.zoom}` : undefined}
           />
         ))}
         {agentStrokes && <PaintAgentStrokeLines strokes={agentStrokes} />}

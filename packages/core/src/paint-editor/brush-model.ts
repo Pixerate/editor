@@ -30,44 +30,55 @@ import {
   DEFAULT_BRISTLE,
   DEFAULT_PARTICLE,
   DEFAULT_STICKER,
+  DEFAULT_VORTEX,
   INVERT_MODES,
   normalizeAntimatter,
   normalizeBristle,
   normalizeParticle,
   normalizeStickerSettings,
+  normalizeVortex,
   STAMP_KINDS,
+  VORTEX_DIRECTIONS,
   type AntimatterSettings,
   type BristleSettings,
   type InvertMode,
   type ParticleSettings,
   type StickerSettings,
+  type VortexDirection,
+  type VortexSettings,
 } from './mark-settings';
 
 export {
   DEFAULT_ANTIMATTER,
   DEFAULT_LIVE_PATTERNS,
+  DEFAULT_VORTEX,
   INVERT_MODES,
   LIVE_PATTERN_KINDS,
   LIVE_PATTERN_PRESETS,
   normalizeAntimatter,
   normalizeLivePatterns,
+  normalizeVortex,
+  VORTEX_DIRECTIONS,
   type AntimatterSettings,
   type InvertMode,
   type LivePatternKind,
   type LivePatternsInput,
   type LivePatternsSettings,
+  type VortexDirection,
+  type VortexSettings,
 };
 export { CULTURE_SPECIES, DEFAULT_CULTURE, normalizeCulture, type CultureSettings, type CultureSpecies };
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
  * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
- * Brush), `blender` (mixes the colours under and near the tip), `smudge` (drags paint along), or
- * `antimatter` (animated blasts that invert, scorch and destroy paint across every visible layer).
+ * Brush), `blender` (mixes the colours under and near the tip), `smudge` (drags paint along),
+ * `antimatter` (animated blasts that invert, scorch and destroy paint across every visible layer) or
+ * `vortex` (winds surrounding paint into a vortex around the drawn shape).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'vortex';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter', 'scraper'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter', 'scraper', 'vortex'];
 
 export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'light' | 'custom';
 
@@ -77,11 +88,12 @@ export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 
  * What a wet brush does to the wet layer: `paint` (water and pigment), `water` (clear water;
  * with `rewet` it lifts dried paint), `dry` (a hair dryer: takes water, the pigment settles),
  * `blow` (pushes the water along the stroke), `blend` (evens out the wet pigment under the tip),
- * `smudge` (drags wet paint along) or `blot` (a tissue: takes up wet paint).
+ * `smudge` (drags wet paint along), `blot` (a tissue: takes up wet paint) or `vortex` (spins the
+ * wet fluid around the drawn shape).
  */
-export type WetTool = 'paint' | 'water' | 'dry' | 'blow' | 'blend' | 'smudge' | 'blot';
+export type WetTool = 'paint' | 'water' | 'dry' | 'blow' | 'blend' | 'smudge' | 'blot' | 'vortex';
 
-export const WET_TOOLS: readonly WetTool[] = ['paint', 'water', 'dry', 'blow', 'blend', 'smudge', 'blot'];
+export const WET_TOOLS: readonly WetTool[] = ['paint', 'water', 'dry', 'blow', 'blend', 'smudge', 'blot', 'vortex'];
 
 /**
  * The wet medium a wet brush paints: its layer takes the medium's wet settings the first time it
@@ -491,6 +503,8 @@ export interface PaintBrush {
   antimatter: AntimatterSettings;
   /** Scraper engine only: how deep and sharp the blade cuts through the paint stack. */
   scraper: ScraperSettings;
+  /** Vortex engine (or wet vortex tool): reach, turns, pull, direction, ink and winding duration. */
+  vortex?: VortexSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
   /** UV-fluorescent ink: glows under the virtual UV blacklight (amount 0: none). */
@@ -645,7 +659,7 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns' | 'culture'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'vortex' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns' | 'culture'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -678,7 +692,13 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   bristle?: Partial<BristleSettings>;
   sticker?: Partial<StickerSettings>;
   antimatter?: Partial<AntimatterSettings>;
+  vortex?: Partial<VortexSettings>;
 };
+
+/** Returns a brush's vortex settings, falling back to `DEFAULT_VORTEX` when omitted. */
+export function brushVortex(brush: Pick<PaintBrush, 'vortex'>): VortexSettings {
+  return brush.vortex ?? DEFAULT_VORTEX;
+}
 
 /** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab, mixer and wet brushes. */
 export function isWetCapable(brush: Pick<PaintBrush, 'engine'>): boolean {
@@ -698,10 +718,11 @@ export function usesPaintExchange(brush: PaintBrush, gradient = brush.paint !== 
   return brush.engine === 'dab' && (brush.behavior.pickup > 0 || gradient);
 }
 
-/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, scrapers, blenders, smudges or the wet tools other than paint). */
-export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet'>): boolean {
+/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, scrapers, blenders, smudges, colourless vortices or the wet tools other than paint). */
+export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet' | 'vortex'>): boolean {
   if (brush.engine === 'eraser' || brush.engine === 'scraper' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
-  if (brush.engine === 'wet') return brush.wet.tool === 'paint';
+  if (brush.engine === 'vortex') return (brush.vortex?.ink ?? 0) > 0;
+  if (brush.engine === 'wet') return brush.wet.tool === 'paint' || (brush.wet.tool === 'vortex' && (brush.vortex?.ink ?? 0) > 0);
   if (brush.engine === 'mixer') return brush.loadsColor;
   return true;
 }
@@ -791,6 +812,12 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
   // `behavior.multicolor` is a read-only view of the gradient, for older readers.
   behavior = { ...behavior, multicolor: paintToMultiColor(paint) ?? { ...DEFAULT_MULTI_COLOR, colors: [] } };
   const wet = normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH);
+  const rawMarks = (raw as { marks?: { kind?: string } & Partial<VortexSettings> }).marks;
+  const rawVortex = raw.vortex ?? (rawMarks?.kind === 'vortex' ? rawMarks : undefined);
+  const vortex =
+    engine === 'vortex' || (engine === 'wet' && wet.tool === 'vortex') || rawVortex !== undefined || b.vortex !== undefined
+      ? normalizeVortex(rawVortex ?? {}, b.vortex ?? DEFAULT_VORTEX)
+      : undefined;
   const wantsLight = typeof raw.light?.amount === 'number' && raw.light.amount > 0;
   const canMutate = engine === 'dab' || (engine === 'wet' && wet.tool === 'paint') || engine === 'impasto' || engine === 'particle' || engine === 'bristle';
   const mutation =
@@ -826,6 +853,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     antimatter: normalizeAntimatter(raw.antimatter ?? {}, b.antimatter ?? DEFAULT_ANTIMATTER),
     scraper: normalizeScraper(raw.scraper, b.scraper ?? DEFAULT_SCRAPER),
+    ...(vortex ? { vortex } : {}),
     light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     fluorescence: normalizeFluorescence(raw.fluorescence ?? {}, b.fluorescence ?? DEFAULT_FLUORESCENCE),
     thermochromic: normalizeThermochromic(raw.thermochromic ?? {}, b.thermochromic ?? DEFAULT_THERMOCHROMIC),

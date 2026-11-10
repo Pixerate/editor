@@ -31,6 +31,7 @@ export function liveStrokeRefusal(brush: PaintBrush): string | null {
       return `The ${brush.name} brush scrapes through painted pixel layers, which a stroke layer can't redraw; rasterize the layer first (rasterize_stroke_layer) or scrape on a pixel layer.`;
     case 'blender':
     case 'smudge':
+    case 'vortex':
       return `The ${brush.name} brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer.`;
     case 'antimatter':
       return `The ${brush.name} brush detonates existing paint across visible layers, so it can't be redrawn on a stroke layer; paint it on a pixel layer (add_layer) or rasterize the layer first (rasterize_stroke_layer).`;

@@ -338,6 +338,23 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
     }
 
+    /// The vortex-paint sliders (`PaintUITables.sliders.vortex`): reach, turns, pull, ink and duration.
+    public var vortexSliders: [PaintUISlidersVortexItem] { tables.sliders.vortex }
+
+    /// The value of a vortex slider (`vortex.reach`, `vortex.turns`, `vortex.pull`, `vortex.ink`, `vortex.duration`).
+    public func vortexValue(_ path: String) -> Double {
+        track()
+        let v = brushVortex(controller.brush)
+        switch path {
+        case "vortex.reach": return v.reach
+        case "vortex.turns": return v.turns
+        case "vortex.pull": return v.pull
+        case "vortex.ink": return v.ink
+        case "vortex.duration": return v.duration
+        default: return 0
+        }
+    }
+
     /// The antimatter-paint sliders (`PaintUITables.sliders.antimatter`).
     public var antimatterSliders: [PaintUISlidersAntimatterItem] { tables.sliders.antimatter }
 
@@ -358,6 +375,19 @@ public final class PaintEditorModel {
         case "antimatter.duration": return a.duration
         default: return 0
         }
+    }
+
+    /// Sets a vortex slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setVortexValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// The active vortex brush's spin direction (`"follow"`, `"cw"` or `"ccw"`).
+    public var vortexDirection: String { track(); return brushVortex(controller.brush).direction }
+
+    /// Sets the active vortex brush's spin direction (`set_brush` with `vortex.direction`).
+    public func setVortexDirection(_ direction: String) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], "vortex.direction", .string(direction))) }
     }
 
     /// Sets an antimatter slider (`set_brush` with `marks.<key>`; editor state, not an undo step).

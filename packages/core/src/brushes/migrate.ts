@@ -39,11 +39,14 @@ function skeleton(b: ResolvedBrush): Brush {
   const cult = b.culture ? { culture: {} } : {};
   const brush: Brush = { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) }, ...irid, ...cult };
   if (b.engine === 'eraser' || b.engine === 'blender' || b.engine === 'smudge') return { id: b.id, name: b.name, kind: 'tool', tool: b.engine, tip: { shape: tipShape(b) } };
+  const mut = b.mutation ? { mutation: {} } : {};
+  if (b.engine === 'wet' && b.wet.tool === 'vortex') {
+    return { ...brush, medium: 'paint', variety: b.wet.medium, marks: { kind: 'vortex' }, behaviour: { surface: 'wet' }, ...mut };
+  }
   if (b.engine === 'wet' && b.wet.tool !== 'paint') {
     const tool = (Object.keys(WET_TOOL_OF) as BrushTool[]).find((t) => WET_TOOL_OF[t] === b.wet.tool)!;
     return { id: b.id, name: b.name, kind: 'tool', tool, tip: { shape: tipShape(b) } };
   }
-  const mut = b.mutation ? { mutation: {} } : {};
   switch (b.engine) {
     case 'wet':
       return { ...brush, medium: 'paint', variety: b.wet.medium, behaviour: { surface: 'wet' }, ...(b.ghost && !b.mutation ? { ghost: {} } : {}), ...mut };
@@ -61,6 +64,10 @@ function skeleton(b: ResolvedBrush): Brush {
       return { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) }, marks: { kind: 'objects' }, ...mut };
     case 'scraper':
       return { ...brush, marks: { kind: 'scraper' } };
+    case 'vortex': {
+      const [medium, variety] = CATEGORY_MEDIUM[b.category] ?? ['paint'];
+      return { ...brush, ...(medium ? { medium } : {}), ...(variety ? { variety } : {}), marks: { kind: 'vortex' }, ...mut };
+    }
     default: {
       const [medium, variety] = CATEGORY_MEDIUM[b.category] ?? [];
       return { ...brush, ...(medium ? { medium } : {}), ...(variety ? { variety } : {}), ...(b.engine === 'dab' && b.spray ? { marks: { kind: 'scatter' } } : {}), ...mut };

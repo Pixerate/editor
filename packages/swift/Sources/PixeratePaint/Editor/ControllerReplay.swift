@@ -79,6 +79,7 @@ extension PaintEditorController {
         if let load = last?.result.mixerLoad { out["mixerLoad"] = loadResult(load) }
         if let w = last?.result.wet { out["wet"] = .bool(w) }
         if let am = last?.result.antimatter { out["antimatter"] = am.json }
+        if let v = last?.result.vortex { out["vortex"] = v.json }
         return out
     }
 

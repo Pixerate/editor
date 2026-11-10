@@ -335,4 +335,18 @@ private final class AsyncOnlyRenderer: EffectRenderer {
         return try await inner.render(request)
     }
     func dispose() { inner.dispose() }
+
+    func testTheVortexGuideDrawsEverySymmetryCopy() throws {
+        let c = try PaintEditorController(width: 128, height: 128)
+        let one = try c.beginStroke(PaintStrokeInit(brushId: "vortex", seed: 1))
+        one.push([PenPoint(x: 40, y: 64, pressure: 1)])
+        let single = one.vortexGuides.count
+        XCTAssertGreaterThan(single, 0)
+        one.cancel()
+        _ = c.setSymmetry(["enabled": true, "mode": "vertical", "centerX": 64, "centerY": 64])
+        let two = try c.beginStroke(PaintStrokeInit(brushId: "vortex", seed: 1))
+        two.push([PenPoint(x: 40, y: 64, pressure: 1)])
+        XCTAssertEqual(two.vortexGuides.count, 2 * single)
+        two.cancel()
+    }
 }
