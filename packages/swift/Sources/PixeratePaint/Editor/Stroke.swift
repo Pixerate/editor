@@ -77,6 +77,8 @@ public struct PaintStrokeResult {
     public var mixerLoad: MixerLoad?
     /// Wet brushes: the paint is wet (it keeps moving until it dries).
     public var wet: Bool?
+    /// Biopaint brushes: how many spores the stroke seeded onto the layer.
+    public var culture: Int?
     /// Antimatter brushes: blast, spark, fuel and layer summary.
     public var antimatter: AntimatterStats?
     /// Vortex brushes: the classified stroke shape and peak displacement in pixels.
@@ -411,6 +413,9 @@ final class PaintStrokeSession: PaintTileTarget {
 
     /// Impasto strokes: the layer's thick-paint channels with the stroke so far.
     func thickChannels() -> ThickChannels? { thickDriver?.channels() ?? vortexDriver?.reliefChannels() }
+
+    /// Dry vortex strokes: the driver, to move per-layer masks (biopaint occupancy) with the paint.
+    func vortexWarp() -> VortexStrokeDriver? { vortexDriver?.preWarpSurface() != nil ? vortexDriver : nil }
 
     /// Vortex strokes: winding animation parameters (`(field, preInkSurface, duration)`).
     func windingAnimation() -> (field: DisplacementField, preInkSurface: TiledSurface, duration: Double)? {

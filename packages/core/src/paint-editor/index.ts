@@ -46,6 +46,8 @@ export * from './ferro-tools';
 export * from './age';
 export * from './scraper';
 export * from './time-machine-tools';
+export * from '../paint/culture';
+export * from './culture-tools';
 export * from './replay';
 export * from './replay-tools';
 export * from './stencils';

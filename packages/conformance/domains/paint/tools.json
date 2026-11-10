@@ -2259,6 +2259,77 @@
                 },
                 "additionalProperties": false
               },
+              "culture": {
+                "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses. Pass null to remove the culture facet.",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+                    "properties": {
+                      "species": {
+                        "type": "string",
+                        "enum": [
+                          "mycelium"
+                        ],
+                        "description": "Living species (default mycelium)."
+                      },
+                      "reach": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+                      },
+                      "branching": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How often threads fork (0..1, default 0.4)."
+                      },
+                      "wander": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much threads meander (0..1, default 0.35)."
+                      },
+                      "appetite": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+                      },
+                      "digest": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+                      },
+                      "fuse": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+                      },
+                      "thickness": {
+                        "type": "number",
+                        "minimum": 0.02,
+                        "maximum": 0.5,
+                        "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+                      },
+                      "glow": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null",
+                    "description": "Remove the culture facet."
+                  }
+                ]
+              },
               "colour": {
                 "type": "object",
                 "description": "The brush's colours. The user's colour still wins unless own is set.",
@@ -2770,6 +2841,7 @@
                     "ferro",
                     "motion",
                     "livePatterns",
+                    "culture",
                     "colour"
                   ],
                   "description": "A facet to remove."
@@ -3120,7 +3192,7 @@
         {
           "name": "paint_stroke",
           "title": "Paint a brush stroke",
-          "description": "Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers), and antimatter brushes (engine antimatter: antimatter, antimatter-flare, antimatter-charge) detonate where they touch paint across every visible layer, inverting colours in the core, removing alpha, scorching a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer (returning antimatter: { blasts, sparks, fuel, layers, skippedLayers }). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet), for antimatter brushes antimatter, and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.",
+          "description": "Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, brushes with a culture facet (mycelial-ink, rot, foxfire) seed spores along the stroke (`culture: { seeds }` in the result; see grow_cultures), sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers), and antimatter brushes (engine antimatter: antimatter, antimatter-flare, antimatter-charge) detonate where they touch paint across every visible layer, inverting colours in the core, removing alpha, scorching a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer (returning antimatter: { blasts, sparks, fuel, layers, skippedLayers }). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet), for culture brushes culture ({ seeds }), for antimatter brushes antimatter, and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -4440,6 +4512,77 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "culture": {
+                    "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses. Pass null to remove the culture facet.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+                        "properties": {
+                          "species": {
+                            "type": "string",
+                            "enum": [
+                              "mycelium"
+                            ],
+                            "description": "Living species (default mycelium)."
+                          },
+                          "reach": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+                          },
+                          "branching": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How often threads fork (0..1, default 0.4)."
+                          },
+                          "wander": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How much threads meander (0..1, default 0.35)."
+                          },
+                          "appetite": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+                          },
+                          "digest": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+                          },
+                          "fuse": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+                          },
+                          "thickness": {
+                            "type": "number",
+                            "minimum": 0.02,
+                            "maximum": 0.5,
+                            "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+                          },
+                          "glow": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null",
+                        "description": "Remove the culture facet."
+                      }
+                    ]
                   },
                   "colour": {
                     "type": "object",
@@ -6407,6 +6550,77 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "culture": {
+                    "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses. Pass null to remove the culture facet.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+                        "properties": {
+                          "species": {
+                            "type": "string",
+                            "enum": [
+                              "mycelium"
+                            ],
+                            "description": "Living species (default mycelium)."
+                          },
+                          "reach": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+                          },
+                          "branching": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How often threads fork (0..1, default 0.4)."
+                          },
+                          "wander": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How much threads meander (0..1, default 0.35)."
+                          },
+                          "appetite": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+                          },
+                          "digest": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+                          },
+                          "fuse": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+                          },
+                          "thickness": {
+                            "type": "number",
+                            "minimum": 0.02,
+                            "maximum": 0.5,
+                            "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+                          },
+                          "glow": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null",
+                        "description": "Remove the culture facet."
+                      }
+                    ]
                   },
                   "colour": {
                     "type": "object",
@@ -8439,6 +8653,77 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "culture": {
+                    "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses. Pass null to remove the culture facet.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+                        "properties": {
+                          "species": {
+                            "type": "string",
+                            "enum": [
+                              "mycelium"
+                            ],
+                            "description": "Living species (default mycelium)."
+                          },
+                          "reach": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+                          },
+                          "branching": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How often threads fork (0..1, default 0.4)."
+                          },
+                          "wander": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How much threads meander (0..1, default 0.35)."
+                          },
+                          "appetite": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+                          },
+                          "digest": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+                          },
+                          "fuse": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+                          },
+                          "thickness": {
+                            "type": "number",
+                            "minimum": 0.02,
+                            "maximum": 0.5,
+                            "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+                          },
+                          "glow": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null",
+                        "description": "Remove the culture facet."
+                      }
+                    ]
                   },
                   "colour": {
                     "type": "object",
@@ -12537,6 +12822,98 @@
           }
         },
         {
+          "name": "get_cultures",
+          "title": "Read living biopaint cultures",
+          "description": "Reads every pixel layer’s biopaint colony (seeded by brushes with a culture facet, such as mycelial-ink, rot and foxfire): tick count, living tips count, total segments drawn, bounds in document pixels, and status (\"growing\", \"extinct\", or \"capped\"), plus whether growWhileClosed is enabled and pendingCatchUpTicks. Changes nothing.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read living biopaint cultures",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "grow_cultures",
+          "title": "Grow biopaint cultures",
+          "description": "Advances living mycelial colonies by steps ticks (1..2000, default 40) on layerId (or all visible unlocked pixel layers with living tips when layerId is omitted) as one undo step. Tips sense ahead for existing paint (appetite) and paper grain, eat and fade paint (digest) while picking up its colour, fork into thinner threads (branching), and fuse into loops (fuse) when meeting existing mycelium. Refuses stroke layers, effect layers, and wet layers holding wet paint (dry_paint first). Returns segmentsAdded, tipsAlive, bounds, status, and per-layer results.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "layerId": {
+                "type": "string",
+                "description": "Pixel layer id from list_layers to grow (default: all layers with living tips)."
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2000,
+                "description": "Simulation ticks to advance (1..2000, default 40). Growing 100 once equals growing 50 twice."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Grow biopaint cultures",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_cultures",
+          "title": "Kill a layer’s biopaint colony",
+          "description": "Stops all living biopaint tips on a pixel layer (default the active layer) so the colony stops growing (`status: \"extinct\"`), while keeping every thread already drawn on the layer as ordinary paint. One undo step. Returns the layerId, removedTips count, and status.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "layerId": {
+                "type": "string",
+                "description": "Pixel layer id from list_layers (default the active layer)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Kill a layer’s biopaint colony",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "set_culture_options",
+          "title": "Configure biopaint culture options",
+          "description": "Enables or disables growWhileClosed (default false): when true, saving records lastGrownAt and reopening catches up elapsed growth (up to 5,000 ticks) as a single undo step (\"Growth while closed\"). Saved with the document, not an undo step. Returns the options now in force.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "growWhileClosed": {
+                "type": "boolean",
+                "description": "Whether living colonies catch up elapsed growth when the painting is reopened (default false)."
+              }
+            },
+            "required": [
+              "growWhileClosed"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Configure biopaint culture options",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
           "name": "export_time_lapse",
           "title": "Export a time-lapse",
           "description": "Repaints the painting from its recorded strokes and events (fills, clears, wet-media events at their clock) in a fresh editor and returns a time-lapse: frame count, fps, size, duration, a video project of the frames as stills (assets frame-0001.png…), and the ffmpeg command that renders it to timelapse.mp4 from the frame files (the video editor export path). Shows a contact sheet of a few frames. With includeFrames the frames come back as base64 PNGs too. Changes nothing. Layers with pixels that were not painted with recorded strokes (imported images, merges) start empty in the replay.",
@@ -14490,6 +14867,77 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "culture": {
+                          "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses. Pass null to remove the culture facet.",
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+                              "properties": {
+                                "species": {
+                                  "type": "string",
+                                  "enum": [
+                                    "mycelium"
+                                  ],
+                                  "description": "Living species (default mycelium)."
+                                },
+                                "reach": {
+                                  "type": "number",
+                                  "minimum": 1,
+                                  "maximum": 100,
+                                  "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+                                },
+                                "branching": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "How often threads fork (0..1, default 0.4)."
+                                },
+                                "wander": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "How much threads meander (0..1, default 0.35)."
+                                },
+                                "appetite": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+                                },
+                                "digest": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+                                },
+                                "fuse": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+                                },
+                                "thickness": {
+                                  "type": "number",
+                                  "minimum": 0.02,
+                                  "maximum": 0.5,
+                                  "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+                                },
+                                "glow": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null",
+                              "description": "Remove the culture facet."
+                            }
+                          ]
                         },
                         "colour": {
                           "type": "object",
@@ -18975,6 +19423,77 @@
                 },
                 "additionalProperties": false
               },
+              "culture": {
+                "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses. Pass null to remove the culture facet.",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+                    "properties": {
+                      "species": {
+                        "type": "string",
+                        "enum": [
+                          "mycelium"
+                        ],
+                        "description": "Living species (default mycelium)."
+                      },
+                      "reach": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+                      },
+                      "branching": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How often threads fork (0..1, default 0.4)."
+                      },
+                      "wander": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much threads meander (0..1, default 0.35)."
+                      },
+                      "appetite": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+                      },
+                      "digest": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+                      },
+                      "fuse": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+                      },
+                      "thickness": {
+                        "type": "number",
+                        "minimum": 0.02,
+                        "maximum": 0.5,
+                        "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+                      },
+                      "glow": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null",
+                    "description": "Remove the culture facet."
+                  }
+                ]
+              },
               "colour": {
                 "type": "object",
                 "description": "The brush's colours. The user's colour still wins unless own is set.",
@@ -20737,6 +21256,77 @@
                 },
                 "additionalProperties": false
               },
+              "culture": {
+                "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses. Pass null to remove the culture facet.",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+                    "properties": {
+                      "species": {
+                        "type": "string",
+                        "enum": [
+                          "mycelium"
+                        ],
+                        "description": "Living species (default mycelium)."
+                      },
+                      "reach": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+                      },
+                      "branching": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How often threads fork (0..1, default 0.4)."
+                      },
+                      "wander": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much threads meander (0..1, default 0.35)."
+                      },
+                      "appetite": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+                      },
+                      "digest": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+                      },
+                      "fuse": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+                      },
+                      "thickness": {
+                        "type": "number",
+                        "minimum": 0.02,
+                        "maximum": 0.5,
+                        "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+                      },
+                      "glow": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null",
+                    "description": "Remove the culture facet."
+                  }
+                ]
+              },
               "colour": {
                 "type": "object",
                 "description": "The brush's colours. The user's colour still wins unless own is set.",
@@ -21248,6 +21838,7 @@
                     "ferro",
                     "motion",
                     "livePatterns",
+                    "culture",
                     "colour"
                   ],
                   "description": "A facet to remove."

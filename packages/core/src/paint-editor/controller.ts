@@ -232,6 +232,26 @@ import {
   type XrayResult,
 } from './age';
 import { collectScrapeableLayers, scrapeLayersByIds, ScraperStrokeDriver } from './scraper';
+import {
+  applyCultureGrowReplay,
+  clearOccupancyUnderStroke,
+  cloneLayerCulture,
+  CULTURE_TICKS_PER_SECOND,
+  culturesExtensionFromJSON,
+  culturesExtensionToJSON,
+  layerCultureSummary,
+  MAX_CATCH_UP_TICKS,
+  mergeLayerCultures,
+  seedCultureFromStroke,
+  stepLayerCulture,
+  translateLayerCulture,
+  type CultureGrowEventData,
+  type CultureRecordedFade,
+  type CultureRecordedSegment,
+  type CultureStatus,
+  type LayerCulture,
+  type LayerCultureSummary,
+} from '../paint/culture';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -326,6 +346,33 @@ export interface PaintLayerLivePatternsInfo extends LivePatternStats {
   wetBounds: RasterRect | null;
 }
 
+/** Biopaint (`culture`) state as panels and tools see it. */
+export interface PaintCulturesStateInfo {
+  layers: LayerCultureSummary[];
+  growWhileClosed: boolean;
+  pendingCatchUpTicks: number;
+  paused: boolean;
+  speed: number;
+  growing: boolean;
+}
+
+export interface GrowCulturesLayerResult {
+  layerId: string;
+  segmentsAdded: number;
+  tipsAlive: number;
+  bounds: RasterRect | null;
+  status: CultureStatus;
+}
+
+export interface GrowCulturesResult {
+  steps: number;
+  segmentsAdded: number;
+  tipsAlive: number;
+  bounds: RasterRect | null;
+  status: CultureStatus;
+  layers: GrowCulturesLayerResult[];
+}
+
 export interface PaintEditorState {
   document: PaintDocumentState;
   /** The active brush (possibly edited from its preset). */
@@ -392,6 +439,8 @@ export interface PaintEditorState {
   age: PaintAgeSettings;
   /** Whether the X-ray radiograph view is switched on in the viewport (editor state, not saved with the document). */
   xrayView: boolean;
+  /** Biopaint (`culture`) colonies across layers, and playback controls. */
+  cultures: PaintCulturesStateInfo;
   /** Increments on every change. */
   version: number;
 }
@@ -784,6 +833,14 @@ export class PaintEditorController {
   private selectedSticker: string | null = null;
   /** A sticker drag in progress (`previewSticker`): the document before it, so the drop undoes in one step, and the one it showed last. */
   private stickerPreview: { base: PaintDocumentState; shown: PaintDocumentState } | null = null;
+  /** Uncommitted live culture growth run (`playCultures`): commits as one undo step when interrupted by a stroke, undo, or save. */
+  private culturePreview: {
+    base: PaintDocumentState;
+    shown: PaintDocumentState;
+    events: Map<string, CultureGrowEventData>;
+  } | null = null;
+  private culturePaused = false;
+  private cultureSpeed = 1;
   private readonly encodeImage: ImageEncoder | undefined;
   private listeners = new Set<() => void>();
   private commitListeners = new Set<(event: PaintCommitEvent) => void>();
@@ -1235,6 +1292,7 @@ export class PaintEditorController {
       hasMutationAgent: this.mutationListeners.size > 0 || this.mutationAgentConnected,
       age: { ...this.age },
       xrayView: this.xrayView,
+      cultures: this.getCultures(),
       version: this.version,
     };
     return this.cached;
@@ -1280,7 +1338,64 @@ export class PaintEditorController {
     if (this.grouping?.pending && !this.grouping.inside) throw new PaintEditorError(`"${this.grouping.label}" is still being painted (one undo step); wait for it to finish before ${what}.`);
   }
 
-  private commit(label: string, next: PaintDocumentState, before = this.doc): void {
+  /** Commits an uninterrupted run of live culture growth (`playCultures`) as a single undo step before another operation runs. */
+  /** The shown document with live growth's pending `culture-grow` events, for replays (commits nothing). */
+  private withCulturePreviewEvents(): PaintDocumentState {
+    const pv = this.culturePreview;
+    if (!pv || pv.shown !== this.doc || pv.shown === pv.base) return this.doc;
+    let doc = pv.shown;
+    for (const [layerId, data] of pv.events) {
+      if (data.steps > 0 || data.segments.length > 0 || data.fades.length > 0) {
+        doc = this.withPaintEvent(doc, { kind: 'culture-grow', layerId, data: data as unknown as Record<string, unknown> });
+      }
+    }
+    return doc;
+  }
+
+  private flushCulturePreview(): void {
+    const pv = this.culturePreview;
+    if (!pv) return;
+    if (pv.shown !== this.doc || pv.shown === pv.base) {
+      this.culturePreview = null;
+      return;
+    }
+    const doc = this.withCulturePreviewEvents();
+    this.culturePreview = null;
+    this.doc = doc;
+    const entry: HistoryEntry = {
+      label: 'Culture growth',
+      origin: 'user',
+      before: pv.base,
+      after: doc,
+    };
+    this.undoStack.push(entry);
+    if (this.undoStack.length > this.historyLimit) this.undoStack.shift();
+    this.redoStack = [];
+    this.docRevision++;
+    this.notifyCommit({ kind: 'execute', label: entry.label, origin: entry.origin });
+  }
+
+  /**
+   * Flushes live culture growth before a change that was built from the live document, and carries
+   * the flushed `culture-grow` events into it: otherwise `next` (built from the preview) would replace
+   * the flushed document and drop the events replay needs.
+   */
+  private flushCultureInto(next: PaintDocumentState, before: PaintDocumentState): { next: PaintDocumentState; before: PaintDocumentState } {
+    const shown = this.doc;
+    this.flushCulturePreview();
+    if (this.doc === shown) return { next, before };
+    const flushed = this.doc;
+    const base = shown.paintEvents ?? [];
+    const added = (flushed.paintEvents ?? []).slice(base.length);
+    if (next !== shown && added.length) {
+      const own = next.paintEvents ?? [];
+      next = { ...next, paintEvents: [...own.slice(0, base.length), ...added, ...own.slice(base.length)] };
+    } else if (next === shown) next = flushed;
+    return { next, before: before === shown ? flushed : before };
+  }
+
+  private commit(label: string, nextIn: PaintDocumentState, beforeIn = this.doc): void {
+    const { next, before } = this.flushCultureInto(nextIn, beforeIn);
     if (this.grouping) {
       // Inside `group`: the change joins the group's one step, and listeners hear it when the group ends.
       this.grouping.changed = true;
@@ -1308,7 +1423,9 @@ export class PaintEditorController {
    * Commits `next` as a new undo step, or with `commitToHistory` false folds it into the last step
    * when that step has the same label (the later values of one slider drag).
    */
-  private commitOrAmend(label: string, next: PaintDocumentState, commitToHistory: boolean): void {
+  private commitOrAmend(label: string, nextIn: PaintDocumentState, commitToHistory: boolean): void {
+    // A flushed growth run becomes the last step, so the change below commits as its own step.
+    const { next } = this.flushCultureInto(nextIn, this.doc);
     const last = this.undoStack[this.undoStack.length - 1];
     if (commitToHistory || !last || last.label !== label || last.wet || this.wetOp || this.grouping) {
       this.commit(label, next);
@@ -1387,6 +1504,8 @@ export class PaintEditorController {
 
   undo(): string | null {
     this.requireIdle('undoing');
+    this.flushCulturePreview();
+    this.culturePaused = true;
     this.clearBlastAnimation();
     const e = this.undoStack[this.undoStack.length - 1];
     if (!e) return null;
@@ -1414,6 +1533,7 @@ export class PaintEditorController {
 
   redo(): string | null {
     this.requireIdle('redoing');
+    this.flushCulturePreview();
     this.clearBlastAnimation();
     const e = this.redoStack[this.redoStack.length - 1];
     if (!e) return null;
@@ -1569,6 +1689,8 @@ export class PaintEditorController {
         }
         if (next.fluor?.[id] && (ox || oy)) next = { ...next, fluor: { ...next.fluor, [id]: translateSurface(next.fluor[id], ox, oy) } };
         if (next.thermo?.[id] && (ox || oy)) next = { ...next, thermo: { ...next.thermo, [id]: translateSurface(next.thermo[id], ox, oy) } };
+        if (next.light?.[id] && (ox || oy)) next = { ...next, light: { ...next.light, [id]: translateSurface(next.light[id], ox, oy) } };
+        if (next.cultures?.[id] && (ox || oy)) next = { ...next, cultures: { ...next.cultures, [id]: translateLayerCulture(next.cultures[id], ox, oy, width, height) } };
       }
     }
     if (this.wet.world) {
@@ -1866,6 +1988,7 @@ export class PaintEditorController {
       ...this.fluorWithout(removedIds),
       ...this.thermoWithout(removedIds),
       ...this.ferroWithout(removedIds),
+      ...this.culturesWithout(removedIds),
     });
     return { removed: id, activeLayerId: active };
   }
@@ -1886,6 +2009,7 @@ export class PaintEditorController {
     const ferroSettings: Record<string, FerroSettings> = { ...(this.doc.ferroSettings ?? {}) };
     const fluor: Record<string, TiledSurface> = { ...(this.doc.fluor ?? {}) };
     const thermo: Record<string, TiledSurface> = { ...(this.doc.thermo ?? {}) };
+    const cultures: Record<string, LayerCulture> = { ...(this.doc.cultures ?? {}) };
     const copy = (l: PaintLayer): PaintLayer => {
       const id = newPaintLayerId();
       if (light[l.id]) light[id] = light[l.id];
@@ -1896,6 +2020,7 @@ export class PaintEditorController {
       if (thermo[l.id]) thermo[id] = thermo[l.id];
       if (thick[l.id]) thick[id] = thick[l.id];
       if (stickers[l.id]) stickers[id] = stickers[l.id].map((x) => ({ ...x }));
+      if (cultures[l.id]) cultures[id] = cloneLayerCulture(cultures[l.id]!);
       // Stroke ids are unique across the document: the copies get new ones.
       if (liveStrokes[l.id]) liveStrokes[id] = liveStrokes[l.id].map((x) => ({ ...x, id: `s${this.strokeCounter++}`, layerId: id }));
       return l.type === 'group' ? { ...l, id, children: l.children.map(copy) } : { ...l, id };
@@ -1916,6 +2041,7 @@ export class PaintEditorController {
         ...(this.doc.thermo ? { thermo } : {}),
         ...(this.doc.ferro ? { ferro } : {}),
         ...(this.doc.ferroSettings ? { ferroSettings } : {}),
+        ...(this.doc.cultures ? { cultures } : {}),
       }),
     );
     return this.describeLayer(dup);
@@ -1985,6 +2111,15 @@ export class PaintEditorController {
     const mergedThermo = this.doc.thermo?.[upper.id] || this.doc.thermo?.[below.id] ? mergeFourChannel(toDoc(this.doc.thermo?.[below.id], below), upper.visible ? toDoc(this.doc.thermo?.[upper.id], upper) : undefined) : undefined;
     const thermoAfter = this.thermoWithout([upper.id, below.id]).thermo ?? (this.doc.thermo ? { ...this.doc.thermo } : undefined);
     const thermo = mergedThermo ? { ...(thermoAfter ?? {}), [below.id]: mergedThermo } : thermoAfter;
+    const toDocCulture = (c: LayerCulture | undefined, l: PaintPixelLayer) =>
+      c ? (l.offset.x || l.offset.y ? translateLayerCulture(c, l.offset.x, l.offset.y, this.doc.canvas.width, this.doc.canvas.height) : c) : undefined;
+    const mergedCulture =
+      this.doc.cultures?.[upper.id] || this.doc.cultures?.[below.id]
+        ? mergeLayerCultures(toDocCulture(this.doc.cultures?.[below.id], below), upper.visible ? toDocCulture(this.doc.cultures?.[upper.id], upper) : undefined)
+        : undefined;
+    const culturesRemoved = this.culturesWithout([upper.id, below.id]);
+    const culturesAfter = 'cultures' in culturesRemoved ? culturesRemoved.cultures : (this.doc.cultures ? { ...this.doc.cultures } : undefined);
+    const cultures = mergedCulture ? { ...(culturesAfter ?? {}), [below.id]: mergedCulture } : culturesAfter;
     this.commit(
       'Merge down',
       this.withWetEvents({
@@ -1999,6 +2134,7 @@ export class PaintEditorController {
         ...(thermo ? { thermo } : {}),
         ...(ferro !== undefined ? { ferro } : {}),
         ...(ferroSettings !== undefined ? { ferroSettings } : {}),
+        cultures,
       }),
     );
     return this.describeLayer(merged);
@@ -2026,6 +2162,7 @@ export class PaintEditorController {
           ...this.fluorWithout([l.id]),
           ...this.thermoWithout([l.id]),
           ...this.ferroWithout([l.id]),
+          ...this.culturesWithout([l.id]),
         },
         { kind: 'clear', layerId: l.id },
       ),
@@ -3494,6 +3631,11 @@ export class PaintEditorController {
       if (brush.engine === 'sticker') throw new PaintEditorError(`Sticker brushes spray objects and cannot lay ferrofluid (${brush.name}); paint ferrofluid with a dab or particle brush (ferrofluid, ferro-ink; list_brush_presets lists them), or set ferro.amount to 0 (set_brush).`);
       if (brush.engine === 'wet') throw new PaintEditorError(`Wet brushes cannot lay ferrofluid (${brush.name}); paint ferrofluid with a dry or impasto brush (ferrofluid, ferro-ink), or set ferro.amount to 0 (set_brush).`);
     }
+    if (brush.culture) {
+      if (brush.engine === 'sticker') throw new PaintEditorError(`Sticker brushes spray objects and cannot carry biopaint spores (${brush.name}); paint with a dab, particle or bristle brush (mycelial-ink, rot, foxfire), or set culture to null (set_brush).`);
+      if (brush.engine === 'wet') throw new PaintEditorError(`Wet brushes cannot carry biopaint spores (${brush.name}); paint with a dry or impasto brush (mycelial-ink, rot, foxfire), or set culture to null (set_brush).`);
+      if (brush.engine === 'eraser' || brush.engine === 'blender' || brush.engine === 'smudge') throw new PaintEditorError(`Tool brushes (${brush.name}) cannot carry biopaint spores; set culture to null (set_brush).`);
+    }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
       if (why) throw new PaintEditorError(`Layer "${layer.name}" is a stroke layer. ${why}`);
@@ -3739,6 +3881,7 @@ export class PaintEditorController {
    */
   beginStroke(init: PaintStrokeInit = {}): PaintStrokeSession {
     this.requireIdle('starting another');
+    this.flushCulturePreview();
     this.clearBlastAnimation();
     const before = this.doc;
     const host: StrokeSessionHost = {
@@ -3886,6 +4029,7 @@ export class PaintEditorController {
         const ferroSettings = fc ? withLayerFerroSettings(this.doc.ferroSettings, ferro, l.id, brush.ferro.amount > 0 ? brush.ferro : (this.doc.ferroSettings?.[l.id] ?? DEFAULT_FERRO)) : this.doc.ferroSettings;
         const fluor = withLayerLight(this.doc.fluor, l.id, s.fluorChannel());
         const thermo = withLayerLight(this.doc.thermo, l.id, s.thermoChannel());
+        const cultures = this.applyStrokeCulture(this.doc, s, l, surface, s.result!);
         let next = this.withWetEvents(
             withLiveStroke(
               {
@@ -3899,6 +4043,7 @@ export class PaintEditorController {
                 ...(thermo ? { thermo } : {}),
                 ...(ferro ? { ferro } : { ferro: undefined }),
                 ...(ferroSettings ? { ferroSettings } : { ferroSettings: undefined }),
+                ...(cultures ? { cultures } : { cultures: undefined }),
               },
               stroke,
             ),
@@ -4098,6 +4243,7 @@ export class PaintEditorController {
           : out.ferroSettings;
         const fl = s.fluorChannel();
         const th = s.thermoChannel();
+        const cultures = this.applyStrokeCulture(out, s, l, surface, s.result!);
         out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
@@ -4108,6 +4254,7 @@ export class PaintEditorController {
           ...(fc ? { ferro: nextFerro, ferroSettings: nextFerroSettings } : {}),
           ...(fl ? { fluor: withLayerLight(out.fluor, l.id, fl) } : {}),
           ...(th ? { thermo: withLayerLight(out.thermo, l.id, th) } : {}),
+          ...(cultures ? { cultures } : { cultures: undefined }),
         }, stroke);
       },
     };
@@ -4138,6 +4285,7 @@ export class PaintEditorController {
   /** Paints one stroke from data (one undo step). */
   paintStroke(init: PaintStrokeInit & { points: readonly PenPoint[] }): PaintStrokeResult {
     this.requireIdle('painting');
+    this.flushCulturePreview();
     this.clearBlastAnimation();
     const points = this.checkPoints(init.points);
     const before = this.doc;
@@ -4817,6 +4965,8 @@ export class PaintEditorController {
     } catch (e) {
       throw new PaintEditorError((e as Error).message);
     }
+    // Live growth commits first: the new document would otherwise drop its pending replay events.
+    this.flushCulturePreview();
     this.age = normalizeAge(update, this.age);
     this.doc = this.withAge(this.doc);
     this.emit('all');
@@ -4914,7 +5064,8 @@ export class PaintEditorController {
               : { ...l, visible: !hiddenIds.has(l.id) }
           );
         target.doc = { ...target.doc, layers: unlockAll(target.doc.layers) };
-        await replayPainting(this.doc, target, { strokes: options.strokes });
+        // Live growth not yet committed is part of the painting shown: replay it too.
+        await replayPainting(this.withCulturePreviewEvents(), target, { strokes: options.strokes });
         await target.wetIdle();
         const dried = restoreVis(target.driedLayers(target.doc.layers));
         const full = renderXrayPixels(
@@ -4980,6 +5131,488 @@ export class PaintEditorController {
     return node;
   }
 
+  // --- Biopaint (`culture`) -------------------------------------------------------
+
+  private culturesWithout(ids: readonly string[]): { cultures?: Record<string, LayerCulture> } {
+    const c = this.doc.cultures;
+    if (!c || !ids.some((id) => c[id])) return {};
+    const out = { ...c };
+    for (const id of ids) delete out[id];
+    return { cultures: Object.keys(out).length ? out : undefined };
+  }
+
+  /**
+   * Updates `doc.cultures[layer.id]` when a stroke commits: places spores along the stroke (and its
+   * symmetry copies) when `brush.culture` is set, or clears occupancy under the new paint when a
+   * non-culture stroke paints over existing threads so living tips treat fresh paint as food.
+   */
+  private applyStrokeCulture(
+    doc: PaintDocumentState,
+    s: PaintStrokeSession,
+    layer: PaintPixelLayer,
+    afterSurface: TiledSurface,
+    result: PaintStrokeResult
+  ): Record<string, LayerCulture> | undefined {
+    const brush = s.init.brush;
+    const existing = doc.cultures?.[layer.id];
+    if (!brush.culture) {
+      if (!existing) return doc.cultures;
+      const vortex = s.vortexWarp();
+      if (vortex) {
+        // A vortex moves the threads with the paint: ink it laid frees what it covered, then the
+        // colony's occupancy winds along with its threads (so they stay its own, not food).
+        const inked = clearOccupancyUnderStroke(existing, layer.surface, vortex.preWarpSurface()!);
+        return { ...(doc.cultures ?? {}), [layer.id]: { ...inked, occupancy: vortex.warpMask(inked.occupancy) } };
+      }
+      const cleared = clearOccupancyUnderStroke(existing, layer.surface, afterSurface);
+      return cleared === existing ? doc.cultures : { ...(doc.cultures ?? {}), [layer.id]: cleared };
+    }
+    const copies = [IDENTITY_AFFINE, ...s.init.affineCopies];
+    let current = existing;
+    let totalSeeds = 0;
+    const ox = layer.offset.x;
+    const oy = layer.offset.y;
+    for (let ci = 0; ci < copies.length; ci++) {
+      const m = copies[ci]!;
+      const copyPoints = s.points.map((p) => {
+        const tx = m[0] * p.x + m[2] * p.y + m[4];
+        const ty = m[1] * p.x + m[3] * p.y + m[5];
+        return { x: tx - ox, y: ty - oy };
+      });
+      const seeded = seedCultureFromStroke({
+        existing: current,
+        points: copyPoints,
+        brushSize: brush.tip.size,
+        color: [s.init.color[0], s.init.color[1], s.init.color[2]],
+        culture: brush.culture,
+        strokeSeed: (s.init.seed + ci * 7919) | 0,
+        beforeSurface: ci === 0 ? layer.surface : afterSurface,
+        afterSurface,
+        canvasWidth: doc.canvas.width,
+        canvasHeight: doc.canvas.height,
+        offsetX: ox,
+        offsetY: oy,
+      });
+      current = seeded.culture;
+      totalSeeds += seeded.seedsAdded;
+    }
+    result.culture = { seeds: totalSeeds };
+    this.culturePaused = false;
+    return current ? { ...(doc.cultures ?? {}), [layer.id]: current } : doc.cultures;
+  }
+
+  /** Biopaint (`culture`) state across all layers, plus `growWhileClosed` and `pendingCatchUpTicks`. */
+  getCultures(now: number = Date.now()): PaintCulturesStateInfo {
+    const layers: LayerCultureSummary[] = [];
+    let growing = false;
+    for (const l of flattenLayers(this.doc.layers)) {
+      if (!isPixelLayer(l)) continue;
+      const c = this.doc.cultures?.[l.id];
+      if (!c) continue;
+      const sum = layerCultureSummary(l.id, c);
+      if (sum.bounds && (l.offset.x || l.offset.y)) {
+        sum.bounds = { ...sum.bounds, x: sum.bounds.x + l.offset.x, y: sum.bounds.y + l.offset.y };
+      }
+      if (sum.tips > 0 && sum.status === 'growing') growing = true;
+      layers.push(sum);
+    }
+    const growWhileClosed = this.doc.growWhileClosed === true;
+    let pendingCatchUpTicks = 0;
+    if (growWhileClosed && growing && typeof this.doc.lastGrownAt === 'number' && Number.isFinite(this.doc.lastGrownAt) && now > this.doc.lastGrownAt) {
+      const elapsedSec = (now - this.doc.lastGrownAt) / 1000;
+      pendingCatchUpTicks = Math.min(MAX_CATCH_UP_TICKS, Math.max(0, Math.floor(elapsedSec * CULTURE_TICKS_PER_SECOND)));
+    }
+    return {
+      layers,
+      growWhileClosed,
+      pendingCatchUpTicks,
+      paused: this.culturePaused,
+      speed: this.cultureSpeed,
+      growing,
+    };
+  }
+
+  private stepCulturesInternal(targetLayerIds: readonly string[], steps: number): {
+    nextDoc: PaintDocumentState;
+    layerResults: GrowCulturesLayerResult[];
+    events: Map<string, CultureGrowEventData>;
+    dirty: RasterRect[];
+  } {
+    let doc = this.doc;
+    const { width, height } = doc.canvas;
+    const maskSel = this.stencilSelection();
+    const stencilSurface = maskSel ? surfaceFromPixels({ width: maskSel.width, height: maskSel.height, data: new Uint8ClampedArray(maskSel.data) }, 1) : null;
+    const paperDepthPermille = Math.round((doc.paper.depth ?? 0) * 1000);
+    const paperSeed = doc.paper.seed ?? 1;
+    const layerResults: GrowCulturesLayerResult[] = [];
+    const events = new Map<string, CultureGrowEventData>();
+    const dirty: RasterRect[] = [];
+
+    for (const layerId of targetLayerIds) {
+      const l = findLayer(doc.layers, layerId)?.layer;
+      if (!isPixelLayer(l)) continue;
+      const c = doc.cultures?.[layerId];
+      if (!c) {
+        layerResults.push({ layerId, segmentsAdded: 0, tipsAlive: 0, bounds: null, status: 'extinct' });
+        continue;
+      }
+      const ox = l.offset.x;
+      const oy = l.offset.y;
+      const layerStencil = stencilSurface && (ox || oy) ? translateSurface(stencilSurface, -ox, -oy) : stencilSurface;
+      const stepped = stepLayerCulture({
+        culture: c,
+        surface: l.surface,
+        lightSurface: doc.light?.[layerId],
+        stencilMask: layerStencil,
+        lockTransparency: isLayerLocked(l, 'transparency'),
+        paperSeed,
+        paperDepthPermille,
+        canvasWidth: width,
+        canvasHeight: height,
+        offsetX: ox,
+        offsetY: oy,
+        steps,
+      });
+      if (stepped.segmentsAdded > 0 || stepped.culture !== c) {
+        const nextCultures = { ...(doc.cultures ?? {}), [layerId]: stepped.culture };
+        const nextLight = stepped.lightSurface ? withLayerLight(doc.light, layerId, stepped.lightSurface) : doc.light;
+        doc = {
+          ...doc,
+          layers: mapLayer(doc.layers, layerId, () => ({ ...l, surface: stepped.surface })),
+          cultures: nextCultures,
+          ...(nextLight ? { light: nextLight } : {}),
+        };
+      }
+      if (stepped.segmentsAdded > 0) {
+        if (ox || oy) {
+          const dxFp = ox * 256;
+          const dyFp = oy * 256;
+          events.set(layerId, {
+            steps: stepped.eventData.steps,
+            fades: stepped.eventData.fades.map((f) => ({ ...f, x: f.x + ox, y: f.y + oy })),
+            segments: stepped.eventData.segments.map((s) => ({
+              ...s,
+              x0: s.x0 + dxFp,
+              y0: s.y0 + dyFp,
+              x1: s.x1 + dxFp,
+              y1: s.y1 + dyFp,
+            })),
+          });
+        } else {
+          events.set(layerId, stepped.eventData);
+        }
+      }
+      const sum = layerCultureSummary(layerId, stepped.culture);
+      const bounds = sum.bounds ? { ...sum.bounds, x: sum.bounds.x + ox, y: sum.bounds.y + oy } : null;
+      if (bounds) dirty.push(bounds);
+      layerResults.push({
+        layerId,
+        segmentsAdded: stepped.segmentsAdded,
+        tipsAlive: stepped.tipsAlive,
+        bounds,
+        status: stepped.status,
+      });
+    }
+    return { nextDoc: doc, layerResults, events, dirty };
+  }
+
+  /**
+   * Advances living biopaint (`culture`) colonies by `steps` ticks (1..2000, default 40) on
+   * `layerId` (or all layers with living tips when omitted) as a single undo step.
+   */
+  growCultures(options: { layerId?: string; steps?: number } = {}): GrowCulturesResult {
+    this.requireIdle('growing cultures');
+    this.requireWetIdle('growing cultures');
+    this.flushCulturePreview();
+    const steps = options.steps ?? 40;
+    if (!(Number.isInteger(steps) && steps >= 1 && steps <= 2000)) {
+      throw new PaintEditorError(`steps ${options.steps} is out of range; use a whole number 1..2000.`);
+    }
+    let targetIds: string[];
+    if (options.layerId !== undefined) {
+      const l = this.requireLayer(options.layerId);
+      if (!isPixelLayer(l)) throw new PaintEditorError(`Layer "${l.name}" is a group; grow cultures on a pixel layer.`);
+      if (this.doc.liveStrokes?.[l.id]) throw new PaintEditorError(`Layer "${l.name}" is a stroke layer; biopaint cultures only grow on pixel layers.`);
+      if (this.doc.effectLayers?.[l.id]) throw new PaintEditorError(`Layer "${l.name}" is an effect layer; rasterize it first (rasterize_effect_layer) or grow cultures on a pixel layer.`);
+      if (this.wet.wetLayerIds().includes(l.id)) throw new PaintEditorError(`Layer "${l.name}" holds wet paint; dry it first (dry_paint) before growing cultures on it.`);
+      if (isLayerLocked(l, 'pixels')) throw new PaintEditorError(`Layer "${l.name}" has its pixels locked; unlock it first.`);
+      if (!l.visible) throw new PaintEditorError(`Layer "${l.name}" is hidden; show it first.`);
+      targetIds = [l.id];
+    } else {
+      targetIds = flattenLayers(this.doc.layers)
+        .filter(
+          (l): l is PaintPixelLayer =>
+            isPixelLayer(l) &&
+            l.visible &&
+            !isLayerLocked(l, 'pixels') &&
+            !this.doc.liveStrokes?.[l.id] &&
+            !this.doc.effectLayers?.[l.id] &&
+            Boolean(this.doc.cultures?.[l.id]?.tips.length)
+        )
+        .map((l) => l.id);
+      for (const id of targetIds) {
+        if (this.wet.wetLayerIds().includes(id)) {
+          const l = this.requireLayer(id);
+          throw new PaintEditorError(`Layer "${l.name}" holds wet paint; dry it first (dry_paint) before growing cultures on it.`);
+        }
+      }
+      if (!targetIds.length && this.doc.activeLayerId) {
+        const active = this.getLayer(this.doc.activeLayerId);
+        if (isPixelLayer(active)) {
+          if (this.doc.liveStrokes?.[active.id]) throw new PaintEditorError(`Layer "${active.name}" is a stroke layer; biopaint cultures only grow on pixel layers.`);
+          if (this.doc.effectLayers?.[active.id]) throw new PaintEditorError(`Layer "${active.name}" is an effect layer; rasterize it first (rasterize_effect_layer) or grow cultures on a pixel layer.`);
+          if (this.wet.wetLayerIds().includes(active.id)) throw new PaintEditorError(`Layer "${active.name}" holds wet paint; dry it first (dry_paint) before growing cultures on it.`);
+          targetIds = [active.id];
+        }
+      }
+    }
+
+    const before = this.doc;
+    this.culturePaused = false;
+    const { nextDoc, layerResults, events } = this.stepCulturesInternal(targetIds, steps);
+    let doc = nextDoc;
+    for (const [layerId, data] of events) {
+      doc = this.withPaintEvent(doc, { kind: 'culture-grow', layerId, data: data as unknown as Record<string, unknown> });
+    }
+    if (doc !== before) {
+      this.commit('Grow culture', doc, before);
+    } else {
+      this.emit([]);
+    }
+    let segmentsAdded = 0;
+    let tipsAlive = 0;
+    let bounds: RasterRect | null = null;
+    let status: CultureStatus = 'extinct';
+    for (const r of layerResults) {
+      segmentsAdded += r.segmentsAdded;
+      tipsAlive += r.tipsAlive;
+      bounds = unionRect(bounds, r.bounds);
+      if (r.status === 'capped') status = 'capped';
+      else if (r.status === 'growing' && status !== 'capped') status = 'growing';
+    }
+    return { steps, segmentsAdded, tipsAlive, bounds, status, layers: layerResults };
+  }
+
+  /** Kills the living colony on `layerId` (default the active layer): clears living tips while keeping drawn threads as paint (one undo step). */
+  removeCultures(layerId?: string): { layerId: string; removedTips: number; status: CultureStatus } {
+    this.requireIdle('removing cultures');
+    this.flushCulturePreview();
+    const l = this.paintTarget(layerId, 'remove the cultures of');
+    const c = this.doc.cultures?.[l.id];
+    if (!c || (c.tips.length === 0 && c.status !== 'growing')) {
+      return { layerId: l.id, removedTips: 0, status: c?.status ?? 'extinct' };
+    }
+    const removedTips = c.tips.length;
+    const nextCulture: LayerCulture = {
+      ...c,
+      tips: [],
+      status: 'extinct',
+    };
+    this.commit('Kill culture', {
+      ...this.doc,
+      cultures: { ...(this.doc.cultures ?? {}), [l.id]: nextCulture },
+    });
+    return { layerId: l.id, removedTips, status: 'extinct' };
+  }
+
+  /** Configures document-wide culture options (`growWhileClosed`). Saved with the document, not an undo step. */
+  setCultureOptions(options: { growWhileClosed?: boolean }): { growWhileClosed: boolean } {
+    if (options.growWhileClosed !== undefined && typeof options.growWhileClosed !== 'boolean') {
+      throw new PaintEditorError('growWhileClosed must be true or false.');
+    }
+    this.flushCulturePreview();
+    const growWhileClosed = options.growWhileClosed ?? (this.doc.growWhileClosed === true);
+    this.docRevision++;
+    this.doc = {
+      ...this.doc,
+      ...(growWhileClosed ? { growWhileClosed: true } : { growWhileClosed: undefined, lastGrownAt: undefined }),
+    };
+    this.emit([]);
+    return { growWhileClosed };
+  }
+
+  /** Pauses or unpauses live culture growth in the editor. */
+  setCulturePaused(paused: boolean): boolean {
+    if (typeof paused !== 'boolean') throw new PaintEditorError('paused must be true or false.');
+    if (!paused) this.culturePaused = false;
+    else {
+      this.flushCulturePreview();
+      this.culturePaused = true;
+    }
+    this.emit([]);
+    return this.culturePaused;
+  }
+
+  /** Sets live culture growth speed multiplier (`0.25..4`, default `1`). */
+  setCultureSpeed(speed: number): number {
+    if (!(typeof speed === 'number' && Number.isFinite(speed) && speed >= 0.25 && speed <= 4)) {
+      throw new PaintEditorError(`speed ${speed} is out of range; use 0.25..4.`);
+    }
+    this.cultureSpeed = speed;
+    this.emit([]);
+    return this.cultureSpeed;
+  }
+
+  /**
+   * Runs any pending offline growth (`growWhileClosed` + `lastGrownAt`) up to `MAX_CATCH_UP_TICKS`
+   * (5,000 ticks) as a single undo step labelled `"Growth while closed"`.
+   */
+  catchUpCultures(now: number = Date.now()): GrowCulturesResult | null {
+    this.requireIdle('catching up cultures');
+    this.flushCulturePreview();
+    const state = this.getCultures(now);
+    const ticks = state.pendingCatchUpTicks;
+    if (ticks <= 0) return null;
+    const targetIds = flattenLayers(this.doc.layers)
+      .filter(
+        (l): l is PaintPixelLayer =>
+          isPixelLayer(l) &&
+          l.visible &&
+          !isLayerLocked(l, 'pixels') &&
+          !this.doc.liveStrokes?.[l.id] &&
+          !this.doc.effectLayers?.[l.id] &&
+          !this.wet.wetLayerIds().includes(l.id) &&
+          Boolean(this.doc.cultures?.[l.id]?.tips.length)
+      )
+      .map((l) => l.id);
+    if (!targetIds.length) return null;
+    const before = this.doc;
+    const { nextDoc, layerResults, events } = this.stepCulturesInternal(targetIds, ticks);
+    let doc: PaintDocumentState = { ...nextDoc, lastGrownAt: Math.round(now) };
+    for (const [layerId, data] of events) {
+      doc = this.withPaintEvent(doc, { kind: 'culture-grow', layerId, data: data as unknown as Record<string, unknown> });
+    }
+    if (doc !== before) {
+      this.commit('Growth while closed', doc, before);
+    }
+    let segmentsAdded = 0;
+    let tipsAlive = 0;
+    let bounds: RasterRect | null = null;
+    let status: CultureStatus = 'extinct';
+    for (const r of layerResults) {
+      segmentsAdded += r.segmentsAdded;
+      tipsAlive += r.tipsAlive;
+      bounds = unionRect(bounds, r.bounds);
+      if (r.status === 'capped') status = 'capped';
+      else if (r.status === 'growing' && status !== 'capped') status = 'growing';
+    }
+    return { steps: ticks, segmentsAdded, tipsAlive, bounds, status, layers: layerResults };
+  }
+
+  /**
+   * Drives live mycelial growth in the editor view on `clock` (like `playEffects`). Paused during
+   * strokes and after an undo until the next stroke or Grow is pressed; each uninterrupted run
+   * commits as one undo step when interrupted by a stroke, undo, or save.
+   */
+  playCultures(clock: { now(): number; frame(cb: () => void): () => void } = defaultEffectClock): { stop(): void } {
+    let stopped = false;
+    let cancel = () => {};
+    let last = clock.now();
+    let accumTicks = 0;
+    const tick = () => {
+      if (stopped) return;
+      const now = clock.now();
+      const dt = Math.max(0, Math.min(0.25, (now - last) / 1000));
+      last = now;
+      if (this.culturePaused || this.session || this.grouping || this.previewing || this.wet.busy) {
+        cancel = clock.frame(tick);
+        return;
+      }
+      // A layer still winding a vortex or playing a blast waits: growing would change its pixels and cut the animation short.
+      const animating = this.hasActiveVortexAnimations() ? new Set([...this.vortexAnimations.keys(), ...this.blastLayers.keys()]) : new Set(this.blastLayers.keys());
+      const targetIds = flattenLayers(this.doc.layers)
+        .filter(
+          (l): l is PaintPixelLayer =>
+            isPixelLayer(l) &&
+            l.visible &&
+            !isLayerLocked(l, 'pixels') &&
+            !this.doc.liveStrokes?.[l.id] &&
+            !this.doc.effectLayers?.[l.id] &&
+            !this.wet.wetLayerIds().includes(l.id) &&
+            Boolean(this.doc.cultures?.[l.id]?.tips.length) &&
+            this.doc.cultures?.[l.id]?.status === 'growing' &&
+            !animating.has(l.id)
+        )
+        .map((l) => l.id);
+      if (!targetIds.length) {
+        if (this.culturePreview) {
+          this.flushCulturePreview();
+          this.emit([]);
+        }
+        cancel = clock.frame(tick);
+        return;
+      }
+      accumTicks += dt * CULTURE_TICKS_PER_SECOND * this.cultureSpeed;
+      const steps = Math.min(8, Math.floor(accumTicks));
+      if (steps >= 1) {
+        accumTicks -= steps;
+        const base = (this.culturePreview?.shown === this.doc ? this.culturePreview.base : null) ?? this.doc;
+        const prevEvents = (this.culturePreview?.shown === this.doc ? this.culturePreview.events : null) ?? new Map<string, CultureGrowEventData>();
+        const { nextDoc, events, dirty } = this.stepCulturesInternal(targetIds, steps);
+        if (nextDoc !== this.doc) {
+          for (const [lid, ev] of events) {
+            const cur = prevEvents.get(lid);
+            if (cur) {
+              cur.steps += ev.steps;
+              cur.fades.push(...ev.fades);
+              cur.segments.push(...ev.segments);
+            } else {
+              prevEvents.set(lid, { steps: ev.steps, fades: [...ev.fades], segments: [...ev.segments] });
+            }
+          }
+          this.doc = nextDoc;
+          this.culturePreview = { base, shown: this.doc, events: prevEvents };
+          this.emit(dirty.length ? dirty : 'all');
+        }
+      }
+      cancel = clock.frame(tick);
+    };
+    cancel = clock.frame(tick);
+    return {
+      stop: () => {
+        stopped = true;
+        cancel();
+        this.flushCulturePreview();
+      },
+    };
+  }
+
+  /** Replays a recorded `'culture-grow'` event scaled by `scale` without re-simulating. */
+  replayCultureGrow(layerId: string, rawData: unknown, scale = 1): void {
+    const l = findLayer(this.doc.layers, layerId)?.layer;
+    if (!isPixelLayer(l) || !rawData || typeof rawData !== 'object') return;
+    const data = rawData as CultureGrowEventData;
+    const fades = Array.isArray(data.fades) ? data.fades : [];
+    const segments = Array.isArray(data.segments) ? data.segments : [];
+    if (!fades.length && !segments.length) return;
+    const { width, height } = this.doc.canvas;
+    const maskSel = this.stencilSelection();
+    const stencilSurface = maskSel ? surfaceFromPixels({ width: maskSel.width, height: maskSel.height, data: new Uint8ClampedArray(maskSel.data) }, 1) : null;
+    const ox = l.offset.x;
+    const oy = l.offset.y;
+    const layerStencil = stencilSurface && (ox || oy) ? translateSurface(stencilSurface, -ox, -oy) : stencilSurface;
+    const culture = this.doc.cultures?.[layerId];
+    const replayed = applyCultureGrowReplay(
+      l.surface,
+      this.doc.light?.[layerId],
+      layerStencil,
+      isLayerLocked(l, 'transparency'),
+      { steps: data.steps ?? 0, fades, segments },
+      scale,
+      width,
+      height,
+      // The replay's own colony (seeded by the replayed strokes): fades spare its threads, as they did live.
+      culture && !ox && !oy ? culture.occupancy : null
+    );
+    const nextLight = replayed.lightSurface ? withLayerLight(this.doc.light, layerId, replayed.lightSurface) : this.doc.light;
+    this.commit('Grow culture', {
+      ...this.doc,
+      layers: mapLayer(this.doc.layers, layerId, () => ({ ...l, surface: replayed.surface })),
+      ...(nextLight ? { light: nextLight } : {}),
+      ...(culture && replayed.occupancy ? { cultures: { ...(this.doc.cultures ?? {}), [layerId]: { ...culture, occupancy: replayed.occupancy } } } : {}),
+    });
+  }
+
   // --- Replay: time-lapse and high-resolution export ------------------------------
 
   /**
@@ -5015,7 +5648,7 @@ export class PaintEditorController {
   async timeLapse(options: TimeLapseOptions = {}): Promise<TimeLapse> {
     const target = this.createReplayTarget(1);
     try {
-      return await buildTimeLapse(this.doc, target, options);
+      return await buildTimeLapse(this.withCulturePreviewEvents(), target, options);
     } finally {
       target.dispose();
     }
@@ -5035,7 +5668,7 @@ export class PaintEditorController {
   async renderHighRes(options: { scale: number; paper?: boolean }): Promise<PixelImage> {
     const target = this.createReplayTarget(options.scale);
     try {
-      await replayPainting(this.doc, target, { scale: options.scale });
+      await replayPainting(this.withCulturePreviewEvents(), target, { scale: options.scale });
       await target.wetIdle();
       return target.compositePixels({ paper: options.paper, wet: 'dried' });
     } finally {
@@ -5777,7 +6410,9 @@ export class PaintEditorController {
       }
     }
     const layers = this.driedLayers(state.layers);
-    return layers === state.layers ? state : { ...state, layers };
+    if (layers !== state.layers) state = { ...state, layers };
+    if (state.growWhileClosed) state = { ...state, lastGrownAt: Date.now() };
+    return state;
   }
 
   /** Wet settings saved with the document (`null` when they are all defaults). */
@@ -5827,7 +6462,7 @@ export class PaintEditorController {
   }
 
   /** Thick paint and light as saved (`layerChannels`, `lighting`), merged into the extensions. */
-  private thickExtensions(): PaintDocumentExtensions {
+  private thickExtensions(state: PaintDocumentState = this.doc): PaintDocumentExtensions {
     const ext: PaintDocumentExtensions = { ...this.extensions };
     const channels: Record<string, unknown> = {};
     for (const [id, ch] of Object.entries(this.doc.thick ?? {})) {
@@ -5913,6 +6548,9 @@ export class PaintEditorController {
     } else {
       delete ext.age;
     }
+    const savedCultures = culturesExtensionToJSON(state);
+    if (savedCultures) ext.cultures = savedCultures;
+    else delete ext.cultures;
     return ext;
   }
 
@@ -6056,6 +6694,13 @@ export class PaintEditorController {
       const magnets = magnetsFromJSON(ext.magnets);
       if (magnets.length) state = { ...state, magnets };
     }
+    if (ext.cultures !== undefined) {
+      const validIds = new Set(flattenLayers(state.layers).filter((l) => isPixelLayer(l)).map((l) => l.id));
+      const loadedCultures = culturesExtensionFromJSON(ext.cultures, validIds, problems);
+      if (loadedCultures.cultures || loadedCultures.growWhileClosed !== undefined || loadedCultures.lastGrownAt !== undefined) {
+        state = { ...state, ...loadedCultures };
+      }
+    }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
     const thick: Record<string, ThickChannels> = {};
@@ -6071,15 +6716,21 @@ export class PaintEditorController {
   }
 
   toJSON(options: { strokes?: boolean } = {}): SerializedPaintDocument {
-    return serializePaintDocument(this.savedState(), { strokes: options.strokes, extensions: this.thickExtensions(), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    this.flushCulturePreview();
+    const state = this.savedState();
+    return serializePaintDocument(state, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   /** The document as JSON with each PNG stored in `store`. */
   toJSONExternal(store: PaintAssetStore, options: { strokes?: boolean } = {}): Promise<SerializedPaintDocument> {
-    return serializePaintDocumentExternal(this.savedState(), store, { strokes: options.strokes, extensions: this.thickExtensions(), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    this.flushCulturePreview();
+    const state = this.savedState();
+    return serializePaintDocumentExternal(state, store, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown; mixingPad?: unknown; wet?: unknown }): string[] {
+    this.culturePreview = null;
+    this.culturePaused = false;
     this.extensions = loaded.extensions;
     this.readWet(loaded.wet, loaded.problems);
     this.readMixingPad(loaded.mixingPad, loaded.problems);
@@ -6121,6 +6772,7 @@ export class PaintEditorController {
     delete this.extensions.heat;
     delete this.extensions.uvLight;
     delete this.extensions.age;
+    delete this.extensions.cultures;
     this.viewCompositor.clear();
     this.schemeViews.clear();
     this.emit();
@@ -7331,11 +7983,15 @@ export class PaintEditorController {
     let layers = doc.layers;
     let thick = doc.thick;
     let light = doc.light;
+    let cultures = doc.cultures;
     for (const o of outputs) {
       if (!o.changed) continue;
       const l = findLayer(layers, o.id)?.layer;
       if (!isPixelLayer(l)) continue;
       layers = mapLayer(layers, o.id, () => ({ ...l, surface: o.surface }));
+      // Biopaint threads the blast changed are no longer the culture's own: it can feed on them, as after any stroke.
+      const culture = cultures?.[o.id];
+      if (culture) cultures = { ...cultures, [o.id]: clearOccupancyUnderStroke(culture, l.surface, o.surface) };
       // `null` means the stroke left that channel as it was (not "cleared"): keep the layer's light and relief.
       if (o.thick !== null) thick = withLayerThick(thick, o.id, o.thick);
       if (o.light !== null) light = withLayerLight(light, o.id, o.light);
@@ -7345,6 +8001,7 @@ export class PaintEditorController {
         ...doc,
         layers,
         strokes: [...doc.strokes, stroke],
+        ...(cultures ? { cultures } : {}),
         ...(thick && Object.keys(thick).length ? { thick } : { thick: undefined }),
         ...(light && Object.keys(light).length ? { light } : { light: undefined }),
       },
@@ -8568,6 +9225,21 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
             ...e.data,
             ...(typeof d.x === 'number' && typeof d.y === 'number' ? { x: d.x + dx, y: d.y + dy } : {}),
             ...(Array.isArray(d.points) ? { points: d.points.map((p) => movePoint(p, dx, dy)) } : {}),
+          },
+        };
+      }
+      if (e.kind === 'culture-grow' && e.data) {
+        const d = e.data as { fades?: CultureRecordedFade[]; segments?: CultureRecordedSegment[] };
+        const dxFp = dx * 256;
+        const dyFp = dy * 256;
+        return {
+          ...e,
+          data: {
+            ...e.data,
+            ...(Array.isArray(d.fades) ? { fades: d.fades.map((f) => ({ ...f, x: f.x + dx, y: f.y + dy })) } : {}),
+            ...(Array.isArray(d.segments)
+              ? { segments: d.segments.map((s) => ({ ...s, x0: s.x0 + dxFp, y0: s.y0 + dyFp, x1: s.x1 + dxFp, y1: s.y1 + dyFp })) }
+              : {}),
           },
         };
       }

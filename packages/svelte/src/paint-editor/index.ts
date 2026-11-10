@@ -8,6 +8,7 @@ import type BrushLibraryBrowserComponent from '../brushes/BrushLibraryBrowser.sv
 import type PaperPanelComponent from './PaperPanel.svelte';
 import type FerroPanelComponent from './FerroPanel.svelte';
 import type TimeMachinePanelComponent from './TimeMachinePanel.svelte';
+import type CulturePanelComponent from './CulturePanel.svelte';
 import type ColorPanelComponent from './ColorPanel.svelte';
 import type PaintLayersPanelComponent from './PaintLayersPanel.svelte';
 import type WetPanelComponent from './WetPanel.svelte';
@@ -30,6 +31,7 @@ export { default as BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser.s
 export { default as PaperPanel } from './PaperPanel.svelte';
 export { default as FerroPanel } from './FerroPanel.svelte';
 export { default as TimeMachinePanel } from './TimeMachinePanel.svelte';
+export { default as CulturePanel } from './CulturePanel.svelte';
 export { default as ColorPanel } from './ColorPanel.svelte';
 export { default as PaintLayersPanel } from './PaintLayersPanel.svelte';
 export { default as WetPanel } from './WetPanel.svelte';
@@ -62,6 +64,7 @@ export type BrushLibraryBrowserProps = ComponentProps<typeof BrushLibraryBrowser
 export type PaperPanelProps = ComponentProps<typeof PaperPanelComponent>;
 export type FerroPanelProps = ComponentProps<typeof FerroPanelComponent>;
 export type TimeMachinePanelProps = ComponentProps<typeof TimeMachinePanelComponent>;
+export type CulturePanelProps = ComponentProps<typeof CulturePanelComponent>;
 export type ColorPanelProps = ComponentProps<typeof ColorPanelComponent>;
 export type PaintLayersPanelProps = ComponentProps<typeof PaintLayersPanelComponent>;
 export type WetPanelProps = ComponentProps<typeof WetPanelComponent>;

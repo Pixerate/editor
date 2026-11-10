@@ -29,6 +29,8 @@ const EXCHANGE: readonly PaintBrushEngine[] = ['dab', 'wet', 'impasto'];
 const DABS: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'scraper'];
 /** Mark engines that can deposit a thin-film iridescence channel. */
 const FILM: readonly PaintBrushEngine[] = ['dab', 'mixer', 'wet', 'impasto', 'particle', 'bristle', 'vortex'];
+/** Engines whose strokes seed biopaint spores: a vortex warps paint already down and carries none. */
+const CULTURE_ENGINES: readonly PaintBrushEngine[] = ['dab', 'mixer', 'wet', 'impasto', 'particle', 'bristle'];
 
 /** One facet field and the engine field it sets. */
 export interface BrushField {
@@ -102,6 +104,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   ...each('fluorescence', 'fluorescence', ['amount', 'invisible']),
   ...each('thermochromic', 'thermochromic', ['hotColor', 'threshold']),
   ...each('iridescence', 'iridescence', ['thickness', 'pressureToThickness', 'ior'], FILM),
+  ...each('culture', 'culture', ['species', 'reach', 'branching', 'wander', 'appetite', 'digest', 'fuse', 'thickness', 'glow'], CULTURE_ENGINES),
   ...each('ferro', 'ferro', ['amount', 'wavelength', 'threshold']),
   // Paint exchange: the dab, wet and impasto engines' behaviour, or the Mixer Brush's settings.
   f('behaviour.exchange.pickup', 'behavior.pickup', EXCHANGE),
@@ -263,6 +266,7 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   if (engine === 'dab' && brush.marks?.kind === 'scatter') input.spray = { ...((input.spray as object | undefined) ?? {}) };
   if (brush.marks?.kind === 'vortex') input.vortex = { ...((input.vortex as object | undefined) ?? {}) };
   if (brush.iridescence && FILM.includes(engine)) input.iridescence = { ...((input.iridescence as object | undefined) ?? {}) };
+  if (brush.culture && brush.kind !== 'tool' && CULTURE_ENGINES.includes(engine)) input.culture = { ...((input.culture as object | undefined) ?? {}) };
   if (engine === 'wet') {
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : brush.marks?.kind === 'vortex' ? 'vortex' : 'paint');
     if (brush.kind === 'tool') delete input.livePatterns;

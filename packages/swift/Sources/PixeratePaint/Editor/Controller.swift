@@ -304,6 +304,9 @@ public final class PaintEditorController {
     var heldEvaporation: [String: Double] = [:]
     var tempLayerTargets: [String: String] = [:]
     var lastMutationTick: Double?
+    /// Biopaint (`culture`) playback state (paused after undo until next stroke or Grow).
+    var culturePaused = false
+    var cultureSpeed = 1.0
     /// Pending paint proposals (`PaintProposals`), shared between proposal tools and evolutionary stroke tools.
     private var attachedProposals: PaintProposals?
     public var proposals: PaintProposals {
@@ -419,6 +422,7 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
+        culturePaused = true
         return e.label
     }
 
@@ -435,6 +439,7 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
+        culturePaused = true
         return e.label
     }
 
@@ -522,6 +527,7 @@ public final class PaintEditorController {
                     d.layers = mapLayer(next.layers, id) { _ in moved }
                     if let fl = next.fluor?.get(id) { d.settingFluor(id, translateSurface(fl, dx, dy)) }
                     if let th = next.thermo?.get(id) { d.settingThermo(id, translateSurface(th, dx, dy)) }
+                    if let c = next.cultures?.get(id) { d.settingCulture(id, translateLayerCulture(c, dx, dy, width, height)) }
                     if let ch = next.thick?.get(id), (dx != 0 || dy != 0) {
                         var t = next.thick!
                         t.set(id, ThickChannels(height: translateSurface(ch.height, dx, dy), material: translateSurface(ch.material, dx, dy), film: translateSurface(ch.film, dx, dy)))
@@ -640,6 +646,29 @@ public final class PaintEditorController {
                             d2["points"] = .array(pts.map { p in
                                 guard let po = p.objectValue, let px = po["x"]?.numberValue, let py = po["y"]?.numberValue else { return p }
                                 return pointJSON(px + Double(dx), py + Double(dy))
+                            })
+                        }
+                        e.data = d2
+                    } else if e.kind == "culture-grow", var d2 = e.data {
+                        let dxFp = dx * 256, dyFp = dy * 256
+                        if let fades = d2["fades"]?.arrayValue {
+                            d2["fades"] = .array(fades.map { v in
+                                guard var fo = v.objectValue, let x = fo["x"]?.numberValue, let y = fo["y"]?.numberValue else { return v }
+                                fo["x"] = .number(x + Double(dx))
+                                fo["y"] = .number(y + Double(dy))
+                                return .object(fo)
+                            })
+                        }
+                        if let segs = d2["segments"]?.arrayValue {
+                            d2["segments"] = .array(segs.map { v in
+                                guard var so = v.objectValue,
+                                      let x0 = so["x0"]?.numberValue, let y0 = so["y0"]?.numberValue,
+                                      let x1 = so["x1"]?.numberValue, let y1 = so["y1"]?.numberValue else { return v }
+                                so["x0"] = .number(x0 + Double(dxFp))
+                                so["y0"] = .number(y0 + Double(dyFp))
+                                so["x1"] = .number(x1 + Double(dxFp))
+                                so["y1"] = .number(y1 + Double(dyFp))
+                                return .object(so)
                             })
                         }
                         e.data = d2
@@ -819,6 +848,7 @@ public final class PaintEditorController {
             d.removingFerro(Array(removed))
             d.removingFluor(Array(removed))
             d.removingThermo(Array(removed))
+            d.removingCultures(Array(removed))
             d.removingStickers(Array(removed))
             d.removingThick(Array(removed))
             if var live = d.liveStrokes {
@@ -842,6 +872,7 @@ public final class PaintEditorController {
         var ferroCopies: [(String, TiledSurface, FerroSettings?)] = []
         var fluorCopies: [(String, TiledSurface)] = []
         var thermoCopies: [(String, TiledSurface)] = []
+        var cultureCopies: [(String, LayerCultureState)] = []
         func copy(_ l: PaintLayer) -> PaintLayer {
             let nid = newPaintLayerId()
             if let list = stickers?.get(l.id) { stickers!.set(nid, list) }
@@ -849,6 +880,7 @@ public final class PaintEditorController {
             if let fer = doc.ferro?.get(l.id) { ferroCopies.append((nid, fer, doc.ferroSettings?.get(l.id))) }
             if let fl = doc.fluor?.get(l.id) { fluorCopies.append((nid, fl)) }
             if let th = doc.thermo?.get(l.id) { thermoCopies.append((nid, th)) }
+            if let c = doc.cultures?.get(l.id) { cultureCopies.append((nid, c)) }
             if let ch = thick?.get(l.id) { thick!.set(nid, ch) }
             if let spill = lightSpills[l.id] { lightSpills[nid] = spill }
             if let list = live?.get(l.id) {
@@ -873,6 +905,7 @@ public final class PaintEditorController {
             for (k, v, s) in ferroCopies { d.settingFerro(k, v, settings: s) }
             if fluorCopies.count > 0 { var fl = d.fluor ?? OrderedMap(); for (k, v) in fluorCopies { fl.set(k, v) }; d.fluor = fl }
             if thermoCopies.count > 0 { var th = d.thermo ?? OrderedMap(); for (k, v) in thermoCopies { th.set(k, v) }; d.thermo = th }
+            for (k, v) in cultureCopies { d.settingCulture(k, v) }
             if live != nil { d.liveStrokes = live }
             if stickers != nil { d.stickers = stickers }
         }))
@@ -929,6 +962,14 @@ public final class PaintEditorController {
         let mergedFluor = lowerFluor != nil || upperFluor != nil ? mergeFourChannel(toDoc(lowerFluor, below), upper.visible ? toDoc(upperFluor, upper) : nil) : nil
         let lowerThermo = doc.thermo?.get(below.id), upperThermo = doc.thermo?.get(upper.id)
         let mergedThermo = lowerThermo != nil || upperThermo != nil ? mergeFourChannel(toDoc(lowerThermo, below), upper.visible ? toDoc(upperThermo, upper) : nil) : nil
+        let canvasW = doc.canvas.width, canvasH = doc.canvas.height
+        let toDocCulture = { (c: LayerCultureState?, l: PaintLayer) -> LayerCultureState? in
+            guard let c else { return nil }
+            return (l.pixelOffset.x != 0 || l.pixelOffset.y != 0)
+                ? translateLayerCulture(c, Double(l.pixelOffset.x), Double(l.pixelOffset.y), canvasW, canvasH)
+                : c
+        }
+        let mergedCulture = mergeLayerCultures(toDocCulture(doc.cultures?.get(below.id), below), upper.visible ? toDocCulture(doc.cultures?.get(upper.id), upper) : nil)
         commit("Merge down", withWetEvents(doc.with { d in
             d.layers = layers
             d.activeLayerId = below.id
@@ -937,11 +978,13 @@ public final class PaintEditorController {
             d.removingFerro([upper.id, below.id])
             d.removingFluor([upper.id, below.id])
             d.removingThermo([upper.id, below.id])
+            d.removingCultures([upper.id, below.id])
             d.removingStickers([upper.id, below.id])
             if let mergedLight { var l = d.light ?? OrderedMap(); l.set(below.id, mergedLight); d.light = l }
             if let mergedFluor { var fl = d.fluor ?? OrderedMap(); fl.set(below.id, mergedFluor); d.fluor = fl }
             if let mergedThermo { var th = d.thermo ?? OrderedMap(); th.set(below.id, mergedThermo); d.thermo = th }
             if let mergedFerro { d.settingFerro(below.id, mergedFerro, settings: mergedFerroSettings) }
+            if let mergedCulture { d.settingCulture(below.id, mergedCulture) }
             if var live = d.liveStrokes {
                 _ = live.delete(upper.id)
                 _ = live.delete(below.id)
@@ -966,6 +1009,7 @@ public final class PaintEditorController {
             d.removingFerro([l.id])
             d.removingFluor([l.id])
             d.removingThermo([l.id])
+            d.removingCultures([l.id])
             d.removingStickers([l.id])
             if var live = d.liveStrokes, live.get(l.id) != nil {
                 live.set(l.id, [])
@@ -1669,6 +1713,9 @@ public final class PaintEditorController {
                         t.set(moved.id, ThickChannels(height: translateSurface(ch.height, dx, dy), material: translateSurface(ch.material, dx, dy), film: translateSurface(ch.film, dx, dy)))
                         o.thick = t
                     }
+                    if let c = doc.cultures?.get(moved.id) {
+                        o.settingCulture(moved.id, translateLayerCulture(c, dx, dy, doc.canvas.width, doc.canvas.height))
+                    }
                 }
                 layer = moved
             }
@@ -1904,6 +1951,18 @@ public final class PaintEditorController {
             if let targetId = tempLayerTargets[session.layerId], findLayer(baseLayers, session.layerId) == nil, let temp = findLayer(doc.layers, session.layerId)?.layer {
                 baseLayers = insertAfter(baseLayers, targetId, temp)
             }
+            let layerBefore = findLayer(baseLayers, session.layerId)?.layer
+            var nextCultures: OrderedMap<String, LayerCultureState>?
+            if let amOutputs = session.antimatterOutputs {
+                // Biopaint threads a blast changed are no longer the culture's own, on every layer it changed.
+                nextCultures = d.cultures
+                for ao in amOutputs where ao.changed {
+                    guard let culture = nextCultures?.get(ao.id), let l = findLayer(baseLayers, ao.id)?.layer, l.isPixel else { continue }
+                    nextCultures!.set(ao.id, clearOccupancyUnderStroke(culture, l.pixelSurface, ao.surface))
+                }
+            } else {
+                nextCultures = layerBefore.flatMap { applyStrokeCulture(d, session, $0, surface, &result) } ?? d.cultures
+            }
             out = d.with { o in
                 if let amOutputs = session.antimatterOutputs {
                     var nextLayers = baseLayers
@@ -1929,6 +1988,7 @@ public final class PaintEditorController {
                     }
                 }
                 o.strokes = d.strokes + [stroke]
+                o.cultures = nextCultures
                 if let fc = session.ferroChannel {
                     let b = session.initValues.brush
                     o.settingFerro(session.layerId, fc, settings: b.ferro.amount > 0 ? b.ferro : (d.ferroSettings?.get(session.layerId) ?? DEFAULT_FERRO))
@@ -2145,6 +2205,7 @@ public final class PaintEditorController {
         if let events = d.wetEvents, !events.isEmpty { out["wetEvents"] = .array(events.map(\.json)) }
         for (k, v) in thickJSON() { out[k] = v }
         for (k, v) in ferroJSON() { out[k] = v }
+        for (k, v) in culturesJSON(d) { out[k] = v }
         if let events = d.paintEvents, !events.isEmpty { out["paintEvents"] = .array(events.map(\.json)) }
         if let o = d.origin, o.x != 0 || o.y != 0 { out["origin"] = pointJSON(Double(o.x), Double(o.y)) }
         if let light = d.light {

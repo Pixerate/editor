@@ -7,7 +7,7 @@
 import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
-import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
+import { BRUSH_ID, BRUSH_ROTATIONS, CULTURE_SPECIES, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
@@ -323,6 +323,18 @@ const LIVE_PATTERNS = object('Gray-Scott reaction-diffusion patterns (spots, str
   relief: unit('Impasto relief height written to the layer thick map as patterns grow (0..1, default 0).'),
 });
 
+const CULTURE = object('Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.', {
+  species: oneOf(CULTURE_SPECIES, 'Living species (default mycelium).'),
+  reach: num(1, 100, 'How far a colony spreads on bare canvas in tip diameters (1..100, default 12).'),
+  branching: unit('How often threads fork (0..1, default 0.4).'),
+  wander: unit('How much threads meander (0..1, default 0.35).'),
+  appetite: unit('How strongly threads steer towards paint on the layer (0..1, default 0.5).'),
+  digest: unit('How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25).'),
+  fuse: unit('Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7).'),
+  thickness: num(0.02, 0.5, 'Thread width as a fraction of tip size (0.02..0.5, default 0.08).'),
+  glow: unit('Bioluminescence written to doc.light along grown threads (0..1, default 0).'),
+});
+
 const SOLID: JsonSchema = {
   type: 'string',
   pattern: '^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$',
@@ -395,6 +407,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     ferro: FERRO,
     motion: MOTION,
     livePatterns: LIVE_PATTERNS,
+    culture: CULTURE,
     colour: COLOUR,
   },
   ['id', 'name', 'kind', 'tip'],
@@ -416,6 +429,7 @@ export const BRUSH_FACET_SCHEMAS = {
   ferro: FERRO,
   motion: MOTION,
   livePatterns: LIVE_PATTERNS,
+  culture: CULTURE,
   colour: COLOUR,
   paint: PAINT,
 } as const;

@@ -597,6 +597,28 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     ferro: { amount: 0.7, wavelength: 12, threshold: 0.15 },
     colour: { default: '#0f172a' },
   },
+  // --- Biopaint (culture): mycelial ink that grows through the painting and feeds on it ---
+  {
+    id: 'mycelial-ink', name: 'Mycelial ink', kind: 'mark', medium: 'ink', variety: 'biopaint',
+    tip: { shape: 'round', size: 8, hardness: 0.9, spacing: 0.08 },
+    dynamics: { smoothing: 0.35, minSize: 0.25 },
+    culture: {},
+    colour: { default: '#1c1917' },
+  },
+  {
+    id: 'rot', name: 'Rot', kind: 'mark', medium: 'ink', variety: 'biopaint',
+    tip: { shape: 'round', size: 12, hardness: 0.75 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+    culture: { reach: 16, branching: 0.5, appetite: 0.8, digest: 0.75, thickness: 0.12 },
+    colour: { default: '#3f2e21' },
+  },
+  {
+    id: 'foxfire', name: 'Foxfire', kind: 'mark', medium: 'ink', variety: 'biopaint',
+    tip: { shape: 'round', size: 10, hardness: 0.8, spacing: 0.08 },
+    dynamics: { smoothing: 0.35, minSize: 0.3 },
+    culture: { reach: 15, branching: 0.45, glow: 0.85 },
+    colour: { default: '#4ade80', palette: ['#4ade80', '#2dd4bf', '#a3e635', '#38bdf8', '#c084fc'] },
+  },
   // --- Antimatter paint: blasts that invert, scorch and destroy paint across visible layers ---
   {
     id: 'antimatter', name: 'Antimatter', kind: 'mark', medium: 'paint', variety: 'antimatter',

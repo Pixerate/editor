@@ -1248,6 +1248,68 @@
       },
       "additionalProperties": false
     },
+    "culture": {
+      "type": "object",
+      "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+      "properties": {
+        "species": {
+          "type": "string",
+          "enum": [
+            "mycelium"
+          ],
+          "description": "Living species (default mycelium)."
+        },
+        "reach": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+        },
+        "branching": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How often threads fork (0..1, default 0.4)."
+        },
+        "wander": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much threads meander (0..1, default 0.35)."
+        },
+        "appetite": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+        },
+        "digest": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+        },
+        "fuse": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+        },
+        "thickness": {
+          "type": "number",
+          "minimum": 0.02,
+          "maximum": 0.5,
+          "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+        },
+        "glow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
+        }
+      },
+      "additionalProperties": false
+    },
     "colour": {
       "type": "object",
       "description": "The brush's colours. The user's colour still wins unless own is set.",

@@ -38,8 +38,8 @@ export const BRUSH_PREVIEW_FALLBACKS: Readonly<Record<string, DualColor>> = {
  * Whether a brush that gives off `light` previews on dark paper: light paint glows on dark, but a
  * multiply light brush (a highlighter) is a tint on paper and previews on light paper.
  */
-export function brushPreviewsOnDark(brush: { light?: { amount?: number }; fluorescence?: { amount?: number }; tip?: { blend?: string } }): boolean {
-  return ((brush.light?.amount ?? 0) > 0 || (brush.fluorescence?.amount ?? 0) > 0) && brush.tip?.blend !== 'multiply';
+export function brushPreviewsOnDark(brush: { light?: { amount?: number }; fluorescence?: { amount?: number }; culture?: { glow?: number }; tip?: { blend?: string } }): boolean {
+  return ((brush.light?.amount ?? 0) > 0 || (brush.fluorescence?.amount ?? 0) > 0 || (brush.culture?.glow ?? 0) > 0) && brush.tip?.blend !== 'multiply';
 }
 
 export interface BrushPreviewColours {

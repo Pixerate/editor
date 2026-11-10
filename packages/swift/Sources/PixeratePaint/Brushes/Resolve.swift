@@ -20,6 +20,8 @@ private let EXCHANGE = ["dab", "wet", "impasto"]
 private let DABS = ["dab", "eraser", "mixer", "blender", "smudge"]
 /// Engines that can deposit a thin-film iridescence coat.
 private let FILM = ["dab", "mixer", "wet", "impasto", "particle", "bristle", "vortex"]
+/// Engines whose strokes seed biopaint spores: a vortex warps paint already down and carries none.
+private let CULTURE_ENGINES = ["dab", "mixer", "wet", "impasto", "particle", "bristle"]
 
 /// One facet field and the engine field it sets.
 struct BrushField: Sendable {
@@ -108,6 +110,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out += each("thermochromic", "thermochromic", ["hotColor", "threshold"])
     out += each("iridescence", "iridescence", ["thickness", "pressureToThickness", "ior"], FILM)
     out += each("ferro", "ferro", ["amount", "wavelength", "threshold"])
+    out += each("culture", "culture", ["species", "reach", "branching", "wander", "appetite", "digest", "fuse", "thickness", "glow"], CULTURE_ENGINES)
     out.append(f("behaviour.exchange.pickup", "behavior.pickup", EXCHANGE))
     out.append(f("behaviour.exchange.mix", "behavior.mix", EXCHANGE))
     out.append(f("behaviour.exchange.dirty", "behavior.dirty", EXCHANGE))
@@ -265,6 +268,9 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     }
     if brush["mutation"] != nil && ["dab", "wet", "impasto", "particle", "bristle"].contains(engine) && (engine != "wet" || brush["kind"]?.stringValue != "tool") {
         input["mutation"] = .object(brush["mutation"]?.objectValue ?? [:])
+    }
+    if brush["culture"] != nil && brush["kind"]?.stringValue != "tool" && CULTURE_ENGINES.contains(engine) {
+        input["culture"] = .object(brush["culture"]?.objectValue ?? [:])
     }
     // Blenders, smudges and scrapers only work on paint already down.
     if engine == "blender" || engine == "smudge" || engine == "scraper" { input["loadsColor"] = false }

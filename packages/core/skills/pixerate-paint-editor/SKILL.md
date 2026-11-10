@@ -103,6 +103,7 @@ Wet oil blends where the brush meets it; impasto adds relief lit by `set_lightin
 **Smart inks** (`fluorescence` for UV/invisible ink under `set_uv_light`, `thermochromic` for heat-reactive ink with `paint_heat` / `advance_heat`; presets `uv-marker`, `thermo-ink`): [references/smart-inks.md](references/smart-inks.md).
 **Ferrofluid paint** (`ferro.amount`, presets `ferrofluid` and `ferro-ink`, pulled by dipole magnets into lit Rosensweig spikes until cured): [references/ferrofluid.md](references/ferrofluid.md).
 **Painting time machine** (non-destructive museum ageing preview `set_age` / `bake_age`, X-ray pentimento radiographs `render_xray` / `set_xray_view`, and the `paint-scraper` brush that excavates through layers): [references/time-machine.md](references/time-machine.md).
+**Biopaint (mycelial ink)** (`culture` facet, presets `mycelial-ink`, `rot`, `foxfire`: spores seeded along a stroke grow fine branching threads that seek out existing paint, digest it, carry its colour along the network, and fuse into loops; `grow_cultures` steps them): [references/culture.md](references/culture.md).
 
 ## Gradient paint
 
@@ -238,7 +239,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `ghost`, `mutation`, `motion`, `colour`, `livePatterns` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `iridescence`, `ghost`, `mutation`, `ferro`, `culture`, `motion`, `colour`, `livePatterns` (objects merge, lists replace; marks of another kind replace the marks; `culture: null` or `unset: ["culture"]` drops biopaint spores), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -335,6 +336,10 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `bake_age` | Commit the current aged look (fading, varnish, craquelure and dust) into a new pixel layer at the top of the stack and reset preview `years` to 0 so the painting is not aged twice. One undo step. Refused when `years` is 0 or wet paint is still moving. Returns `{ layerId, age }`. |
 | `render_xray` | Render an X-ray radiograph of the painting that composites every pixel layer (hidden ones included) by `density = opacity × (thickHeight + lightnessWeight)` so lead-white and impasto strokes read bright and buried layers (pentimento) show through. Optional `strokes: k` replays the first `k` recorded strokes to X-ray an earlier stage. Changes nothing. Returns a PNG image and `{ width, height, strokes, totalStrokes, layerCount, hiddenLayerCount, maxDensity, meanDensity }`. |
 | `set_xray_view` | Turn the viewport X-ray overlay `on` or off (`false`) to inspect buried and hidden layers live while painting or scraping with `paint-scraper`. View state only, not an undo step. Returns `{ on }`. |
+| `get_cultures` | Read living biopaint (`culture`) colonies across layers (`tick`, living `tips`, `segments`, `bounds`, `status`: `growing` / `extinct` / `capped`), plus `growWhileClosed` and `pendingCatchUpTicks`. Changes nothing. |
+| `grow_cultures` | Step living biopaint (`culture`) colonies forward by `steps` ticks (1..2000, default 40) on `layerId` (or all layers with living tips when omitted) as one undo step. Threads sense ahead, steer toward existing paint (`appetite`), fade what they eat (`digest`), carry its colour along the network, branch (`branching`) and fuse (`fuse`). Returns `segmentsAdded`, `tipsAlive`, `bounds`, `status` and per-layer results. Refuses stroke layers, effect layers, and wet layers holding wet paint (`dry_paint` first). |
+| `remove_cultures` | Kill living biopaint tips on `layerId` (or the active layer) so growth stops (`status: "extinct"`), keeping the threads already drawn as ordinary paint. One undo step. Returns `layerId`, `removedTips`, `status`. |
+| `set_culture_options` | Turn `growWhileClosed` (`true` / `false`) on or off so saving records a timestamp and reopening catches up elapsed growth as one undo step (`"Growth while closed"`). Returns `{ growWhileClosed }`. |
 
 ### Stickers
 

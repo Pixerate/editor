@@ -3,6 +3,7 @@ import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, 
 import { usePaintEditorState } from './usePaintEditor';
 import { FerroPanel } from './FerroPanel';
 import { TimeMachinePanel } from './TimeMachinePanel';
+import { CulturePanel } from './CulturePanel';
 import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, chip, panel, useAttempt } from './shared';
 
 export interface PaperPanelProps {
@@ -113,6 +114,7 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
       </div>
       <FerroPanel controller={controller} />
       <TimeMachinePanel controller={controller} />
+      <CulturePanel controller={controller} />
       <ErrorLine error={error} />
     </div>
   );

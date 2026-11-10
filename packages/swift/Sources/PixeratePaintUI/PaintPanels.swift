@@ -381,6 +381,7 @@ public struct PaintPaperPanel: View {
             PaintUvHeatPanel(model: model)
             PaintFerroPanel(model: model)
             PaintTimeMachinePanel(model: model)
+            PaintCulturePanel(model: model)
         }
     }
 }
@@ -408,6 +409,50 @@ public struct PaintTimeMachinePanel: View {
             .controlSize(.small)
             Button("Use Paint Scraper brush") { model.selectBrush("paint-scraper") }
                 .controlSize(.small)
+        }
+    }
+}
+
+/// Biopaint (`CulturePanel`): living mycelial ink brush controls, colony status, manual Grow / Pause / Kill actions, and grow-while-closed toggle.
+public struct PaintCulturePanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let state = model.cultures
+        let enabled = model.brushHasCulture
+        let activeId = model.activeLayer?.id
+        let activeSummary = activeId.flatMap { id in state.layers.first { $0.layerId == id } }
+        let totalTips = state.layers.reduce(0) { $0 + $1.tips }
+        let totalSegments = state.layers.reduce(0) { $0 + $1.segments }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                PanelHeading("Biopaint (mycelial ink)")
+                Spacer()
+                Toggle("Carry spores", isOn: Binding(get: { enabled }, set: { model.setBrushCultureEnabled($0) }))
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+            }
+            if enabled {
+                ForEach(model.cultureSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.cultureValue(item.path), range: item.min...item.max, step: item.step) {
+                        model.setCultureValue(item.path, $0)
+                    }
+                }
+            }
+            HStack(spacing: 4) {
+                Button("Grow +24") { model.growCultures(steps: 24) }.disabled(totalTips == 0)
+                Button(state.paused ? "Resume" : "Pause") { model.setCulturePaused(!state.paused) }.disabled(totalTips == 0)
+                Button("Kill colony") { model.removeCultures(layerId: activeId) }.disabled((activeSummary?.tips ?? 0) == 0)
+            }
+            .controlSize(.small)
+            Toggle("Grow while closed", isOn: Binding(get: { state.growWhileClosed }, set: { model.setCultureOptions(growWhileClosed: $0) }))
+                .font(.caption)
+            if totalTips > 0 || totalSegments > 0 {
+                Text("\(totalTips) living tips · \(totalSegments) segments · \( activeSummary?.status ?? "idle")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

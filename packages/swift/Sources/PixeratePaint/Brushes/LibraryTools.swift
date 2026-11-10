@@ -102,11 +102,38 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
         i.stampArt = stampArt
         if b.light.amount > 0 && b.engine != "sticker" { i.light = emptyLight() }
         let session = try PaintStrokeSession(i)
-        try session.push(thumbnailStroke(width, height))
+        let pts = thumbnailStroke(width, height)
+        try session.push(pts)
         _ = try session.end()
+        let beforeCulture = surface
         surface = session.surfaceAfter ?? surface
         let thick = session.thickChannels() ?? session.filmChannel().map { ThickChannels(height: emptySurface(1, 0), material: emptySurface(4, 0), film: $0) }
         light = session.lightChannel
+        if let c = b.culture {
+            let seeded = seedCultureFromStroke(
+                points: pts.map { Point2(x: $0.x, y: $0.y) },
+                brushSize: b.tip.size,
+                color: [rgb[0], rgb[1], rgb[2]],
+                culture: c,
+                strokeSeed: 7,
+                beforeSurface: beforeCulture,
+                afterSurface: surface,
+                canvasWidth: width,
+                canvasHeight: height
+            )
+            let grown = stepLayerCulture(
+                culture: seeded.culture,
+                surface: surface,
+                lightSurface: light ?? (c.glow > 0 ? emptyLight() : nil),
+                paperSeed: paper.seed,
+                paperDepthPermille: Int(JS.round(paper.depth * 1000)),
+                canvasWidth: width,
+                canvasHeight: height,
+                steps: 24
+            )
+            surface = grown.surface
+            if let gl = grown.lightSurface, !gl.tiles.isEmpty { light = gl }
+        }
         // Thick paint is shown lit, and light paint glowing, as on the canvas.
         let lit = thick.map { LitCache().lit(surface, $0, DEFAULT_LIGHTING) } ?? surface
         surface = light != nil || thick != nil ? glowSurface(lit, light, thick) : lit

@@ -30,6 +30,7 @@ import type { WetEvent } from './wet';
 import { scaleStencil } from './stencils';
 import type { Sticker } from './stickers';
 import type { PaintMagnet } from './ferro';
+import type { CultureGrowEventData } from '../paint/culture';
 import type { WetFlowSpec } from '../paint/wet/flow';
 import type { WetParams, WetTilt } from '../paint/wet/model';
 import type { LivePatternsInput, LivePatternsSettings } from '../paint/live-patterns';
@@ -171,6 +172,7 @@ export async function replayPainting(
         });
       } else if (e.kind === 'clear') target.clearLayer(e.layerId);
       else if (e.kind === 'cure-ferrofluid') target.cureFerrofluid(e.layerId);
+      else if (e.kind === 'culture-grow') target.replayCultureGrow(e.layerId, e.data as unknown as CultureGrowEventData, s);
       else if (e.kind === 'live-strokes') {
         const d = e.data as { strokes?: RecordedStroke[]; rasterized?: boolean } | undefined;
         if (d?.rasterized) target.replaceLiveStrokes(e.layerId, null);

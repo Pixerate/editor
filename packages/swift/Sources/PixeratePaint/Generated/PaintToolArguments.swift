@@ -611,6 +611,7 @@ public struct SetBrushArguments: Sendable {
         case ferro
         case motion
         case livePatterns
+        case culture
         case colour
     }
 
@@ -656,6 +657,8 @@ public struct SetBrushArguments: Sendable {
     public var motion: JSONValue?
     /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
     public var livePatterns: JSONValue?
+    /// Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.
+    public var culture: JSONValue?
     /// The brush's colours.
     public var colour: JSONValue?
     /// Facets to remove, back to their defaults (applied before the facets given).
@@ -684,6 +687,7 @@ public struct SetBrushArguments: Sendable {
         ferro = args.argument("ferro")
         motion = args.argument("motion")
         livePatterns = args.argument("livePatterns")
+        culture = args.argument("culture")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
     }
@@ -2297,6 +2301,49 @@ public struct SetXrayViewArguments: Sendable {
     }
 }
 
+/// Arguments of `get_cultures`.
+public struct GetCulturesArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `grow_cultures`.
+public struct GrowCulturesArguments: Sendable {
+    /// Pixel layer id from list_layers to grow (default: all layers with living tips).
+    public var layerId: String?
+    /// Simulation ticks to advance (1..2000, default 40).
+    public var steps: Int?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+        steps = try args.integer("steps")
+    }
+}
+
+/// Arguments of `remove_cultures`.
+public struct RemoveCulturesArguments: Sendable {
+    /// Pixel layer id from list_layers (default the active layer).
+    public var layerId: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+    }
+}
+
+/// Arguments of `set_culture_options`.
+public struct SetCultureOptionsArguments: Sendable {
+    /// Whether living colonies catch up elapsed growth when the painting is reopened (default false).
+    public var growWhileClosed: Bool
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        growWhileClosed = try args.required(try args.bool("growWhileClosed"), "growWhileClosed")
+    }
+}
+
 /// Arguments of `export_time_lapse`.
 public struct ExportTimeLapseArguments: Sendable {
     /// About how many frames (default 120); one after every few strokes.
@@ -3266,6 +3313,8 @@ public struct CreateBrushArguments: Sendable {
     public var motion: JSONValue?
     /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
     public var livePatterns: JSONValue?
+    /// Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.
+    public var culture: JSONValue?
     /// The brush's colours.
     public var colour: JSONValue?
 
@@ -3293,6 +3342,7 @@ public struct CreateBrushArguments: Sendable {
         ferro = args.argument("ferro")
         motion = args.argument("motion")
         livePatterns = args.argument("livePatterns")
+        culture = args.argument("culture")
         colour = args.argument("colour")
     }
 }
@@ -3344,6 +3394,7 @@ public struct UpdateBrushArguments: Sendable {
         case ferro
         case motion
         case livePatterns
+        case culture
         case colour
     }
 
@@ -3389,6 +3440,8 @@ public struct UpdateBrushArguments: Sendable {
     public var motion: JSONValue?
     /// Gray-Scott reaction-diffusion patterns (spots, stripes, coral, maze, worms) that grow inside wet paint (behaviour.surface: wet) and freeze where the paint dries.
     public var livePatterns: JSONValue?
+    /// Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.
+    public var culture: JSONValue?
     /// The brush's colours.
     public var colour: JSONValue?
     /// Facets to remove, back to their defaults (applied before the facets given).
@@ -3417,6 +3470,7 @@ public struct UpdateBrushArguments: Sendable {
         ferro = args.argument("ferro")
         motion = args.argument("motion")
         livePatterns = args.argument("livePatterns")
+        culture = args.argument("culture")
         colour = args.argument("colour")
         unset = try args.enumerations("unset", as: Unset.self)
     }
@@ -3715,6 +3769,10 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .bakeAge: try BakeAgeArguments(args)
     case .renderXray: try RenderXrayArguments(args)
     case .setXrayView: try SetXrayViewArguments(args)
+    case .getCultures: try GetCulturesArguments(args)
+    case .growCultures: try GrowCulturesArguments(args)
+    case .removeCultures: try RemoveCulturesArguments(args)
+    case .setCultureOptions: try SetCultureOptionsArguments(args)
     case .exportTimeLapse: try ExportTimeLapseArguments(args)
     case .exportHighRes: try ExportHighResArguments(args)
     case .breedStrokes: try BreedStrokesArguments(args)

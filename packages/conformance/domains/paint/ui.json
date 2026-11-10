@@ -2883,6 +2883,64 @@
         "step": 0.1
       }
     ],
+    "culture": [
+      {
+        "path": "culture.reach",
+        "label": "Reach",
+        "min": 1,
+        "max": 100,
+        "step": 1
+      },
+      {
+        "path": "culture.branching",
+        "label": "Branching",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "culture.wander",
+        "label": "Wander",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "culture.appetite",
+        "label": "Appetite",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "culture.digest",
+        "label": "Digest",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "culture.fuse",
+        "label": "Fuse",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "culture.thickness",
+        "label": "Thread width",
+        "min": 0.02,
+        "max": 0.5,
+        "step": 0.01
+      },
+      {
+        "path": "culture.glow",
+        "label": "Bioluminescence",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
     "livePatterns": [
       {
         "path": "scale",

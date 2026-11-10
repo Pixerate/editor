@@ -143,6 +143,8 @@ export interface PaintStrokeResult {
   wet?: boolean;
   /** Sticker brushes: refs the spray picked but skipped because their art had not loaded yet. */
   skippedStickers?: string[];
+  /** Biopaint (`brush.culture`): how many spores were placed along the stroke on commit. */
+  culture?: { seeds: number };
   /** Antimatter paint: blasts fired, sparks spawned, fuel measured, and which layers changed or were skipped. */
   antimatter?: AntimatterStats;
   /** Vortex brushes: classified stroke shape (`'point' | 'open' | 'closed'`) and maximum displacement (px). */
@@ -581,6 +583,11 @@ export class PaintStrokeSession {
   /** Vortex strokes: the view-only winding animation data when duration > 0 and pixels moved. */
   vortexAnimation() {
     return this.vortexDriver ? this.vortexDriver.windingAnimation() : null;
+  }
+
+  /** Dry vortex strokes: the driver, to move per-layer masks (biopaint occupancy) with the paint. */
+  vortexWarp(): VortexStrokeDriver | null {
+    return this.vortexDriver?.preWarpSurface() ? this.vortexDriver : null;
   }
 
   /** Shows a wet stroke's progress (the wet layer's display). */

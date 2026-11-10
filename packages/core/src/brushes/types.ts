@@ -12,6 +12,7 @@
  */
 
 import type { ColorValue } from '../color/dual';
+import type { CultureSpecies } from '../paint/culture';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
@@ -484,6 +485,31 @@ export interface BrushLivePatterns {
 }
 
 /**
+ * Biopaint (`culture`): living ink that seeds spores along a brush stroke, grows outward as
+ * branching threads, steers towards paint on the layer and digests what it crosses.
+ */
+export interface BrushCulture {
+  /** Living species (default `mycelium`). */
+  species?: CultureSpecies;
+  /** How far a colony spreads on bare canvas in tip diameters, 1..100 (default 12). */
+  reach?: number;
+  /** How often threads fork, 0..1 (default 0.4). */
+  branching?: number;
+  /** How much threads meander, 0..1 (default 0.35). */
+  wander?: number;
+  /** How strongly threads steer towards paint, 0..1 (default 0.5). */
+  appetite?: number;
+  /** How much paint is consumed as threads cross it, 0..1 (default 0.25). */
+  digest?: number;
+  /** Chance a thread fuses into another thread it meets rather than deflecting, 0..1 (default 0.7). */
+  fuse?: number;
+  /** Thread width as a fraction of tip size, 0.02..0.5 (default 0.08). */
+  thickness?: number;
+  /** Bioluminescence written to `doc.light`, 0..1 (default 0). */
+  glow?: number;
+}
+
+/**
  * A colour a brush can carry: a solid colour (hex, `#rrggbbaa`, `rgba()` or a light / dark
  * `DualColor`), a gradient, or effect paint.
  */
@@ -530,6 +556,7 @@ export interface Brush {
   ferro?: BrushFerro;
   motion?: BrushMotion;
   livePatterns?: BrushLivePatterns;
+  culture?: BrushCulture;
   colour?: BrushColour;
 }
 

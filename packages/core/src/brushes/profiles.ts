@@ -51,6 +51,8 @@ export interface BrushHostProfile {
   iridescence?: BrushSupport;
   /** Liquid ferrofluid (`ferro`); missing: `none`. */
   ferro?: BrushSupport;
+  /** Biopaint living ink (`culture`); missing: `none`. */
+  culture?: BrushSupport;
 }
 
 export interface BrushIssue {
@@ -93,6 +95,7 @@ export const PAINT_PROFILE: BrushHostProfile = {
   livePatterns: 'full',
   iridescence: 'full',
   ferro: 'full',
+  culture: 'full',
 };
 
 /** The image editor's brush: dry dabs on pixels, its Mixer Brush and the eraser. */
@@ -209,6 +212,7 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
     else if (surface === 'wet' && nonZero(brush.light?.amount)) add('mutation', 'error', 'Wet mutation brushes use the wet light channel as their fade tracer.', 'Remove light (or set light.amount to 0), or remove mutation.');
   }
   feature(profile.ferro ?? 'none', nonZero(brush.ferro?.amount), 'ferro', 'ferrofluid spikes and magnets', 'Remove ferro (or set ferro.amount to 0).');
+  feature(profile.culture ?? 'none', !!brush.culture, 'culture', 'biopaint (mycelial ink)', 'Remove culture.');
   const m = brush.motion;
   feature(profile.motion, !!m && (!!m.live || nonZero(m.waveSpeed) || m.fps !== undefined), 'motion', 'animation', 'Remove motion.');
   const d = brush.dynamics ?? {};
@@ -338,6 +342,9 @@ export function degrade(brush: Brush, profile: BrushHostProfile, options: { igno
         break;
       case 'ferro':
         delete b.ferro;
+        break;
+      case 'culture':
+        delete b.culture;
         break;
       case 'motion':
         delete b.motion;

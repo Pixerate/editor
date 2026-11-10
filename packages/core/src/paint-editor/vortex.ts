@@ -963,4 +963,20 @@ export class VortexStrokeDriver {
     if (!this.warpedSurface || !this.displacementField || !this.preInkSurface || !(duration > 0)) return null;
     return { field: this.displacementField, frames: this.keyframes ?? [this.displacementField], preInkSurface: this.preInkSurface, duration };
   }
+
+  /** The layer before the warp, with the stroke's ink laid (`null` when the stroke changed nothing). */
+  preWarpSurface(): TiledSurface | null {
+    return this.warpedSurface ? this.preInkSurface : null;
+  }
+
+  /**
+   * A 1-channel mask (biopaint culture `occupancy`) moved with the paint: bilinear like impasto
+   * height, so 1-px threads stay connected where the swirl stretches them (point sampling would
+   * break them up). Unchanged without a warp.
+   */
+  warpMask(mask: TiledSurface): TiledSurface {
+    const field = this.displacementField;
+    if (!this.warpedSurface || !field || !(field.maxDisplacement > 1e-4) || mask.channels !== 1 || mask.tileCount === 0) return mask;
+    return warpTiledSurfaceChannel(mask, field, { offset: this.init.offset, selection: this.init.selection }).surface;
+  }
 }

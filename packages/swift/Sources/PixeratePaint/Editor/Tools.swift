@@ -27,6 +27,7 @@ func strokeResultJSON(_ r: PaintStrokeResult) -> JSONValue {
     var o: JSONObject = ["layerId": .string(r.layerId), "bounds": rectJSON(r.bounds), "dabs": .number(Double(r.dabs)), "strokeId": r.strokeId.map { .string($0) } ?? .null]
     if let load = r.mixerLoad { o["mixerLoad"] = loadResult(load) }
     if let wet = r.wet { o["wet"] = .bool(wet) }
+    if let seeds = r.culture { o["culture"] = ["seeds": .number(Double(seeds))] }
     if let am = r.antimatter { o["antimatter"] = am.json }
     if let vortex = r.vortex { o["vortex"] = vortex.json }
     return .object(o)
@@ -259,7 +260,7 @@ func contractProvider(_ id: String, _ handlers: [String: PaintToolHandler], cont
 
 /// The paint editor's tools (`createPaintEditorToolProvider`): the ones this port implements.
 public func createPaintEditorToolProvider(_ controller: PaintEditorController) throws -> AgentToolProvider {
-    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEvolutionHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }.merging(paintReplayExportHandlers(controller)) { a, _ in a }.merging(paintStickerHandlers(controller)) { a, _ in a }.merging(paintWetHandlers(controller)) { a, _ in a }.merging(paintMutationHandlers(controller)) { a, _ in a }.merging(paintFerroHandlers(controller)) { a, _ in a }.merging(paintTimeMachineHandlers(controller)) { a, _ in a }
+    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEvolutionHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }.merging(paintReplayExportHandlers(controller)) { a, _ in a }.merging(paintStickerHandlers(controller)) { a, _ in a }.merging(paintWetHandlers(controller)) { a, _ in a }.merging(paintMutationHandlers(controller)) { a, _ in a }.merging(paintFerroHandlers(controller)) { a, _ in a }.merging(paintTimeMachineHandlers(controller)) { a, _ in a }.merging(paintCultureHandlers(controller)) { a, _ in a }
     return try contractProvider("paint-editor", handlers, content: paintContentHandlers(controller).merging(paintReplayExportContentHandlers(controller)) { a, _ in a }.merging(paintTimeMachineContentHandlers(controller)) { a, _ in a })
 }
 

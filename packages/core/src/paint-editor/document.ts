@@ -18,6 +18,7 @@ import type { FerroSettings, PaintMagnet } from './ferro';
 import type { Sticker } from './stickers';
 import type { PaintEffectSource, PaintPaperEffect } from './effects';
 import type { HeatField } from './heat';
+import type { LayerCulture } from '../paint/culture';
 import type { PaintAgeSettings } from './age';
 
 export type PaintPixelLayer = RasterPixelLayer & {
@@ -76,6 +77,12 @@ export interface PaintDocumentState {
   magnets?: PaintMagnet[];
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
+  /** Biopaint (`culture`): per-layer living mycelial colony state (`tick`, `nextId`, `tips`, `occupancy`, `segmentsTotal`, `status`). */
+  cultures?: Readonly<Record<string, LayerCulture>>;
+  /** Whether active cultures continue growing while the document is closed (default false). */
+  growWhileClosed?: boolean;
+  /** Timestamp (ms) when cultures were last grown or saved. */
+  lastGrownAt?: number;
   /** Effect layers: the provider effect each one is drawn from (layers that are gone are ignored). */
   effectLayers?: Readonly<Record<string, PaintEffectSource>>;
   /** Effect paper: a provider generator drawn over the paper, under the paint. */
@@ -92,7 +99,7 @@ export interface PaintDocumentState {
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
 export interface PaintEvent {
   at: number;
-  kind: 'fill' | 'fill-region' | 'clear' | 'flatten' | 'stickers' | 'live-strokes' | 'magnets' | 'cure-ferrofluid';
+  kind: 'fill' | 'fill-region' | 'clear' | 'flatten' | 'stickers' | 'live-strokes' | 'magnets' | 'cure-ferrofluid' | 'culture-grow';
   layerId: string;
   /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers or live strokes after an edit. */
   data?: Record<string, unknown>;

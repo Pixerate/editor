@@ -62,6 +62,8 @@ export interface BrushEngineControls {
   light?: boolean;
   /** Thin-film iridescence: whether the brush can lay a thin-film iridescent coat (`iridescence`; `IRIDESCENCE_SLIDERS` are in `sliders` when enabled). */
   iridescence?: boolean;
+  /** Biopaint (`culture`): whether the brush can seed living mycelial ink (`culture`; `CULTURE_SLIDERS` are in `sliders` when enabled). */
+  culture?: boolean;
 }
 
 /** The light paint slider (every engine that lays colour but sticker brushes; wet brushes when they paint). */
@@ -81,6 +83,18 @@ export const IRIDESCENCE_SLIDERS: readonly SliderControl[] = [
   { path: 'iridescence.thickness', label: 'Film thickness (nm)', min: 100, max: 1000, step: 5 },
   { path: 'iridescence.pressureToThickness', label: 'Pressure → thickness', min: 0, max: 1, step: 0.01 },
   { path: 'iridescence.ior', label: 'Refractive index', min: 1.2, max: 2, step: 0.01 },
+];
+
+/** The biopaint (`culture`) sliders (appended when `brush.culture` is set). */
+export const CULTURE_SLIDERS: readonly SliderControl[] = [
+  { path: 'culture.reach', label: 'Reach', min: 1, max: 100, step: 1 },
+  { path: 'culture.branching', label: 'Branching', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.wander', label: 'Wander', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.appetite', label: 'Appetite', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.digest', label: 'Digest', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.fuse', label: 'Fuse', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.thickness', label: 'Thread width', min: 0.02, max: 0.5, step: 0.01 },
+  { path: 'culture.glow', label: 'Bioluminescence', min: 0, max: 1, step: 0.01 },
 ];
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
@@ -119,7 +133,7 @@ export const ANTIMATTER_SLIDERS: readonly SliderControl[] = [
  * pigment choice; dab and mixer brushes also have the dirty and multi-colour controls. Pick-up
  * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
  */
-export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; iridescence?: PaintBrush['iridescence']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
+export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; iridescence?: PaintBrush['iridescence']; culture?: PaintBrush['culture']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
   const c = engineControls(brush);
   if (!c) return null;
   const mut = brush.mutation ? MUTATION_SLIDERS : [];
@@ -129,9 +143,12 @@ export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: 
   }
   // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
   const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
+  // Antimatter detonates paint: it lays no film and carries no spores. A vortex warps paint and carries none either.
   const canFilm = brush.engine !== 'antimatter';
+  const canCulture = canFilm && brush.engine !== 'vortex';
   const film: readonly SliderControl[] = canFilm && brush.iridescence ? IRIDESCENCE_SLIDERS : [];
-  return { ...c, sliders: [...c.sliders, ...mut, LIGHT_SLIDER, ...extra, ...film], light: true, iridescence: canFilm };
+  const cult: readonly SliderControl[] = canCulture && brush.culture ? CULTURE_SLIDERS : [];
+  return { ...c, sliders: [...c.sliders, ...mut, LIGHT_SLIDER, ...extra, ...film, ...cult], light: true, iridescence: canFilm, culture: canCulture };
 }
 
 function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
