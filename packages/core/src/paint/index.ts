@@ -24,3 +24,4 @@ export * from './brushstroke';
 export * from './pointer';
 export * from './grain';
 export * from './live-patterns';
+export * from './displacement';

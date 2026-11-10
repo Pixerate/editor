@@ -627,4 +627,31 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     marks: { kind: 'scraper' },
     dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5 },
   },
+  // --- Vortex paint: draw a shape and the paint around it winds into a vortex of that shape ---
+  {
+    id: 'vortex', name: 'Vortex', kind: 'mark', medium: 'paint', variety: 'vortex',
+    tip: { shape: 'round', size: 24, hardness: 0.7 },
+    marks: { kind: 'vortex' },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+  },
+  {
+    id: 'ink-vortex', name: 'Ink vortex', kind: 'mark', medium: 'paint', variety: 'vortex',
+    tip: { shape: 'round', hardness: 0.75 },
+    marks: { kind: 'vortex', ink: 0.85 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+    colour: { default: '#2563eb', palette: ['#2563eb', '#dc2626', '#f59e0b', '#10b981', '#7c3aed', '#ec4899'] },
+  },
+  {
+    id: 'whirlpool', name: 'Whirlpool', kind: 'mark', medium: 'paint', variety: 'vortex',
+    tip: { shape: 'round', size: 28, hardness: 0.65 },
+    marks: { kind: 'vortex', reach: 4, turns: 2.5, pull: 0.75 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+  },
+  {
+    id: 'wet-vortex', name: 'Wet vortex', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 28, hardness: 0.6 },
+    marks: { kind: 'vortex', reach: 3.5, pull: 0.35 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.6, rewet: 0.35 } },
+  },
 ];

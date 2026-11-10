@@ -2206,6 +2206,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "`<TimeMachinePanel>` (in `<PaperPanel>`) (`/paint-editor`)",
         "svelte": "`<TimeMachinePanel>` (in `<PaperPanel>`) (`/paint-editor`)",
         "swift": "✅ `PaintAgeSettings`, `DEFAULT_AGE`, `craquelureAt`, `agePixel`, `renderXrayPixels`, `ScraperStrokeDriver`; `PaintEditorController` `setAge`, `getAge`, `bakeAge`, `renderXray`, `setXrayView`; `PaintTimeMachinePanel` (in `PaintPaperPanel`)"
+      },
+      {
+        "feature": "Vortex Paint (a `vortex` mark brush (`marks.kind: 'vortex'`, `engine: 'vortex'`; `reach`, `turns`, `pull`, `direction`, `ink`, `duration`) where the drawn stroke defines the shape of a vortex — a tap creates a round whirlpool (`'point'`), an open curve wraps paint around it like a racetrack (`'open'`), and a closed loop uses signed Euclidean distance so paint inside and outside winds coherently (`'closed'`); Lamb-Oseen tangential spin plus inward pull integrated in fixed sub-steps into a single backward displacement field (`integrateVelocityField`) and resampled once with premultiplied bilinear sampling (`warpTiledSurfaceRgba`) across RGBA, impasto relief, light, ferrofluid, fluorescent and thermochromic channels, with optional pre-warp ink and view-only winding animation; on wet layers (`wet-vortex` or any vortex brush on wet paint) `WetWorld.swirl` spins and lifts the fluid directly; mirrored symmetry copies invert spin direction; presets Vortex, Ink vortex, Whirlpool and Wet vortex; `vortex` summary on `paint_stroke` / `stroke_path`)",
+        "core": "`VortexStrokeDriver`, `buildVortexDisplacement`, `buildVortexVelocityField`, `vortexGuideSegments`, `VORTEX_SLIDERS`, `DEFAULT_VORTEX`, `normalizeVortex` (`/paint-editor`) & `integrateVelocityField`, `warpTiledSurfaceRgba` (`/paint`)",
+        "react": "`<BrushPanel>` (`<BrushEditor>`) & vortex guide in `<PaintCanvas>`",
+        "svelte": "`<BrushPanel>` (`<BrushEditor>`) & vortex guide in `<PaintCanvas>`",
+        "swift": "✅ `VortexSettings`, `DEFAULT_VORTEX`, `VortexStrokeSummary`, `WetWorld.swirl`, `vortexGuideSegments`; vortex sliders and direction picker in `PaintBrushPanel`, vortex guide (with symmetry copies) in `PaintCanvasView`; the view-only winding animation (`duration`): Planned (#733)"
       }
     ]
   },

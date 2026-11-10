@@ -13,13 +13,13 @@ import PixerateRaster
  */
 public typealias Brush = JSONObject
 
-private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper"]
+private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"]
 /// Engines that pick up and mix paint dab by dab (the exchange ratios apply).
 private let EXCHANGE = ["dab", "wet", "impasto"]
 /// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
 private let DABS = ["dab", "eraser", "mixer", "blender", "smudge"]
 /// Engines that can deposit a thin-film iridescence coat.
-private let FILM = ["dab", "mixer", "wet", "impasto", "particle", "bristle"]
+private let FILM = ["dab", "mixer", "wet", "impasto", "particle", "bristle", "vortex"]
 
 /// One facet field and the engine field it sets.
 struct BrushField: Sendable {
@@ -146,6 +146,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("marks.colourJitter", "sticker.colorJitter", ["sticker"]))
     out += each("marks", "antimatter", ["blastRadius", "blastSpacing", "threshold", "invert", "invertMode", "scorch", "annihilate", "sparks", "sparkReach", "crater", "duration"], ["antimatter"])
     out += each("marks", "scraper", ["depth", "sharpness"], ["scraper"])
+    out += ["reach", "turns", "pull", "direction", "ink", "duration"].map { f("marks.\($0)", "vortex.\($0)", ["vortex", "wet"], marks: ["vortex"]) }
     out += each("tip.bristle", "bristle", ["count", "stiffness", "splay", "thickness", "load", "jitter"], ["bristle"])
     return out
 }()
@@ -193,12 +194,13 @@ public func resolveEngine(_ brush: Brush) -> String {
         return tool == "eraser" || tool == "blender" || tool == "smudge" ? tool! : "wet"
     }
     let marks = brush.path("marks.kind")?.stringValue
+    let surface = brush.path("behaviour.surface")?.stringValue
+    if marks == "vortex" { return surface == "wet" ? "wet" : "vortex" }
     if marks == "particles" { return "particle" }
     if marks == "objects" { return "sticker" }
     if marks == "antimatter" { return "antimatter" }
     if marks == "scraper" { return "scraper" }
     if brush.path("tip.shape")?.stringValue == "bristle" { return "bristle" }
-    let surface = brush.path("behaviour.surface")?.stringValue
     if surface == "thick" { return "impasto" }
     if surface == "wet" { return "wet" }
     if brush.path("behaviour.exchange.reservoir") != nil { return "mixer" }
@@ -253,9 +255,10 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     }
     // Spray marks: the dab engine with droplets.
     if engine == "dab" && marksKind == "scatter" { input["spray"] = .object(input["spray"]?.objectValue ?? [:]) }
+    if marksKind == "vortex" { input["vortex"] = .object(input["vortex"]?.objectValue ?? [:]) }
     if brush["iridescence"] != nil && FILM.contains(engine) { input["iridescence"] = .object(input["iridescence"]?.objectValue ?? [:]) }
     if engine == "wet" {
-        let tool = brush["kind"]?.stringValue == "tool" ? WET_TOOL_OF.first { $0.0 == brush["tool"]?.stringValue }?.1 : "paint"
+        let tool = brush["kind"]?.stringValue == "tool" ? WET_TOOL_OF.first { $0.0 == brush["tool"]?.stringValue }?.1 : marksKind == "vortex" ? "vortex" : "paint"
         setPath(&input, "wet.tool", tool.map { .string($0) } ?? .null)
         if let medium = resolveWetMedium(brush) { setPath(&input, "wet.medium", .string(medium)) }
         if brush["ghost"] != nil && tool == "paint" { input["ghost"] = .object(input["ghost"]?.objectValue ?? [:]) }

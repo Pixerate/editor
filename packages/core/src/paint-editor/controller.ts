@@ -127,9 +127,10 @@ import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
 import { BacklightCache, backlightOf, type BacklitLayer } from './backlight';
 import { DEFAULT_LIGHT_SPILL, LightCache, emptyLight, lightFromJSON, lightInfo, lightToJSON, mergeLight, normalizeLightSpill, scaleLight, type LightSpill } from './light';
 import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
-import { brushTakesPaint } from './brushes';
+import { brushTakesPaint, brushVortex, isWetBrush } from './brushes';
 import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
-import { isWetBrush } from './brushes';
+import { warpTiledSurfaceRgba, type DisplacementField } from '../paint/displacement';
+import { vortexWindingField, type VortexStrokeSummary } from './vortex';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { MAX_WET_LANES, type WetBackendInfo, type WetGhostState, type WetSnapshot } from '../paint/wet/world';
@@ -817,6 +818,23 @@ export class PaintEditorController {
   private liveEffectAt: number | null = null;
   /** The view's stroke layers at `effectTime`, each with the document surface it was drawn from (stale once that changes). */
   private animatedLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+  /** View-only vortex winding animations per layer (dropped as soon as the layer's document surface changes). */
+  private vortexAnimations = new Map<
+    string,
+    {
+      base: TiledSurface;
+      surface: TiledSurface;
+      preInkSurface: TiledSurface;
+      /** Keyframes of the winding along the paint's arcs (`vortexWindingField`). */
+      frames: readonly DisplacementField[];
+      offset: { x: number; y: number };
+      lockTransparency: boolean;
+      selection: { width: number; height: number; data: ArrayLike<number> } | null;
+      bounds: RasterRect | null;
+      durationMs: number;
+      startAt: number | null;
+    }
+  >();
   /** Blast animation frames (view only), kept apart from live effect frames so neither replaces the other. */
   private blastLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
   /** Blast animation light / thick channels (`null` light: none at this frame). */
@@ -828,6 +846,7 @@ export class PaintEditorController {
     dirty: RasterRect | null;
     ticked: boolean;
   } | null = null;
+  /** The clock `playEffects` is playing on (blast and vortex animations are timed on it). */
   private playingClock: { now(): number; frame(cb: () => void): () => void } | null = null;
   /** `renderAnimationFrame` / `withEffectTime`: layer surfaces at another time, for one render. */
   private frameOverride: Map<string, TiledSurface> | null = null;
@@ -3434,7 +3453,10 @@ export class PaintEditorController {
       if (!l.visible) throw new PaintEditorError(`Layer "${l.name}" is hidden; show it (update_layer visible true) to paint on it.`);
       return l;
     })();
-    const brush = this.strokeBrush(init);
+    let brush = this.strokeBrush(init);
+    if (brush.engine === 'vortex' && this.wet.wetLayerIds().includes(layer.id)) {
+      brush = { ...brush, engine: 'wet', wet: { ...brush.wet, tool: 'vortex' }, vortex: brushVortex(brush) };
+    }
     const mutRefusal = mutationBrushRefusal(brush);
     if (mutRefusal) throw new PaintEditorError(mutRefusal);
     // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
@@ -3636,6 +3658,7 @@ export class PaintEditorController {
     const copies = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
     const hasThick = Boolean(doc.thick?.[layer.id]);
     const needThick = brush.engine !== 'antimatter' && (brush.engine === 'impasto' || Boolean(brush.iridescence) || (brush.engine === 'eraser' && hasThick) || Boolean(wet?.driver.init.film));
+    const needRelief = brush.engine === 'vortex' && hasThick;
     const isSpecialEngine = brush.engine === 'sticker' || brush.engine === 'antimatter';
     const gradient = effect ? null : this.strokeGradient(init, brush, color);
     const session = new PaintStrokeSession(host, {
@@ -3661,6 +3684,7 @@ export class PaintEditorController {
       wet,
       scraper,
       thick: needThick ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
+      relief: needRelief ? { channels: doc.thick![layer.id]! } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && !isSpecialEngine && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
       // Ferrofluid paint: a twin of the stroke paints the liquid ferrofluid channel.
@@ -3764,6 +3788,9 @@ export class PaintEditorController {
       sampled: (s, points) => {
         this.notifySample('points', s, points);
         this.previewPathStroke(s);
+        if (s.init.brush.engine === 'vortex' || (s.init.brush.engine === 'wet' && s.init.brush.wet.tool === 'vortex')) {
+          this.emit([]);
+        }
       },
       commit: (s, surface, cancelled) => {
         this.session = null;
@@ -3886,6 +3913,11 @@ export class PaintEditorController {
           next = canonical;
         }
         this.commit(`${brush.name} stroke`, next, before);
+        const anim = s.vortexAnimation();
+        const committed = anim ? findLayer(this.doc.layers, l.id)?.layer : undefined;
+        if (anim && isPixelLayer(committed)) {
+          this.queueVortexAnimation(l.id, committed.surface, l.offset, isLayerLocked(l, 'transparency'), s.init.selection ?? null, s.result?.bounds ?? null, anim);
+        }
         this.recordMutationStroke(stroke, s.result?.bounds ?? null);
         // After the commit, so a listener that paints in reply finds the editor idle.
         this.notifySample('end', s, [], stroke.id);
@@ -4013,7 +4045,7 @@ export class PaintEditorController {
   }
 
   /** Runs a whole stroke against `doc` without touching the editor; returns the new document. */
-  private runStroke(doc: PaintDocumentState, init: PaintStrokeInit, points: readonly PenPoint[]): { doc: PaintDocumentState; result: PaintStrokeResult; brush: PaintBrush; antimatterDriver: AntimatterStrokeDriver | null } {
+  private runStroke(doc: PaintDocumentState, init: PaintStrokeInit, points: readonly PenPoint[]): { doc: PaintDocumentState; result: PaintStrokeResult; brush: PaintBrush; session: PaintStrokeSession; antimatterDriver: AntimatterStrokeDriver | null } {
     let out = doc;
     const host: StrokeSessionHost = {
       update: () => {},
@@ -4100,7 +4132,7 @@ export class PaintEditorController {
       }
       result.wet = this.wet.isWet(session.layerId);
     }
-    return { doc: out, result, brush: session.init.brush, antimatterDriver: session.antimatterDriver() };
+    return { doc: out, result, brush: session.init.brush, session, antimatterDriver: session.antimatterDriver() };
   }
 
   /** Paints one stroke from data (one undo step). */
@@ -4116,7 +4148,7 @@ export class PaintEditorController {
       this.wetOp = null;
       throw e;
     }
-    const { doc, result, brush, antimatterDriver } = run;
+    const { doc, result, brush, session, antimatterDriver } = run;
     if (!result.strokeId && this.wetOp) {
       const snap = this.wetOp.before;
       this.wetOp = null;
@@ -4133,6 +4165,11 @@ export class PaintEditorController {
       if (antimatterDriver && brush.antimatter.duration > 0 && antimatterDriver.hasBlasts()) {
         this.startBlastAnimation(antimatterDriver, result.bounds);
       }
+      const anim = session.vortexAnimation();
+      const l = findLayer(this.doc.layers, session.layerId)?.layer;
+      if (anim && isPixelLayer(l)) {
+        this.queueVortexAnimation(l.id, l.surface, l.offset, isLayerLocked(l, 'transparency'), session.init.selection ?? null, result.bounds, anim);
+      }
       const lastStroke = this.doc.strokes[this.doc.strokes.length - 1];
       if (lastStroke && lastStroke.id === result.strokeId) this.recordMutationStroke(lastStroke, result.bounds);
     } else this.emit([]);
@@ -4145,7 +4182,7 @@ export class PaintEditorController {
    * with an optional `pressure` profile along each. All of it is one undo step. A given `seed`
    * seeds the first subpath; the next ones take the following seeds.
    */
-  strokePath(init: Omit<PaintStrokeInit, 'start' | 'copies' | 'load'> & PathSampleOptions & { path: string }): { layerId: string; bounds: RasterRect | null; dabs: number; strokeIds: string[]; mixerLoad?: MixerLoad; wet?: boolean } {
+  strokePath(init: Omit<PaintStrokeInit, 'start' | 'copies' | 'load'> & PathSampleOptions & { path: string }): { layerId: string; bounds: RasterRect | null; dabs: number; strokeIds: string[]; mixerLoad?: MixerLoad; wet?: boolean; vortex?: VortexStrokeSummary } {
     this.requireIdle('painting');
     if (typeof init.path !== 'string' || !init.path.trim()) throw new PaintEditorError('path is empty; give SVG path data in document pixels, e.g. "M 10 10 C 40 0 80 60 120 30".');
     let subpaths: PenPoint[][];
@@ -4177,13 +4214,28 @@ export class PaintEditorController {
     if (run?.result.mixerLoad) this.keepLoad(run.brush, run.result.mixerLoad);
     if (doc !== before || this.wetOp) {
       this.commit(`${run?.brush.name ?? 'Brush'} path stroke`, this.withWetEvents(doc), before);
+      if (run) {
+        const anim = run.session.vortexAnimation();
+        const l = findLayer(this.doc.layers, run.session.layerId)?.layer;
+        if (anim && isPixelLayer(l)) {
+          this.queueVortexAnimation(l.id, l.surface, l.offset, isLayerLocked(l, 'transparency'), run.session.init.selection ?? null, run.result.bounds, anim);
+        }
+      }
       for (const sid of strokeIds) {
         const recorded = this.doc.strokes.find((s) => s.id === sid);
         if (recorded) this.recordMutationStroke(recorded, this.paintedBounds.get(recorded) ?? null);
       }
     } else this.emit([]);
     const layerId = run?.result.layerId ?? stroke.layerId ?? this.doc.activeLayerId ?? '';
-    return { layerId, bounds, dabs, strokeIds, ...(run?.result.mixerLoad ? { mixerLoad: run.result.mixerLoad } : {}), ...(run?.result.wet !== undefined ? { wet: run.result.wet } : {}) };
+    return {
+      layerId,
+      bounds,
+      dabs,
+      strokeIds,
+      ...(run?.result.mixerLoad ? { mixerLoad: run.result.mixerLoad } : {}),
+      ...(run?.result.wet !== undefined ? { wet: run.result.wet } : {}),
+      ...(run?.result.vortex ? { vortex: run.result.vortex } : {}),
+    };
   }
 
   /** Checks stroke samples (finite x and y, pressure 0..1) and returns them; throws a sentence naming the bad point. */
@@ -5397,7 +5449,7 @@ export class PaintEditorController {
   }
 
   /** The layers with the live stroke's surface in place. */
-  private currentLayers(): PaintLayer[] {
+  private currentLayers(view = false): PaintLayer[] {
     const override = this.frameOverride;
     if (override) return Array.from(override).reduce((ls, [id, surface]) => mapLayer(ls, id, (l) => ({ ...(l as PaintPixelLayer), surface })), this.doc.layers);
     const liveMulti = this.liveScraper ?? this.liveMulti;
@@ -5409,7 +5461,7 @@ export class PaintEditorController {
       return layers;
     }
     const live = this.live;
-    if (!live) return this.schemeLayers(this.animatedView());
+    if (!live) return this.schemeLayers(this.animatedView(view));
     if (this.liveLayers?.key === live.surface) return this.liveLayers.layers;
     const layers = mapLayer(this.schemeLayers(this.doc.layers), live.layerId, (l) => ({ ...(l as PaintPixelLayer), surface: live.surface }));
     this.liveLayers = { key: live.surface, layers };
@@ -5642,7 +5694,7 @@ export class PaintEditorController {
   }
 
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
-    const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers();
+    const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers(this.currentLayers(view)) : this.currentLayers(view);
     const useAge = (options.age ?? view) && isAgeActive(this.age);
     const paintedCount = useAge ? Math.max(1, flattenLayers(base).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).length) : 1;
     let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base), useAge, paintedCount)));
@@ -7001,9 +7053,10 @@ export class PaintEditorController {
 
   // --- Live effect paint ------------------------------------------------------------
 
-  /** The view's layers: stroke layers playing live effects at `effectTime`, the rest as they are. */
-  private animatedView(): PaintLayer[] {
-    if (!this.animatedLayers.size && !this.blastLayers.size) return this.doc.layers;
+  /** The view's layers: stroke layers playing live effects at `effectTime`, antimatter blast frames, and (in the view) vortex winding animations, the rest as they are. */
+  private animatedView(view = false): PaintLayer[] {
+    const useVortex = view && this.hasActiveVortexAnimations();
+    if (!this.animatedLayers.size && !this.blastLayers.size && !useVortex) return this.doc.layers;
     let layers = this.doc.layers;
     for (const frames of [this.animatedLayers, this.blastLayers]) {
       for (const [id, a] of frames) {
@@ -7011,7 +7064,88 @@ export class PaintEditorController {
         if (isPixelLayer(l) && l.surface === a.base) layers = mapLayer(layers, id, () => ({ ...l, surface: a.surface }));
       }
     }
+    if (useVortex) {
+      for (const [id, v] of this.vortexAnimations) {
+        if (!this.playingClock && v.startAt === null) continue;
+        const l = findLayer(layers, id)?.layer;
+        if (isPixelLayer(l) && l.surface === v.base) layers = mapLayer(layers, id, () => ({ ...l, surface: v.surface }));
+      }
+    }
     return layers;
+  }
+
+  private queueVortexAnimation(
+    layerId: string,
+    committedSurface: TiledSurface,
+    offset: { x: number; y: number },
+    lockTransparency: boolean,
+    selection: { width: number; height: number; data: ArrayLike<number> } | null,
+    bounds: RasterRect | null,
+    anim: { preInkSurface: TiledSurface; frames: readonly DisplacementField[]; duration: number },
+  ): void {
+    if (this.previewing || !(anim.duration > 0)) return;
+    const durationMs = Math.round(anim.duration * 1000);
+    if (durationMs <= 0) return;
+    this.vortexAnimations.set(layerId, {
+      base: committedSurface,
+      surface: anim.preInkSurface,
+      preInkSurface: anim.preInkSurface,
+      frames: anim.frames,
+      offset: { ...offset },
+      lockTransparency,
+      selection,
+      bounds: bounds ? { ...bounds } : null,
+      durationMs,
+      startAt: this.playingClock ? this.playingClock.now() : null,
+    });
+  }
+
+  /** Whether any layer has a view-only vortex winding animation in flight. */
+  hasActiveVortexAnimations(): boolean {
+    if (!this.vortexAnimations.size) return false;
+    for (const [id, v] of this.vortexAnimations) {
+      const l = findLayer(this.doc.layers, id)?.layer;
+      if (!isPixelLayer(l) || l.surface !== v.base) this.vortexAnimations.delete(id);
+    }
+    return this.vortexAnimations.size > 0;
+  }
+
+  /** Advances view-only vortex winding animations to `now` (ms). Returns true when any animation stepped. */
+  stepVortexAnimations(now: number): boolean {
+    if (!this.hasActiveVortexAnimations()) return false;
+    const dirty: RasterRect[] = [];
+    let anyChanged = false;
+    for (const [id, v] of [...this.vortexAnimations]) {
+      const l = findLayer(this.doc.layers, id)?.layer;
+      if (!isPixelLayer(l) || l.surface !== v.base) {
+        this.vortexAnimations.delete(id);
+        continue;
+      }
+      if (v.startAt === null) v.startAt = now;
+      const elapsed = Math.max(0, now - v.startAt);
+      if (elapsed >= v.durationMs) {
+        this.vortexAnimations.delete(id);
+        if (v.bounds) dirty.push(v.bounds);
+        anyChanged = true;
+        continue;
+      }
+      const u = Math.max(0, Math.min(1, elapsed / v.durationMs));
+      const t = u * u * (3 - 2 * u);
+      // Between the keyframes around t, so the paint winds along its arcs (scaling the final
+      // field would slide it along chords).
+      const field = vortexWindingField(v.frames, t);
+      v.surface = field
+        ? warpTiledSurfaceRgba(v.preInkSurface, field, {
+            offset: v.offset,
+            lockTransparency: v.lockTransparency,
+            selection: v.selection,
+          }).surface
+        : v.preInkSurface;
+      if (v.bounds) dirty.push(v.bounds);
+      anyChanged = true;
+    }
+    if (anyChanged) this.emit(dirty.length ? dirty : 'all');
+    return anyChanged;
   }
 
   /** Stroke layers with live effect strokes, and the distinct live sources (frame 0). */
@@ -7100,17 +7234,24 @@ export class PaintEditorController {
    */
   playEffects(clock: { now(): number; frame(cb: () => void): () => void } = defaultEffectClock): { stop(): void } {
     this.playingClock = clock;
+    const initNow = clock.now();
+    for (const v of this.vortexAnimations.values()) {
+      if (v.startAt === null) v.startAt = initNow;
+    }
     if (this.activeBlastAnim && !this.activeBlastAnim.ticked) {
-      this.activeBlastAnim.driver.rebaseTime(clock.now());
-      this.stepBlastAnimation(clock.now());
+      this.activeBlastAnim.driver.rebaseTime(initNow);
+      this.stepBlastAnimation(initNow);
     }
     let stopped = false;
     let cancel = () => {};
     let last = -Infinity;
-    let started = clock.now() - this.effectTime;
+    let started = initNow - this.effectTime;
     const tick = () => {
       if (stopped) return;
       const now = clock.now();
+      if (!this.session && this.hasActiveVortexAnimations()) {
+        this.stepVortexAnimations(now);
+      }
       const { playing, fps } = this.effectPlaybackState;
       if (this.activeBlastAnim && !this.session) {
         this.stepBlastAnimation(now);
@@ -7134,7 +7275,7 @@ export class PaintEditorController {
     cancel = clock.frame(tick);
     const self = this;
     return {
-      stop() {
+      stop: () => {
         stopped = true;
         if (self.playingClock === clock) self.playingClock = null;
         cancel();
@@ -8109,9 +8250,9 @@ export class PaintEditorController {
     this.lastMutationTick = null;
   }
 
-  /** A layer's tile surface (live while stroking), for thumbnails. */
+  /** A layer's tile surface (live while stroking, or winding in the view), for thumbnails. */
   layerSurface(id: string): TiledSurface | null {
-    const l = findLayer(this.currentLayers(), id)?.layer;
+    const l = findLayer(this.currentLayers(true), id)?.layer;
     return isPixelLayer(l) ? l.surface : null;
   }
 

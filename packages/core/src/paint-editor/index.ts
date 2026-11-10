@@ -35,6 +35,7 @@ export type { PaintAgentTool, PaintOrigin, PaintToolCoordinates } from './hosted
 export * from './ui';
 export { BLEND_MODES, PAINTERLY_BLEND_MODES, isBlendMode, isPainterlyBlendMode, standardBlendMode, type BlendMode, type BlendModeInfo } from '../raster/blend';
 export * from './wet';
+export * from './vortex';
 export * from './wet-tools';
 export * from './thick';
 export * from './heat';

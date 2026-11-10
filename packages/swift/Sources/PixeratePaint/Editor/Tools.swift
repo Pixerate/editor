@@ -28,6 +28,7 @@ func strokeResultJSON(_ r: PaintStrokeResult) -> JSONValue {
     if let load = r.mixerLoad { o["mixerLoad"] = loadResult(load) }
     if let wet = r.wet { o["wet"] = .bool(wet) }
     if let am = r.antimatter { o["antimatter"] = am.json }
+    if let vortex = r.vortex { o["vortex"] = vortex.json }
     return .object(o)
 }
 

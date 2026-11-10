@@ -269,7 +269,7 @@
       "additionalProperties": false
     },
     "marks": {
-      "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
+      "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).",
       "oneOf": [
         {
           "type": "object",
@@ -601,6 +601,60 @@
               "minimum": 0,
               "maximum": 1,
               "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Vortex paint: the stroke you draw is the shape of a vortex (a point whirlpool, an open racetrack, or a closed loop) that pulls in and winds surrounding paint at pen-up. Missing fields take their defaults.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "vortex",
+              "description": "Always \"vortex\"."
+            },
+            "reach": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 8,
+              "description": "How far the vortex pulls from the stroke, in tip radii (default 3). Pressure scales the local reach."
+            },
+            "turns": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 6,
+              "description": "How far paint winds around the shape, in turns (default 1.5)."
+            },
+            "pull": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How strongly paint is drawn inward toward the stroke: 0 pure spin, 1 strong whirlpool contraction (default 0.3)."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "follow",
+                "cw",
+                "ccw"
+              ],
+              "description": "Winding direction: follow (default: closed loops turn the way they were drawn; open strokes and points turn clockwise), cw (clockwise) or ccw (counter-clockwise)."
+            },
+            "ink": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How much paint colour the stroke lays before winding: 0 is colourless and only moves existing paint; > 0 lays colour and winds it (default 0)."
+            },
+            "duration": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3,
+              "description": "Seconds the view-only winding animation takes on screen; 0 shows the final result at once (default 1.2)."
             }
           },
           "required": [

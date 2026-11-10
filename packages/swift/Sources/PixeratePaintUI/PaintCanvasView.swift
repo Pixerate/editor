@@ -157,6 +157,20 @@ public struct PaintCanvasView: View {
                 ))
             }
         }
+        if let active = model.controller.activeStroke, active.open, !active.points.isEmpty {
+            let b = active.brush
+            if b.engine == "vortex" || (b.engine == "wet" && b.wet.tool == "vortex") {
+                for seg in active.vortexGuides {
+                    let isReach = seg.kind == "vortex-reach"
+                    out.append(GuideLine(
+                        from: seg.from,
+                        to: seg.to,
+                        color: Color(red: 0.22, green: 0.74, blue: 0.97).opacity(isReach ? 0.5 : 0.95),
+                        dashed: isReach
+                    ))
+                }
+            }
+        }
         return out
     }
 }

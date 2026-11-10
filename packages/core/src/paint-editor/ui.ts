@@ -21,6 +21,7 @@ import { MAX_DOT_TEXTURES, type DotRotation, type DotTextureOrder, type Particle
 import { MAX_STICKER_STAMPS, type StampKind } from './stickers';
 import type { StickerRef } from '../stickers/types';
 import type { WetEngineInfo, WetGpuMode } from './wet';
+import { vortexGuideSegments } from './vortex';
 import { isPalmTouch, pointerToPenPoint, type PointerSample } from './input';
 import { MAX_ZOOM, MIN_ZOOM, screenToDocument } from './view';
 import { hsvToRgb, parseHexColor, rgbToHexColor, rgbToHsv, wheelToHue, type ColorWheel } from './color';
@@ -446,7 +447,7 @@ export class PaintCanvasPresenter {
   }
 }
 
-export type GuideOverlayKind = 'symmetry' | 'perspective' | 'snap' | 'stencil' | 'sticker' | 'stroke';
+export type GuideOverlayKind = 'symmetry' | 'perspective' | 'snap' | 'stencil' | 'sticker' | 'stroke' | 'vortex' | 'vortex-reach';
 
 /**
  * Lines to draw over the canvas for the guides, the picked sticker and the picked stroke of a stroke layer (moved by
@@ -456,6 +457,12 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
   const s = controller.getState();
   const size = s.document.canvas;
   const out: Array<{ from: Point2; to: Point2; kind: GuideOverlayKind }> = [];
+  const active = controller.activeStroke;
+  if (active?.open && (active.init.brush.engine === 'vortex' || (active.init.brush.engine === 'wet' && active.init.brush.wet.tool === 'vortex'))) {
+    for (const seg of vortexGuideSegments(active.points, active.init.brush, active.init.copies)) {
+      out.push(seg);
+    }
+  }
   const layerId = s.document.activeLayerId;
   const strokePicked = layerId && s.selectedStroke ? s.document.liveStrokes?.[layerId]?.some((x) => x.id === s.selectedStroke) : false;
   const area = strokePicked ? controller.liveStrokeArea(s.selectedStroke!) : null;
@@ -489,7 +496,7 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
   return out;
 }
 
-export { ANTIMATTER_SLIDERS, BRUSH_SLIDERS, brushEngineControls, GHOST_SLIDERS, IRIDESCENCE_SLIDERS, multiColorSliders, MUTATION_SLIDERS, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
+export { ANTIMATTER_SLIDERS, BRUSH_SLIDERS, brushEngineControls, GHOST_SLIDERS, IRIDESCENCE_SLIDERS, multiColorSliders, MUTATION_SLIDERS, patchBrushValue, VORTEX_SLIDERS, type BrushEngineControls, type SliderControl } from './brush-controls';
 import type { SliderControl } from './brush-controls';
 
 export const PAPER_SLIDERS: readonly SliderControl[] = [
@@ -607,6 +614,14 @@ export const WET_TOOL_LABELS: Readonly<Record<WetTool, string>> = {
   blend: 'Blend',
   smudge: 'Smudge',
   blot: 'Blot (erase wet)',
+  vortex: 'Vortex (spin wet)',
+};
+
+/** Labels of the vortex winding directions. */
+export const VORTEX_DIRECTION_LABELS: Readonly<Record<'follow' | 'cw' | 'ccw', string>> = {
+  follow: 'Follow stroke',
+  cw: 'Clockwise',
+  ccw: 'Counter-clockwise',
 };
 
 /** The wet panel's sliders for a layer's wet settings (paths into `WetParams`). */

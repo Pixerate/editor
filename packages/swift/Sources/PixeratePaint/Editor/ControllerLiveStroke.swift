@@ -43,6 +43,10 @@ public final class PaintLiveStroke {
     /// The brush and colour the stroke paints with.
     public var brush: PaintBrush { session.initValues.brush }
     public var color: String { session.initValues.colorHex }
+    /// The live vortex guide (`vortexGuideSegments`) for the samples so far, with every symmetry copy.
+    public var vortexGuides: [(from: Point2, to: Point2, kind: String)] {
+        vortexGuideSegments(session.points, session.initValues.brush, session.initValues.copies)
+    }
 
     /// Adds pen samples and redraws the layer with them.
     public func push(_ points: [PenPoint]) {
@@ -302,7 +306,7 @@ extension PaintEditorController {
      */
     public func canPaint(_ brush: PaintBrush) -> Bool {
         // Editor stamps and image sources have their art here; a host's library stickers don't.
-        brushStickerRefs(brush).isEmpty && ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper"].contains(brush.engine)
+        brushStickerRefs(brush).isEmpty && ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"].contains(brush.engine)
     }
 
     // MARK: - Colour

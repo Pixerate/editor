@@ -72,7 +72,7 @@ func fluorTwinBrush(_ brush: PaintBrush) -> PaintBrush {
     base.fluorescence = DEFAULT_FLUORESCENCE
     base.thermochromic = DEFAULT_THERMOCHROMIC
     base.tip.blend = .normal
-    if brush.engine == "eraser" || brush.engine == "smudge" || brush.engine == "blender" { return base }
+    if brush.engine == "eraser" || brush.engine == "smudge" || brush.engine == "blender" || brush.engine == "vortex" { return base }
     let move = brush.engine == "impasto" ? (brush.impasto.tool == "knife" ? "smudge" : "dab") : brush.engine
     if f > 0 {
         var tip = base.tip.json.objectValue!
@@ -97,7 +97,7 @@ func thermoTwinBrush(_ brush: PaintBrush) -> PaintBrush {
     base.thermochromic = DEFAULT_THERMOCHROMIC
     base.paint = nil
     base.tip.blend = .normal
-    if brush.engine == "eraser" || brush.engine == "smudge" || brush.engine == "blender" { return base }
+    if brush.engine == "eraser" || brush.engine == "smudge" || brush.engine == "blender" || brush.engine == "vortex" { return base }
     let move = brush.engine == "impasto" ? (brush.impasto.tool == "knife" ? "smudge" : "dab") : brush.engine
     if active {
         var behavior = base.behavior.json.objectValue!

@@ -376,7 +376,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -393,6 +393,10 @@
               {
                 "value": "scraper",
                 "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -2326,7 +2330,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -2343,6 +2347,10 @@
               {
                 "value": "scraper",
                 "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -4096,7 +4104,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -4113,6 +4121,10 @@
               {
                 "value": "scraper",
                 "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -5647,7 +5659,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -5664,6 +5676,10 @@
               {
                 "value": "scraper",
                 "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "particles"
@@ -7205,7 +7221,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -7222,6 +7238,10 @@
               {
                 "value": "scraper",
                 "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -9916,7 +9936,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -9933,6 +9953,10 @@
               {
                 "value": "scraper",
                 "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "scatter"
