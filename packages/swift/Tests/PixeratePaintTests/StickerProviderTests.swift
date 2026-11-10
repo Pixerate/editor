@@ -112,4 +112,76 @@ final class StickerProviderTests: XCTestCase {
         XCTAssertNil(s.json["frame"])
         XCTAssertNil(s.applying(["frame": 0]).frame)
     }
+
+    /// A sticker drag (`previewSticker`) redraws without an undo step; the drop commits one step from before the drag.
+    func testPreviewStickerDragUndoesInOneStep() throws {
+        let c = try PaintEditorController(width: 96, height: 96, stickers: try combineStickerProviders([editorStickers(), createFakeStickerProvider()]))
+        try c.prepareStickers(["fake:weather-wind"])
+        let added = try c.addStickers(nil, [["ref": "editor:star", "x": 20, "y": 20, "size": 24], ["ref": "fake:weather-wind", "x": 60, "y": 60, "size": 24, "frame": 1]])
+        let id = added[1].id
+        let before = c.compositePixels(paper: false).data
+        let steps = c.undoLabel
+
+        let shown = try c.previewSticker(nil, id, ["x": 40, "y": 30])
+        XCTAssertEqual(shown.x, 40)
+        XCTAssertEqual(shown.frame, 1)
+        _ = try c.previewSticker(nil, id, ["x": 30, "y": 40, "frame": 2])
+        XCTAssertEqual(try c.listStickers()[1].x, 30)
+        XCTAssertEqual(c.undoLabel, steps, "a preview is not an undo step")
+        XCTAssertNotEqual(c.compositePixels(paper: false).data, before)
+
+        // The drop: one step, and undo goes back to before the first preview.
+        let dropped = try c.updateSticker(nil, id, ["x": 32, "y": 40])
+        XCTAssertEqual(dropped.frame, 2)
+        XCTAssertEqual(c.undoLabel, "Edit sticker")
+        let movedPixels = c.compositePixels(paper: false).data
+        XCTAssertEqual(c.undo(), "Edit sticker")
+        XCTAssertEqual(c.undoLabel, "Add stickers")
+        XCTAssertEqual(try c.listStickers()[1].x, 60)
+        XCTAssertEqual(try c.listStickers()[1].frame, 1)
+        XCTAssertEqual(c.compositePixels(paper: false).data, before)
+        _ = c.redo()
+        XCTAssertEqual(c.compositePixels(paper: false).data, movedPixels)
+
+        // Cancel restores the document from before the preview.
+        _ = try c.previewSticker(nil, id, ["x": 70])
+        c.cancelStickerPreview()
+        XCTAssertEqual(try c.listStickers()[1].x, 32)
+        XCTAssertEqual(c.compositePixels(paper: false).data, movedPixels)
+        c.cancelStickerPreview() // nothing to cancel
+        XCTAssertEqual(try c.listStickers()[1].x, 32)
+    }
+
+    func testPreviewStickerFailsUsefully() throws {
+        let c = try PaintEditorController(width: 64, height: 64)
+        XCTAssertThrowsError(try c.previewSticker(nil, "st1", ["x": 1])) { e in
+            XCTAssertTrue((e as? PaintEditorError)?.message.contains("has no stickers") == true, "\(e)")
+        }
+        let added = try c.addStickers(nil, [["ref": "editor:star", "x": 20, "y": 20]])
+        XCTAssertThrowsError(try c.previewSticker(nil, "st9", ["x": 1])) { e in
+            XCTAssertTrue((e as? PaintEditorError)?.message.contains("has no sticker \"st9\". Call list_stickers for the ids.") == true, "\(e)")
+        }
+        XCTAssertThrowsError(try c.previewSticker(nil, added[0].id, ["frame": 1])) { e in
+            XCTAssertTrue((e as? PaintEditorError)?.message.contains("is not animated") == true, "\(e)")
+        }
+        let layer = try XCTUnwrap(c.doc.activeLayerId)
+        _ = try c.updateLayer(layer, ["locks": ["pixels": true]])
+        XCTAssertThrowsError(try c.previewSticker(nil, added[0].id, ["x": 30])) { e in
+            XCTAssertTrue((e as? PaintEditorError)?.message.contains("has its pixels locked") == true, "\(e)")
+        }
+        XCTAssertEqual(try c.listStickers()[0].x, 20)
+    }
+
+    /// Any other change after a preview ends it: the next sticker edit commits from the document as it is.
+    func testPreviewStickerEndsWhenTheDocumentChanges() throws {
+        let c = try PaintEditorController(width: 64, height: 64)
+        let added = try c.addStickers(nil, [["ref": "editor:star", "x": 20, "y": 20]])
+        let layer = c.doc.activeLayerId
+        _ = try c.previewSticker(nil, added[0].id, ["x": 30])
+        _ = try c.addLayer(name: "Other")
+        let count = c.doc.layers.count
+        c.cancelStickerPreview()
+        XCTAssertEqual(c.doc.layers.count, count, "cancel after another change does nothing")
+        XCTAssertEqual(try c.listStickers(layer).first?.x, 30)
+    }
 }

@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint] Sticker Drag Previews Rely on Document Identity
+
+- **Issue / Symptom**: A sticker drag (`previewSticker`) must undo in one step from before the drag, but any other change in between must end the preview.
+- **Root Cause**: `PaintDocumentState` is a class; the preview keeps `(base, shown)` and is live only while `shown === doc`, as TS compares objects. Setting `doc` normally emits a full redraw, so the preview sets it with `setDocSilently` and emits only the dirty rects.
+- **Solution / Workaround**: Commit sticker changes through `commitStickers`, which commits from `previewBase() ?? doc` and clears the preview. Never copy the document between preview and drop (`doc.with { }` makes a new object and ends the preview).
+
 ### [core/paint] Replays Re-derived Editor State That Strokes Read at Paint Time; Settings Outside History Were Lost on Undo
 
 - **Issue / Symptom**: (1) `render_xray { strokes: totalStrokes }` differed from `render_xray` when a hidden or locked layer lay under a scraped one: the replay cut layers the live stroke never touched. (2) `set_age` → `undo_paint` of an earlier stroke reset the age in Swift, and in TS kept it in `get_age` but dropped it from the saved document. (3) The first conformance scenario saving a scraper stroke showed the Swift `migrateBrushV1` writing `medium: "paint"` for scraper brushes, which TS does not.

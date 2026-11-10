@@ -125,15 +125,56 @@ extension PaintEditorController {
     private func commitStickers(_ label: String, _ layer: PaintLayer, _ stickers: [Sticker], dirty: [RasterRect]? = nil) throws {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it first.") }
         try requireStickerArt(stickers)
+        let before = previewBase() ?? doc
+        stickerPreview = nil
+        let next = withStickers(layer, stickers, dirty: dirty)
+        commit(label, withPaintEvent(next, kind: "stickers", layerId: layer.id, data: ["stickers": .array(stickers.map { .object($0.json) })]), before: before)
+    }
+
+    /// The document with a layer's stickers replaced and its pixels redrawn from them; with `dirty`, only the tiles under those rects.
+    private func withStickers(_ layer: PaintLayer, _ stickers: [Sticker], dirty: [RasterRect]?) -> PaintDocumentState {
         let partial = dirty != nil && layer.pixelOffset.x == 0 && layer.pixelOffset.y == 0
         let surface = partial ? stickerSurface(stickers, base: layer.pixelSurface, dirty: dirty, art: stickerArt.get) : stickerSurface(stickers, art: stickerArt.get)
-        let next = doc.with { o in
+        return doc.with { o in
             o.layers = mapLayer(doc.layers, layer.id) { $0.withSurface(surface, offset: LayerOffset(x: 0, y: 0)) }
             var t = o.stickers ?? OrderedMap()
             t.set(layer.id, stickers)
             o.stickers = t
         }
-        commit(label, withPaintEvent(next, kind: "stickers", layerId: layer.id, data: ["stickers": .array(stickers.map { .object($0.json) })]))
+    }
+
+    /// The document from before the sticker preview on screen, or nil when none is (anything else changed the document since).
+    private func previewBase() -> PaintDocumentState? {
+        guard let p = stickerPreview, p.shown === doc else { return nil }
+        return p.base
+    }
+
+    /**
+     * Shows a sticker change without committing it (a drag in progress): only the tiles under its
+     * old and new place are redrawn. `updateSticker` then commits it as one undo step from before
+     * the first preview; `cancelStickerPreview` puts it back. Returns the sticker as shown.
+     */
+    @discardableResult
+    public func previewSticker(_ layerId: String?, _ id: String, _ update: JSONObject) throws -> Sticker {
+        let (layer, stickers) = try stickerLayer(layerId)
+        if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it first.") }
+        guard let i = stickers.firstIndex(where: { $0.id == id }) else { throw PaintEditorError("Layer \"\(layer.name)\" has no sticker \"\(id)\". Call list_stickers for the ids.") }
+        let next = try stickerUpdated(stickers[i], try readStickerUpdate(update))
+        let list = stickers.enumerated().map { $0.offset == i ? next : $0.element }
+        let dirty = [stickerRect(stickers[i]), stickerRect(next)]
+        let base = previewBase() ?? doc
+        setDocSilently(withStickers(layer, list, dirty: dirty))
+        stickerPreview = (base, doc)
+        emit(dirty)
+        return next
+    }
+
+    /// Drops a sticker preview, restoring the document from before it.
+    public func cancelStickerPreview() {
+        let base = previewBase()
+        stickerPreview = nil
+        guard let base else { return }
+        doc = base
     }
 
     private func readStickerUpdate(_ u: JSONObject) throws -> JSONObject { try normalizeStickerUpdate(u) }
