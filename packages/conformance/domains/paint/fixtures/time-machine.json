@@ -1,0 +1,550 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "time-machine",
+  "description": "Painting time machine: museum ageing preview and bake, X-ray pentimento radiographs (including historical stroke replay), and the scraper brush excavating through paint layers.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "impasto-oil",
+        "color": "#f7f5ee",
+        "seed": 11,
+        "points": [
+          {
+            "x": 14,
+            "y": 32
+          },
+          {
+            "x": 50,
+            "y": 32
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown brush \"impasto-oil\". Closest: impasto-brush, oil-pastel, oil-round. Call list_brush_presets for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Overpainting"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Overpainting",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "oil-paint",
+        "color": "#d23a2a",
+        "seed": 22,
+        "points": [
+          {
+            "x": 12,
+            "y": 20
+          },
+          {
+            "x": 52,
+            "y": 44
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown brush \"oil-paint\". Closest: oil-pastel, oil-round, oil-flat. Call list_brush_presets for the ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "dried": [],
+          "stillWet": false
+        }
+      }
+    },
+    {
+      "tool": "get_age",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "active": false,
+          "age": {
+            "cracks": 0.5,
+            "dust": 0.3,
+            "fading": 0.5,
+            "seed": 1,
+            "varnish": 0.5,
+            "years": 0
+          },
+          "xrayView": false
+        }
+      }
+    },
+    {
+      "tool": "set_age",
+      "arguments": {
+        "years": 300,
+        "varnish": 0.65,
+        "cracks": 0.6,
+        "fading": 0.55,
+        "dust": 0.4,
+        "seed": 7
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "age": {
+            "cracks": 0.6,
+            "dust": 0.4,
+            "fading": 0.55,
+            "seed": 7,
+            "varnish": 0.65,
+            "years": 300
+          }
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "age": {
+              "cracks": 0.6,
+              "dust": 0.4,
+              "fading": 0.55,
+              "seed": 7,
+              "varnish": 0.65,
+              "years": 300
+            },
+            "assets": {},
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "@1",
+                "name": "Overpainting",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    },
+    {
+      "tool": "set_xray_view",
+      "arguments": {
+        "on": true
+      },
+      "expect": {
+        "result": {
+          "xrayView": true
+        }
+      }
+    },
+    {
+      "tool": "render_xray",
+      "arguments": {
+        "maxSide": 64
+      },
+      "expect": {
+        "result": {
+          "height": 64,
+          "hiddenLayerCount": 0,
+          "layerCount": 2,
+          "maxDensity": 0,
+          "meanDensity": 0,
+          "strokes": 0,
+          "totalStrokes": 0,
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "render_xray",
+      "arguments": {
+        "strokes": 1,
+        "maxSide": 64
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "strokes 1 is out of range; the painting has 0 recorded strokes, so use 0..0."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "set_xray_view",
+      "arguments": {
+        "on": false
+      },
+      "expect": {
+        "result": {
+          "xrayView": false
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "paint-scraper",
+        "seed": 33,
+        "points": [
+          {
+            "x": 20,
+            "y": 32
+          },
+          {
+            "x": 44,
+            "y": 32
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": null,
+          "dabs": 15,
+          "layerId": "@1",
+          "strokeId": null
+        },
+        "pixels": {
+          "file": "png/time-machine.11.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "0fbba07a833d4dcfc7024eaf313661a0ba8f80a05c6d29b8801c612e10e60dee",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "bake_age",
+      "arguments": {},
+      "pixels": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "age": {
+            "cracks": 0.6,
+            "dust": 0.4,
+            "fading": 0.55,
+            "seed": 7,
+            "varnish": 0.65,
+            "years": 300
+          },
+          "bounds": null,
+          "layer": {
+            "active": true,
+            "blend": "normal",
+            "bounds": null,
+            "clipped": false,
+            "depth": 0,
+            "id": "@3",
+            "locks": {},
+            "name": "Aged (300 yr)",
+            "opacity": 1,
+            "parentId": null,
+            "type": "pixel",
+            "visible": true
+          }
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@3",
+            "age": {
+              "cracks": 0.6,
+              "dust": 0.4,
+              "fading": 0.55,
+              "seed": 7,
+              "varnish": 0.65,
+              "years": 0
+            },
+            "assets": {},
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "@1",
+                "name": "Overpainting",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "@3",
+                "name": "Aged (300 yr)",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/time-machine.12.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "0fbba07a833d4dcfc7024eaf313661a0ba8f80a05c6d29b8801c612e10e60dee",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

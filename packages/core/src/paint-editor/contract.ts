@@ -26,6 +26,7 @@ import { createPaintEffectsToolProvider } from './effect-tools';
 import { PAINT_FORMAT, PAINT_SCHEMA_VERSION } from './serialize';
 import { createPaintEditorToolProvider } from './tools';
 import {
+  AGE_SLIDERS,
   ANTIMATTER_SLIDERS,
   BLEND_MENU_GROUPS,
   DOT_ROTATION_LABELS,
@@ -180,6 +181,18 @@ export const PAINT_DOCUMENT_JSON_SCHEMA: JsonSchema = {
             ambient: { type: 'number', minimum: 0, maximum: 1, description: 'Remaining daylight ambient level (0..1).' },
           },
         },
+        age: {
+          type: 'object',
+          description: 'Painting time-machine ageing preview settings when non-default.',
+          properties: {
+            years: { type: 'number', minimum: 0, maximum: 500, description: 'Simulated age in years (0..500; 0 = fresh paint).' },
+            varnish: { type: 'number', minimum: 0, maximum: 1, description: 'Yellowed varnish absorption strength (0..1).' },
+            cracks: { type: 'number', minimum: 0, maximum: 1, description: 'Voronoi / stress craquelure crack network strength (0..1).' },
+            fading: { type: 'number', minimum: 0, maximum: 1, description: 'Pigment lightfastness fading strength by hue (0..1).' },
+            dust: { type: 'number', minimum: 0, maximum: 1, description: 'Low-frequency surface dust grain strength (0..1).' },
+            seed: { type: 'integer', minimum: 0, description: 'Deterministic seed for craquelure and dust.' },
+          },
+        },
       },
       required: ['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId'],
     },
@@ -205,7 +218,7 @@ function uiTables() {
     brushOptions: BRUSH_OPTION_CONTROLS,
     blendMenu: BLEND_MENU_GROUPS,
     layerEffects: LAYER_EFFECT_MENU.map(({ kind, label }) => ({ kind, label, controls: layerEffectControls(defaultLayerEffect(kind, kind)) })),
-    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS, magnet: MAGNET_SLIDERS, antimatter: ANTIMATTER_SLIDERS },
+    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, age: AGE_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS, magnet: MAGNET_SLIDERS, antimatter: ANTIMATTER_SLIDERS },
     pathStrokeTapers: PATH_STROKE_TAPERS,
     padSampleSizes: PAD_SAMPLE_SIZES,
     wetGpu: WET_GPU_OPTIONS,

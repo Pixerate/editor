@@ -223,11 +223,13 @@ final class LitCache {
 
     /// The layer's pixels lit (tiles without relief, thin film or ferrofluid nearby are the colour tiles themselves).
     /// Without ferrofluid this is the thick-paint / thin-film pass; with it, `litFerro` (see `thick.ts`).
-    func lit(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting, _ viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT, _ ferro: FerroLayerInput? = nil) -> TiledSurface {
+    func lit(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting, _ viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT, _ ferro: FerroLayerInput? = nil, _ age: PaintAgeSettings? = nil, _ layerCount: Int = 1, _ offset: LayerOffset = LayerOffset(x: 0, y: 0)) -> TiledSurface {
         if let ferro, !ferro.surface.tiles.isEmpty { return litFerro(color, ch, light, viewTilt, ferro) }
-        let hasHeight = !ch.height.tiles.isEmpty && light.relief > 0
+        let hasCracks = age != nil && isAgeActive(age!) && age!.cracks > 0 && light.relief > 0
+        let hasHeight = (!ch.height.tiles.isEmpty || hasCracks) && light.relief > 0
         let hasFilm = !ch.film.tiles.isEmpty
         if !hasHeight && !hasFilm { return color }
+        let ck = hasCracks ? "\(ageKey(age!))|\(layerCount)|\(offset.x),\(offset.y)" : ""
         var out = color.tiles
         var keys = Set<TileKey>()
         for (key, tile) in color.tiles {
@@ -235,22 +237,36 @@ final class LitCache {
             let (tx, ty) = tileCoord(key)
             func around(_ dx: Int, _ dy: Int) -> Tile? { hasHeight ? ch.height.tiles.get(tileKey(tx + dx, ty + dy)) : nil }
             let f = ch.film.tiles.get(key)
-            var any = f != nil
-            if hasHeight {
+            var any = f != nil || hasCracks
+            if hasHeight && !any {
                 for dy in -1...1 where !any { for dx in -1...1 where !any { if around(dx, dy) != nil { any = true } } }
             }
             if !any { continue }
-            let h = hasHeight ? ch.height.tiles.get(key) : nil
-            let m = ch.material.tiles.get(key)
+            let m = hasHeight ? ch.material.tiles.get(key) : nil
             var inputs: [ObjectIdentifier?] = [ObjectIdentifier(tile), m.map(ObjectIdentifier.init), f.map(ObjectIdentifier.init)]
-            for dy in -1...1 { for dx in -1...1 { inputs.append(around(dx, dy).map(ObjectIdentifier.init)) } }
-            if let cached = tiles[key], cached.inputs == inputs, cached.light == light, cached.viewTilt == viewTilt, cached.ferroKey == "" {
+            for dy in -1...1 {
+                for dx in -1...1 {
+                    inputs.append(around(dx, dy).map(ObjectIdentifier.init))
+                    if hasCracks { inputs.append(color.tiles.get(tileKey(tx + dx, ty + dy)).map(ObjectIdentifier.init)) }
+                }
+            }
+            if let cached = tiles[key], cached.inputs == inputs, cached.light == light, cached.viewTilt == viewTilt, cached.ferroKey == ck {
                 out.set(key, cached.tile)
                 continue
             }
-            let data = lightTile(tile.data, h?.data, { dx, dy in around(dx, dy)?.data }, m?.data, light, f?.data, viewTilt)
+            let cd = expandTile(tile, 4)
+            func heightTileAt(_ ntx: Int, _ nty: Int) -> [UInt8]? {
+                let nk = tileKey(ntx, nty)
+                let ht = ch.height.tiles.get(nk)
+                let baseH = ht.map { expandTile($0, 1) }
+                if !hasCracks { return baseH }
+                let ct: [UInt8]? = ntx == tx && nty == ty ? cd : color.tiles.get(nk).map { expandTile($0, 4) }
+                return carveAgeCrackHeightTile(ct, baseH, ntx, nty, offset, age!, layerCount)
+            }
+            let hd = hasHeight ? heightTileAt(tx, ty) : nil
+            let data = lightTile(cd, hd, { dx, dy in heightTileAt(tx + dx, ty + dy) }, m.map { expandTile($0, 4) }, light, f.map { expandTile($0, 4) }, viewTilt)
             let litTile = Tile(data: data, uniform: nil)
-            tiles[key] = (inputs, light, viewTilt, "", litTile)
+            tiles[key] = (inputs, light, viewTilt, ck, litTile)
             out.set(key, litTile)
         }
         for key in Array(tiles.keys) where !keys.contains(key) { tiles[key] = nil }

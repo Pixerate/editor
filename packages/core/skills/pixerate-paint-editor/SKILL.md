@@ -102,6 +102,7 @@ in wet paint and freeze when it dries; presets `turing-wash`, `coral-ink`):
 Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`, and `iridescence` (`scarab-lacquer`, `soap-film`, `pearl-glaze`) adds thin-film structural colour that shifts hue with light and `set_view_tilt`: load `pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint** (neon, glowing glass and watercolour: `light.amount`, the Light category; backlit paper): [references/light-paint.md](references/light-paint.md).
 **Smart inks** (`fluorescence` for UV/invisible ink under `set_uv_light`, `thermochromic` for heat-reactive ink with `paint_heat` / `advance_heat`; presets `uv-marker`, `thermo-ink`): [references/smart-inks.md](references/smart-inks.md).
 **Ferrofluid paint** (`ferro.amount`, presets `ferrofluid` and `ferro-ink`, pulled by dipole magnets into lit Rosensweig spikes until cured): [references/ferrofluid.md](references/ferrofluid.md).
+**Painting time machine** (non-destructive museum ageing preview `set_age` / `bake_age`, X-ray pentimento radiographs `render_xray` / `set_xray_view`, and the `paint-scraper` brush that excavates through layers): [references/time-machine.md](references/time-machine.md).
 
 ## Gradient paint
 
@@ -324,6 +325,11 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `list_magnets` | List the canvas magnets (`id`, `x`, `y`, `strength`, `radius`). Changes nothing. |
 | `get_ferrofluid` | Read a layer's liquid ferrofluid and live spikes (`ferro`, `bounds`, `peak`, `coverage`, `activeSpikeArea`, `maxSpikeHeight`, `magnetCount`, `wavelength`, `threshold`). Changes nothing. |
 | `cure_ferrofluid` | Bake a layer's current magnetic spikes into solid impasto height and dark glossy material, clearing its liquid ferrofluid so magnet edits no longer change it. One undo step. Returns `layerId`, `cured`, `bounds`, `maxSpikeHeight`, `activeSpikeArea`. |
+| `set_age` | Preview the painting aged over `years` (0..500; 0 = fresh paint) with pigment `fading` by hue, yellowed `varnish` absorption, seeded Voronoi / stress `cracks` (craquelure relief that catches `set_lighting`) and surface `dust` grain (`seed`). Saved with the document, not an undo step. Returns `age`. |
+| `get_age` | Read the current ageing preview settings (`years`, `varnish`, `cracks`, `fading`, `dust`, `seed`). Changes nothing. |
+| `bake_age` | Commit the current aged look (fading, varnish, craquelure and dust) into a new pixel layer at the top of the stack and reset preview `years` to 0 so the painting is not aged twice. One undo step. Refused when `years` is 0 or wet paint is still moving. Returns `{ layerId, age }`. |
+| `render_xray` | Render an X-ray radiograph of the painting that composites every pixel layer (hidden ones included) by `density = opacity × (thickHeight + lightnessWeight)` so lead-white and impasto strokes read bright and buried layers (pentimento) show through. Optional `strokes: k` replays the first `k` recorded strokes to X-ray an earlier stage. Changes nothing. Returns a PNG image and `{ width, height, strokes, totalStrokes, layerCount, hiddenLayerCount, maxDensity, meanDensity }`. |
+| `set_xray_view` | Turn the viewport X-ray overlay `on` or off (`false`) to inspect buried and hidden layers live while painting or scraping with `paint-scraper`. View state only, not an undo step. Returns `{ on }`. |
 
 ### Stickers
 

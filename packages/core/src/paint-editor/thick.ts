@@ -35,6 +35,7 @@ import {
   type FerroLayerInput,
 } from './ferro';
 import { hash2 } from './noise';
+import { ageKey, carveAgeCrackHeightTile, isAgeActive, type PaintAgeSettings } from './age';
 
 /** Where the light comes from. */
 export interface PaintLighting {
@@ -243,12 +244,22 @@ export class LitCache {
    * ferrofluid adds its carrier colour, glossy metallic material and (near magnets) Rosensweig
    * spike heights before the same lighting.
    */
-  lit(color: TiledSurface, ch: ThickChannels, light: PaintLighting, viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT, ferro?: FerroLayerInput | null): TiledSurface {
+  lit(
+    color: TiledSurface,
+    ch: ThickChannels,
+    light: PaintLighting,
+    viewTilt: PaintViewTilt = DEFAULT_VIEW_TILT,
+    ferro?: FerroLayerInput | null,
+    age?: PaintAgeSettings | null,
+    layerCount = 1,
+    offset: { x: number; y: number } = { x: 0, y: 0 },
+  ): TiledSurface {
     if (ferro && ferro.surface.tiles.size > 0) return this.litFerro(color, ch, light, viewTilt, ferro);
-    const hasRelief = ch.height.tiles.size > 0 && light.relief > 0;
+    const hasCracks = Boolean(age && isAgeActive(age) && age.cracks > 0 && light.relief > 0);
+    const hasRelief = (ch.height.tiles.size > 0 || hasCracks) && light.relief > 0;
     const hasFilm = ch.film.tiles.size > 0;
     if (!hasRelief && !hasFilm) return color;
-    const lk = `${lightingKey(light)}|${viewTiltKey(viewTilt)}`;
+    const lk = `${lightingKey(light)}|${viewTiltKey(viewTilt)}${hasCracks ? `|${ageKey(age!)}|${layerCount}|${offset.x},${offset.y}` : ''}`;
     const out = new Map(color.tiles);
     const keys = new Set<TileKey>();
     for (const key of color.tiles.keys()) keys.add(key);
@@ -256,8 +267,8 @@ export class LitCache {
       const tx = (key % 65536) - 32768;
       const ty = Math.floor(key / 65536) - 32768;
       const around = (dx: number, dy: number) => ch.height.tiles.get(tileKey(tx + dx, ty + dy))?.data ?? null;
-      let any = false;
-      if (hasRelief) {
+      let any = hasCracks;
+      if (hasRelief && !any) {
         for (let dy = -1; dy <= 1 && !any; dy++) for (let dx = -1; dx <= 1 && !any; dx++) if (around(dx, dy)) any = true;
       }
       const f = ch.film.tiles.get(key) ?? null;
@@ -265,22 +276,37 @@ export class LitCache {
       const h = hasRelief ? (ch.height.tiles.get(key) ?? null) : null;
       const m = hasRelief ? (ch.material.tiles.get(key) ?? null) : null;
       const inputs: unknown[] = [tile, lk, m, f];
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) inputs.push(hasRelief ? (ch.height.tiles.get(tileKey(tx + dx, ty + dy)) ?? null) : null);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nk = tileKey(tx + dx, ty + dy);
+          inputs.push(hasRelief ? (ch.height.tiles.get(nk) ?? null) : null);
+          if (hasCracks) inputs.push(color.tiles.get(nk) ?? null);
+        }
+      }
       const cached = this.tiles.get(key);
       if (cached && cached.inputs.length === inputs.length && cached.inputs.every((v, i) => v === inputs[i])) {
         out.set(key, cached.tile);
         continue;
       }
-      const hd = h ? expand(h, 1) : null;
+      const cd = expand(tile, 4);
+      const heightTileAt = (ntx: number, nty: number): Uint8ClampedArray | null => {
+        const nk = tileKey(ntx, nty);
+        const ht = ch.height.tiles.get(nk);
+        const baseH = ht ? expand(ht, 1) : null;
+        if (!hasCracks) return baseH;
+        const ct = ntx === tx && nty === ty ? cd : (() => {
+          const nt = color.tiles.get(nk);
+          return nt ? expand(nt, 4) : null;
+        })();
+        return carveAgeCrackHeightTile(ct, baseH, ntx, nty, offset, age!, layerCount);
+      };
+      const hd = hasRelief ? heightTileAt(tx, ty) : null;
       const md = m ? expand(m, 4) : null;
       const fd = f ? expand(f, 4) : null;
       const data = lightTile(
-        expand(tile, 4),
+        cd,
         hd,
-        (dx, dy) => {
-          const t = ch.height.tiles.get(tileKey(tx + dx, ty + dy));
-          return t ? expand(t, 1) : null;
-        },
+        (dx, dy) => heightTileAt(tx + dx, ty + dy),
         md,
         light,
         fd,

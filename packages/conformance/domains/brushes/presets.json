@@ -2678,5 +2678,28 @@
         "#a855f7"
       ]
     }
+  },
+  {
+    "id": "paint-scraper",
+    "name": "Paint scraper",
+    "kind": "mark",
+    "medium": "paint",
+    "variety": "scraper",
+    "tip": {
+      "shape": "flat",
+      "size": 28,
+      "hardness": 0.9,
+      "spacing": 0.06,
+      "angle": 30,
+      "roundness": 0.35
+    },
+    "marks": {
+      "kind": "scraper"
+    },
+    "dynamics": {
+      "smoothing": 0.25,
+      "rotation": "stroke",
+      "minSize": 0.5
+    }
   }
 ]

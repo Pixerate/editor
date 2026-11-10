@@ -534,7 +534,7 @@
             "additionalProperties": false
           },
           "marks": {
-            "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+            "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
             "oneOf": [
               {
                 "type": "object",
@@ -839,6 +839,33 @@
                     "minimum": 0,
                     "maximum": 2,
                     "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "scraper",
+                    "description": "Always \"scraper\"."
+                  },
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                  },
+                  "sharpness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                   }
                 },
                 "required": [
@@ -2215,7 +2242,7 @@
             "additionalProperties": false
           },
           "marks": {
-            "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+            "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
             "oneOf": [
               {
                 "type": "object",
@@ -2520,6 +2547,33 @@
                     "minimum": 0,
                     "maximum": 2,
                     "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "scraper",
+                    "description": "Always \"scraper\"."
+                  },
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+                  },
+                  "sharpness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
                   }
                 },
                 "required": [

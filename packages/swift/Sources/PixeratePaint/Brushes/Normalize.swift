@@ -221,7 +221,7 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
         if let ks = k?.stringValue, let schema = BrushSchema.marks[ks] {
             brush["marks"] = readObject(rawMarks, schema, "brush.marks", &problems).map { .object($0) }
         } else {
-            problems.append("marks.kind \(k.map { $0.stringified() } ?? "undefined") is not valid; use continuous, scatter, particles, objects or antimatter. marks dropped.")
+            problems.append("marks.kind \(k.map { $0.stringified() } ?? "undefined") is not valid; use continuous, scatter, particles, objects, antimatter or scraper. marks dropped.")
         }
     }
 
@@ -325,7 +325,7 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             ? "it needs a source (a grain pattern or source:<id>)"
             : tip["shape"] == "bristle"
             ? "bristle tips lay their own marks"
-            : marks == "particles" || marks == "objects" || marks == "antimatter"
+            : marks == "particles" || marks == "objects" || marks == "antimatter" || marks == "scraper"
             ? "\(marks!) marks are not dabs"
             : surface == "wet" || surface == "thick"
             ? "\(surface!) paint lays its own texture"
@@ -369,8 +369,8 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
         if b["exchange"] != nil && kind == "tool" && !wetTool {
             drop("behaviour.exchange", "the \(toolName ?? "undefined") does not pick paint up")
             b["exchange"] = nil
-        } else if b["exchange"] != nil && (marksKind == "particles" || marksKind == "objects" || marksKind == "antimatter" || tip["shape"] == "bristle") {
-            drop("behaviour.exchange", "particle, object, antimatter and bristle marks do not pick paint up")
+        } else if b["exchange"] != nil && (marksKind == "particles" || marksKind == "objects" || marksKind == "antimatter" || marksKind == "scraper" || tip["shape"] == "bristle") {
+            drop("behaviour.exchange", "particle, object, antimatter, scraper and bristle marks do not pick paint up")
             b["exchange"] = nil
         }
         behaviour = b

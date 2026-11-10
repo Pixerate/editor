@@ -314,6 +314,47 @@
               "description": "Remaining daylight ambient level (0..1)."
             }
           }
+        },
+        "age": {
+          "type": "object",
+          "description": "Painting time-machine ageing preview settings when non-default.",
+          "properties": {
+            "years": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 500,
+              "description": "Simulated age in years (0..500; 0 = fresh paint)."
+            },
+            "varnish": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Yellowed varnish absorption strength (0..1)."
+            },
+            "cracks": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Voronoi / stress craquelure crack network strength (0..1)."
+            },
+            "fading": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Pigment lightfastness fading strength by hue (0..1)."
+            },
+            "dust": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Low-frequency surface dust grain strength (0..1)."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Deterministic seed for craquelure and dust."
+            }
+          }
         }
       },
       "required": [

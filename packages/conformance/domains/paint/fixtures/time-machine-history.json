@@ -1,0 +1,1260 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "time-machine-history",
+  "description": "Time machine against history: a scraper stroke records the layers it cut, so a historical X-ray replay of every stroke matches the live X-ray although a hidden layer lies under the scraped one; and set_age (not an undo step) survives undo and redo of a stroke, in get_age and the saved document.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "layerId": "@1",
+        "color": "#f8fafc",
+        "opacity": 1
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Hidden underpainting"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Hidden underpainting",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "layerId": "@2",
+        "brushId": "impasto-brush",
+        "color": "#ffffff",
+        "seed": 5,
+        "points": [
+          {
+            "x": 8,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 14,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 20,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 26,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 32,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 38,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 44,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 50,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 56,
+            "y": 32,
+            "pressure": 1
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 48,
+            "width": 96,
+            "x": -16,
+            "y": 8
+          },
+          "dabs": 23,
+          "layerId": "@2",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#ffffff"
+          },
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@2",
+        "visible": false
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 46,
+            "width": 73,
+            "x": -5,
+            "y": 9
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Hidden underpainting",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": false
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Top"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@3",
+          "locks": {},
+          "name": "Top",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "layerId": "@3",
+        "color": "#dc2626",
+        "opacity": 1
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@3"
+        }
+      }
+    },
+    {
+      "tool": "update_layer",
+      "arguments": {
+        "layerId": "@1",
+        "locks": {
+          "pixels": true
+        }
+      },
+      "expect": {
+        "result": {
+          "active": false,
+          "blend": "normal",
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {
+            "pixels": true
+          },
+          "name": "Layer 1",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "paint-scraper",
+        "marks": {
+          "kind": "scraper",
+          "depth": 1,
+          "sharpness": 0.9
+        },
+        "tip": {
+          "size": 18,
+          "spacing": 0.08,
+          "opacity": 1,
+          "flow": 1
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.5,
+              "rotation": "stroke",
+              "smoothing": 0.25
+            },
+            "id": "paint-scraper",
+            "kind": "mark",
+            "marks": {
+              "depth": 1,
+              "kind": "scraper",
+              "sharpness": 0.9
+            },
+            "medium": "paint",
+            "name": "Paint scraper",
+            "tip": {
+              "angle": 30,
+              "flow": 1,
+              "hardness": 0.9,
+              "opacity": 1,
+              "roundness": 0.35,
+              "shape": "flat",
+              "size": 18,
+              "spacing": 0.08
+            },
+            "variety": "scraper"
+          },
+          "engine": "scraper",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "layerId": "@3",
+        "seed": 9,
+        "points": [
+          {
+            "x": 12,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 16,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 20,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 24,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 28,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 32,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 36,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 40,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 44,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 48,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 52,
+            "y": 32,
+            "pressure": 1
+          }
+        ]
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 30,
+            "width": 69,
+            "x": -3,
+            "y": 17
+          },
+          "dabs": 28,
+          "layerId": "@3",
+          "strokeId": "s2"
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@3",
+            "assets": {
+              "@1": "<binary>",
+              "@2": "pixerate-asset:1c2-20a4x1r6lqj",
+              "@3": "pixerate-asset:r6-15yep0j1g3g"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layerChannels": {
+              "@2": {
+                "height": "pixerate-asset:2pa-2eogsz6z5k8",
+                "material": "pixerate-asset:23u-n34o6zns8l",
+                "rect": {
+                  "height": 256,
+                  "width": 512,
+                  "x": -256,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "locks": {
+                  "pixels": true
+                },
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Hidden underpainting",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": false,
+                "x": -5,
+                "y": 9
+              },
+              {
+                "asset": "@3",
+                "blend": "normal",
+                "id": "@3",
+                "name": "Top",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#f8fafc",
+                  "grain": 0,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@1"
+              },
+              {
+                "at": 1,
+                "data": {
+                  "blend": "normal",
+                  "color": "#dc2626",
+                  "grain": 0,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@3"
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.4
+                    },
+                    "surface": "thick",
+                    "thick": {
+                      "gloss": 0.45,
+                      "load": 0.92
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.55,
+                    "rotation": "stroke",
+                    "smoothing": 0.25
+                  },
+                  "id": "impasto-brush",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Impasto brush",
+                  "tip": {
+                    "angle": 90,
+                    "hardness": 0.8,
+                    "roundness": 0.55,
+                    "shape": "flat",
+                    "size": 36,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#ffffff",
+                "id": "s1",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 1,
+                    "x": 8,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 14,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 20,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 26,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 32,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 38,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 44,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 50,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 56,
+                    "y": 32
+                  }
+                ],
+                "seed": 5
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "rotation": "stroke",
+                    "smoothing": 0.25
+                  },
+                  "id": "paint-scraper",
+                  "kind": "mark",
+                  "marks": {
+                    "depth": 1,
+                    "kind": "scraper",
+                    "sharpness": 0.9
+                  },
+                  "name": "Paint scraper",
+                  "tip": {
+                    "angle": 30,
+                    "hardness": 0.9,
+                    "roundness": 0.35,
+                    "shape": "flat",
+                    "size": 18,
+                    "spacing": 0.08
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s2",
+                "layerId": "@3",
+                "points": [
+                  {
+                    "pressure": 1,
+                    "x": 12,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 16,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 20,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 24,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 28,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 32,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 36,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 40,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 44,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 48,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 52,
+                    "y": 32
+                  }
+                ],
+                "scrapeLayerIds": [
+                  "@3"
+                ],
+                "seed": 9
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/time-machine-history.10.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "e02cf3b28a39be0a3446d57c58cf44bf48a630f202dfc59d8733fcb818d087e4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "render_xray",
+      "arguments": {
+        "maxSide": 64
+      },
+      "expect": {
+        "result": {
+          "height": 64,
+          "hiddenLayerCount": 1,
+          "layerCount": 3,
+          "maxDensity": 3.289,
+          "meanDensity": 2.073,
+          "strokes": 2,
+          "totalStrokes": 2,
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "render_xray",
+      "arguments": {
+        "strokes": 2,
+        "maxSide": 64
+      },
+      "expect": {
+        "result": {
+          "height": 64,
+          "hiddenLayerCount": 1,
+          "layerCount": 3,
+          "maxDensity": 3.289,
+          "meanDensity": 2.073,
+          "strokes": 2,
+          "totalStrokes": 2,
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "set_age",
+      "arguments": {
+        "years": 300,
+        "seed": 7
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "age": {
+            "cracks": 0.5,
+            "dust": 0.3,
+            "fading": 0.5,
+            "seed": 7,
+            "varnish": 0.5,
+            "years": 300
+          }
+        }
+      }
+    },
+    {
+      "tool": "undo_paint",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "nextRedo": "Paint scraper stroke",
+          "nextUndo": "Layer properties",
+          "undone": "Paint scraper stroke"
+        }
+      }
+    },
+    {
+      "tool": "get_age",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "active": true,
+          "age": {
+            "cracks": 0.5,
+            "dust": 0.3,
+            "fading": 0.5,
+            "seed": 7,
+            "varnish": 0.5,
+            "years": 300
+          },
+          "xrayView": false
+        }
+      }
+    },
+    {
+      "tool": "redo_paint",
+      "arguments": {},
+      "document": true,
+      "expect": {
+        "result": {
+          "nextRedo": null,
+          "nextUndo": "Paint scraper stroke",
+          "redone": "Paint scraper stroke"
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@3",
+            "age": {
+              "cracks": 0.5,
+              "dust": 0.3,
+              "fading": 0.5,
+              "seed": 7,
+              "varnish": 0.5,
+              "years": 300
+            },
+            "assets": {
+              "@1": "<binary>",
+              "@2": "pixerate-asset:1c2-20a4x1r6lqj",
+              "@3": "pixerate-asset:r6-15yep0j1g3g"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layerChannels": {
+              "@2": {
+                "height": "pixerate-asset:2pa-2eogsz6z5k8",
+                "material": "pixerate-asset:23u-n34o6zns8l",
+                "rect": {
+                  "height": 256,
+                  "width": 512,
+                  "x": -256,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "locks": {
+                  "pixels": true
+                },
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Hidden underpainting",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": false,
+                "x": -5,
+                "y": 9
+              },
+              {
+                "asset": "@3",
+                "blend": "normal",
+                "id": "@3",
+                "name": "Top",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#f8fafc",
+                  "grain": 0,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@1"
+              },
+              {
+                "at": 1,
+                "data": {
+                  "blend": "normal",
+                  "color": "#dc2626",
+                  "grain": 0,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@3"
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.4
+                    },
+                    "surface": "thick",
+                    "thick": {
+                      "gloss": 0.45,
+                      "load": 0.92
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.55,
+                    "rotation": "stroke",
+                    "smoothing": 0.25
+                  },
+                  "id": "impasto-brush",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Impasto brush",
+                  "tip": {
+                    "angle": 90,
+                    "hardness": 0.8,
+                    "roundness": 0.55,
+                    "shape": "flat",
+                    "size": 36,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#ffffff",
+                "id": "s1",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 1,
+                    "x": 8,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 14,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 20,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 26,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 32,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 38,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 44,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 50,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 56,
+                    "y": 32
+                  }
+                ],
+                "seed": 5
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "rotation": "stroke",
+                    "smoothing": 0.25
+                  },
+                  "id": "paint-scraper",
+                  "kind": "mark",
+                  "marks": {
+                    "depth": 1,
+                    "kind": "scraper",
+                    "sharpness": 0.9
+                  },
+                  "name": "Paint scraper",
+                  "tip": {
+                    "angle": 30,
+                    "hardness": 0.9,
+                    "roundness": 0.35,
+                    "shape": "flat",
+                    "size": 18,
+                    "spacing": 0.08
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s2",
+                "layerId": "@3",
+                "points": [
+                  {
+                    "pressure": 1,
+                    "x": 12,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 16,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 20,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 24,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 28,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 32,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 36,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 40,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 44,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 48,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 52,
+                    "y": 32
+                  }
+                ],
+                "scrapeLayerIds": [
+                  "@3"
+                ],
+                "seed": 9
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    },
+    {
+      "tool": "get_age",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "active": true,
+          "age": {
+            "cracks": 0.5,
+            "dust": 0.3,
+            "fading": 0.5,
+            "seed": 7,
+            "varnish": 0.5,
+            "years": 300
+          },
+          "xrayView": false
+        }
+      }
+    }
+  ]
+}
