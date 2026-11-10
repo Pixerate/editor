@@ -135,6 +135,12 @@ final class StickerProviderTests: XCTestCase {
         XCTAssertEqual(dropped.frame, 2)
         XCTAssertEqual(c.undoLabel, "Edit sticker")
         let movedPixels = c.compositePixels(paper: false).data
+        // The partial redraws (old and new place only) match drawing the stickers from scratch there.
+        let fresh = try PaintEditorController(width: 96, height: 96, stickers: try combineStickerProviders([editorStickers(), createFakeStickerProvider()]))
+        try fresh.prepareStickers(["fake:weather-wind"])
+        _ = try fresh.addStickers(nil, [["ref": "editor:star", "x": 20, "y": 20, "size": 24], ["ref": "fake:weather-wind", "x": 32, "y": 40, "size": 24, "frame": 2]])
+        XCTAssertEqual(try fresh.listStickers(), try c.listStickers())
+        XCTAssertEqual(fresh.compositePixels(paper: false).data, movedPixels)
         XCTAssertEqual(c.undo(), "Edit sticker")
         XCTAssertEqual(c.undoLabel, "Add stickers")
         XCTAssertEqual(try c.listStickers()[1].x, 60)
@@ -183,5 +189,22 @@ final class StickerProviderTests: XCTestCase {
         c.cancelStickerPreview()
         XCTAssertEqual(c.doc.layers.count, count, "cancel after another change does nothing")
         XCTAssertEqual(try c.listStickers(layer).first?.x, 30)
+    }
+
+    /// Undo mid-drag drops the preview (as in TS): it never reaches the redo history, and a later drop commits from the undone document.
+    func testUndoDuringAPreviewDropsIt() throws {
+        let c = try PaintEditorController(width: 64, height: 64)
+        let first = try c.addStickers(nil, [["ref": "editor:star", "x": 20, "y": 20]])
+        _ = try c.addStickers(nil, [["ref": "editor:heart", "x": 40, "y": 40]])
+        _ = try c.previewSticker(nil, first[0].id, ["x": 30])
+        XCTAssertEqual(c.undo(), "Add stickers")
+        XCTAssertEqual(try c.listStickers().map(\.x), [20])
+        c.cancelStickerPreview()
+        XCTAssertEqual(try c.listStickers().map(\.x), [20], "cancel after undo does nothing")
+        XCTAssertEqual(c.redo(), "Add stickers")
+        XCTAssertEqual(try c.listStickers().map(\.x), [20, 40], "redo restores the step without the preview")
+        _ = try c.updateSticker(nil, first[0].id, ["x": 25])
+        XCTAssertEqual(c.undo(), "Edit sticker")
+        XCTAssertEqual(try c.listStickers().map(\.x), [20, 40])
     }
 }
