@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BRUSH_JSON_SCHEMA,
   BRUSH_PRESETS,
@@ -12,6 +12,7 @@ import {
   PaintEditorError,
   createPaintEditorToolProvider,
   renderBrushThumbnail,
+  startCultureCatchUp,
 } from '../src/paint-editor';
 import { ToolRegistry } from '../src/tools/registry';
 import { readPixel } from '../src/raster/surface';
@@ -913,5 +914,66 @@ describe('Biopaint mycelial ink (#684)', () => {
     const grows = (c.document.paintEvents ?? []).filter((e) => e.kind === 'culture-grow' && e.layerId === cultureLayer);
     expect(grows.length).toBe(1);
     expect((grows[0]!.data as { steps: number }).steps).toBeGreaterThan(6);
+  });
+});
+
+describe('Biopaint catch-up when the document is replaced', () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** A growWhileClosed painting saved at `savedAt`, with living tips. */
+  function closedPainting(savedAt: number): unknown {
+    vi.setSystemTime(savedAt);
+    const c = new PaintEditorController({ width: 140, height: 140 });
+    c.setCultureOptions({ growWhileClosed: true });
+    c.paintStroke({ brushId: 'mycelial-ink', seed: 61, points: [{ x: 50, y: 70 }, { x: 90, y: 70 }] });
+    return c.toJSON();
+  }
+
+  it('onDocumentReplaced fires after loadJSON and newCanvas, with the new document in place, until unsubscribed', () => {
+    vi.useFakeTimers();
+    const saved = closedPainting(1_000_000);
+    const c = new PaintEditorController({ width: 64, height: 64 });
+    const seen: number[] = [];
+    const off = c.onDocumentReplaced(() => seen.push(c.document.canvas.width));
+    c.loadJSON(saved);
+    c.newCanvas({ width: 32, height: 32 });
+    expect(seen).toEqual([140, 32]);
+    off();
+    c.loadJSON(saved);
+    expect(seen).toEqual([140, 32]);
+  });
+
+  it('startCultureCatchUp catches up on start and again for each document opened into the same controller', () => {
+    vi.useFakeTimers();
+    const saved = closedPainting(1_000_000);
+    const c = new PaintEditorController({ width: 64, height: 64 });
+    vi.setSystemTime(1_010_000);
+    const stop = startCultureCatchUp(c);
+    // Nothing to catch up on the blank canvas.
+    expect(c.getState().undoLabel).toBeNull();
+
+    c.loadJSON(saved);
+    expect(c.getState().undoLabel).toBe('Growth while closed');
+    expect(c.getCultures().pendingCatchUpTicks).toBe(0);
+
+    // Stopped: a later open is left as saved.
+    stop();
+    c.loadJSON(saved);
+    expect(c.getState().undoLabel).toBeNull();
+    expect(c.getCultures().pendingCatchUpTicks).toBeGreaterThan(0);
+  });
+
+  it('startCultureCatchUp skips a refusal instead of breaking the open', () => {
+    vi.useFakeTimers();
+    const saved = closedPainting(1_000_000);
+    const c = new PaintEditorController({ width: 64, height: 64 });
+    vi.setSystemTime(1_010_000);
+    const stop = startCultureCatchUp(c);
+    const spy = vi.spyOn(c, 'catchUpCultures').mockImplementation(() => {
+      throw new PaintEditorError('busy');
+    });
+    expect(c.loadJSON(saved)).toEqual([]);
+    expect(spy).toHaveBeenCalledTimes(1);
+    stop();
   });
 });

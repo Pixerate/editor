@@ -31,6 +31,28 @@ final class BrushModelTests: XCTestCase {
         }
     }
 
+    func testIridescenceIsDroppedFromAntimatterAndObjectMarks() throws {
+        let film: JSONValue = .object(["thickness": .number(480), "ior": .number(1.65)])
+        for (kind, why) in [("antimatter", "antimatter marks detonate paint, not film"), ("objects", "object marks are stickers, not film")] {
+            var problems: [String] = []
+            let brush = try normalizeBrushSpec(.object([
+                "id": .string("film-\(kind)"), "name": .string("Film"), "kind": .string("mark"),
+                "tip": .object(["shape": .string("round"), "size": .number(20)]),
+                "marks": .object(["kind": .string(kind)]),
+                "iridescence": film,
+            ]), &problems)
+            XCTAssertNil(brush["iridescence"], kind)
+            XCTAssertTrue(problems.contains("iridescence dropped: \(why)."), "\(kind): \(problems)")
+        }
+        var problems: [String] = []
+        let lacquer = try normalizeBrushSpec(.object([
+            "id": .string("film-continuous"), "name": .string("Film"), "kind": .string("mark"),
+            "tip": .object(["shape": .string("round"), "size": .number(20)]),
+            "iridescence": film,
+        ]), &problems)
+        XCTAssertNotNil(lacquer["iridescence"])
+    }
+
     func testMigrationsMatchTheContracts() throws {
         let list = try XCTUnwrap(JSONValue.parse(ConformanceContracts.data("domains/brushes/migrations.json")).arrayValue)
         for item in list {
