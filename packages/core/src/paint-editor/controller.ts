@@ -1006,7 +1006,7 @@ export class PaintEditorController {
           let layers = this.doc.layers;
           for (const [id, surface] of surfaces) if (findLayer(layers, id)) layers = mapLayer(layers, id, (l) => ({ ...(l as PaintPixelLayer), surface }));
           // Wet paint moving is not an undo step: keep the history's documents.
-          this.doc = { ...this.doc, layers };
+          this.replaceDocKeepingGrowth({ ...this.doc, layers });
           this.emit(rects.length ? rects : 'all');
         },
         layerLight: (id) => this.doc.light?.[id] ?? null,
@@ -1014,7 +1014,7 @@ export class PaintEditorController {
           let light = this.doc.light;
           for (const [id, surface] of lights) if (findLayer(this.doc.layers, id)) light = withLayerLight(light, id, surface);
           // Wet light moving is not an undo step either.
-          this.doc = { ...this.doc, ...(light ? { light } : {}) };
+          this.replaceDocKeepingGrowth({ ...this.doc, ...(light ? { light } : {}) });
         },
         layerHeight: (id) => this.doc.thick?.[id]?.height ?? null,
         updateHeights: (heights) => {
@@ -1024,7 +1024,7 @@ export class PaintEditorController {
             const prev = thick?.[id] ?? emptyThickChannels();
             thick = { ...(thick ?? {}), [id]: { ...prev, height } };
           }
-          if (thick !== this.doc.thick) this.doc = { ...this.doc, ...(thick ? { thick } : {}) };
+          if (thick !== this.doc.thick) this.replaceDocKeepingGrowth({ ...this.doc, ...(thick ? { thick } : {}) });
         },
         changed: () => {},
       },
@@ -1350,6 +1350,17 @@ export class PaintEditorController {
       }
     }
     return doc;
+  }
+
+  /**
+   * Replaces the document without an undo step (wet paint flowing) and keeps a live growth run going:
+   * the run's shown document moves to `next`, so the next growth tick (or a flush) does not take the
+   * replaced document for an interruption and drop the run's replay events.
+   */
+  private replaceDocKeepingGrowth(next: PaintDocumentState): void {
+    const pv = this.culturePreview;
+    if (pv && pv.shown === this.doc) pv.shown = next;
+    this.doc = next;
   }
 
   private flushCulturePreview(): void {

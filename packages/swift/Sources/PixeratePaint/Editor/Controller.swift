@@ -243,6 +243,8 @@ public final class PaintEditorController {
     /// Each layer's light spill (missing: the default).
     var lightSpills: [String: LightSpill] = [:]
     var previewing = false
+    /// View-only vortex winding animations (`ControllerVortexAnimation.swift`).
+    let vortexPlayback = VortexPlayback()
     /// The mixing pad and the pads kept by name.
     let pad = MixingPad()
     var savedPads: [SavedMixingPad] = []
@@ -318,6 +320,10 @@ public final class PaintEditorController {
     /// Biopaint (`culture`) playback state (paused after undo until next stroke or Grow).
     var culturePaused = false
     var cultureSpeed = 1.0
+    /// The uncommitted live growth run (`playCultures`, ControllerCultureLive.swift), if any.
+    var culturePreview: CulturePreview?
+    /// Extra sources of layers live growth must skip for now, by name (`animatingLayerIds`, which the vortex and blast animations wire into).
+    var cultureGrowthHolds: [String: () -> Set<String>] = [:]
     /// Pending paint proposals (`PaintProposals`), shared between proposal tools and evolutionary stroke tools.
     private var attachedProposals: PaintProposals?
     public var proposals: PaintProposals {
@@ -363,21 +369,21 @@ public final class PaintEditorController {
                 var layers = doc.layers
                 for (id, surface) in surfaces where findLayer(layers, id) != nil { layers = mapLayer(layers, id) { $0.withSurface(surface) } }
                 // Wet paint moving is not an undo step: keep the history's documents.
-                if !surfaces.isEmpty { setDocSilently(doc.with { $0.layers = layers }) }
+                if !surfaces.isEmpty { setDocSilentlyKeepingGrowth(doc.with { $0.layers = layers }) }
                 emit(rects.isEmpty ? nil : rects)
             },
             layerLight: { [unowned self] id in doc.light?.get(id) },
             updateLights: { [unowned self] lights in
                 let d = doc
                 // Wet light moving is not an undo step either.
-                setDocSilently(d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } })
+                setDocSilentlyKeepingGrowth(d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } })
                 // Anywhere: light spills past its tiles (`computeSpill`), so tile rectangles would miss the glow around them.
                 emit(nil)
             },
             layerHeight: { [unowned self] id in doc.thick?.get(id)?.height },
             updateHeights: { [unowned self] heights in
                 let d = doc
-                setDocSilently(d.with { o in
+                setDocSilentlyKeepingGrowth(d.with { o in
                     var t = o.thick ?? OrderedMap()
                     for (id, height) in heights where findLayer(d.layers, id) != nil {
                         var ch = t.get(id) ?? emptyThickChannels()
@@ -399,14 +405,16 @@ public final class PaintEditorController {
     public var undoLabel: String? { undoStack.last?.label }
     public var redoLabel: String? { redoStack.last?.label }
 
-    func commit(_ label: String, _ next: PaintDocumentState, before: PaintDocumentState? = nil) {
+    func commit(_ label: String, _ nextIn: PaintDocumentState, before beforeIn: PaintDocumentState? = nil) {
+        // Live growth commits first as its own step, and its replay events carry into `next`.
+        let (next, before) = flushCultureInto(nextIn, before: beforeIn ?? doc)
         if grouping != nil {
             // Inside `group`: the change joins the group's one step.
             grouping!.changed = true
             doc = next
             return
         }
-        let entry = HistoryEntry(label: label, before: before ?? doc, after: next)
+        let entry = HistoryEntry(label: label, before: before, after: next)
         if let op = wetOp {
             entry.wet = (op.before, wet.snapshot(), false)
             wetOp = nil
@@ -420,6 +428,8 @@ public final class PaintEditorController {
 
     public func undo() -> String? {
         if liveStroke != nil { return nil }
+        flushCulturePreview()
+        culturePaused = true
         clearBlastAnimation()
         guard let e = undoStack.popLast() else { return nil }
         redoStack.append(e)
@@ -435,12 +445,12 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
-        culturePaused = true
         return e.label
     }
 
     public func redo() -> String? {
         if liveStroke != nil { return nil }
+        flushCulturePreview()
         clearBlastAnimation()
         guard let e = redoStack.popLast() else { return nil }
         undoStack.append(e)
@@ -453,7 +463,6 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
-        culturePaused = true
         return e.label
     }
 
@@ -1961,6 +1970,7 @@ public final class PaintEditorController {
             let stroke = record(session)
             result.strokeId = stroke.id
             paintedBounds[stroke.key] = .some(result.bounds)
+            noteVortexAnimation(session, strokeId: stroke.id)
             if let scraper = session.initValues.scraper {
                 let scraped = scraper.commitToDocument(d)
                 out = scraped.doc.with { $0.strokes = d.strokes + [stroke] }
@@ -2050,6 +2060,7 @@ public final class PaintEditorController {
     /// Paints one stroke from data (one undo step).
     public func paintStroke(_ i: PaintStrokeInit, points rawPoints: [PenPoint]) throws -> PaintStrokeResult {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before painting another.") }
+        flushCulturePreview()
         let points = try checkPoints(rawPoints)
         clearBlastAnimation()
         let before = doc
@@ -2064,6 +2075,7 @@ public final class PaintEditorController {
         if let load = run.result.mixerLoad { keepLoad(run.brush, load) }
         if run.doc !== before || wetOp != nil {
             commit("\(run.brush.name) stroke", withWetEvents(run.doc), before: before)
+            queueVortexAnimation(after: run.result)
             startPendingBlastAnimation(run.result.bounds)
             if let sid = run.result.strokeId, let stroke = doc.strokes.last(where: { $0.id == sid }) {
                 recordMutationStroke(stroke, run.result.bounds)
@@ -2122,7 +2134,8 @@ public final class PaintEditorController {
 
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
     func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display", view: Bool = false, age ageOpt: Bool? = nil) -> [ViewLayer] {
-        let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
+        let (shown, winding) = view ? vortexViewLayers(currentLayers()) : (currentLayers(), false)
+        let base = wetMode == "dried" ? driedLayers(shown) : shown
         let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in
             guard l.open else { return nil }
             if let ch = l.shown.thickChannels() { return (l.layerId, ch) }
@@ -2142,7 +2155,7 @@ public final class PaintEditorController {
         var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live, liveFerro: liveFerro, useAge: useAge, paintedLayerCount: paintedCount)), liveThick: live)
         if useAge { layers = ageLayers(layers, paintedLayerCount: paintedCount, liveThick: live) }
         // Backlit paper shines through everything: its light goes on top.
-        let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && !hasActiveBlastAnimation && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
+        let baseIsCommitted = !winding && (liveStroke?.open != true || liveStroke!.isWet) && !hasActiveBlastAnimation && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
         if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
         if let layerIds {
             layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }
@@ -2230,6 +2243,7 @@ public final class PaintEditorController {
 
     /// The document as JSON with inline PNG data URLs (`toJSON`).
     public func toJSON(strokes withStrokes: Bool = true) -> JSONObject {
+        flushCulturePreview()
         let d = savedDocumentState()
         var out: JSONObject = [
             "format": .string(PAINT_FORMAT), "version": .number(Double(PAINT_SCHEMA_VERSION)),

@@ -133,6 +133,14 @@ public let MAX_INTEGRATION_STEPS = 960
 /// `maxSubStepPx` each, unless that would take more than `MAX_INTEGRATION_STEPS`: then they are
 /// longer, and the full travel is kept.
 public func integrateVelocityField(_ vel: VelocityGridField, _ totalTravel: Double, maxSubStepPx: Double? = nil) -> DisplacementField {
+    integrateVelocityFieldFrames(vel, totalTravel, 0, maxSubStepPx: maxSubStepPx).field
+}
+
+/// `integrateVelocityField`, also keeping the displacement after `keyframes` evenly spaced points
+/// of the integration (the last is the field itself): the paint's path along its arcs, for an
+/// animation to play back (`lerpDisplacementFields` between neighbours) instead of scaling the
+/// final field, which would move it along chords.
+public func integrateVelocityFieldFrames(_ vel: VelocityGridField, _ totalTravel: Double, _ keyframes: Int, maxSubStepPx: Double? = nil) -> (field: DisplacementField, frames: [DisplacementField]) {
     let rect = vel.rect
     let step = vel.step
     let cols = vel.cols
@@ -144,7 +152,7 @@ public func integrateVelocityField(_ vel: VelocityGridField, _ totalTravel: Doub
     var dx = [Float](repeating: 0, count: count)
     var dy = [Float](repeating: 0, count: count)
     if totalTravel <= 1e-5 || maxSpeed <= 1e-6 {
-        return DisplacementField(rect: rect, step: step, cols: cols, rows: rows, dx: dx, dy: dy, maxDisplacement: 0)
+        return (DisplacementField(rect: rect, step: step, cols: cols, rows: rows, dx: dx, dy: dy, maxDisplacement: 0), [])
     }
 
     // As many sub-steps as the fastest cell needs to move at most `maxSubStepPx` each, up to
@@ -190,8 +198,11 @@ public func integrateVelocityField(_ vel: VelocityGridField, _ totalTravel: Doub
 
     var nextDx = [Float](repeating: 0, count: count)
     var nextDy = [Float](repeating: 0, count: count)
+    let kf = Swift.max(0, keyframes)
+    var frames: [DisplacementField] = []
+    var nextFrame = 1
 
-    for _ in 0..<steps {
+    for s in 0..<steps {
         for r in 0..<rows {
             for c in 0..<cols {
                 let idx = r * cols + c
@@ -211,15 +222,40 @@ public func integrateVelocityField(_ vel: VelocityGridField, _ totalTravel: Doub
         }
         swap(&dx, &nextDx)
         swap(&dy, &nextDy)
+        while kf > 0 && nextFrame <= kf && Double(s + 1) >= JS.round(Double(steps * nextFrame) / Double(kf)) {
+            frames.append(displacementFieldOf(rect, step, cols, rows, dx, dy))
+            nextFrame += 1
+        }
     }
 
+    let field = kf > 0 ? frames[frames.count - 1] : displacementFieldOf(rect, step, cols, rows, dx, dy)
+    return (field, frames)
+}
+
+private func displacementFieldOf(_ rect: RasterRect, _ step: Int, _ cols: Int, _ rows: Int, _ dx: [Float], _ dy: [Float]) -> DisplacementField {
     var maxDisplacement = 0.0
-    for i in 0..<count {
+    for i in 0..<dx.count {
         let m = hypot(Double(dx[i]), Double(dy[i]))
         if m > maxDisplacement { maxDisplacement = m }
     }
-
     return DisplacementField(rect: rect, step: step, cols: cols, rows: rows, dx: dx, dy: dy, maxDisplacement: maxDisplacement)
+}
+
+/// The displacement `t` (0..1) of the way from `a` (nil: none) to `b`, cell by cell. Both are on
+/// the same grid (keyframes of one integration, `integrateVelocityFieldFrames`).
+public func lerpDisplacementFields(_ a: DisplacementField?, _ b: DisplacementField, _ t: Double) -> DisplacementField {
+    let k = Swift.max(0, Swift.min(1, t))
+    let n = b.dx.count
+    var dx = [Float](repeating: 0, count: n)
+    var dy = [Float](repeating: 0, count: n)
+    let adx = a?.dx, ady = a?.dy
+    for i in 0..<n {
+        let ax = adx.map { Double($0[i]) } ?? 0
+        let ay = ady.map { Double($0[i]) } ?? 0
+        dx[i] = Float(ax + (Double(b.dx[i]) - ax) * k)
+        dy[i] = Float(ay + (Double(b.dy[i]) - ay) * k)
+    }
+    return displacementFieldOf(b.rect, b.step, b.cols, b.rows, dx, dy)
 }
 
 /// Composes two backward displacement fields `first` followed by `second` onto a grid covering their

@@ -1,5 +1,11 @@
 # @pixerate/swift
 
+## 0.34.0
+
+### Minor Changes
+
+- e3cbe1e: Vortex paint winds on screen in Swift (#733): `integrateVelocityFieldFrames` keeps `VORTEX_KEYFRAMES` snapshots of the integration, `vortexWindingField` blends neighbouring keyframes, and the controller plays the view-only animation (`marks.duration`) from `stepVortexAnimations`, which `PaintEditorModel.tick` calls on the editor clock. It ends on the committed pixels, and undo, redo or another stroke on the layer drops it, as in TypeScript.
+
 ## 0.33.0
 
 ### Minor Changes

@@ -171,6 +171,7 @@ public final class PaintLiveStroke {
         if let load = run.result.mixerLoad { c.keepLoad(run.brush, load) }
         if run.doc !== current || c.wetOp != nil {
             c.commit("\(run.brush.name) stroke", c.withWetEvents(run.doc), before: before)
+            c.queueVortexAnimation(after: run.result)
             c.startPendingBlastAnimation(run.result.bounds)
             if let sid = run.result.strokeId, let stroke = c.doc.strokes.last(where: { $0.id == sid }) {
                 c.recordMutationStroke(stroke, run.result.bounds)
@@ -257,6 +258,7 @@ extension PaintEditorController {
      */
     public func beginStroke(_ initIn: PaintStrokeInit = PaintStrokeInit()) throws -> PaintLiveStroke {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before starting another.") }
+        flushCulturePreview()
         var i = initIn
         if i.snapToPerspective == nil { i.snapToPerspective = true }
         let before = doc

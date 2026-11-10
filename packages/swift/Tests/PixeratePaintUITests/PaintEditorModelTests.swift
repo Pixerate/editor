@@ -457,6 +457,25 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(model.activeLight?.hasLight, false)
     }
 
+    func testTheClockPlaysTheVortexWindingInTheCanvas() async throws {
+        let model = try makeModel(width: 600, height: 300)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        _ = try await call(model.registry, "paint_stroke", ["points": [["x": 20, "y": 60], ["x": 120, "y": 60]], "brushId": "ink-pen", "color": "#dc2626", "seed": 3])
+        _ = model.tick(now: 0)
+        _ = presenter.render()
+        _ = try await call(model.registry, "paint_stroke", ["points": [["x": 70, "y": 60, "pressure": 1]], "brushId": "vortex", "brush": ["marks": ["kind": "vortex", "duration": 1]], "seed": 5])
+        XCTAssertTrue(model.controller.hasActiveVortexAnimations())
+        _ = presenter.render()
+        // Frames redraw only the stroke's tiles, and the last one leaves the committed pixels.
+        _ = model.tick(now: 100)
+        _ = model.tick(now: 500)
+        XCTAssertEqual(presenter.render(), 1)
+        XCTAssertNotEqual(model.controller.vortexAnimationSurface(model.controller.doc.activeLayerId!)?.tileCount, nil)
+        _ = model.tick(now: 1200)
+        XCTAssertFalse(model.controller.hasActiveVortexAnimations())
+        XCTAssertEqual(presenter.render(), 1)
+    }
+
     func testTickingAdvancesTheWetClockAndRedrawsOnlyChangedTiles() async throws {
         let model = try makeModel(width: 600, height: 300)
         let presenter = PaintCanvasPresenter(controller: model.controller)
