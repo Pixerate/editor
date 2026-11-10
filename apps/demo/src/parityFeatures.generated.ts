@@ -2198,7 +2198,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`AntimatterStrokeDriver`, `ANTIMATTER_SLIDERS`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterSettings`, `AntimatterStats` (`/paint-editor`)",
         "react": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
         "svelte": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
-        "swift": "✅ `AntimatterStrokeDriver`, `AntimatterSettings`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterStats`; Antimatter controls in `PaintBrushPanel`; the view-only blast animation (`duration`, the blast commits at once): Planned (#533)"
+        "swift": "✅ `AntimatterStrokeDriver`, `AntimatterSettings`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterStats`; Antimatter controls in `PaintBrushPanel`; the view-only blast animation (`duration`, the blast commits at once): Planned (#732)"
       }
     ]
   },
