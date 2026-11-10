@@ -44,7 +44,9 @@ none, it is the editor's own stamps (`editorStickers()`: `editor:dot`, `editor:s
   content; absent means the provider didn't say, not that it is hand-made.
 - Leave `variant` out of `insert_sticker` unless the user asked for one: the default matches the
   background.
-- Prefer tintable stickers when they must match a palette.
+- Prefer tintable stickers when they must match a palette. A tintable sticker is drawn as a flat
+  silhouette in the colour (its own colours are dropped, its alpha kept); a non-tintable one
+  always shows its own pixels.
 - Animated stickers (`animated: true`, with `frameCount` and `frameDelay` in ms) are drawn one
   frame at a time: a paint sticker brush picks frames with `marks.frameMode` (`perform` by stroke
   time, `random` seeded), and `add_stickers` / `update_sticker` take a `frame` below `frameCount`.

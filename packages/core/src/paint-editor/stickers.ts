@@ -10,7 +10,7 @@
  * same stickers.
  */
 
-import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, readRegion, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { TileMedium, type PaintTileTarget } from '../paint/exchange';
 import { PaintGradientSampler, type PaintGradientSource } from '../paint/gradient-paint';
 import type { PaintBrush } from './brushes';
@@ -18,8 +18,8 @@ import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, t
 import { hash2, rand01 } from './noise';
 import { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
 import { editorStampOf, normalizeStickerRef } from '../stickers/helpers';
-import type { StickerRef, StickerVariant } from '../stickers/types';
-import { sampleArt, type StickerArt, type StickerArtLookup } from './sticker-art';
+import type { StickerProvider, StickerRef, StickerVariant } from '../stickers/types';
+import { StickerArtCache, defaultStickerRasterizer, sampleArt, type StickerArt, type StickerArtLookup, type StickerRasterizer } from './sticker-art';
 
 export { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
 export { DEFAULT_STICKER, MAX_STICKER_STAMPS, normalizeStickerSettings, STICKER_FRAME_MODES, type StickerFrameMode, type StickerSettings } from './mark-settings';
@@ -135,7 +135,7 @@ function drawArtSticker(medium: TileMedium, s: Sticker, art: StickerArt): Raster
   const ca = Math.cos(a);
   const sa = Math.sin(a);
   const scale = Math.max(art.width, art.height) / s.size;
-  const [r, g, b] = hexRgb(s.color);
+  const tint = hexRgb(s.color);
   const px: number[] = [0, 0, 0, 0];
   for (let yy = 0, p = 0; yy < rect.height; yy++) {
     for (let xx = 0; xx < rect.width; xx++, p++) {
@@ -148,13 +148,118 @@ function drawArtSticker(medium: TileMedium, s: Sticker, art: StickerArt): Raster
       sampleArt(art, ax, ay, px, s.frame);
       if (!(px[3] > 0)) continue;
       cov[p] = px[3];
-      field[p * 3] = art.tintable ? r : px[0];
-      field[p * 3 + 1] = art.tintable ? g : px[1];
-      field[p * 3 + 2] = art.tintable ? b : px[2];
+      tintStickerArt(art, px, tint, field, p * 3);
     }
   }
-  medium.deposit(rect, cov, s.opacity, [r, g, b], null, field);
+  medium.deposit(rect, cov, s.opacity, tint, null, field);
   return rect;
+}
+
+/**
+ * The colour a sample of sticker art is drawn in (0..1 RGB, written to `out` at `at`): tintable art
+ * becomes a flat silhouette in the paint colour `tint`, shaped only by the art's alpha; other art
+ * keeps its own colour. The canvas (`drawSticker`) and `renderStickerStamp` both tint here.
+ */
+export function tintStickerArt(art: Pick<StickerArt, 'tintable'>, sample: readonly number[], tint: readonly number[], out: { [i: number]: number }, at = 0): void {
+  const src = art.tintable ? tint : sample;
+  out[at] = src[0];
+  out[at + 1] = src[1];
+  out[at + 2] = src[2];
+}
+
+/** One sticker stamp's pixels: `size × size` straight RGBA (empty when `size` is 0). */
+export interface StickerStamp {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+}
+
+/** How to render a sticker stamp (`renderStickerStamp`). */
+export interface StickerStampOptions {
+  /** The paint colour, `#rrggbb` (any case). Ignored for art that isn't tintable; anything else draws black. */
+  colour: string;
+  /** Output edge in px: the stamp's diameter, as `Sticker.size`. Rounded down; 0 or less gives an empty stamp. */
+  size: number;
+  /** Animation frame (default 0), wrapped to the art's frame count (-1 is the last); rounded down. Ignored for static art. */
+  frame?: number;
+  /** Degrees clockwise about the stamp's centre (default 0), as `Sticker.rotation`; a non-finite value is 0. */
+  rotation?: number;
+}
+
+const EMPTY_STAMP = (): StickerStamp => ({ width: 0, height: 0, data: new Uint8ClampedArray(0) });
+
+/** The sticker `renderStickerStamp` draws: centred in a `size` px box at (0, 0), full opacity. */
+function stampSticker(ref: StickerRef, o: StickerStampOptions, size: number): Sticker {
+  const frame = Number.isFinite(o.frame) ? Math.floor(o.frame!) : 0;
+  const stamp = stickerStamp({ ref });
+  return {
+    id: 'stamp',
+    ref,
+    ...(stamp ? { stamp } : {}),
+    x: size / 2,
+    y: size / 2,
+    size,
+    rotation: Number.isFinite(o.rotation) ? o.rotation! : 0,
+    color: typeof o.colour === 'string' && /^#[0-9a-f]{6}$/i.test(o.colour) ? o.colour.toLowerCase() : '#000000',
+    opacity: 1,
+    seed: 0,
+    ...(frame !== 0 ? { frame } : {}),
+  };
+}
+
+/** Draws one sticker through the sticker layer's own redraw (`stickerSurface`) and reads its `size` px box. */
+function stampPixels(s: Sticker, size: number, art?: StickerArtLookup): StickerStamp {
+  const surface = stickerSurface([s], undefined, undefined, art);
+  return { width: size, height: size, data: readRegion(surface, { x: 0, y: 0, width: size, height: size }) };
+}
+
+/**
+ * One sticker stamp exactly as the paint canvas draws it, for previews (a swatch, a stroke preview,
+ * a sticker picker): `size × size` straight RGBA of a sticker of diameter `size` centred in the box
+ * at full opacity, drawn by the canvas's own code (`drawSticker` through `stickerSurface`), so
+ * tinting, frame choice and sampling can't drift from what a stroke paints.
+ *
+ * - **Tint**: tintable art is a flat silhouette in `colour`, shaped by the art's alpha; other art
+ *   keeps its own pixels and ignores `colour`. A colour that isn't `#rrggbb` draws black.
+ * - **Fit**: the art's longest side spans `size`, centred, sampled bilinearly from the art.
+ * - **Frame**: wrapped to the art's frame count (negative frames count back from the last); static
+ *   art has one frame.
+ * - **Rotation**: degrees clockwise about the centre. The output stays `size × size`, so the corners
+ *   of turned art are cut off, as the canvas cuts them at the sticker's box. (The canvas's box has
+ *   one more pixel on each side, which only bilinear bleed of art drawn larger than its own pixels
+ *   or the corners of turned art reach; the stamp leaves that ring out.)
+ * - A pixel of the stamp equals the canvas pixel of a sticker centred at (x + size / 2, y + size / 2)
+ *   for whole x, y; a sticker at a fractional position is sampled at that offset.
+ */
+export function renderStickerStamp(art: StickerArt, options: StickerStampOptions): StickerStamp {
+  const size = Number.isFinite(options.size) ? Math.floor(options.size) : 0;
+  if (size <= 0) return EMPTY_STAMP();
+  return stampPixels(stampSticker('stamp:art', options, size), size, () => art);
+}
+
+/** Where `renderStickerStampFrom` loads a sticker's art. */
+export interface StickerStampLoadOptions extends StickerStampOptions {
+  /** The cache to load the art through and keep it in (default: a new one; pass the paint editor's to share loads). */
+  cache?: StickerArtCache;
+  /** Rasteriser for SVG and non-PNG art (default `defaultStickerRasterizer`). */
+  rasterize?: StickerRasterizer;
+  /** Load the sticker's dark variant when it has one (default false). */
+  dark?: boolean;
+}
+
+/**
+ * `renderStickerStamp` for a sticker ref from `provider`, loading its art through
+ * `StickerArtCache.ensure` (unknown refs and failed loads reject with the cache's errors). An editor
+ * stamp (`editor:star`) draws the editor's procedural stamp in `colour`, with texture seed 0; its
+ * shading noise is keyed on canvas pixels, so it matches a canvas sticker at the same position.
+ */
+export async function renderStickerStampFrom(provider: StickerProvider, ref: StickerRef, options: StickerStampLoadOptions): Promise<StickerStamp> {
+  const size = Number.isFinite(options.size) ? Math.floor(options.size) : 0;
+  const cache = options.cache ?? new StickerArtCache();
+  const art = await cache.ensure(provider, ref, options.rasterize ?? defaultStickerRasterizer, options.dark ?? false);
+  if (size <= 0) return EMPTY_STAMP();
+  if (!art) return stampPixels(stampSticker(normalizeStickerRef(ref), options, size), size);
+  return renderStickerStamp(art, options);
 }
 
 /**
