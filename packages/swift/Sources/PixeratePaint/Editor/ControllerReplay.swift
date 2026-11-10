@@ -66,6 +66,7 @@ extension PaintEditorController {
         if let run = last, let load = run.result.mixerLoad { keepLoad(run.brush, load) }
         if d !== before || wetOp != nil {
             commit("\(last?.brush.name ?? "Brush") path stroke", withWetEvents(d), before: before)
+            if let run = last { queueVortexAnimation(after: run.result) }
             for sid in strokeIds {
                 if let recorded = doc.strokes.first(where: { $0.id == sid }) {
                     recordMutationStroke(recorded, paintedBounds[recorded.key] ?? nil)
