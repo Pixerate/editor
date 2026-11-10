@@ -69,12 +69,10 @@ extension PaintEditorController {
     /**
      * Layers mid-animation that live growth must not touch now (TS `playCultures` skips
      * `vortexAnimations` and `blastLayers`): growing would change their pixels and cut the
-     * animation short. This is the one place to wire the Swift animations in, e.g.
-     * `out.formUnion(vortexAnimatingLayerIds()); out.formUnion(blastAnimatingLayerIds)`.
-     * `cultureGrowthHolds` adds any other registered sources (tests use it).
+     * animation short. `cultureGrowthHolds` adds any other registered sources (tests use it).
      */
     func animatingLayerIds() -> Set<String> {
-        var out = Set<String>()
+        var out = blastAnimatingLayerIds
         for source in cultureGrowthHolds.values { out.formUnion(source()) }
         return out
     }

@@ -241,7 +241,7 @@ extension PaintEditorController {
         var out: [BacklitLayer] = []
         for l in layers where l.visible {
             if let children = l.children { out += backlitLayers(children, committed: committed, liveThick: liveThick, opacity: opacity * l.opacity) } else if l.isPixel {
-                let thick = !committed && liveThick?.layerId == l.id ? liveThick!.channels : doc.thick?.get(l.id)
+                let thick = !committed && liveThick?.layerId == l.id ? liveThick!.channels : committed ? doc.thick?.get(l.id) : blastViewThick(l.id, doc.thick?.get(l.id))
                 out.append(BacklitLayer(surface: l.pixelSurface, offset: l.pixelOffset, opacity: opacity * l.opacity, thick: thick))
             }
         }

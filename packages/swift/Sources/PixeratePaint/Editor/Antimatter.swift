@@ -745,7 +745,75 @@ public final class AntimatterStrokeDriver {
                     blendPixel(sx, sy, sr, sg, sb, fade, lightHit)
                 }
             }
+
+            // Mid-animation only: the white flash in the core and the shock ring running outwards.
+            if progress < 1 {
+                let flashStrength = Swift.max(0, 1 - progress * 2.2)
+                let shockFade = (1 - progress) * (1 - progress)
+                let shockR = b.radius * (0.25 + 0.75 * JS.sqrt(progress))
+                let band = Swift.max(1.5, b.radius * 0.14)
+                let maxR = JS.ceil(shockR + band + 1)
+                let minX = Int(JS.floor(b.x - maxR))
+                let maxX = Int(JS.ceil(b.x + maxR))
+                let minY = Int(JS.floor(b.y - maxR))
+                let maxY = Int(JS.ceil(b.y + maxR))
+                for py in minY...maxY {
+                    let dy = Double(py) - b.y
+                    for px in minX...maxX {
+                        let dx = Double(px) - b.x
+                        let d = JS.hypot(dx, dy)
+                        var a = 0.0
+                        if flashStrength > 0 && d < b.radius * 0.55 {
+                            let f = 1 - d / (b.radius * 0.55)
+                            a = Swift.max(a, f * f * flashStrength * 0.9)
+                        }
+                        let ringDist = abs(d - shockR)
+                        if ringDist < band {
+                            let rf = 1 - ringDist / band
+                            a = Swift.max(a, rf * rf * shockFade * 0.75)
+                        }
+                        if a > 0 {
+                            blendPixel(px, py, 255, 250, 235, a, b.lightAmount * a)
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    public func hasBlasts() -> Bool { !blasts.isEmpty }
+
+    /// Rebases blast birth times so the earliest blast starts at `now` ms (`rebaseTime`): birth
+    /// times come from `PenPoint.t`, which can have any origin (an agent's 0-based times).
+    public func rebaseTime(_ now: Double) {
+        guard let minT = blasts.map(\.t).min() else { return }
+        let shift = now - minT
+        for i in blasts.indices { blasts[i].t += shift }
+    }
+
+    /**
+     * The blast state at `now` (ms) for the view-only blast animation (`renderAtTime`): each blast
+     * expands over `antimatter.duration` from its birth time. When `active` is false (every blast
+     * has finished), `outputs` are `layerOutputs()`, the committed pixels.
+     */
+    public func renderAtTime(_ now: Double) -> (outputs: [AntimatterLayerOutput], active: Bool) {
+        let durationMs = initValues.brush.antimatter.duration * 1000
+        if durationMs <= 0 || blasts.isEmpty { return (layerOutputs(), false) }
+        if !blasts.contains(where: { now - $0.t < durationMs }) { return (layerOutputs(), false) }
+        let progressOf = { (b: AntimatterBlast) -> Double in
+            if now < b.t { return 0 }
+            let elapsed = now - b.t
+            if elapsed >= durationMs { return 1 }
+            return Swift.min(1, 0.05 + 0.95 * (elapsed / durationMs))
+        }
+        var animHeat: [TileKey: [Float]] = [:]
+        var animOrder: [TileKey] = []
+        var animCoords: [TileKey: (tx: Int, ty: Int)] = [:]
+        for b in blasts {
+            let p = progressOf(b)
+            if p > 0 { _ = writeBlastToHeat(b, &animHeat, &animOrder, &animCoords, p) }
+        }
+        return (buildOutputs(animHeat, animOrder, animCoords, progressOf), true)
     }
 
     public func layerOutputs() -> [AntimatterLayerOutput] {

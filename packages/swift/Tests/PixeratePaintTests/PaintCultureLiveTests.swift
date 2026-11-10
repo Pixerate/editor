@@ -152,6 +152,29 @@ final class PaintCultureLiveTests: XCTestCase {
         XCTAssertEqual(grows(c).count, 1)
     }
 
+    // TS 22 with a real animation: an antimatter blast still expanding on the layer holds its growth.
+    func testABlastAnimationHoldsGrowthOnItsLayer() throws {
+        let c = try PaintEditorController(width: 96, height: 96)
+        let layerId = c.doc.activeLayerId!
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "mycelial-ink", seed: 5), points: pts([(20, 48), (76, 48)]))
+        let blast: JSONObject = ["tip": ["size": 12], "antimatter": ["blastRadius": 2, "sparks": 0, "crater": 0, "duration": 0.8]]
+        let res = try c.paintStroke(PaintStrokeInit(brushId: "antimatter", brush: blast, seed: 3), points: [PenPoint(x: 70, y: 48, pressure: 1)])
+        XCTAssertEqual(res.antimatter?.blasts, 1)
+        var now = 1000.0
+        c.tickBlastAnimation(now)
+        XCTAssertTrue(c.blastAnimatingLayerIds.contains(layerId))
+        let committed = c.getLayer(layerId)!.pixelSurface
+        let player = c.playCultures(now: now)
+        run(player, &now, frames: 4)
+        XCTAssertTrue(c.getLayer(layerId)!.pixelSurface === committed, "growth waits while the blast plays")
+        now += 2000
+        c.tickBlastAnimation(now)
+        XCTAssertFalse(c.hasActiveBlastAnimation)
+        run(player, &now, frames: 4)
+        XCTAssertFalse(c.getLayer(layerId)!.pixelSurface === committed, "growth resumes once the blast ends")
+        player.stop()
+    }
+
     // TS 23: wet paint flowing on another layer replaces the document, but the run goes on as one step.
     func testWetFlowDuringGrowthKeepsOneRun() throws {
         let c = try PaintEditorController(width: 96, height: 96)
