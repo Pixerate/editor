@@ -595,6 +595,59 @@ private func surfaceDiffers(_ a: TiledSurface, _ b: TiledSurface) -> Bool {
     return false
 }
 
+/// The pixels a gradient vortex ink stroke reads and writes: a copy-on-write view of the layer.
+private final class VortexInkTarget: PaintTileTarget {
+    let base: TiledSurface
+    let offset: LayerOffset
+    let lockTransparency: Bool
+    let selection: PaintSelection?
+    var live: [TileKey: ByteTile] = [:]
+    var order: [TileKey] = []
+    init(_ i: VortexStrokeDriverInit) {
+        base = i.base
+        offset = i.offset
+        lockTransparency = i.lockTransparency
+        selection = i.selection
+    }
+    func readTile(_ tx: Int, _ ty: Int) -> ByteTile? {
+        let key = tileKey(tx, ty)
+        if let t = live[key] { return t }
+        guard let t = base.tiles.get(key) else { return nil }
+        return ByteTile(t.data)
+    }
+    func writeTile(_ tx: Int, _ ty: Int) -> ByteTile {
+        let key = tileKey(tx, ty)
+        if let t = live[key] { return t }
+        let t = ByteTile(base.tiles.get(key)?.data ?? [UInt8](repeating: UInt8(truncatingIfNeeded: base.defaultValue), count: TILE * TILE * 4))
+        live[key] = t
+        order.append(key)
+        return t
+    }
+}
+
+/**
+ * Lays a vortex stroke's ink in gradient paint (`paint`): the stroke painted with a dab brush's
+ * paint exchange over a copy of the layer (no pick-up). Returns the inked layer and the rectangle
+ * it changed, or nil when no dab landed.
+ */
+private func layGradientInk(_ i: VortexStrokeDriverInit, _ inkBrush: PaintBrush, _ film: FilmBuffer?, _ points: [PenPoint]) -> (surface: TiledSurface, bounds: RasterRect)? {
+    let target = VortexInkTarget(i)
+    var b = inkBrush
+    b.engine = "dab"
+    b.behavior.pickup = 0
+    let stroke = PaintDabStroke(b, target: target, load: EMPTY_MIXER_LOAD, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: i.copies, paint: i.paint, effect: i.effect, stampArt: i.stampArt)
+    stroke.film = film
+    let rects = stroke.push(points) + stroke.finish()
+    if rects.isEmpty || target.order.isEmpty { return nil }
+    var bounds: RasterRect? = nil
+    for r in rects { bounds = unionRect(bounds, r) }
+    var tiles = i.base.tiles
+    for key in target.order {
+        if let finished = finishTile(target.live[key]!.data, 4, i.base.defaultValue) { tiles.set(key, finished) } else { _ = tiles.delete(key) }
+    }
+    return (TiledSurface(channels: 4, tiles: tiles, defaultValue: i.base.defaultValue), bounds!)
+}
+
 final class VortexStrokeDriver {
     private let initValues: VortexStrokeDriverInit
     private var rawPoints: [PenPoint] = []
@@ -638,7 +691,16 @@ final class VortexStrokeDriver {
             let filmBuf = (i.relief != nil && brush.iridescence != nil)
                 ? FilmBuffer(i.relief!.film, i.offset, i.selection)
                 : nil
-            let dry = DryStroke(
+            if i.paint != nil {
+                // Gradient paint: the ink is laid the way a dab brush paints a gradient (dab by dab,
+                // each dab's colour from the gradient), with no pick-up.
+                if let r = layGradientInk(i, inkBrush, filmBuf, rawPoints) {
+                    preSurface = r.surface
+                    inkBounds = r.bounds
+                    if let filmBuf { preFilm = filmBuf.surface() }
+                }
+            }
+            let dry = i.paint != nil ? nil : DryStroke(
                 inkBrush,
                 grain: i.grain,
                 paperDepth: i.paperDepth,
@@ -647,9 +709,9 @@ final class VortexStrokeDriver {
                 effect: i.effect,
                 stampArt: i.stampArt
             )
-            dry.film = filmBuf
-            let rects = dry.push(rawPoints) + dry.finish()
-            if !rects.isEmpty {
+            dry?.film = filmBuf
+            let rects = dry.map { $0.push(rawPoints) + $0.finish() } ?? []
+            if let dry, !rects.isEmpty {
                 var tiles = i.base.tiles
                 let apply = StrokeApply(
                     mode: .paint,

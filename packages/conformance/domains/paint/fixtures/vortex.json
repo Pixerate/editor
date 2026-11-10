@@ -699,6 +699,102 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "set_paint",
+      "arguments": {
+        "paint": {
+          "type": "gradient",
+          "stops": [
+            {
+              "offset": 0,
+              "color": "#1d4ed8"
+            },
+            {
+              "offset": 1,
+              "color": "#facc15"
+            }
+          ],
+          "map": {
+            "by": "distance",
+            "length": 40,
+            "repeat": "mirror"
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "color": "#1f2937",
+          "paint": {
+            "map": {
+              "by": "distance",
+              "length": 40,
+              "repeat": "mirror",
+              "unit": "px"
+            },
+            "space": "pigment",
+            "stops": [
+              {
+                "color": "#1d4ed8",
+                "offset": 0
+              },
+              {
+                "color": "#facc15",
+                "offset": 1
+              }
+            ],
+            "type": "gradient"
+          },
+          "secondaryColor": "#ffffff"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "ink-vortex",
+        "seed": 30,
+        "points": [
+          {
+            "x": 8,
+            "y": 52
+          },
+          {
+            "x": 32,
+            "y": 56
+          },
+          {
+            "x": 56,
+            "y": 52
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 46,
+            "width": 77,
+            "x": -7,
+            "y": 23
+          },
+          "dabs": 3,
+          "layerId": "@2",
+          "strokeId": "s8",
+          "vortex": {
+            "maxDisplacement": 41.89,
+            "shape": "open"
+          }
+        },
+        "pixels": {
+          "file": "png/vortex.12.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "dcd6767d0ced7eb373ae3adfbd1d0b91cf0308a5c7fb064408570873d5a90835",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

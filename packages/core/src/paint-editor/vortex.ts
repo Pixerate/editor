@@ -22,6 +22,7 @@ import {
   type VelocityGridField,
 } from '../paint/displacement';
 import { applyStrokeToTile, type StrokeApply } from '../paint/brush';
+import { EMPTY_MIXER_LOAD, type PaintTileTarget } from '../paint/exchange';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import {
   finishTile,
@@ -38,6 +39,7 @@ import {
   type PaintBrush,
   type VortexDirection,
 } from './brush-model';
+import { PaintDabStroke } from './dab-stroke';
 import type { EffectPaintPixels } from './effect-paint';
 import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
 import type { Point2 } from './guides';
@@ -679,6 +681,66 @@ function unionRect(a: RasterRect | null, b: RasterRect | null): RasterRect | nul
   };
 }
 
+/**
+ * Lays a vortex stroke's ink in gradient paint (`init.paint`): the stroke painted with a dab
+ * brush's paint exchange over a copy of the layer (no pick-up). Returns the inked layer and the
+ * rectangle it changed, or `null` when no dab landed.
+ */
+function layGradientInk(
+  init: VortexStrokeDriverInit,
+  inkBrush: PaintBrush,
+  film: FilmBuffer | null,
+  points: readonly PenPoint[]
+): { surface: TiledSurface; bounds: RasterRect } | null {
+  const base = init.base;
+  const live = new Map<TileKey, Uint8ClampedArray>();
+  const target: PaintTileTarget = {
+    offset: init.offset,
+    lockTransparency: init.lockTransparency,
+    selection: init.selection,
+    readTile: (tx, ty) => live.get(tileKey(tx, ty)) ?? base.tiles.get(tileKey(tx, ty))?.data ?? null,
+    writeTile: (tx, ty) => {
+      const key = tileKey(tx, ty);
+      let t = live.get(key);
+      if (!t) {
+        const src = base.tiles.get(key)?.data;
+        t = src ? new Uint8ClampedArray(src) : new Uint8ClampedArray(TILE * TILE * 4).fill(base.defaultValue);
+        live.set(key, t);
+      }
+      return t;
+    },
+  };
+  const rgb = (c: readonly number[]): [number, number, number] => [c[0]! / 255, c[1]! / 255, c[2]! / 255];
+  const stroke = new PaintDabStroke(
+    { ...inkBrush, engine: 'dab', behavior: { ...inkBrush.behavior, pickup: 0 } },
+    {
+      target,
+      color: rgb(init.color),
+      secondary: rgb(init.background),
+      load: EMPTY_MIXER_LOAD,
+      grain: init.grain,
+      paperDepth: init.paperDepth,
+      seed: init.seed,
+      copies: init.copies,
+      paint: init.paint,
+      effect: init.effect,
+      stampArt: init.stampArt,
+      film,
+    }
+  );
+  const rects = [...stroke.push(points), ...stroke.finish()];
+  if (!rects.length || !live.size) return null;
+  let bounds: RasterRect | null = null;
+  for (const r of rects) bounds = unionRect(bounds, r);
+  const tiles = new Map<TileKey, Tile>(base.tiles);
+  for (const [key, data] of live) {
+    const finished = finishTile(data, 4, base.defaultValue);
+    if (finished) tiles.set(key, finished);
+    else tiles.delete(key);
+  }
+  return { surface: new TiledSurface(4, tiles, base.defaultValue), bounds: bounds! };
+}
+
 export class VortexStrokeDriver {
   private readonly rawPoints: PenPoint[] = [];
   private warpedSurface: TiledSurface | null = null;
@@ -729,7 +791,19 @@ export class VortexStrokeDriver {
         init.relief && brush.iridescence
           ? new FilmBuffer(init.relief.film, init.offset, init.selection)
           : null;
-      const dry = new DryStroke(inkBrush, {
+      if (init.paint) {
+        // Gradient paint: the ink is laid the way a dab brush paints a gradient (dab by dab, each
+        // dab's colour from the gradient), with no pick-up.
+        const r = layGradientInk(init, inkBrush, filmBuf, this.rawPoints);
+        if (r) {
+          preSurface = r.surface;
+          inkBounds = r.bounds;
+          if (filmBuf) preFilm = filmBuf.surface();
+        }
+      }
+      const dry = init.paint
+        ? null
+        : new DryStroke(inkBrush, {
         grain: init.grain,
         paperDepth: init.paperDepth,
         seed: init.seed,
@@ -738,8 +812,8 @@ export class VortexStrokeDriver {
         stampArt: init.stampArt,
         film: filmBuf,
       });
-      const rects = [...dry.push(this.rawPoints), ...dry.finish()];
-      if (rects.length > 0) {
+      const rects = dry ? [...dry.push(this.rawPoints), ...dry.finish()] : [];
+      if (dry && rects.length > 0) {
         const tiles = new Map<TileKey, Tile>(init.base.tiles);
         const apply: StrokeApply = {
           mode: 'paint',
@@ -763,7 +837,7 @@ export class VortexStrokeDriver {
             touched.set(tileKey(t.tx, t.ty), t);
           }
         }
-        const defaultTile = new Uint8ClampedArray(TILE * TILE * 4);
+        const defaultTile = new Uint8ClampedArray(TILE * TILE * 4).fill(init.base.defaultValue);
         for (const [key, { tx, ty }] of touched) {
           const src = init.base.tiles.get(key)?.data ?? defaultTile;
           const data = applyStrokeToTile(dry.coverage, src, 4, tx, ty, apply);
