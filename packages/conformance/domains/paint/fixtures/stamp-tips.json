@@ -1311,6 +1311,465 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 49,
+                "width": 68,
+                "x": -3,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:57u-99ifx29l64"
+            },
+            "brushSources": [
+              {
+                "height": 16,
+                "id": "comma",
+                "image": "<binary>",
+                "licence": "Made for this scenario; CC0.",
+                "name": "Comma",
+                "origin": "stamp-tips",
+                "width": 16
+              }
+            ],
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 24
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 48,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -3,
+                "y": 2
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "angleJitter": 0.4,
+                    "sizeJitter": 0.2
+                  },
+                  "id": "star-stamp",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Star stamp",
+                  "tip": {
+                    "shape": "stamp",
+                    "size": 12,
+                    "spacing": 0.7,
+                    "stamps": [
+                      "editor:star"
+                    ]
+                  }
+                },
+                "color": "#a03020",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 6
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 30,
+                    "y": 8
+                  },
+                  {
+                    "pressure": 0.7,
+                    "x": 58,
+                    "y": 10
+                  }
+                ],
+                "seed": 201
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "mix": 0.4,
+                      "pickup": 0.5
+                    }
+                  },
+                  "dynamics": {
+                    "flip": "x",
+                    "rotation": "stroke"
+                  },
+                  "id": "soft-comma",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Soft comma",
+                  "tip": {
+                    "grain": {
+                      "contrast": 1.5,
+                      "depth": 0.8,
+                      "invert": true,
+                      "mode": "texturised",
+                      "scale": 0.75,
+                      "source": "source:comma"
+                    },
+                    "hardness": 0.4,
+                    "shape": "stamp",
+                    "size": 11,
+                    "spacing": 0.35,
+                    "stamps": [
+                      "source:comma"
+                    ]
+                  }
+                },
+                "color": "#204080",
+                "id": "s2",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.12549019607843137,
+                    0.25098039215686274,
+                    0.5019607843137255
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 4,
+                    "y": 14
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 24,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 44,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 60,
+                    "y": 22
+                  }
+                ],
+                "seed": 202
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "count": 2,
+                    "flip": "y"
+                  },
+                  "id": "comma-spray",
+                  "kind": "mark",
+                  "marks": {
+                    "density": 0.2,
+                    "kind": "scatter",
+                    "size": 0.4
+                  },
+                  "medium": "dry",
+                  "name": "Comma spray",
+                  "tip": {
+                    "grain": {
+                      "contrast": 1,
+                      "depth": 0.5,
+                      "invert": false,
+                      "mode": "texturised",
+                      "scale": 0.5,
+                      "source": "canvas"
+                    },
+                    "shape": "stamp",
+                    "size": 14,
+                    "spacing": 0.8,
+                    "stamps": [
+                      "source:comma"
+                    ]
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#306030",
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 6,
+                    "y": 28
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 32,
+                    "y": 30
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 58,
+                    "y": 28
+                  }
+                ],
+                "seed": 203
+              },
+              {
+                "brush": {
+                  "id": "comma-dots",
+                  "kind": "mark",
+                  "marks": {
+                    "count": 6,
+                    "kind": "particles",
+                    "size": 0.3,
+                    "stampOrder": "random"
+                  },
+                  "name": "Comma dots",
+                  "tip": {
+                    "shape": "stamp",
+                    "size": 10,
+                    "stamps": [
+                      "source:comma",
+                      "editor:heart"
+                    ]
+                  }
+                },
+                "color": "#603080",
+                "id": "s4",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 6,
+                    "y": 36
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 32,
+                    "y": 38
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 58,
+                    "y": 36
+                  }
+                ],
+                "seed": 204
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "count": 3,
+                    "scatter": 0.5
+                  },
+                  "id": "grain-eraser",
+                  "kind": "tool",
+                  "name": "Grain eraser",
+                  "tip": {
+                    "grain": {
+                      "contrast": 2,
+                      "depth": 0.9,
+                      "invert": false,
+                      "mode": "texturised",
+                      "scale": 1,
+                      "source": "rough"
+                    },
+                    "shape": "round",
+                    "size": 8
+                  },
+                  "tool": "eraser"
+                },
+                "color": "#1f2937",
+                "id": "s5",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 1,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 60,
+                    "y": 44
+                  }
+                ],
+                "seed": 205
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "flip": "xy"
+                  },
+                  "id": "comma-smudge",
+                  "kind": "tool",
+                  "name": "Comma smudge",
+                  "tip": {
+                    "grain": {
+                      "contrast": 1,
+                      "depth": 0.6,
+                      "invert": false,
+                      "mode": "moving",
+                      "scale": 1,
+                      "source": "source:comma"
+                    },
+                    "shape": "round",
+                    "size": 10
+                  },
+                  "tool": "smudge"
+                },
+                "color": "#1f2937",
+                "id": "s6",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 1,
+                    "x": 60,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 4,
+                    "y": 44
+                  }
+                ],
+                "seed": 206
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/stamp-tips.20.png",
+          "width": 64,
+          "height": 48,
+          "sha256": "314b66534441ade3112d69f7a59644e6820a73ef6415a4d208c229bce6e3a452",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

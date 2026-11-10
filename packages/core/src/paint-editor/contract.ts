@@ -318,6 +318,8 @@ export function createPaintConformanceHost(setup: Omit<PaintEditorOptions, 'stic
   return {
     callTool: (name, args) => registry.callTool(name, args),
     document: () => toEditorDocumentFile(createPaintEditorDocument(controller)),
+    save: () => controller.toJSON(),
+    load: (document) => controller.loadJSON(document),
     pixels: ({ paper }) => controller.compositePixels({ paper }),
     isGeneratedId: (value) => GENERATED_ID.test(value),
     dispose: () => controller.dispose(),

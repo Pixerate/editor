@@ -795,6 +795,603 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 66,
+                "width": 66,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Wet",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 176,
+                "width": 196,
+                "x": -66,
+                "y": -56
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@1": "pixerate-asset:o7a-25iel3jgo8j",
+              "@2": "pixerate-asset:76y-v9ku05bqhk"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -66,
+                "y": -56
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Wet",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureFlow": 1,
+                    "pressureSize": false,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.3,
+                    "tiltRoundness": 0.6,
+                    "tiltSize": 0.5
+                  },
+                  "id": "airbrush",
+                  "kind": "mark",
+                  "medium": "spray",
+                  "name": "Airbrush",
+                  "tip": {
+                    "flow": 0.06,
+                    "hardness": 0,
+                    "shape": "round",
+                    "size": 90,
+                    "spacing": 0.04
+                  },
+                  "variety": "airbrush"
+                },
+                "color": "#ef4444",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 12,
+                    "y": 22
+                  },
+                  {
+                    "x": 52,
+                    "y": 22
+                  }
+                ],
+                "seed": 1
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureFlow": 1,
+                    "pressureSize": false,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.3,
+                    "tiltRoundness": 0.6,
+                    "tiltSize": 0.5
+                  },
+                  "id": "airbrush",
+                  "kind": "mark",
+                  "medium": "spray",
+                  "name": "Airbrush",
+                  "tip": {
+                    "flow": 0.06,
+                    "hardness": 0,
+                    "shape": "round",
+                    "size": 90,
+                    "spacing": 0.04
+                  },
+                  "variety": "airbrush"
+                },
+                "color": "#2563eb",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 12,
+                    "y": 42
+                  },
+                  {
+                    "x": 52,
+                    "y": 42
+                  }
+                ],
+                "seed": 2
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "smoothing": 0.3
+                  },
+                  "id": "whirlpool",
+                  "kind": "mark",
+                  "marks": {
+                    "kind": "vortex",
+                    "pull": 0.75,
+                    "reach": 4,
+                    "turns": 2.5
+                  },
+                  "medium": "paint",
+                  "name": "Whirlpool",
+                  "tip": {
+                    "hardness": 0.65,
+                    "shape": "round",
+                    "size": 28
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 32,
+                    "y": 32
+                  }
+                ],
+                "seed": 10
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "smoothing": 0.3
+                  },
+                  "id": "vortex",
+                  "kind": "mark",
+                  "marks": {
+                    "kind": "vortex"
+                  },
+                  "medium": "paint",
+                  "name": "Vortex",
+                  "tip": {
+                    "hardness": 0.7,
+                    "shape": "round",
+                    "size": 24
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s4",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 16,
+                    "y": 24
+                  },
+                  {
+                    "x": 32,
+                    "y": 24
+                  },
+                  {
+                    "x": 48,
+                    "y": 24
+                  }
+                ],
+                "seed": 11
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "smoothing": 0.3
+                  },
+                  "id": "ink-vortex",
+                  "kind": "mark",
+                  "marks": {
+                    "ink": 0.85,
+                    "kind": "vortex"
+                  },
+                  "medium": "paint",
+                  "name": "Ink vortex",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round"
+                  }
+                },
+                "color": "#7c3aed",
+                "id": "s5",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 32,
+                    "y": 20
+                  },
+                  {
+                    "x": 44,
+                    "y": 32
+                  },
+                  {
+                    "x": 32,
+                    "y": 44
+                  },
+                  {
+                    "x": 20,
+                    "y": 32
+                  },
+                  {
+                    "x": 31,
+                    "y": 21
+                  }
+                ],
+                "seed": 12
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "mix": 0.45,
+                      "pickup": 0.45
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "pigment": 0.45,
+                      "rewet": 0.2,
+                      "water": 0.8
+                    }
+                  },
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "pressureSize": false,
+                    "rotation": "stroke",
+                    "smoothing": 0.3
+                  },
+                  "id": "watercolor-wash",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Wash brush",
+                  "tip": {
+                    "angle": 90,
+                    "hardness": 0.35,
+                    "roundness": 0.45,
+                    "shape": "flat",
+                    "size": 90
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#0284c7",
+                "id": "s6",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.00784313725490196,
+                    0.5176470588235295,
+                    0.7803921568627451
+                  ]
+                },
+                "points": [
+                  {
+                    "x": 16,
+                    "y": 32
+                  },
+                  {
+                    "x": 48,
+                    "y": 32
+                  }
+                ],
+                "seed": 20,
+                "steps": [
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.35,
+                      "water": 0.6
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "smoothing": 0.3
+                  },
+                  "id": "wet-vortex",
+                  "kind": "mark",
+                  "marks": {
+                    "kind": "vortex",
+                    "pull": 0.35,
+                    "reach": 3.5
+                  },
+                  "medium": "paint",
+                  "name": "Wet vortex",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#1f2937",
+                "id": "s7",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "x": 20,
+                    "y": 32
+                  },
+                  {
+                    "x": 32,
+                    "y": 22
+                  },
+                  {
+                    "x": 44,
+                    "y": 32
+                  }
+                ],
+                "seed": 21,
+                "steps": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "smoothing": 0.3
+                  },
+                  "id": "ink-vortex",
+                  "kind": "mark",
+                  "marks": {
+                    "ink": 0.85,
+                    "kind": "vortex"
+                  },
+                  "medium": "paint",
+                  "name": "Ink vortex",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round"
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s8",
+                "layerId": "@2",
+                "paint": {
+                  "map": {
+                    "by": "distance",
+                    "length": 40,
+                    "repeat": "mirror",
+                    "unit": "px"
+                  },
+                  "space": "pigment",
+                  "stops": [
+                    {
+                      "color": "#1d4ed8",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#facc15",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "gradient"
+                },
+                "points": [
+                  {
+                    "x": 8,
+                    "y": 52
+                  },
+                  {
+                    "x": 32,
+                    "y": 56
+                  },
+                  {
+                    "x": 56,
+                    "y": 52
+                  }
+                ],
+                "seed": 30
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "@2": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.45,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "wetEvents": [
+              {
+                "at": 7,
+                "clock": 8,
+                "kind": "dry"
+              }
+            ],
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/vortex.13.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "d4bd209f54586b2222e407a584e9cc0611bb9b51b19866508ae80967417dbde1",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

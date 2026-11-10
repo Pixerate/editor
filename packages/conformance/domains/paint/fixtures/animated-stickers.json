@@ -2187,6 +2187,774 @@
           "sticker": null
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@3",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 36,
+                "width": 72,
+                "x": 12,
+                "y": 6
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@3",
+              "locks": {},
+              "name": "Placed",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 14,
+                "width": 89,
+                "x": 1,
+                "y": 17
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Random",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 14,
+                "width": 89,
+                "x": 1,
+                "y": 9
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Performed",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@4",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@3",
+            "assets": {
+              "@1": "<binary>",
+              "@2": "<binary>",
+              "@3": "pixerate-asset:iu-2et38nszddq"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 48,
+                  "y": 24
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 48,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@4",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Performed",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 9
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Random",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 17
+              },
+              {
+                "asset": "@3",
+                "blend": "normal",
+                "id": "@3",
+                "name": "Placed",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 12,
+                "y": 6
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 2,
+                "data": {
+                  "stickers": [
+                    {
+                      "color": "#0ea5e9",
+                      "frame": 2,
+                      "id": "st25",
+                      "opacity": 1,
+                      "ref": "fake:weather-wind",
+                      "rotation": 0,
+                      "seed": 1956676679,
+                      "size": 40,
+                      "x": 30,
+                      "y": 24
+                    },
+                    {
+                      "color": "#0ea5e9",
+                      "id": "st26",
+                      "opacity": 1,
+                      "ref": "fake:weather-wind",
+                      "rotation": 0,
+                      "seed": 2098028833,
+                      "size": 30,
+                      "x": 70,
+                      "y": 24
+                    }
+                  ]
+                },
+                "kind": "stickers",
+                "layerId": "@3"
+              },
+              {
+                "at": 2,
+                "data": {
+                  "stickers": [
+                    {
+                      "color": "#0ea5e9",
+                      "frame": 3,
+                      "id": "st25",
+                      "opacity": 1,
+                      "ref": "fake:weather-wind",
+                      "rotation": 0,
+                      "seed": 1956676679,
+                      "size": 40,
+                      "x": 30,
+                      "y": 24
+                    },
+                    {
+                      "color": "#0ea5e9",
+                      "id": "st26",
+                      "opacity": 1,
+                      "ref": "fake:weather-wind",
+                      "rotation": 0,
+                      "seed": 2098028833,
+                      "size": 30,
+                      "x": 70,
+                      "y": 24
+                    }
+                  ]
+                },
+                "kind": "stickers",
+                "layerId": "@3"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "stickers": {
+              "@1": [
+                {
+                  "color": "#14b8a6",
+                  "id": "st1",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 903981921,
+                  "size": 16.2,
+                  "x": 8,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "id": "st2",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 517413328,
+                  "size": 16.2,
+                  "x": 14.75,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "id": "st3",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 81077706,
+                  "size": 16.2,
+                  "x": 21.5,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 1,
+                  "id": "st4",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 295764861,
+                  "size": 16.2,
+                  "x": 28.25,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 1,
+                  "id": "st5",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 31221324,
+                  "size": 16.2,
+                  "x": 35,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 1,
+                  "id": "st6",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 339150308,
+                  "size": 16.2,
+                  "x": 41.75,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 2,
+                  "id": "st7",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 146057767,
+                  "size": 16.2,
+                  "x": 48.5,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 2,
+                  "id": "st8",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 156616913,
+                  "size": 16.2,
+                  "x": 55.25,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 2,
+                  "id": "st9",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 604269345,
+                  "size": 16.2,
+                  "x": 62,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 3,
+                  "id": "st10",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 440620296,
+                  "size": 16.2,
+                  "x": 68.75,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 3,
+                  "id": "st11",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 472844637,
+                  "size": 16.2,
+                  "x": 75.5,
+                  "y": 16
+                },
+                {
+                  "color": "#14b8a6",
+                  "frame": 3,
+                  "id": "st12",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 736450911,
+                  "size": 16.2,
+                  "x": 82.25,
+                  "y": 16
+                }
+              ],
+              "@2": [
+                {
+                  "color": "#f59e0b",
+                  "frame": 2,
+                  "id": "st13",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 986643711,
+                  "size": 16.2,
+                  "x": 8,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 3,
+                  "id": "st14",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 658656963,
+                  "size": 16.2,
+                  "x": 14.75,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 1,
+                  "id": "st15",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 924624607,
+                  "size": 16.2,
+                  "x": 21.5,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 3,
+                  "id": "st16",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 852305351,
+                  "size": 16.2,
+                  "x": 28.25,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "id": "st17",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 325190391,
+                  "size": 16.2,
+                  "x": 35,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 3,
+                  "id": "st18",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 955405485,
+                  "size": 16.2,
+                  "x": 41.75,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 1,
+                  "id": "st19",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 644678257,
+                  "size": 16.2,
+                  "x": 48.5,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 2,
+                  "id": "st20",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 928611033,
+                  "size": 16.2,
+                  "x": 55.25,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 1,
+                  "id": "st21",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 797462315,
+                  "size": 16.2,
+                  "x": 62,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "id": "st22",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 594874537,
+                  "size": 16.2,
+                  "x": 68.75,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 1,
+                  "id": "st23",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 539820030,
+                  "size": 16.2,
+                  "x": 75.5,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 3,
+                  "id": "st24",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 486771967,
+                  "size": 16.2,
+                  "x": 82.25,
+                  "y": 24
+                }
+              ],
+              "@3": [
+                {
+                  "color": "#0ea5e9",
+                  "frame": 3,
+                  "id": "st25",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 1956676679,
+                  "size": 40,
+                  "x": 30,
+                  "y": 24
+                },
+                {
+                  "color": "#0ea5e9",
+                  "id": "st26",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 2098028833,
+                  "size": 30,
+                  "x": 70,
+                  "y": 24
+                }
+              ]
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "smoothing": 0.2
+                  },
+                  "id": "sticker-stars",
+                  "kind": "mark",
+                  "marks": {
+                    "colourJitter": 0,
+                    "density": 0.6,
+                    "kind": "objects",
+                    "rotationJitter": 0,
+                    "scatter": 0,
+                    "sizeJitter": 0
+                  },
+                  "name": "Star stickers",
+                  "tip": {
+                    "shape": "stamp",
+                    "size": 18,
+                    "stamps": [
+                      "fake:weather-wind"
+                    ]
+                  }
+                },
+                "color": "#14b8a6",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "t": 0,
+                    "x": 8,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.8,
+                    "t": 80,
+                    "x": 24,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.8,
+                    "t": 160,
+                    "x": 40,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.8,
+                    "t": 240,
+                    "x": 56,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.8,
+                    "t": 320,
+                    "x": 72,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.8,
+                    "t": 400,
+                    "x": 88,
+                    "y": 16
+                  }
+                ],
+                "seed": 11
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "smoothing": 0.2
+                  },
+                  "id": "sticker-stars",
+                  "kind": "mark",
+                  "marks": {
+                    "colourJitter": 0,
+                    "density": 0.6,
+                    "frameMode": "random",
+                    "kind": "objects",
+                    "rotationJitter": 0,
+                    "scatter": 0,
+                    "sizeJitter": 0
+                  },
+                  "name": "Star stickers",
+                  "tip": {
+                    "shape": "stamp",
+                    "size": 18,
+                    "stamps": [
+                      "fake:weather-wind"
+                    ]
+                  }
+                },
+                "color": "#f59e0b",
+                "id": "s2",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 8,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 40,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 56,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 72,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 88,
+                    "y": 24
+                  }
+                ],
+                "seed": 42
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 96
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/animated-stickers.21.png",
+          "width": 96,
+          "height": 48,
+          "sha256": "91a3b3ec90bf7ae94ddd994e073acffaf4c453e872325f60c5306e760a83689c",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

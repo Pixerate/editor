@@ -39,6 +39,10 @@ public final class PaintConformanceHost: ConformanceHost {
 
     public func document() throws -> JSONValue { controller.editorDocument() }
 
+    public func save() throws -> JSONValue? { .object(controller.toJSON()) }
+
+    public func load(_ document: JSONValue) throws -> [String]? { try controller.loadJSON(document) }
+
     public func pixels(paper: Bool?) throws -> ConformanceImage {
         let p = controller.compositePixels(paper: paper)
         return ConformanceImage(width: p.width, height: p.height, data: p.data)

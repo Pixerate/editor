@@ -276,6 +276,62 @@
           "width": 128
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 48,
+                "width": 64,
+                "x": 0,
+                "y": 3
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "pixels": {
+          "file": "png/culture-replay.10.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "5b3c7c8b30403046602912129b710a2ba72117eccba00b111286e70c2083d959",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "export_high_res",
+      "arguments": {
+        "scale": 2,
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 9150,
+          "data": "<binary>",
+          "height": 128,
+          "mimeType": "image/png",
+          "width": 128
+        }
+      }
     }
   ]
 }
