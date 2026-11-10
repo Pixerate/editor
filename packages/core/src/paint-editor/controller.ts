@@ -222,6 +222,7 @@ import {
 } from './ferro';
 import {
   DEFAULT_AGE,
+  bakeAgedPixels,
   type AgeFieldLayer,
   isAgeActive,
   normalizeAge,
@@ -784,6 +785,16 @@ function unionRect(a: RasterRect | null, b: RasterRect | null): RasterRect | nul
 }
 
 const isPixelLayer = (l: PaintLayer | undefined): l is PaintPixelLayer => l?.type === 'pixel';
+
+/** The pixel layers that are drawn and hold paint, bottom first: visible, non-empty, not inside a hidden group. */
+function paintedPixelLayers(layers: readonly PaintLayer[], out: PaintPixelLayer[] = []): PaintPixelLayer[] {
+  for (const l of layers) {
+    if (!l.visible) continue;
+    if (l.type === 'group') paintedPixelLayers(l.children, out);
+    else if (isPixelLayer(l) && l.surface.tiles.size > 0) out.push(l);
+  }
+  return out;
+}
 
 export class PaintEditorController {
   private doc: PaintDocumentState;
@@ -5020,8 +5031,14 @@ export class PaintEditorController {
     }
     const before = this.doc;
     const bakedAge: PaintAgeSettings = { ...this.age };
-    const agedPixels = this.compositePixels({ paper: false, wet: 'dried', age: true });
-    const surface = surfaceFromPixels(agedPixels, 4);
+    // Laid over the painting as it shows once `years` is 0, the layer must give the aged preview
+    // (backlight aside, which stays on top): the paint's alpha, the colour solved over the paper.
+    const { width, height } = this.doc.canvas;
+    const all = { x: 0, y: 0, width, height };
+    const paint = this.exportCompositor.composite(this.renderLayers({ paper: false, wet: 'dried', age: false }), all, this.sources());
+    const plain = this.exportCompositor.composite(this.renderLayers({ paper: true, wet: 'dried', age: false }, false, false), all, this.sources());
+    const aged = this.exportCompositor.composite(this.renderLayers({ paper: true, wet: 'dried', age: true }, false, false), all, this.sources());
+    const surface = surfaceFromPixels({ width, height, data: bakeAgedPixels(aged, plain, paint) }, 4);
     const bounds = contentBounds(surface);
     const label = options.name?.trim() ? options.name.trim() : `Aged (${Math.round(bakedAge.years)} yr)`;
     const newLayer: PaintPixelLayer = {
@@ -6280,8 +6297,7 @@ export class PaintEditorController {
    */
   private ageNode(base: PaintLayer[], paintedLayerCount: number): AgeNode {
     const field: AgeFieldLayer[] = [];
-    for (const l of flattenLayers(base)) {
-      if (!isPixelLayer(l) || !l.visible || !l.surface.tiles.size) continue;
+    for (const l of paintedPixelLayers(base)) {
       const height = (this.liveThick?.layerId === l.id ? this.liveThick.channels : this.doc.thick?.[l.id])?.height;
       field.push({ surface: l.surface, ...(height ? { height } : {}), offset: l.offset });
     }
@@ -6353,10 +6369,10 @@ export class PaintEditorController {
     return { type: 'pixel', id: BACKLIGHT_LAYER_ID, name: 'Backlight', visible: true, opacity: 1, blend: 'linear-dodge', surface, offset: { x: 0, y: 0 } } as PaintPixelLayer;
   }
 
-  private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
+  private renderLayers(options: RenderOptions, view = false, withBacklight = true): ViewLayer[] {
     const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers(this.currentLayers(view)) : this.currentLayers(view);
     const useAge = (options.age ?? view) && isAgeActive(this.age);
-    const paintedCount = useAge ? Math.max(1, flattenLayers(base).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).length) : 1;
+    const paintedCount = useAge ? Math.max(1, paintedPixelLayers(base).length) : 1;
     let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base), useAge, paintedCount)));
     if (options.layerIds) {
       const picked: PaintLayer[] = [];
@@ -6366,9 +6382,11 @@ export class PaintEditorController {
     // Ageing is one pass over the composite (paper and paint), not inside each layer: a Multiply
     // layer is not yellowed twice and an Add (light spill) layer does not take the dust and bleach.
     // A copy: `layers` can be the document's own array.
-    const top: ViewLayer[] = useAge ? [...layers, this.ageNode(base, paintedCount)] : [...layers];
+    // Only the layers drawn mark the paint (`layerIds` picks some, shown whatever their visibility).
+    const fieldBase = options.layerIds ? options.layerIds.map((id) => ({ ...(findLayer(base, id)?.layer ?? this.requireLayer(id)), visible: true }) as PaintLayer) : base;
+    const top: ViewLayer[] = useAge ? [...layers, this.ageNode(fieldBase, paintedCount)] : [...layers];
     // Backlit paper shines through everything, the aged painting included: its light goes on top.
-    const backlight = options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
+    const backlight = withBacklight && options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
     if (backlight) top.push(backlight);
     const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting)];
     if (options.paper !== false && this.doc.paperEffect) under.push(this.paperEffectNode(this.doc.paperEffect));

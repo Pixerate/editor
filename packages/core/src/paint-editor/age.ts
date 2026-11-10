@@ -481,6 +481,37 @@ export function ageCompositeRegion(
 }
 
 /**
+ * The pixels `bake_age` commits: a layer that, laid Normal over the painting as it will show
+ * without ageing (`plain`, opaque: paper and paint), gives the aged composite (`aged`). Its alpha
+ * is the paint's own (`paint`, the composite without the paper; raised where the ageing needs more
+ * to reach), so bare paper stays clear, and its colour solves `plain · (1 − a) + colour · a = aged`,
+ * so a translucent wash or a Multiply /
+ * Add layer over the paper bakes to what the preview shows rather than to its colour on its own.
+ * All three are canvas-sized RGBA (straight alpha).
+ */
+export function bakeAgedPixels(aged: Uint8ClampedArray, plain: Uint8ClampedArray, paint: Uint8ClampedArray): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(paint.length);
+  for (let i = 0; i < paint.length; i += 4) {
+    let a = paint[i + 3];
+    if (a === 0) continue;
+    // A thin layer can only move the pixel so far: raise the alpha to what the change needs
+    // (dark cracks under a light wash), so the colour stays within 0..255 and the result is exact.
+    for (let k = 0; k < 3 && a < 255; k++) {
+      const v = aged[i + k];
+      const u = plain[i + k];
+      const need = v < u ? (255 * (u - v)) / u : v > u ? (255 * (v - u)) / (255 - u) : 0;
+      if (need > a) a = Math.min(255, Math.ceil(need));
+    }
+    out[i + 3] = a;
+    for (let k = 0; k < 3; k++) {
+      // Uint8ClampedArray clamps to 0..255 (and rounds half to even, so round first as Swift does).
+      out[i + k] = a === 255 ? aged[i + k] : Math.round((aged[i + k] * 255 - plain[i + k] * (255 - a)) / a);
+    }
+  }
+  return out;
+}
+
+/**
  * Per-layer cache of aged colour tiles.
  * @deprecated The editor ages the composite in one pass (`ageCompositeRegion`); ageing each layer
  * yellows Multiply / Overlay layers twice and brightens Add layers.

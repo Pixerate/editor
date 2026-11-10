@@ -19,7 +19,7 @@ Ageing is **one pass over the finished composite** (paper, effect paper and ever
 
 Like `set_lighting` and `set_uv_light`, `set_age` is document state (`SET` semantics, not an undo step) and is saved with the document. Undoing or redoing another step (a stroke, a fill) keeps the current age; only undoing `bake_age` brings back the `years` it reset. `RenderOptions.age` is on by default in the viewport and `render_preview`, and opt-in (`age: true`) for exports.
 
-Call `bake_age` to commit the aged composite (the paint without the paper, exactly as the preview shows it) into a new pixel layer (`"Aged (<years> yr)"`) at the top of the stack as a single undo step and reset `years` to `0`.
+Call `bake_age` to commit the aged look into a new pixel layer (`"Aged (<years> yr)"`) at the top of the stack as a single undo step and reset `years` to `0`. Over the painting below it, the layer gives exactly what the preview showed where there is paint (Multiply glazes, light spill and translucent washes included: its colours are solved over the paper, so do not move it or hide the layers under it and expect the same look); bare paper is left clear and is unaged once `years` is `0`. Hidden layers, and layers inside hidden groups, are not part of the painting for ageing or baking.
 
 ## 2. X-ray view (`render_xray`, `set_xray_view`)
 

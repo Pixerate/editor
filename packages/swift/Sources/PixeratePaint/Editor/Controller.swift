@@ -2136,7 +2136,7 @@ public final class PaintEditorController {
     }
 
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
-    func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display", view: Bool = false, age ageOpt: Bool? = nil) -> [ViewLayer] {
+    func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display", view: Bool = false, age ageOpt: Bool? = nil, backlight withBacklight: Bool = true) -> [ViewLayer] {
         let (shown, winding) = view ? vortexViewLayers(currentLayers()) : (currentLayers(), false)
         let base = wetMode == "dried" ? driedLayers(shown) : shown
         let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in
@@ -2154,7 +2154,7 @@ public final class PaintEditorController {
             return (l.layerId, f, b.ferro.amount > 0 ? b.ferro : (doc.ferroSettings?.get(l.layerId) ?? DEFAULT_FERRO))
         }
         let useAge = (ageOpt ?? view) && isAgeActive(age)
-        let paintedCount = useAge ? Swift.max(1, flattenLayers(base).filter { $0.isPixel && $0.visible && !$0.pixelSurface.tiles.isEmpty }.count) : 1
+        let paintedCount = useAge ? Swift.max(1, paintedPixelLayers(base).count) : 1
         var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live, liveFerro: liveFerro, useAge: useAge, paintedLayerCount: paintedCount)), liveThick: live)
         if let layerIds {
             layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }
@@ -2162,10 +2162,12 @@ public final class PaintEditorController {
         // Ageing is one pass over the composite (paper and paint), not inside each layer: a Multiply
         // layer is not yellowed twice and an Add (light spill) layer does not take the dust and bleach.
         var top = layers.map(ViewLayer.init)
-        if useAge { top.append(ageNode(base, paintedLayerCount: paintedCount, liveThick: live)) }
+        // Only the layers drawn mark the paint (`layerIds` picks some, shown whatever their visibility).
+        let fieldBase = layerIds.map { ids in ids.compactMap { id in (findLayer(base, id)?.layer ?? getLayer(id))?.copy(visible: true) } } ?? base
+        if useAge { top.append(ageNode(fieldBase, paintedLayerCount: paintedCount, liveThick: live)) }
         // Backlit paper shines through everything, the aged painting included: its light goes on top.
         let baseIsCommitted = !winding && (liveStroke?.open != true || liveStroke!.isWet) && !hasActiveBlastAnimation && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
-        if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { top.append(ViewLayer(backlight)) }
+        if withBacklight && paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { top.append(ViewLayer(backlight)) }
         let effectivePaper = uvLight.on ? uvPaper(doc.paper, uvLight) : doc.paper
         var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(effectivePaper, light: lighting)]
         if paper != false, let p = doc.paperEffect { under.append(paperEffectNode(p)) }
@@ -2174,10 +2176,22 @@ public final class PaintEditorController {
         return out
     }
 
+    /// The pixel layers that are drawn and hold paint, bottom first: visible, non-empty, not inside a hidden group.
+    func paintedPixelLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
+        var out: [PaintLayer] = []
+        func walk(_ list: [PaintLayer]) {
+            for l in list where l.visible {
+                if let c = l.children { walk(c) } else if l.isPixel && !l.pixelSurface.tiles.isEmpty { out.append(l) }
+            }
+        }
+        walk(layers)
+        return out
+    }
+
     /// Time-machine ageing as one pass over the composite (above the painted layers, below the backlight); `base` gives where the paint is.
     func ageNode(_ base: [PaintLayer], paintedLayerCount: Int, liveThick: (layerId: String, channels: ThickChannels)? = nil) -> ViewLayer {
         var field: [AgeFieldLayer] = []
-        for l in flattenLayers(base) where l.isPixel && l.visible && !l.pixelSurface.tiles.isEmpty {
+        for l in paintedPixelLayers(base) {
             let ch = liveThick?.layerId == l.id ? liveThick!.channels : doc.thick?.get(l.id)
             field.append(AgeFieldLayer(surface: l.pixelSurface, height: ch?.height, offset: l.pixelOffset))
         }

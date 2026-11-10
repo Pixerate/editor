@@ -402,6 +402,37 @@ public func agePaperTile(
     return out
 }
 
+/**
+ * The pixels `bake_age` commits (`bakeAgedPixels`): a layer that, laid Normal over the painting as it
+ * will show without ageing (`plain`, opaque), gives the aged composite (`aged`). Its alpha is the
+ * paint's own (`paint`, raised where the ageing needs more to reach), so bare paper stays clear, and
+ * its colour solves `plain · (1 − a) + colour · a = aged`.
+ */
+public func bakeAgedPixels(_ aged: [UInt8], _ plain: [UInt8], _ paint: [UInt8]) -> [UInt8] {
+    var out = [UInt8](repeating: 0, count: paint.count)
+    var i = 0
+    while i < paint.count {
+        var a = Int(paint[i + 3])
+        if a > 0 {
+            var k = 0
+            while k < 3 && a < 255 {
+                let v = Double(aged[i + k]), u = Double(plain[i + k])
+                let need = v < u ? (255 * (u - v)) / u : v > u ? (255 * (v - u)) / (255 - u) : 0
+                if need > Double(a) { a = Swift.min(255, Int(need.rounded(.up))) }
+                k += 1
+            }
+            out[i + 3] = UInt8(a)
+            for k in 0..<3 {
+                if a == 255 { out[i + k] = aged[i + k]; continue }
+                let c = JS.round((Double(aged[i + k]) * 255 - Double(plain[i + k]) * Double(255 - a)) / Double(a))
+                out[i + k] = UInt8(Swift.max(0, Swift.min(255, c)))
+            }
+        }
+        i += 4
+    }
+    return out
+}
+
 /// A painted layer as the composite ageing pass reads it: its alpha marks paint, its thick height feeds the cracks.
 public struct AgeFieldLayer {
     /// The layer's RGBA pixels (only alpha is read).
@@ -877,8 +908,15 @@ extension PaintEditorController {
         }
         let before = doc
         let bakedAge = age
-        let agedPixels = compositePixels(paper: false, wet: "dried", age: true)
-        let surface = surfaceFromPixels(width: agedPixels.width, height: agedPixels.height, data: agedPixels.data, channels: 4)
+        // Laid over the painting as it shows once `years` is 0, the layer must give the aged preview
+        // (backlight aside, which stays on top): the paint's alpha, the colour solved over the paper.
+        let w = doc.canvas.width, h = doc.canvas.height
+        let all = RasterRect(x: 0, y: 0, width: w, height: h)
+        let compositor = createPaintCompositor()
+        let paint = compositor.composite(renderLayers(paper: false, wet: "dried", age: false), all, sources())
+        let plain = compositor.composite(renderLayers(paper: true, wet: "dried", age: false, backlight: false), all, sources())
+        let aged = compositor.composite(renderLayers(paper: true, wet: "dried", age: true, backlight: false), all, sources())
+        let surface = surfaceFromPixels(width: w, height: h, data: bakeAgedPixels(aged, plain, paint), channels: 4)
         let bounds = contentBounds(surface)
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let label = !trimmed.isEmpty ? trimmed : "Aged (\(Int(JS.round(bakedAge.years))) yr)"
