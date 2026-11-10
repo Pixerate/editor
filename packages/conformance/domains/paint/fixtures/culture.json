@@ -10316,6 +10316,46 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 30,
+                "width": 61,
+                "x": 0,
+                "y": 18
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "pixels": {
+          "file": "png/culture.8.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "a2adbe50d26748de3c16bee6cf25019991d8b5096634e46b7d0df8d0447ad296",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

@@ -43,6 +43,7 @@ describe('the paint conformance scenarios', () => {
       // Numbers within CONFORMANCE_NUMBER_TOLERANCE match (trig may differ in the last bits across CPUs); toEqual shows the diff.
       if (!conformanceValuesMatch(out.result, step.expect!.result)) expect(out.result, label).toEqual(step.expect!.result);
       expect(out.isError, label).toBe(step.expect!.isError === true);
+      if ((step.reload || step.load !== undefined) && !conformanceValuesMatch(out.loaded, step.expect!.loaded)) expect(out.loaded, `${label} loaded`).toEqual(step.expect!.loaded);
       if (step.document && !conformanceValuesMatch(out.document, step.expect!.document)) expect(out.document, `${label} document`).toEqual(step.expect!.document);
       if (step.pixels) {
         const recorded = step.expect!.pixels!;
@@ -52,6 +53,41 @@ describe('the paint conformance scenarios', () => {
         expect(sha256(new Uint8Array(png.data.buffer, png.data.byteOffset, png.data.byteLength)), `${recorded.file} holds the recorded pixels`).toBe(recorded.sha256);
       }
     });
+  }, 60_000);
+
+  // A reload step compares the other implementation's reopened document with this core's, which
+  // only proves a feature survives saving if this core's own save → load → save loses nothing.
+  const reloading = scenarios.filter((s) => s.steps.some((step) => step.reload));
+  it.each(reloading.map((s) => [s.id, s] as const))('%s reopens what it saved unchanged', async (_id, scenario) => {
+    const host = createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() });
+    const save = host.save!.bind(host);
+    const load = host.load!.bind(host);
+    // `lastGrownAt` is the clock at save time (growWhileClosed); everything else must come back as saved.
+    const comparable = (doc: unknown) => {
+      const copy = JSON.parse(JSON.stringify(doc)) as { cultures?: { lastGrownAt?: number } };
+      delete copy.cultures?.lastGrownAt;
+      return copy;
+    };
+    let pending: { pixels: string } | null = null;
+    let checked = 0;
+    host.save = () => {
+      pending = { pixels: sha256(host.pixels({}).data) };
+      return save();
+    };
+    host.load = (document) => {
+      const reload = pending;
+      pending = null;
+      const problems = load(document);
+      // `load` steps open another document on purpose; only reloads must change nothing.
+      if (!reload) return problems;
+      checked++;
+      expect(problems, `${scenario.id}: problems reopening its own save`).toEqual([]);
+      expect(comparable(save()), `${scenario.id}: the document saved again after reopening`).toEqual(comparable(document));
+      expect(sha256(host.pixels({}).data), `${scenario.id}: the pixels after reopening`).toBe(reload.pixels);
+      return problems;
+    };
+    await runConformanceScenario(scenario, host);
+    expect(checked).toBe(scenario.steps.filter((step) => step.reload).length);
   }, 60_000);
 });
 

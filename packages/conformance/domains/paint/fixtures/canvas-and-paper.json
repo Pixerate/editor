@@ -710,6 +710,155 @@
         },
         "isError": true
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {},
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 16,
+                  "y": 12
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 24,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "paper": {
+              "absorption": 0.55,
+              "color": "#f8f6ef",
+              "depth": 0.25,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Hot pressed watercolour",
+              "pattern": "hot-pressed",
+              "permeability": 0.4,
+              "preset": "hot-pressed",
+              "roughness": 0.25,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 32
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/canvas-and-paper.11.png",
+          "width": 32,
+          "height": 24,
+          "sha256": "df268d55203cd514245cbf0e87146c84c2c86c7af9a263f6718222a0e97fa884",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

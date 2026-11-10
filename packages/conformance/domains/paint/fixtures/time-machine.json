@@ -981,6 +981,447 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@3",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 55,
+                "width": 64,
+                "x": 0,
+                "y": 4
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@3",
+              "locks": {},
+              "name": "Aged (300 yr)",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 55,
+                "width": 64,
+                "x": 0,
+                "y": 4
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Overpainting",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 46,
+                "width": 60,
+                "x": 1,
+                "y": 9
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@3",
+            "age": {
+              "cracks": 0.6,
+              "dust": 0.4,
+              "fading": 0.55,
+              "seed": 7,
+              "varnish": 0.65,
+              "years": 0
+            },
+            "assets": {
+              "@1": "pixerate-asset:1ta-23buimwz8tw",
+              "@2": "pixerate-asset:3n6-15g1gakm7tc",
+              "@3": "pixerate-asset:7d6-qhmouqukyu"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layerChannels": {
+              "@1": {
+                "height": "pixerate-asset:1xe-az07eq0m6q",
+                "material": "pixerate-asset:1p2-2fi71pbayj7",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 9
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Overpainting",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 4
+              },
+              {
+                "asset": "@3",
+                "blend": "normal",
+                "id": "@3",
+                "name": "Aged (300 yr)",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 4
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.4
+                    },
+                    "surface": "thick",
+                    "thick": {
+                      "gloss": 0.45,
+                      "load": 0.92
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.55,
+                    "rotation": "stroke",
+                    "smoothing": 0.25
+                  },
+                  "id": "impasto-brush",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Impasto brush",
+                  "tip": {
+                    "angle": 90,
+                    "hardness": 0.8,
+                    "roundness": 0.55,
+                    "shape": "flat",
+                    "size": 36,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#f7f5ee",
+                "id": "s1",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.9686274509803922,
+                    0.9607843137254902,
+                    0.9333333333333333
+                  ]
+                },
+                "points": [
+                  {
+                    "x": 14,
+                    "y": 32
+                  },
+                  {
+                    "x": 50,
+                    "y": 32
+                  }
+                ],
+                "seed": 11
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "mix": 0.55,
+                      "pickup": 0.6
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "body": 1,
+                      "load": 0.97,
+                      "pigment": 0.9,
+                      "water": 0.4
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "smoothing": 0.25
+                  },
+                  "id": "oil-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Wet oil round",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 24,
+                    "spacing": 0.08
+                  },
+                  "variety": "oil"
+                },
+                "color": "#d23a2a",
+                "id": "s2",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.8235294117647058,
+                    0.22745098039215686,
+                    0.16470588235294117
+                  ]
+                },
+                "points": [
+                  {
+                    "x": 12,
+                    "y": 20
+                  },
+                  {
+                    "x": 52,
+                    "y": 44
+                  }
+                ],
+                "seed": 22,
+                "steps": [
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "rotation": "stroke",
+                    "smoothing": 0.25
+                  },
+                  "id": "paint-scraper",
+                  "kind": "mark",
+                  "marks": {
+                    "kind": "scraper"
+                  },
+                  "name": "Paint scraper",
+                  "tip": {
+                    "angle": 30,
+                    "hardness": 0.9,
+                    "roundness": 0.35,
+                    "shape": "flat",
+                    "size": 28,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s3",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "x": 20,
+                    "y": 32
+                  },
+                  {
+                    "x": 44,
+                    "y": 32
+                  }
+                ],
+                "scrapeLayerIds": [
+                  "@2",
+                  "@1"
+                ],
+                "seed": 33
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "@2": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.08,
+                    "bloom": 0,
+                    "edgeDarkening": 0,
+                    "evaporation": 0.03,
+                    "fixture": 0.02,
+                    "granulation": 0,
+                    "pickup": 0.6,
+                    "pigmentWeight": 0.8,
+                    "viscosity": 0.95
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "wetEvents": [
+              {
+                "at": 2,
+                "clock": 0,
+                "kind": "dry"
+              }
+            ],
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/time-machine.13.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "825eb29cbbf8423371dff8baad60906f7e5eaab711975d92bf598493f89c8b92",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

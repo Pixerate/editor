@@ -800,6 +800,37 @@ func thickToJSON(_ ch: ThickChannels) -> JSONValue? {
     return .object(out)
 }
 
+/// The layer-space origin of a saved channel's `rect` (`{ x, y, … }`), or nil when it has none.
+func savedRectOrigin(_ rect: JSONValue?) -> (x: Int, y: Int)? {
+    guard let r = rect?.objectValue, let x = r["x"]?.finite, let y = r["y"]?.finite,
+          abs(x) < 1e9, abs(y) < 1e9 else { return nil }
+    return (Int(x), Int(y))
+}
+
+/// Saved form → channels (`thickFromJSON`); throws a sentence when it cannot be read.
+func thickFromJSON(_ raw: JSONValue) throws -> ThickChannels {
+    guard let r = raw.objectValue, let o = savedRectOrigin(r["rect"]),
+          let heightUrl = r["height"]?.stringValue, let materialUrl = r["material"]?.stringValue
+    else { throw PaintEditorError("not saved thick-paint channels") }
+    func decode(_ url: String, _ gray: Bool) throws -> DecodedPng {
+        guard let parsed = parseDataUrl(url) else { throw PaintEditorError("a channel is not a PNG data URL") }
+        return try decodePng(parsed.bytes, keepGray: gray)
+    }
+    let h = try decode(heightUrl, true)
+    let m = try decode(materialUrl, false)
+    let hd = h.channels == 1 ? h.data : (0..<(h.width * h.height)).map { h.data[$0 * 4] }
+    var film = emptySurface(4, 0)
+    if let filmUrl = r["film"]?.stringValue {
+        let f = try decode(filmUrl, false)
+        film = surfaceFromPixels(width: f.width, height: f.height, data: f.data, channels: 4, x: o.x, y: o.y)
+    }
+    return ThickChannels(
+        height: surfaceFromPixels(width: h.width, height: h.height, data: hd, channels: 1, x: o.x, y: o.y),
+        material: surfaceFromPixels(width: m.width, height: m.height, data: m.data, channels: 4, x: o.x, y: o.y),
+        film: film
+    )
+}
+
 /// How far a bead's surface faces the viewer (0 edge-on .. 1 facing), from the height around a pixel.
 private func facing(_ h: [UInt8], _ x: Int, _ y: Int) -> Double {
     func at(_ xx: Int, _ yy: Int) -> Double { Double(h[Swift.min(TILE - 1, Swift.max(0, yy)) * TILE + Swift.min(TILE - 1, Swift.max(0, xx))]) }

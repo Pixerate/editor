@@ -217,8 +217,7 @@ extension PaintEditorController {
     }
 
     /**
-     * Calls `listener` when the document is replaced (`newCanvas`; opening a saved document once
-     * this port reads them), after the new document is in place, so a mounted canvas can run
+     * Calls `listener` when the document is replaced (`newCanvas`, `loadJSON`), after the new document is in place, so a mounted canvas can run
      * `catchUpCultures` (`onDocumentReplaced` in `controller.ts`). Returns the handle that stops it.
      */
     public func onDocumentReplaced(_ listener: @escaping () -> Void) -> Cancellable {

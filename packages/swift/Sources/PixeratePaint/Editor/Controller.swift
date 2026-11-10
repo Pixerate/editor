@@ -233,6 +233,8 @@ public final class PaintEditorController {
     /// Painting guides (symmetry, perspective, tracing, references, stencils).
     public internal(set) var guides: PaintGuides { didSet { emit() } }
     var nextStencilId = 1
+    /// Top-level fields of the opened document this editor does not read, written back on save (`extensions`).
+    var extensions = JSONObject()
     var nextReferenceId = 1
     var nextMagnetId = 1
     var stencilCache: (key: [Stencil], size: String, mask: PaintSelection?)?
@@ -2260,12 +2262,15 @@ public final class PaintEditorController {
     public func toJSON(strokes withStrokes: Bool = true) -> JSONObject {
         flushCulturePreview()
         let d = savedDocumentState()
-        var out: JSONObject = [
+        // Fields this editor does not read go first, as they were read; everything it writes replaces them.
+        var out: JSONObject = extensions
+        let header: JSONObject = [
             "format": .string(PAINT_FORMAT), "version": .number(Double(PAINT_SCHEMA_VERSION)),
             "width": .number(Double(d.canvas.width)), "height": .number(Double(d.canvas.height)), "dpi": .number(d.canvas.dpi),
             "paper": .object(d.paper.json),
             "activeLayerId": d.activeLayerId.map { .string($0) } ?? .null,
         ]
+        for (k, v) in header { out[k] = v }
         if withStrokes && !d.strokes.isEmpty { out["strokes"] = .array(d.strokes.map(strokeToJSON)) }
         out["guides"] = .object(guides.json)
         out["swatches"] = .array(swatches.map(\.json))

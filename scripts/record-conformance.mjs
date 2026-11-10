@@ -77,9 +77,10 @@ for (const [domain, createHost] of Object.entries(DOMAINS)) {
       const out = first[i];
       const again = second[i];
       const label = `${domain}/${scenario.id} step ${i + 1} (${step.tool})`;
-      if (JSON.stringify([out.result, out.document, out.render]) !== JSON.stringify([again.result, again.document, again.render])) throw new Error(`${label} is not deterministic: pass a seed or avoid clock-dependent values.`);
+      if (JSON.stringify([out.result, out.loaded, out.document, out.render]) !== JSON.stringify([again.result, again.loaded, again.document, again.render])) throw new Error(`${label} is not deterministic: pass a seed or avoid clock-dependent values.`);
       const expect = { result: out.result };
       if (out.isError) expect.isError = true;
+      if (step.reload || step.load !== undefined) expect.loaded = out.loaded;
       if (step.document) expect.document = out.document;
       if (step.render) expect.render = out.render;
       if (out.pixels) {

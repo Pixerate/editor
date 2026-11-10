@@ -137,6 +137,12 @@ A step is `{ tool, arguments?, document?, render?, pixels?, ignore?, expect }`:
   paper out): a PNG under `fixtures/png/`, its size, the SHA-256 of its RGBA bytes, and the most
   another implementation may differ by: `maxDelta` in any channel of any pixel and `meanDelta` over
   all channels (0–255). This core matches the hash exactly.
+- With `reload: true`, the host saves the document (the editor's own `toJSON`, assets inline) and
+  opens the save again (`loadJSON`, which clears the history) before the call, as an app reopening a
+  painting does. With `load`, it opens that saved document instead. `expect.loaded` is what opening
+  reported: the normalized problems (parts that could not be read), or `{ "error": message }` when
+  the document was refused. Paint scenarios end with a reload, so every saved feature is checked
+  through save → load → save in both implementations.
 - `ignore` lists JSON pointers left out of the result because they describe one implementation (the
   wet engine's backend); a `*` segment is every element or member.
 

@@ -501,6 +501,245 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@3",
+          "layers": [
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@3",
+              "locks": {},
+              "name": "Flats",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@3",
+            "assets": {
+              "@3": "<binary>"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@3",
+                "blend": "normal",
+                "id": "@3",
+                "name": "Flats",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              },
+              {
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#3366cc",
+                  "grain": 0,
+                  "opacity": 0.8,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@1"
+              },
+              {
+                "at": 0,
+                "data": {
+                  "blend": "multiply",
+                  "color": "#ffcc00",
+                  "grain": 0.5,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@2"
+              },
+              {
+                "at": 0,
+                "kind": "clear",
+                "layerId": "@1"
+              },
+              {
+                "at": 0,
+                "data": {
+                  "antialias": true,
+                  "blend": "normal",
+                  "closeGap": 4,
+                  "color": "#f3d23a",
+                  "expand": 1,
+                  "grain": 0,
+                  "opacity": 1,
+                  "points": [
+                    {
+                      "x": 24,
+                      "y": 16
+                    }
+                  ],
+                  "pressure": 0.5,
+                  "reference": "@1",
+                  "tolerance": 32
+                },
+                "kind": "fill-region",
+                "layerId": "@3"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/fill-blend-merge.14.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "16bd71bad2c43ac827c5f31f68fdf41b0bda53fb1e713e8fbbed370919f26861",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

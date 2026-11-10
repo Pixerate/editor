@@ -2,6 +2,35 @@ import Foundation
 import PixerateCore
 import PixerateRaster
 
+/// Whether `s` is exactly `#` and six hex digits (`/^#[0-9a-f]{6}$/i`; ICU's `$` would also pass a trailing newline).
+private func isExactHex6(_ s: String) -> Bool {
+    let u = Array(s.utf16)
+    return u.count == 7 && u[0] == 0x23 && u[1...].allSatisfy { ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x41 && $0 <= 0x46) || ($0 >= 0x61 && $0 <= 0x66) }
+}
+
+/// A swatch read from JSON (`readSwatch`), or nil when it is not one (a gradient swatch keeps its gradient).
+func readSwatch(_ raw: JSONValue) -> Swatch? {
+    guard let r = raw.objectValue else { return nil }
+    var gradient: PaintGradientSource? = nil
+    if case .gradient(let g)? = readPaintSource(r["paint"]) { gradient = g }
+    let color: String
+    if let c = r["color"]?.stringValue, isExactHex6(c) {
+        color = c.lowercased()
+    } else if let g = gradient, let first = g.stops.first?.color {
+        // `paintSourceColor` with its default colours.
+        color = first == "paint" ? "#000000" : first == "secondary" ? "#ffffff" : first
+    } else {
+        return nil
+    }
+    var out = Swatch(color: color)
+    if let n = r["name"]?.stringValue {
+        let t = n.jsTrimmed
+        if !t.isEmpty { out.name = String(decoding: Array(t.utf16.prefix(80)), as: UTF16.self) }
+    }
+    out.paint = gradient
+    return out
+}
+
 /// Swatches and the mixing pad (`controller.ts`): editor state, not undo steps.
 extension PaintEditorController {
     /// Adds a swatch: a colour, or a paint source (a gradient swatch holds its gradient).
