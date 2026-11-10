@@ -24,6 +24,9 @@ public final class PaintConformanceHost: ConformanceHost {
             wet: PaintWetOptions(gpu: "off")
         )
         controller.setEffectsProvider(FakeEffectProvider())
+        if setup["stickers"] == "fake", let p = try? combineStickerProviders([editorStickers(), createFakeStickerProvider()]) {
+            controller.setStickersProvider(p)
+        }
         _ = try registry.register(createPaintEditorToolProvider(controller))
         _ = try registry.register(createPaintEffectsToolProvider(controller))
         _ = try registry.register(createPaintBrushLibraryToolProvider(controller))

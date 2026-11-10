@@ -116,7 +116,7 @@ import {
 } from './guides';
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
 import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
-import { normalizeStickerUpdate, stickerAt as hitSticker, stickerRect, stickerStamp, stickerSurface, type Sticker } from './stickers';
+import { normalizeStickerUpdate, stickerAt as hitSticker, stickerRect, stickerStamp, stickerSurface, stickerWithFrame, type Sticker } from './stickers';
 import { defaultStickerRasterizer, StickerArtCache, type StickerArtLookup, type StickerRasterizer } from './sticker-art';
 import { BrushSourceArtCache, engineBrushSourceIds } from './brush-source-art';
 import { isBrushSourceRef, readBrushSource } from '../brushes/sources';
@@ -6596,8 +6596,10 @@ export class PaintEditorController {
           try {
             const ref = normalizeStickerRef(x.ref ?? (x.stamp as string));
             const stamp = editorStampOf(ref);
-            const { stamp: _old, variant, ...rest } = x;
-            return [{ ...rest, ref, ...(stamp ? { stamp } : {}), ...(variant === 'dark' && !stamp ? { variant } : {}) } as Sticker];
+            const { stamp: _old, variant, frame, ...rest } = x;
+            // A frame is saved only past the first (`frame` 0 is left out); anything else is not a frame.
+            const f = Number.isInteger(frame) && (frame as number) > 0 ? { frame } : {};
+            return [{ ...rest, ref, ...(stamp ? { stamp } : {}), ...(variant === 'dark' && !stamp ? { variant } : {}), ...f } as Sticker];
           } catch {
             return [];
           }
@@ -7265,6 +7267,20 @@ export class PaintEditorController {
     }
   }
 
+  /**
+   * A sticker with a checked change applied: a new ref takes the variant the colour scheme picks and
+   * starts at its first frame unless the change names one; the frame is checked against the art.
+   */
+  private stickerUpdated(s: Sticker, u: Partial<Omit<Sticker, 'id'>>): Sticker {
+    const merged = { ...s, ...(u.ref !== undefined && u.frame === undefined ? { frame: 0 } : {}), ...u };
+    const next = u.ref !== undefined ? this.withStickerVariant(merged) : merged;
+    try {
+      return stickerWithFrame(next, this.stickerArt.get(next.ref, next.variant));
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+  }
+
   /** The top-most sticker under a point (document pixels) on a layer (default the active one), or `null`. */
   stickerAt(layerId: string | undefined, x: number, y: number): Sticker | null {
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new PaintEditorError('x and y must be numbers of document pixels.');
@@ -7292,8 +7308,7 @@ export class PaintEditorController {
     if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it first.`);
     const i = stickers.findIndex((s) => s.id === id);
     if (i < 0) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
-    const u = this.readStickerUpdate(update);
-    const next = u.ref !== undefined ? this.withStickerVariant({ ...stickers[i], ...u }) : { ...stickers[i], ...u };
+    const next = this.stickerUpdated(stickers[i], this.readStickerUpdate(update));
     const list = stickers.map((s, j) => (j === i ? next : s));
     const dirty = [stickerRect(stickers[i]), stickerRect(next)];
     const base = this.previewBase() ?? this.doc;
@@ -7318,8 +7333,7 @@ export class PaintEditorController {
     const { layer, stickers } = this.stickerLayer(layerId);
     const i = stickers.findIndex((s) => s.id === id);
     if (i < 0) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
-    const u = this.readStickerUpdate(update);
-    const next = u.ref !== undefined ? this.withStickerVariant({ ...stickers[i], ...u }) : { ...stickers[i], ...u };
+    const next = this.stickerUpdated(stickers[i], this.readStickerUpdate(update));
     this.commitStickers('Edit sticker', layer, stickers.map((s, j) => (j === i ? next : s)), [stickerRect(stickers[i]), stickerRect(next)]);
     return { ...next };
   }
@@ -7349,7 +7363,12 @@ export class PaintEditorController {
       }
       if (raw.seed !== undefined && !Number.isInteger(raw.seed)) throw new PaintEditorError(`Sticker ${i}: seed must be a whole number.`);
       const id = n++;
-      return this.withStickerVariant({ id: `st${id}`, size: 48, rotation: 0, color: this.color, opacity: 1, seed: raw.seed ?? (mix32((id * 0x9e3779b1) >>> 0) & 0x7fffffff), ...u } as Sticker);
+      const placed = this.withStickerVariant({ id: `st${id}`, size: 48, rotation: 0, color: this.color, opacity: 1, seed: raw.seed ?? (mix32((id * 0x9e3779b1) >>> 0) & 0x7fffffff), ...u } as Sticker);
+      try {
+        return stickerWithFrame(placed, this.stickerArt.get(placed.ref, placed.variant));
+      } catch (e) {
+        throw new PaintEditorError(`Sticker ${i}: ${(e as Error).message}`);
+      }
     });
     this.commitStickers('Add stickers', layer, [...(existing ?? []), ...added], existing?.length ? added.map(stickerRect) : undefined);
     return added.map((s) => ({ ...s }));

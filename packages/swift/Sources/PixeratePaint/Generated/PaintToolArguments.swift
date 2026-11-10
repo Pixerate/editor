@@ -2512,6 +2512,8 @@ public struct UpdateStickerArguments: Sendable {
     public var color: String?
     /// Opacity 0..1.
     public var opacity: Double?
+    /// 0-based animation frame index for animated stickers.
+    public var frame: Int?
 
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
     public init(_ args: JSONObject) throws {
@@ -2525,6 +2527,7 @@ public struct UpdateStickerArguments: Sendable {
         rotation = try args.number("rotation")
         color = try args.string("color")
         opacity = try args.number("opacity")
+        frame = try args.integer("frame")
     }
 }
 

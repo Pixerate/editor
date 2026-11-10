@@ -50,6 +50,10 @@ struct StrokeSessionInit {
     var effect: (source: PaintEffectPaint, pixels: EffectPaintPixels)? = nil
     /// Sticker brushes: the number of the first sticker id (`st<n>`) the spray makes.
     var stickerNextId: Int? = nil
+    /// Sticker brushes: art cache for provider stickers (beyond `editor:<id>`).
+    var stickerArt: StickerArtLookup? = nil
+    /// Sticker brushes: variant (`"light"` | `"dark"`) to look up for a sticker ref.
+    var stickerVariant: ((String) -> String)? = nil
     /// Wet brushes: the driver that applies the stroke to the wet layer, and the layer's current pixels (the wet layer's display).
     var wet: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
     /// Impasto brushes: the layer's thick-paint channels before the stroke.
@@ -81,6 +85,8 @@ public struct PaintStrokeResult {
     public var culture: Int?
     /// Antimatter brushes: blast, spark, fuel and layer summary.
     public var antimatter: AntimatterStats?
+    /// Sticker brushes: provider stickers the stroke skipped because their art was not cached yet.
+    public var skippedStickers: [String]?
     /// Vortex brushes: the classified stroke shape and peak displacement in pixels.
     public var vortex: VortexStrokeSummary?
 }
@@ -147,6 +153,8 @@ final class PaintStrokeSession: PaintTileTarget {
 
     /// Sticker brushes: the stickers the stroke sprayed, or nil.
     var sprayedStickers: [Sticker]? { spray.flatMap { $0.stickers.isEmpty ? nil : $0.stickers } }
+    /// Sticker brushes: provider stickers the stroke skipped because their art was not cached yet.
+    var skippedStickers: [String]? { spray.flatMap { $0.skipped.isEmpty ? nil : $0.skipped } }
 
     /// Antimatter brushes: the per-layer outputs after `end()`, or nil.
     var antimatterOutputs: [AntimatterLayerOutput]? { antimatter?.layerOutputs() }
@@ -324,10 +332,9 @@ final class PaintStrokeSession: PaintTileTarget {
             filmBuffer = nil
             return
         }
-        if let ref = brushStickerRefs(brush).first { throw UnportedBrushError(message: "The \(brush.name) brush lays the sticker \"\(ref)\", which the Swift paint editor can't draw: it has the editor's stamps (editor:star…) and image sources (source:<id>), not a host's sticker library.") }
         if brush.engine == "sticker" {
             dry = nil
-            spray = StickerSpray(brush: brush, target: self, color: i.colorHex, seed: i.seed, copies: copies, nextId: i.stickerNextId ?? 1, paint: i.paint, effect: i.effect?.pixels)
+            spray = StickerSpray(brush: brush, target: self, color: i.colorHex, seed: i.seed, copies: copies, nextId: i.stickerNextId ?? 1, paint: i.paint, effect: i.effect?.pixels, art: i.stickerArt, variant: i.stickerVariant)
             return
         }
         if brush.engine == "antimatter" {
@@ -616,6 +623,7 @@ final class PaintStrokeSession: PaintTileTarget {
         let dabs = dry?.dabCount ?? thickDriver?.dabCount ?? spray?.dabCount ?? wet!.dabCount
         var r = PaintStrokeResult(layerId: layerId, bounds: changed ? bounds : nil, dabs: dabs, strokeId: nil)
         if let carried = wet?.load ?? thickDriver?.load { r.mixerLoad = initValues.brush.behavior.dirty ? carried : cleanMixer(carried) }
+        if let skipped = skippedStickers { r.skippedStickers = skipped }
         result = r
         return r
     }

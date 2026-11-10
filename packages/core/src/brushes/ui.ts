@@ -12,7 +12,7 @@
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { BRUSH_SLIDERS, brushEngineControls, type SliderControl } from '../paint-editor/brush-controls';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, STICKER_FRAME_MODES, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
 import { BrushLibraryError, type AddBrushSourceResult, type BrushLibrary, type BrushLibraryEntry, type SaveBrushResult } from './library';
 import { normalizeBrushSpec } from './normalize';
 import { brushColourKind, checkBrush, checkBrushEdit, degrade, PAINT_PROFILE, type BrushHostProfile, type BrushIssue, type BrushSupport } from './profiles';
@@ -74,6 +74,8 @@ const MEDIUM_LABELS: Readonly<Record<BrushMedium, string>> = { paint: 'Paint', i
 const TOOL_LABELS: Readonly<Record<BrushTool, string>> = { eraser: 'Eraser', blender: 'Blender', smudge: 'Smudge', water: 'Add water', dryer: 'Dry', blow: 'Blow', blot: 'Blot', 'wet-blend': 'Wet blend', 'wet-drag': 'Wet smudge' };
 const SHAPE_LABELS: Readonly<Record<string, string>> = { round: 'Round', flat: 'Flat', chisel: 'Chisel', bristle: 'Bristle', stamp: 'Stamp' };
 const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', scatter: 'Spray', particles: 'Particles', objects: 'Stickers', antimatter: 'Antimatter', scraper: 'Scraper', vortex: 'Vortex' };
+/** How an animated sticker's frames are picked along a stroke (`marks.frameMode`). */
+const STICKER_FRAME_MODE_LABELS: Readonly<Record<string, string>> = { perform: 'Play as drawn', random: 'Random frame' };
 const VORTEX_DIRECTION_LABELS: Readonly<Record<string, string>> = { follow: 'Follow stroke', cw: 'Clockwise', ccw: 'Counter-clockwise' };
 const SURFACE_LABELS: Readonly<Record<string, string>> = { dry: 'Dry', wet: 'Wet (flows)', thick: 'Thick (impasto)' };
 const ROTATION_LABELS: Readonly<Record<string, string>> = { fixed: 'Fixed', stroke: 'Follow stroke', barrel: 'Pen barrel' };
@@ -100,6 +102,7 @@ const ARIA: Readonly<Record<string, string>> = {
   'marks.stampRotation': 'Dot rotation',
   'marks.invertMode': 'Inversion mode',
   'marks.direction': 'Vortex direction',
+  'marks.frameMode': 'Animated sticker frames',
   'behaviour.wet.medium': 'Wet medium',
   'behaviour.thick.applicator': 'Impasto tool',
   'light.pressure': 'Light follows pressure',
@@ -207,6 +210,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       marks === 'particles' && shape === 'stamp' && choice('marks.stampOrder', 'Texture order', options(DOT_TEXTURE_ORDERS, { sequence: 'In turn', random: 'Random' })),
       marks === 'particles' && shape === 'stamp' && choice('marks.stampRotation', 'Texture turn', options(DOT_ROTATIONS, { follow: 'Follow motion', random: 'Random', fixed: 'Tip angle' })),
       marks === 'antimatter' && choice('marks.invertMode', 'Inversion mode', options(INVERT_MODES, { rgb: 'RGB', oklab: 'OKLab' }), 'rgb'),
+      marks === 'objects' && choice('marks.frameMode', 'Animated frames', options(STICKER_FRAME_MODES, STICKER_FRAME_MODE_LABELS), 'perform'),
       marks === 'vortex' && choice('marks.direction', 'Direction', options(VORTEX_DIRECTIONS, VORTEX_DIRECTION_LABELS), 'follow'),
       ...particles.map((c) => slider(c)),
       ...objects.map((c) => slider(c)),

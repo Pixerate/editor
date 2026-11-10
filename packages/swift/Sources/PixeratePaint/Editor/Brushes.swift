@@ -523,6 +523,8 @@ func normalizeBristle(_ raw: JSONObject, _ base: JSONObject) -> JSONObject {
     ]
 }
 
+public let STICKER_FRAME_MODES = ["perform", "random"]
+
 func normalizeStickerSettings(_ raw: JSONObject, _ base: JSONObject) -> JSONObject {
     let refs = { (list: [JSONValue]) in list.compactMap { $0.stringValue.flatMap(normalizeStickerRef) } }
     let baseStamps = base["stamps"]?.arrayValue ?? []
@@ -530,13 +532,16 @@ func normalizeStickerSettings(_ raw: JSONObject, _ base: JSONObject) -> JSONObje
     var unique: [String] = []
     for s in stamps where !unique.contains(s) { unique.append(s) }
     let final: [String] = !stamps.isEmpty ? Array(unique.prefix(MAX_STICKER_STAMPS)) : refs(!baseStamps.isEmpty ? baseStamps : DEFAULT_STICKER["stamps"]!.arrayValue!)
+    let frameMode = raw["frameMode"]?.stringValue.flatMap { STICKER_FRAME_MODES.contains($0) ? $0 : nil } ?? base["frameMode"]?.stringValue
     func unitKey(_ k: String) -> JSONValue { .number(unitValue(raw[k], base[k]!.numberValue!)) }
-    return [
+    var out: JSONObject = [
         "stamps": .array(final.map { .string($0) }),
         "density": unitKey("density"), "sizeJitter": unitKey("sizeJitter"), "rotationJitter": unitKey("rotationJitter"),
         "scatter": raw["scatter"]?.finite.map { .number(Swift.min(2, Swift.max(0, $0))) } ?? base["scatter"]!,
         "colorJitter": unitKey("colorJitter"),
     ]
+    if frameMode == "random" { out["frameMode"] = "random" }
+    return out
 }
 
 /// Scraper engine settings: how many layers per pass (0..1) and bevel sharpness (0..1).

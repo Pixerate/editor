@@ -143,6 +143,14 @@ inner glow, shadows, stroke, bevel, satin and overlays, as in the image editor
   `add_stickers` (exact places), `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`,
   `remove_stickers`. A sticker layer takes no other paint; sprays are refused under an enabled
   mask stencil (hide it with `update_stencil` `enabled` false, then remove unwanted stickers).
+  **Animated stickers** (`describe_sticker` says `animated`, `frameCount`, `frameDelay` ms) stamp
+  one frame per sticker, chosen by the brush's `marks.frameMode`: `perform` (default) plays the
+  animation as the stroke is drawn, frame = floor(ms since the stroke's first point / frameDelay)
+  mod frameCount, so it needs points with `t` (untimed points all stamp frame 0); `random` picks a
+  seeded frame per sticker and needs no times. Each sticker keeps its `frame` (left out when 0), so
+  redraws, `sticker_at`, undo, saving and replays show the same frame; `add_stickers` and
+  `update_sticker` take `frame` (0..frameCount-1; past the last, or above 0 on a static sticker,
+  is refused), and restamping (`ref`) without `frame` goes back to frame 0.
 - **Stroke layers**: pixels drawn from the layer's strokes; they take `dab`, `particle`, `bristle`
   and Mixer Brush strokes that pick up no paint. `list_strokes {live: true}` → `update_stroke` /
   `edit_stroke_points` / `reorder_stroke` / `remove_strokes`; `rasterize_stroke_layer` once settled.
@@ -345,10 +353,10 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 
 | Tool | Use |
 | --- | --- |
-| `list_stickers` | Read a layer's stickers bottom first: id, `ref` (and `stamp` for the editor's own), x, y, size, rotation, color, opacity. |
-| `add_stickers` | Place stickers exactly (`ref` from `find_stickers`, `x`, `y`, optional `size`, `rotation`, `color`, `opacity`, `seed`) on a sticker layer or an empty layer; a provider's art loads first. Use it for deliberate placement, a sticker brush for a scatter. One undo step. Returns the new stickers with ids. |
+| `list_stickers` | Read a layer's stickers bottom first: id, `ref` (and `stamp` for the editor's own), x, y, size, rotation, color, opacity, and `frame` for an animated sticker past its first frame. |
+| `add_stickers` | Place stickers exactly (`ref` from `find_stickers`, `x`, `y`, optional `size`, `rotation`, `color`, `opacity`, `seed`, `frame` of an animated sticker) on a sticker layer or an empty layer; a provider's art loads first. Use it for deliberate placement, a sticker brush for a scatter. One undo step. Returns the new stickers with ids. |
 | `sticker_at` | Read the top-most sticker under a point (`x`, `y`), or null. Use it to pick one sticker among many similar ones before `update_sticker`, `arrange_stickers` or `remove_stickers`. |
-| `update_sticker` | Change one sticker by `id`: `ref`, `x`, `y`, `size`, `rotation`, `color`, `opacity`. One undo step. Returns it. |
+| `update_sticker` | Change one sticker by `id`: `ref`, `x`, `y`, `size`, `rotation`, `color`, `opacity`, `frame` (an animated sticker's frame, 0..frameCount-1 from `describe_sticker`; a new `ref` without `frame` starts at frame 0). One undo step. Returns it (frame 0 left out). |
 | `find_stickers` | Search the sticker library (the editor's stamps unless the host plugged in its own) by words, category, tags and commercial licence, a page at a time. Returns refs (`provider:id`) for sticker brushes (`set_brush` `sticker.stamps`) and `add_stickers`, with tintable and licence. |
 | `describe_sticker` | One sticker by `ref`: licence and attribution, colours, outline. Unknown refs are refused with the closest ones. |
 | `arrange_stickers` | Move stickers (`ids`) to the `front` or `back` of their layer. One undo step. |

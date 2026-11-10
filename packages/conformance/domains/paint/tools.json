@@ -1491,6 +1491,14 @@
                         "minimum": 0,
                         "maximum": 1,
                         "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                      },
+                      "frameMode": {
+                        "type": "string",
+                        "enum": [
+                          "perform",
+                          "random"
+                        ],
+                        "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                       }
                     },
                     "required": [
@@ -3745,6 +3753,14 @@
                             "minimum": 0,
                             "maximum": 1,
                             "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                          },
+                          "frameMode": {
+                            "type": "string",
+                            "enum": [
+                              "perform",
+                              "random"
+                            ],
+                            "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                           }
                         },
                         "required": [
@@ -5783,6 +5799,14 @@
                             "minimum": 0,
                             "maximum": 1,
                             "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                          },
+                          "frameMode": {
+                            "type": "string",
+                            "enum": [
+                              "perform",
+                              "random"
+                            ],
+                            "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                           }
                         },
                         "required": [
@@ -7886,6 +7910,14 @@
                             "minimum": 0,
                             "maximum": 1,
                             "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                          },
+                          "frameMode": {
+                            "type": "string",
+                            "enum": [
+                              "perform",
+                              "random"
+                            ],
+                            "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                           }
                         },
                         "required": [
@@ -13297,6 +13329,11 @@
                       "type": "integer",
                       "minimum": 0,
                       "description": "Texture seed (default from the new id); splat and confetti shapes vary with it."
+                    },
+                    "frame": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "0-based animation frame index for animated stickers (default 0)."
                     }
                   },
                   "required": [
@@ -13385,6 +13422,11 @@
                 "minimum": 0,
                 "maximum": 1,
                 "description": "Opacity 0..1."
+              },
+              "frame": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0-based animation frame index for animated stickers."
               }
             },
             "required": [
@@ -14100,6 +14142,14 @@
                                   "minimum": 0,
                                   "maximum": 1,
                                   "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                                },
+                                "frameMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "perform",
+                                    "random"
+                                  ],
+                                  "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                                 }
                               },
                               "required": [
@@ -18655,6 +18705,14 @@
                         "minimum": 0,
                         "maximum": 1,
                         "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                      },
+                      "frameMode": {
+                        "type": "string",
+                        "enum": [
+                          "perform",
+                          "random"
+                        ],
+                        "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                       }
                     },
                     "required": [
@@ -20488,6 +20546,14 @@
                         "minimum": 0,
                         "maximum": 1,
                         "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                      },
+                      "frameMode": {
+                        "type": "string",
+                        "enum": [
+                          "perform",
+                          "random"
+                        ],
+                        "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                       }
                     },
                     "required": [

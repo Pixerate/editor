@@ -45,6 +45,9 @@ none, it is the editor's own stamps (`editorStickers()`: `editor:dot`, `editor:s
 - Leave `variant` out of `insert_sticker` unless the user asked for one: the default matches the
   background.
 - Prefer tintable stickers when they must match a palette.
+- Animated stickers (`animated: true`, with `frameCount` and `frameDelay` in ms) are drawn one
+  frame at a time: a paint sticker brush picks frames with `marks.frameMode` (`perform` by stroke
+  time, `random` seeded), and `add_stickers` / `update_sticker` take a `frame` below `frameCount`.
 - Vector stickers need SVG art and canvas stickers an outline (`silhouette`); `find_stickers`
   lists `formats`, and `describe_sticker` the outline. The image editor takes either.
 
@@ -63,6 +66,6 @@ none, it is the editor's own stamps (`editorStickers()`: `editor:dot`, `editor:s
 
 | Tool | Use |
 | --- | --- |
-| `find_stickers` | Search or list the library: `query`, `category`, `collection`, `tags`, `commercial`, `limit`, `after`. Returns `items` (each `ref`, name, category, collection, tags, width, height, formats, tintable, aiGenerated, variants, licence), `total`, `next`, `categories`, `collections`. Changes nothing. |
+| `find_stickers` | Search or list the library: `query`, `category`, `collection`, `tags`, `commercial`, `limit`, `after`. Returns `items` (each `ref`, name, category, collection, tags, width, height, formats, tintable, aiGenerated, variants, animated, frameCount, frameDelay, licence), `total`, `next`, `categories`, `collections`. Changes nothing. |
 | `insert_sticker` | Put one sticker (`ref`) into the vector, image or canvas editor, centred at `x`, `y` (default the middle), `width` wide (default natural), tinted with `color` when tintable, in its dark `variant` on a dark background (or the one passed). One undo step. Returns the new group, layer or node `id`, the size, the `variant` used and the licence. |
 | `describe_sticker` | One sticker by `ref`: everything `find_stickers` returns plus `silhouette` (SVG path data) and `colours`. Unknown refs are refused with the closest ones. Changes nothing. |

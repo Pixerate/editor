@@ -8,7 +8,7 @@
 
 import { pngDataUrl } from '../raster/png';
 import { StickerError } from './errors';
-import { checkStickerVariant, stickerCollections, stickerPage } from './helpers';
+import { checkStickerFrame, checkStickerVariant, stickerCollections, stickerPage } from './helpers';
 import type { StickerAsset, StickerDescription, StickerLoadOptions, StickerProvider, StickerSummary, StickerVariant } from './types';
 
 export interface FakeStickerProviderOptions {
@@ -31,10 +31,24 @@ interface FakeSticker {
   commercial: boolean;
   collection?: string;
   aiGenerated?: boolean;
+  animated?: boolean;
+  frameCount?: number;
+  frameDelay?: number;
 }
 
 const CATALOGUE: FakeSticker[] = [
-  ...['sun', 'moon', 'cloud', 'rain', 'snow', 'wind'].map((w, i) => ({ id: `weather-${w}`, name: w[0].toUpperCase() + w.slice(1), category: 'weather', tags: ['weather', w], shape: 'badge' as const, colours: [['#f59e0b', '#64748b', '#94a3b8', '#2563eb', '#e0f2fe', '#14b8a6'][i], '#ffffff'] as [string, string], commercial: true, collection: 'outdoors', aiGenerated: true })),
+  ...['sun', 'moon', 'cloud', 'rain', 'snow', 'wind'].map((w, i) => ({
+    id: `weather-${w}`,
+    name: w[0].toUpperCase() + w.slice(1),
+    category: 'weather',
+    tags: ['weather', w],
+    shape: 'badge' as const,
+    colours: [['#f59e0b', '#64748b', '#94a3b8', '#2563eb', '#e0f2fe', '#14b8a6'][i], '#ffffff'] as [string, string],
+    commercial: true,
+    collection: 'outdoors',
+    aiGenerated: true,
+    ...(w === 'wind' ? { animated: true, frameCount: 4, frameDelay: 100 } : {}),
+  })),
   ...['apple', 'pear', 'cherry', 'lemon', 'grape'].map((f, i) => ({ id: `fruit-${f}`, name: f[0].toUpperCase() + f.slice(1), category: 'food', tags: ['fruit', f], shape: 'tile' as const, colours: [['#dc2626', '#84cc16', '#be123c', '#facc15', '#7c3aed'][i], '#166534'] as [string, string], commercial: true, collection: 'kitchen' })),
   ...['new', 'sale', 'hot', 'free'].map((b, i) => ({ id: `badge-${b}`, name: `${b[0].toUpperCase() + b.slice(1)} badge`, category: 'badges', tags: ['badge', 'label', b], shape: 'badge' as const, colours: [['#16a34a', '#dc2626', '#ea580c', '#0891b2'][i], '#ffffff'] as [string, string], commercial: true, collection: 'shop' })),
   { id: 'art-sketch', name: 'Sketch', category: 'art', tags: ['drawing', 'non-commercial'], shape: 'tile', colours: ['#1f2937', '#fde68a'], commercial: false },
@@ -66,23 +80,33 @@ function summaryOf(s: FakeSticker): StickerSummary {
     ...(s.shape === 'tile' ? { variants: ['light', 'dark'] as StickerVariant[] } : {}),
     ...(s.collection ? { collection: s.collection } : {}),
     ...(s.aiGenerated ? { aiGenerated: true } : {}),
+    ...(s.animated ? { animated: true, frameCount: s.frameCount, frameDelay: s.frameDelay } : {}),
   };
 }
 
 /** The tile's two colours for a variant: the dark one has a pale top half. */
 const tileColours = (s: FakeSticker, variant: StickerVariant): [string, string] => (variant === 'dark' ? [s.colours[0], DARK_TOP] : s.colours);
 
+const NOTCH_FRAMES: ReadonlyArray<[number, number]> = [
+  [45, 45],
+  [55, 35],
+  [35, 55],
+  [25, 45],
+];
+
 /** Badge: a disc with a square notch out of its middle. Tile: a rounded square, top half in the second colour. */
-function svgOf(s: FakeSticker, fill: string, variant: StickerVariant): string {
+function svgOf(s: FakeSticker, fill: string, variant: StickerVariant, frame = 0): string {
   if (s.shape === 'badge') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><path fill="${fill}" fill-rule="evenodd" d="M60 6A54 54 0 1 1 59.9 6ZM45 45H75V75H45Z"/></svg>`;
+    const [nx, ny] = NOTCH_FRAMES[frame % NOTCH_FRAMES.length];
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><path fill="${fill}" fill-rule="evenodd" d="M60 6A54 54 0 1 1 59.9 6ZM${nx} ${ny}H${nx + 30}V${ny + 30}H${nx}Z"/></svg>`;
   }
   const [bottom, top] = tileColours(s, variant);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect x="10" y="10" width="100" height="100" fill="${bottom}"/><rect x="10" y="10" width="100" height="50" fill="${top}"/></svg>`;
 }
 
-function pixelsOf(s: FakeSticker, size: number, fill: string, variant: StickerVariant): Uint8ClampedArray {
+function pixelsOf(s: FakeSticker, size: number, fill: string, variant: StickerVariant, frame = 0): Uint8ClampedArray {
   const [bottom, top] = tileColours(s, variant);
+  const [nx, ny] = NOTCH_FRAMES[frame % NOTCH_FRAMES.length];
   const out = new Uint8ClampedArray(size * size * 4);
   const hex = (c: string) => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
   for (let y = 0; y < size; y++) {
@@ -92,7 +116,7 @@ function pixelsOf(s: FakeSticker, size: number, fill: string, variant: StickerVa
       let rgb: number[] | null = null;
       if (s.shape === 'badge') {
         const inDisc = Math.hypot(u - 60, v - 60) <= 54;
-        const inNotch = u >= 45 && u <= 75 && v >= 45 && v <= 75;
+        const inNotch = u >= nx && u <= nx + 30 && v >= ny && v <= ny + 30;
         if (inDisc && !inNotch) rgb = hex(fill);
       } else if (u >= 10 && u <= 110 && v >= 10 && v <= 110) rgb = hex(v < 60 ? top : bottom);
       if (!rgb) continue;
@@ -130,14 +154,16 @@ export function createFakeStickerProvider(options: FakeStickerProviderOptions = 
       const s = find(id);
       if (!s) throw new StickerError('unknown_sticker', `No fake sticker "${id}".`);
       if (options.failIds?.includes(id)) throw new StickerError('load_failed', `The fake sticker "${id}" failed to load (failIds).`);
-      const variant = checkStickerVariant(summaryOf(s), o.variant);
+      const summary = summaryOf(s);
+      const variant = checkStickerVariant(summary, o.variant);
+      const frame = checkStickerFrame(summary, o.frame);
       const fill = s.shape === 'badge' && o.colour ? o.colour.toLowerCase() : s.colours[0];
       if (o.format === 'png') {
         const size = o.size ?? 128;
         if (!(Number.isInteger(size) && size >= 8 && size <= 512)) throw new StickerError('invalid_argument', `size must be 8..512 px, got ${size}.`);
-        return { kind: 'image', url: pngDataUrl(size, size, pixelsOf(s, size, fill, variant)), width: size, height: size };
+        return { kind: 'image', url: pngDataUrl(size, size, pixelsOf(s, size, fill, variant, frame)), width: size, height: size };
       }
-      return { kind: 'svg', svg: svgOf(s, fill, variant) };
+      return { kind: 'svg', svg: svgOf(s, fill, variant, frame) };
     },
   };
 }

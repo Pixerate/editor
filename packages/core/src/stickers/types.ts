@@ -70,6 +70,12 @@ export interface StickerSummary {
   variants?: StickerVariant[];
   /** The collection it belongs to (`collections()`), when the provider groups its stickers. */
   collection?: string;
+  /** Whether the sticker has multiple animation frames (`load(id, { frame })`). */
+  animated?: boolean;
+  /** Number of animation frames when `animated` is true (at least 2). */
+  frameCount?: number;
+  /** Duration of each animation frame in milliseconds when `animated` is true. */
+  frameDelay?: number;
 }
 
 /** Everything about one sticker. */
@@ -115,6 +121,8 @@ export interface StickerLoadOptions {
   colour?: string;
   /** The art for a light (default) or dark background; one the sticker doesn't list is refused, naming the ones it has. */
   variant?: StickerVariant;
+  /** 0-based animation frame index (`0 ..< frameCount`, default `0`). */
+  frame?: number;
 }
 
 export interface StickerProviderCapabilities {

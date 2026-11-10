@@ -69,6 +69,19 @@ export function stickerVariantFor(s: Pick<StickerSummary, 'variants'>, dark: boo
   return dark && s.variants?.includes('dark') ? 'dark' : 'light';
 }
 
+/**
+ * Checks `load`'s frame against the sticker's `frameCount`, throwing an `invalid_argument` `StickerError`
+ * when out of range. Providers call it at the top of `load`; returns the 0-based frame index to draw.
+ */
+export function checkStickerFrame(s: Pick<StickerSummary, 'id' | 'animated' | 'frameCount'>, frame: number | undefined): number {
+  const f = frame ?? 0;
+  const count = s.animated ? Math.max(1, s.frameCount ?? 1) : 1;
+  if (!Number.isInteger(f) || f < 0 || f >= count) {
+    throw new StickerError('invalid_argument', `Sticker "${s.id}" has ${count} frame(s) (0..${count - 1}), got frame ${JSON.stringify(frame)}.`);
+  }
+  return f;
+}
+
 /** The collections of an in-memory catalogue with their counts, in first-seen order; `names` gives names and descriptions by id. */
 export function stickerCollections(items: readonly StickerSummary[], names: Record<string, { name: string; description?: string }> = {}): StickerCollection[] {
   const out = new Map<string, StickerCollection>();

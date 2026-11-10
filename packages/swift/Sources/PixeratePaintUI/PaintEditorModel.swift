@@ -396,6 +396,17 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], key, .number(value))) }
     }
 
+    /// The active sticker brush's animated-frame mode (`perform`, the default, or `random`; `marks.frameMode`).
+    public var stickerFrameMode: String {
+        track()
+        return controller.brush.sticker["frameMode"]?.stringValue == "random" ? "random" : "perform"
+    }
+
+    /// Sets the active sticker brush's animated-frame mode (`marks.frameMode`: `perform` or `random`).
+    public func setStickerFrameMode(_ mode: String) {
+        attempt { _ = try controller.setBrushFacets(["marks": ["kind": "objects", "frameMode": .string(mode == "random" ? "random" : "perform")]]) }
+    }
+
     /// The active antimatter brush's colour inversion mode (`rgb` or `oklab`).
     public var antimatterInvertMode: String {
         track()

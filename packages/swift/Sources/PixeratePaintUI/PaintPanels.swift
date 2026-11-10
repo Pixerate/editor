@@ -275,6 +275,13 @@ public struct PaintBrushPanel: View {
                 }
                 .font(.caption)
             }
+            if brush.engine == "sticker" {
+                Picker("Animated frames", selection: Binding(get: { model.stickerFrameMode }, set: { model.setStickerFrameMode($0) })) {
+                    Text("Play as drawn").tag("perform")
+                    Text("Random frame").tag("random")
+                }
+                .font(.caption)
+            }
             if brush.engine == "antimatter" {
                 Picker("Invert colours in", selection: Binding(get: { model.antimatterInvertMode }, set: { model.setAntimatterInvertMode($0) })) {
                     Text(model.tables.labels.invertModes.rgb).tag("rgb")

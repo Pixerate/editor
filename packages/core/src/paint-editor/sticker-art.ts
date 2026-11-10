@@ -24,6 +24,10 @@ export interface StickerArt {
   data: Uint8ClampedArray;
   /** Flat art: drawn in the sticker's colour, keeping its alpha. */
   tintable: boolean;
+  /** All animation frames (straight RGBA, `width × height × 4` each) when the sticker is animated (`frames.length >= 2`). */
+  frames?: readonly Uint8ClampedArray[];
+  /** Duration of each animation frame in milliseconds when animated (default 100). */
+  frameDelay?: number;
 }
 
 /** The art for a ref in a variant (default `light`), when it has loaded. */
@@ -130,10 +134,23 @@ export class StickerArtCache {
       const max = provider.capabilities.maxSize ?? STICKER_ART_SIZE;
       const size = Math.min(STICKER_ART_SIZE, max);
       const v = variant === 'dark' ? { variant } : {};
-      const asset = await provider.load(id, d.formats.includes('png') ? { format: 'png', size, ...v } : { format: d.formats[0] ?? 'svg', size, ...v });
+      const fmt = d.formats.includes('png') ? ({ format: 'png' as const, size, ...v }) : ({ format: d.formats[0] ?? ('svg' as const), size, ...v });
+      const asset = await provider.load(id, fmt);
       const px = await rasterize(asset, size);
       if (!(px.width > 0 && px.height > 0) || px.data.length !== px.width * px.height * 4) throw new StickerError('load_failed', `The art for "${ref}" came back empty or the wrong size.`);
-      return { ...px, tintable: d.tintable };
+      const count = d.animated && d.frameCount && d.frameCount > 1 ? d.frameCount : 1;
+      if (count <= 1) return { ...px, tintable: d.tintable };
+      const rest = await Promise.all(
+        Array.from({ length: count - 1 }, async (_, i) => {
+          const fa = await provider.load(id, { ...fmt, frame: i + 1 });
+          const fpx = await rasterize(fa, size);
+          if (fpx.width !== px.width || fpx.height !== px.height || fpx.data.length !== px.data.length) {
+            throw new StickerError('load_failed', `Frame ${i + 1} of "${ref}" has size ${fpx.width}×${fpx.height}, expected ${px.width}×${px.height}.`);
+          }
+          return fpx.data;
+        })
+      );
+      return { ...px, tintable: d.tintable, frames: [px.data, ...rest], frameDelay: d.frameDelay ?? 100 };
     })();
     this.entries.set(key, { status: 'loading', promise });
     return promise.then(
@@ -158,8 +175,9 @@ export class StickerArtCache {
 }
 
 /** Bilinear RGBA sample of `art` at (x, y) in its pixels (straight alpha, colour weighted by alpha). */
-export function sampleArt(art: StickerArt, x: number, y: number, out: number[]): number[] {
-  const { width: w, height: h, data } = art;
+export function sampleArt(art: StickerArt, x: number, y: number, out: number[], frame?: number): number[] {
+  const { width: w, height: h, frames } = art;
+  const data = frame !== undefined && frames && frames.length > 0 ? (frames[((frame % frames.length) + frames.length) % frames.length] ?? art.data) : art.data;
   const fx = x - 0.5;
   const fy = y - 0.5;
   const x0 = Math.floor(fx);

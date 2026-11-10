@@ -305,12 +305,17 @@ extension PaintEditorController {
 
     /**
      * Whether this port paints with `brush`: every engine (dab, eraser, Mixer Brush, blender,
-     * smudge, wet, impasto, particle, bristle, sticker, scraper), stamp tips included, unless it lays a
-     * sticker from a host's sticker library, which has no art here. A brush picker leaves those out.
+     * smudge, wet, impasto, particle, bristle, sticker, antimatter, scraper, vortex), stamp tips
+     * included, and library stickers when the sticker library (`setStickersProvider`) has them and
+     * their art has not failed to load (`prepareStickers` loads it). A brush picker leaves the rest out.
      */
     public func canPaint(_ brush: PaintBrush) -> Bool {
-        // Editor stamps and image sources have their art here; a host's library stickers don't.
-        brushStickerRefs(brush).isEmpty && ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"].contains(brush.engine)
+        guard ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"].contains(brush.engine) else { return false }
+        let provider = stickers.provider
+        return brushStickerRefs(brush).allSatisfy { ref in
+            guard let id = try? stickerIdFor(provider, ref), (try? provider.describe(id)) != nil else { return false }
+            return stickerArt.status(ref, stickerArt.variantFor(ref, dark: colorScheme == "dark")).status != "failed"
+        }
     }
 
     // MARK: - Colour

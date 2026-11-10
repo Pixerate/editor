@@ -25,6 +25,10 @@ import { createPaintEditorDocument } from './editorDocument';
 import { createPaintEffectsToolProvider } from './effect-tools';
 import { PAINT_FORMAT, PAINT_SCHEMA_VERSION } from './serialize';
 import { createPaintEditorToolProvider } from './tools';
+import { combineStickerProviders } from '../stickers/combine';
+import { editorStickers } from '../stickers/editor';
+import { createFakeStickerProvider } from '../stickers/fake';
+import type { StickerProvider } from '../stickers/types';
 import {
   AGE_SLIDERS,
   ANTIMATTER_SLIDERS,
@@ -297,11 +301,14 @@ const GENERATED_ID = /^(pl[0-9a-z]{9,}|[a-z]+_[0-9a-z]{8,}_[0-9a-z]+)$/;
  * A fresh paint editor for replaying a conformance scenario (`domains/paint/fixtures`): every paint
  * tool provider in one registry that validates arguments, the saved document (the
  * `pixerate.editor-document` envelope) and the composited pixels. `setup` is the scenario's
- * editor options, such as `{ width, height }`; `effects` is the effect provider the effect tools use.
+ * editor options, such as `{ width, height }`, where `stickers: "fake"` is the editor's stickers with
+ * the fake sticker library (`createFakeStickerProvider`, which has an animated sticker); `effects` is
+ * the effect provider the effect tools use.
  */
-export function createPaintConformanceHost(setup: PaintEditorOptions, options: { effects: EffectProvider }): ConformanceHost {
+export function createPaintConformanceHost(setup: Omit<PaintEditorOptions, 'stickers'> & { stickers?: StickerProvider | 'fake' }, options: { effects: EffectProvider }): ConformanceHost {
+  const stickers = setup.stickers === 'fake' ? combineStickerProviders([editorStickers(), createFakeStickerProvider()]) : setup.stickers;
   // The TypeScript wet kernel on one thread is the reference; WebAssembly and the GPU load late.
-  const controller = new PaintEditorController({ ...setup, wet: { kernel: 'typescript', threads: 0, gpu: 'off', ...setup.wet } });
+  const controller = new PaintEditorController({ ...setup, stickers, wet: { kernel: 'typescript', threads: 0, gpu: 'off', ...setup.wet } });
   controller.setEffectsProvider(options.effects);
   const registry = new ToolRegistry({ validateArguments: true });
   registry.register(createPaintEditorToolProvider(controller));

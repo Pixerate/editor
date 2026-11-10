@@ -207,6 +207,126 @@ describe('stickers in the paint editor', () => {
     expect(c.stickerAt(undefined, tile.x, tile.y + 20)?.id).toBe(tile.id);
   });
 
+  it('sprays animated stickers in perform (real-time) and random frame modes, and places/updates specific frames', async () => {
+    const c = new PaintEditorController({ width: 320, height: 140, paper: 'smooth', stickers: combineStickerProviders([editorStickers(), createFakeStickerProvider()]) });
+    await c.prepareStickers(['fake:weather-wind']);
+    const windDesc = await c.stickersProvider.describe('fake:weather-wind');
+    expect(windDesc).toMatchObject({ animated: true, frameCount: 4, frameDelay: 100 });
+
+    // Perform mode (default): advances frames according to elapsed stroke time (ms).
+    c.addLayer();
+    c.setBrush({ id: 'sticker-stars', tip: { size: 30 }, sticker: { stamps: ['fake:weather-wind'], density: 0.5, scatter: 0, sizeJitter: 0, rotationJitter: 0 } });
+    expect(c.getState().brush.sticker.frameMode).toBeUndefined();
+    const timedLine = [
+      { x: 20, y: 70, pressure: 0.8, t: 1000 },
+      { x: 100, y: 70, pressure: 0.8, t: 1120 },
+      { x: 180, y: 70, pressure: 0.8, t: 1240 },
+      { x: 260, y: 70, pressure: 0.8, t: 1360 },
+    ];
+    c.paintStroke({ points: timedLine, color: '#14b8a6', seed: 11 });
+    const performed = c.listStickers();
+    expect(performed.length).toBeGreaterThanOrEqual(4);
+    expect(performed[0].frame).toBeUndefined(); // frame 0 omitted
+    const performFrames = performed.map((s) => s.frame ?? 0);
+    expect(new Set(performFrames)).toEqual(new Set([0, 1, 2, 3]));
+    // Frame progression is monotonic mod 4 along the timed stroke.
+    for (let i = 1; i < performFrames.length; i++) {
+      expect((performFrames[i] - performFrames[i - 1] + 4) % 4).toBeLessThanOrEqual(2);
+    }
+
+    // Random mode: picks seeded frames even without timestamps, and round-trips through facet brushes.
+    c.addLayer();
+    c.setBrush({ id: 'sticker-stars', tip: { size: 30 }, sticker: { stamps: ['fake:weather-wind'], density: 0.6, scatter: 0, sizeJitter: 0, rotationJitter: 0, frameMode: 'random' } });
+    expect(c.getState().brush.sticker.frameMode).toBe('random');
+    c.paintStroke({ points: line, color: '#14b8a6', seed: 42 });
+    const randomized = c.listStickers().map((s) => s.frame ?? 0);
+    expect(new Set(randomized).size).toBeGreaterThan(1);
+    c.undo();
+    c.paintStroke({ points: line, color: '#14b8a6', seed: 42 });
+    expect(c.listStickers().map((s) => s.frame ?? 0)).toEqual(randomized);
+
+    // Explicit frame placement and update_sticker frame change: notch moves between frames 0 and 2.
+    c.addLayer();
+    const [placed] = c.addStickers(undefined, [{ ref: 'fake:weather-wind', x: 120, y: 70, size: 120, color: '#0ea5e9', frame: 0 }]);
+    const l0 = c.getActiveLayer() as PaintPixelLayer;
+    // Frame 0 notch is at (45..75, 45..75) -> centre (120, 70) is transparent, (100, 90) is filled.
+    expect(readPixel(l0.surface, 120, 70)[3]).toBe(0);
+    expect(readPixel(l0.surface, 100, 90)[3]).toBeGreaterThan(200);
+    // Frame 2 notch is at (35..65, 55..85) in 120x120 art -> (110, 80) in doc coords is inside the notch (transparent).
+    c.updateSticker(undefined, placed.id, { frame: 2 });
+    const l2 = c.getActiveLayer() as PaintPixelLayer;
+    expect(readPixel(l2.surface, 110, 80)[3]).toBe(0);
+  });
+
+  it('checks a placed frame against the art through the tools: frame 0 left out, past the last refused, restamping resets it', async () => {
+    const c = new PaintEditorController({ width: 160, height: 100, paper: 'smooth', stickers: combineStickerProviders([editorStickers(), createFakeStickerProvider()]) });
+    const r = new ToolRegistry();
+    r.register(createPaintEditorToolProvider(c));
+    c.addLayer();
+    const added = ok(await r.callTool('add_stickers', { stickers: [{ ref: 'fake:weather-wind', x: 50, y: 50, size: 40, frame: 2 }, { ref: 'fake:weather-wind', x: 110, y: 50, size: 40, frame: 0 }] }));
+    expect(added.stickers[0].frame).toBe(2);
+    expect('frame' in added.stickers[1]).toBe(false);
+    const id = added.stickers[0].id;
+
+    // Out of range: refused before anything changes, naming the frames it has.
+    const before = c.listStickers();
+    const far = await r.callTool('update_sticker', { id, frame: 4 });
+    expect(far.isError).toBe(true);
+    expect(text(far)).toContain('"fake:weather-wind" has 4 frames, so frame is 0..3; got 4.');
+    expect(c.listStickers()).toEqual(before);
+    const stat = await r.callTool('add_stickers', { stickers: [{ ref: 'editor:star', x: 10, y: 10, frame: 1 }] });
+    expect(stat.isError).toBe(true);
+    expect(text(stat)).toContain('Sticker 0: "editor:star" is not animated, so its only frame is 0; got 1');
+    expect((await r.callTool('update_sticker', { id, frame: 1.5 })).isError).toBe(true);
+
+    // Frame 0 is the saved form of the first frame: left out, not stored as 0.
+    const zero = ok(await r.callTool('update_sticker', { id, frame: 0 }));
+    expect('frame' in zero).toBe(false);
+    expect(c.listStickers().find((s) => s.id === id)).not.toHaveProperty('frame');
+
+    // Hit-testing follows the frame: frame 3's notch is at art (25..55, 45..75), so (40, 60) misses there and hits at frame 0.
+    expect(ok(await r.callTool('sticker_at', { x: 50 - 20 / 3, y: 50 })).sticker?.id).toBe(id);
+    ok(await r.callTool('update_sticker', { id, frame: 3 }));
+    expect(ok(await r.callTool('sticker_at', { x: 50 - 20 / 3, y: 50 })).sticker).toBeNull();
+
+    // Undo and redo restore the frame; a saved and loaded document keeps it.
+    ok(await r.callTool('undo_paint', {}));
+    expect(c.listStickers().find((s) => s.id === id)).not.toHaveProperty('frame');
+    ok(await r.callTool('redo_paint', {}));
+    expect(c.listStickers().find((s) => s.id === id)?.frame).toBe(3);
+    const json = JSON.parse(JSON.stringify(c.toJSON()));
+    const layerId = c.getActiveLayer()!.id;
+    const saved = (json.extensions?.stickers ?? json.stickers)[layerId] as Array<Record<string, unknown>>;
+    saved[1].frame = 0;
+    saved.push({ ...saved[1], id: 'st99', frame: -2 });
+    const d = new PaintEditorController({ width: 160, height: 100, stickers: combineStickerProviders([editorStickers(), createFakeStickerProvider()]) });
+    d.loadJSON(json);
+    const loaded = d.listStickers(layerId);
+    expect(loaded[0].frame).toBe(3);
+    expect(loaded[1]).not.toHaveProperty('frame');
+    expect(loaded[2]).not.toHaveProperty('frame');
+
+    // Restamping without a frame starts the new sticker at its first frame.
+    const heart = ok(await r.callTool('update_sticker', { id, ref: 'editor:heart' }));
+    expect('frame' in heart).toBe(false);
+  });
+
+  it('plays an animated sticker by stroke time in perform mode: no times, every sticker the first frame', async () => {
+    const c = new PaintEditorController({ width: 320, height: 140, paper: 'smooth', stickers: combineStickerProviders([editorStickers(), createFakeStickerProvider()]) });
+    await c.prepareStickers(['fake:weather-wind']);
+    c.addLayer();
+    c.setBrush({ id: 'sticker-stars', tip: { size: 30 }, sticker: { stamps: ['fake:weather-wind'], density: 0.5, scatter: 0, sizeJitter: 0, rotationJitter: 0 } });
+    c.paintStroke({ points: line, color: '#14b8a6', seed: 3 });
+    expect(c.listStickers().every((s) => s.frame === undefined)).toBe(true);
+    // The frame is floor(ms since the stroke's first timed sample / frameDelay) mod frameCount, whatever the first t is.
+    c.addLayer();
+    c.paintStroke({ points: [{ x: 20, y: 60, t: 5000 }, { x: 300, y: 60, t: 5390 }], color: '#14b8a6', seed: 3 });
+    const frames = c.listStickers().map((s) => s.frame ?? 0);
+    expect(frames[0]).toBe(0);
+    expect(frames).toEqual([...frames].sort((a, b) => a - b));
+    expect(frames.at(-1)).toBe(3);
+  });
+
   it('refuses to redraw stickers whose art has not loaded, and reports a failed load', async () => {
     const c = new PaintEditorController({ width: 200, height: 120, stickers: createFakeStickerProvider({ failIds: ['badge-sale'] }) });
     c.addLayer();

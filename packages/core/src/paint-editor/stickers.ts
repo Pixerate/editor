@@ -22,7 +22,7 @@ import type { StickerRef, StickerVariant } from '../stickers/types';
 import { sampleArt, type StickerArt, type StickerArtLookup } from './sticker-art';
 
 export { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
-export { DEFAULT_STICKER, MAX_STICKER_STAMPS, normalizeStickerSettings, type StickerSettings } from './mark-settings';
+export { DEFAULT_STICKER, MAX_STICKER_STAMPS, normalizeStickerSettings, STICKER_FRAME_MODES, type StickerFrameMode, type StickerSettings } from './mark-settings';
 import type { StickerSettings } from './mark-settings';
 import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { oklabToOklch, oklabToRgb, oklchToOklab, rgbToOklab } from '../color/convert';
@@ -51,6 +51,8 @@ export interface Sticker {
    * colour scheme was dark and the sticker has one); absent for the light art.
    */
   variant?: StickerVariant;
+  /** 0-based animation frame index when the sticker is animated; absent when 0 or static. */
+  frame?: number;
 }
 
 function hexRgb(hex: string): [number, number, number] {
@@ -143,7 +145,7 @@ function drawArtSticker(medium: TileMedium, s: Sticker, art: StickerArt): Raster
       const ax = (dx * ca + dy * sa) * scale + art.width / 2;
       const ay = (-dx * sa + dy * ca) * scale + art.height / 2;
       if (ax < -1 || ay < -1 || ax > art.width + 1 || ay > art.height + 1) continue;
-      sampleArt(art, ax, ay, px);
+      sampleArt(art, ax, ay, px, s.frame);
       if (!(px[3] > 0)) continue;
       cov[p] = px[3];
       field[p * 3] = art.tintable ? r : px[0];
@@ -272,11 +274,19 @@ export class StickerSpray {
     const ref = st.stamps[Math.floor(rand01(seed, i, 57) * st.stamps.length)] ?? 'editor:dot';
     const stamp = stickerStamp({ ref });
     const variant = stamp ? 'light' : (this.init.variant?.(ref) ?? 'light');
-    if (!stamp && !this.init.art?.(ref, variant)) {
+    const pic = stamp ? undefined : this.init.art?.(ref, variant);
+    if (!stamp && !pic) {
       this.skipped.add(ref);
       this.next++;
       return;
     }
+    const frameCount = pic?.frames && pic.frames.length > 1 ? pic.frames.length : 1;
+    const frame =
+      frameCount > 1
+        ? st.frameMode === 'random'
+          ? Math.floor(rand01(seed, i, 67) * frameCount)
+          : Math.floor(Math.max(0, d.time ?? 0) / Math.max(1, pic?.frameDelay ?? 100)) % frameCount
+        : 0;
     const sticker: Sticker = {
       id: `st${this.next++}`,
       ref,
@@ -289,6 +299,7 @@ export class StickerSpray {
       opacity: Math.round(Math.min(1, d.opacity * this.init.brush.tip.opacity * base.alpha) * 1000) / 1000,
       seed: Math.floor(rand01(seed, i, 65) * 1e9),
       ...(variant === 'dark' ? { variant } : {}),
+      ...(frame > 0 ? { frame } : {}),
     };
     this.stickers.push(sticker);
     rects.push(drawSticker(this.medium, sticker, this.init.art));
@@ -357,7 +368,29 @@ export function normalizeStickerUpdate(u: Partial<Omit<Sticker, 'id'>>): Partial
     if (!(u.opacity >= 0 && u.opacity <= 1)) throw new Error(`opacity ${u.opacity} is out of range; use 0..1.`);
     out.opacity = u.opacity;
   }
+  if (u.frame !== undefined) {
+    if (!Number.isInteger(u.frame) || u.frame < 0) throw new Error(`frame ${JSON.stringify(u.frame)} must be a whole number >= 0.`);
+    out.frame = u.frame;
+  }
   return out;
+}
+
+/**
+ * A placed sticker with its animation frame checked against its art: frame 0 is left out (the saved
+ * form, so a static and a first-frame sticker save the same), and a frame past the art's last is
+ * refused naming how many it has. Editor stamps and static art have one frame. Art that has not
+ * loaded passes unchecked (the redraw refuses it until it has).
+ */
+export function stickerWithFrame<T extends Partial<Sticker> & Pick<Sticker, 'ref'>>(s: T, art: StickerArt | null | undefined): T {
+  const { frame, ...rest } = s;
+  if (frame === undefined || frame === 0) return rest as T;
+  if (!Number.isInteger(frame) || frame < 0) throw new Error(`frame ${JSON.stringify(frame)} must be a whole number >= 0.`);
+  if (!stickerStamp(s) && !art) return s;
+  const count = art?.frames && art.frames.length > 1 ? art.frames.length : 1;
+  if (frame >= count) {
+    throw new Error(count > 1 ? `"${s.ref}" has ${count} frames, so frame is 0..${count - 1}; got ${frame}.` : `"${s.ref}" is not animated, so its only frame is 0; got ${frame} (describe_sticker says whether a sticker is animated and its frameCount).`);
+  }
+  return s;
 }
 
 /**
@@ -416,7 +449,7 @@ export function stickerAt(stickers: readonly Sticker[], x: number, y: number, ar
     const pic = art?.(s.ref, s.variant);
     if (!pic) return s;
     const scale = Math.max(pic.width, pic.height) / 2;
-    if (sampleArt(pic, u * scale + pic.width / 2, v * scale + pic.height / 2, [0, 0, 0, 0])[3] > 0.25) return s;
+    if (sampleArt(pic, u * scale + pic.width / 2, v * scale + pic.height / 2, [0, 0, 0, 0], s.frame)[3] > 0.25) return s;
   }
   return null;
 }
