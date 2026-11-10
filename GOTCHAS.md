@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/canvas] Animated Edge Dots Ignored `keyPoints`, and Glows Hid Straight Edges
+
+- **Issue / Symptom**: Dots on a reversed or back-and-forth edge (`direction: "reverse"` / `"alternate"`) ran source to target anyway, and a glowing beam or pulse on a perfectly horizontal or vertical edge (a `straight` or `step` edge between aligned nodes) did not draw at all.
+- **Root Cause**: `<animateMotion>` defaults to `calcMode="paced"`, which ignores `keyPoints` / `keyTimes`. SVG filters default to `filterUnits="objectBoundingBox"`, and a straight line's box has zero height (or width), so the filter region is empty and the element disappears.
+- **Solution / Workaround**: `<EdgeAnimation>` (React and Svelte) always sets `calcMode="linear"` on `<animateMotion>`, and `getCanvasEdgeAnimationRender` gives the glow filter a region in user space (`filterUnits="userSpaceOnUse"`, the path's bounds plus a margin for size and glow). Keep both if you render `CanvasEdgeAnimationRender` yourself.
+
+### [core/paint-editor] Dual-Colour Strokes: Light Side in the Document, the Scheme Only in the View
+
+- **Issue / Symptom**: Paint shared between viewers with different themes must show each their own side of a dual colour, and a theme switch must not change, save or sync the document.
+- **Root Cause**: A stroke layer's pixels are stored in the document (and in every history snapshot), so redrawing them for a scheme would bake one viewer's theme into shared pixels and make history entries disagree with the view.
+- **Solution / Workaround**: The document always draws a dual-colour stroke on a stroke layer with its light side (`RecordedStroke.color` is `dualColor.light`, however it was painted). `currentLayers()` swaps in a per-layer view surface (`schemeLayers` / `schemeSurface`), cached and brought up to date from the strokes added or removed since (whole redraw on a reorder). `beginStroke` paints on that view so the stroke looks right while drawing, then redraws the stroke area for the document on commit (`withLiveStrokes(..., { record: false })`) and keeps what was painted as the view; `runStroke` paints stroke layers in the light side directly (`paintScheme`). Pixel layers bake the side painted: there are no strokes to redraw them from. Exports and PSD use the view; `toJSON` the document.
+
 ### [core|swift/paint-editor] A Live-Adjust Gesture Must Only Undo Its Own Commit
 
 - **Issue / Symptom**: Dragging the Fill tool to adjust tolerance (or cancelling the drag) undid the user's previous edit, e.g. a stroke, when the fill itself had painted nothing.
@@ -4211,7 +4223,7 @@ All contributors and AI assistants should check this file before starting work a
 ### [swift] `JSONValue: ExpressibleByNilLiteral` Turns `cond ? nil : jsonValue` Into `.some(.null)` Instead of `Optional.none`
 - **Issue / Symptom**: In a Swift function returning `JSONValue?` (such as `engineChanges`'s inner `diff(_:_:)`), writing `return a == b ? nil : b` where `b` has type `JSONValue` (non-optional) returns `.some(.null)` instead of `nil` (`Optional<JSONValue>.none`), populating every unchanged key of a diff object with `null`.
 - **Root Cause**: `JSONValue` conforms to `ExpressibleByNilLiteral` (`init(nilLiteral: ()) { self = .null }`). In a ternary expression `cond ? nil : b` where `b` is a non-optional `JSONValue`, Swift unifies both branches to the non-optional type `JSONValue` (turning `nil` into `JSONValue.null`) and then wraps the result in `Optional.some`, rather than typing the ternary as `Optional<JSONValue>`.
-- **Solution / Workaround**: Always write `.none` instead of `nil` in ternary expressions returning `JSONValue?` when the other branch is a non-optional `JSONValue` (e.g., `return a == b ? .none : b` and `return out.isEmpty ? .none : .object(out)`).
+- **Solution / Workaround**: Always write `.none` instead of `nil` in ternary expressions returning `JSONValue?` when the other branch is a non-optional `JSONValue` (e.g., `return a == b ? .none : b` and `return out.isEmpty ? .none : .object(out)`). The same trap hits `compactMap { cond ? nil : item.toJSON() }`, which keeps `.null` elements: give the closure an explicit `-> JSONValue?` return type and use `if cond { return nil }`.
 
 ### [core|swift/paint] Ferrofluid and Thin-Film Share `LitCache.lit`, and Code That Builds `ThickChannels` Must Carry `film`
 - **Issue / Symptom**: Merging ferrofluid (#703) with thin-film iridescence (#693) broke in two quiet ways: a single combined lighting loop re-shaded ferrofluid-free thick paint (the two features gate relief differently), and `cure_ferrofluid` dropped the layer's iridescent film because `bakeFerroIntoThick` built `{ height, material }` (TS fails to typecheck; Swift's `ThickChannels.init` silently defaults `film` to empty).
@@ -4226,3 +4238,23 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Calling `render_xray({ strokes: k })` on a painting with a hidden or locked underpainting layer fails with `Layer "…" is hidden; show it (update_layer visible true) to paint on it.` when `replayPainting` replays historical strokes onto that layer.
 - **Root Cause**: `createReplayTarget` copies `this.doc.layers` with their current `visible` and `locks` state. In a pentimento workflow, a layer is painted on first and hidden or locked later, so `target.paintStroke` refuses to replay the earlier stroke onto the now-hidden or locked layer.
 - **Solution / Workaround**: In `renderXray` (both TypeScript `controller.ts` and Swift `Age.swift`), record the set of currently hidden layer IDs, temporarily set `visible: true, locks: undefined` across `target.doc.layers` before calling `replayPainting`, and restore the original `visible` flags on `dried` before calling `renderXrayPixels` so `hiddenLayerCount` remains accurate.
+
+### [swift/chart] Excel Number Formatting Requires V8's Shortest-Round-Trip Decimal Digits (`String(number)`, `toExponential`, `toPrecision`)
+- **Issue / Symptom**: Porting `decimalDigits` (`spreadsheet/numfmt/decimal.ts`) with `String(format: "%e", ...)` or Foundation's `Decimal` rounds 15-digit floats differently from V8's `String(Math.abs(n))`, shifting exact half-way rounding ties in `fixed`, `formatGeneralFit`, scientific notation (`0.00E+00`) and continued-fraction approximations (`# ?/?`).
+- **Root Cause**: The TS number-format engine extracts base-10 mantissa digits and exponent directly from JavaScript's `String(Math.abs(n))` (ECMA-262 shortest round-trip representation) and uses `n.toExponential` / `n.toPrecision` inside `formatGeneralFit`.
+- **Solution / Workaround**: `Decimal.swift` parses the output of `JSONValue.jsNumber(abs(n))`, and `JSString.swift` implements `jsToExponential` and `jsToPrecision` on top of `jsExactDecimal` (with ECMA-262 ties-away-from-zero rounding) so `PixerateCore/NumberFormat/` and `PixerateChart` match the TypeScript formatter bit-for-bit across all number-format, scale and model test vectors.
+
+### [swift] `String.contains`, `hasPrefix` and `replacingOccurrences` Compare Characters, Not the Code Units JS Compares
+- **Issue / Symptom**: In the chart port (#694), `serializeCsv([["a\r\nb"]])` wrote an unquoted line break, `escapeSvg` left `"` unescaped when a combining mark followed it (an attribute injection through a chart title), and the OOXML writer left a raw `&` in `R&\u{301}D`.
+- **Root Cause**: A Swift `String` is a collection of grapheme clusters. `"\r\n"` is one `Character`, so it `contains` neither `"\r"` nor `"\n"`. `"&\u{301}"` is one `Character`, so `for ch in text { case "&" }` never matches it, and `replacingOccurrences(of: "\"", …)` skips `"\u{301}`. JS `includes`, `startsWith`, `replace` and `/["\r\n]/` all work on UTF-16 code units.
+- **Solution / Workaround**: When porting a JS string test or replace, use `jsIncludes`, `jsStartsWith`, `jsEndsWith` and `jsReplacingAll` (`PixerateCore/JSString.swift`), which compare UTF-16 code units. Write escapers over `text.unicodeScalars` and append with `out.unicodeScalars.append`. Likewise, ICU regexes differ from JS: `\d`, `\w` and `\b` are Unicode-aware (spell out `[0-9]`, `[A-Za-z0-9_]`, `(?![A-Za-z0-9_])`), and `\s` misses `\v` and the BOM U+FEFF that JS's `\s` matches.
+
+### [core/persistence] A `save` That Throws Synchronously Left Remote Sync "In Flight" Forever
+- **Issue / Symptom**: After one failed save, `createEditorRemoteSync` never saved again: every later `flush()` awaited the old promise and returned without calling `save`.
+- **Root Cause**: The in-flight promise was cleared in the save IIFE's `finally`. A non-async `save` that throws synchronously settles the IIFE before `inFlightPromise = run` runs, so the `finally` cleared nothing and the assignment then stored an already-settled promise that nothing cleared.
+- **Solution / Workaround**: Assign the promise first, then clear it after awaiting it (`if (inFlightPromise === run) inFlightPromise = null`), never inside the async body. The same applies to any "one at a time" guard built on an async IIFE.
+
+### [core/persistence] Remote Saves Must Be Compare-and-Set, or Two Sessions Overwrite Each Other
+- **Issue / Symptom**: With `version = max(local, server + 1)`, two sessions editing one document without a shared room silently replaced each other's work on every save (last writer wins).
+- **Root Cause**: A read-then-write save does not check what changed in between, and bumping the version past the server's only hides the race.
+- **Solution / Workaround**: `save` receives `baseVersion` (the last confirmed server version). Write only where the stored version still equals it (a database transaction or conditional update, not a fetch followed by a set) and return `{ conflict: true }` otherwise. `onConflict` gets `base` (last confirmed snapshot) and `document` (this session's), merges this session's changes into the server document, loads it with `apply` (not broadcast as a local change) and returns the server version; the controller then saves again. `maxConflictRetries` (default 3) stops a loop.

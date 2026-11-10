@@ -37,6 +37,12 @@ export interface CreateAutosaveOptions<T> {
   recover?: boolean;
   /** Write pending changes on `pagehide` and when the tab is hidden (default `true`). */
   flushOnHide?: boolean;
+  /**
+   * The server / host version of the loaded document, stored with each snapshot. The recovery
+   * check retires snapshots made on an older version instead of offering them, so they never
+   * overwrite newer server state.
+   */
+  baseVersion?: number | (() => number | undefined);
 }
 
 export interface SvelteAutosave<T> {
@@ -86,6 +92,7 @@ export function createAutosave<T>(options: CreateAutosaveOptions<T>): SvelteAuto
     debounceMs: options.debounceMs,
     retryBaseMs: options.retryBaseMs,
     retryMaxMs: options.retryMaxMs,
+    baseVersion: options.baseVersion,
   });
 
   const recover = options.recover !== false;

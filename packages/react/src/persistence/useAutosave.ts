@@ -38,6 +38,12 @@ export interface UseAutosaveOptions<T> {
   recover?: boolean;
   /** Write pending changes on `pagehide` and when the tab is hidden (default `true`). */
   flushOnHide?: boolean;
+  /**
+   * The server / host version of the loaded document, stored with each snapshot. The recovery
+   * check retires snapshots made on an older version instead of offering them, so they never
+   * overwrite newer server state.
+   */
+  baseVersion?: number | (() => number | undefined);
 }
 
 export interface UseAutosaveResult<T> {
@@ -104,6 +110,10 @@ export function useAutosave<T>(options: UseAutosaveOptions<T>): UseAutosaveResul
       debounceMs: o.debounceMs,
       retryBaseMs: o.retryBaseMs,
       retryMaxMs: o.retryMaxMs,
+      baseVersion: () => {
+        const v = optionsRef.current.baseVersion;
+        return typeof v === 'function' ? v() : v;
+      },
     });
     const unsubscribeStatus = instance.subscribe(setStatus);
     const unsubscribeRevisions = revisions.subscribe(() => instance.notify());

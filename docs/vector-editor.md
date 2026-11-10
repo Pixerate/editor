@@ -357,7 +357,7 @@ Besides tracing outlines (Image Trace), a picture can become stylised vector art
   - `hatch` draws engraving lines along a turned grid. They swell where the picture is dark and taper off where it is light.
 - **Colours** are reduced to a `colors`-sized palette by the same median cut Image Trace uses, applied to the cells' colours. The shapes of one colour are one compound path, so a picture becomes a few dozen paths.
 - **Limits.** At most 60,000 shapes; a larger `cell` draws fewer.
-- **Panel and agents.** The trace panel's mode menu offers the four styles next to tracing. Agents use `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage` and `vector.hatchImage` with a PNG data URL.
+- **Panel and agents.** The trace panel's mode menu offers the four styles next to tracing. Agents use `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage` and `vector.hatchImage` with a PNG data URL, or an image reference when the host resolves them (see Image Trace).
 
 ## Generative prompts
 
@@ -536,6 +536,18 @@ The two modes:
 - **Colour** quantises the opaque pixels by median cut. A split falls where the channel value changes, so identical colours stay in one box. The colours are traced from the most common up, and each colour's path also covers the colours traced after it, so the stacked shapes leave no gaps between them.
 
 `traceImage` places the result as one group (one undo step). Agents pass a PNG data URL to `vector.traceImage`, which core decodes with its own PNG reader, up to 4 million pixels. The panels decode any image the browser can read, scaled to at most 1 million pixels.
+
+A model can name an image but cannot write out its bytes, so a host that knows its images passes `resolveImage` to `createVectorCommands`. Then `image` may also be a reference (an http(s) or asset URL, a canvas node id), which the host loads and returns as `{ image: { width, height, data } }` (RGBA) or `{ png }` (a data URL or bytes), scaled to at most `maxPixels`; `null` means there is no such image. `imageReferences` says in the argument's description what references it takes. Data URLs still decode synchronously, so they work in atomic batches; references make the run asynchronous.
+
+```ts
+createVectorCommands(controller, {
+	imageReferences: 'the id of an image node on the canvas, or an http(s) URL',
+	resolveImage: async (ref, { maxPixels }) => {
+		const url = canvas.imageUrlOf(ref) ?? (/^https?:/.test(ref) ? ref : null);
+		return url ? { image: await decodeToPixels(url, maxPixels) } : null;
+	}
+});
+```
 
 ## Lottie
 

@@ -6,9 +6,6 @@
     "width": 640,
     "height": 400
   },
-  "skip": {
-    "swift": "chart not ported yet (#697)"
-  },
   "steps": [
     {
       "tool": "set_chart_data",
@@ -2041,6 +2038,230 @@
           },
           "warnings": [],
           "width": 640
+        }
+      }
+    },
+    {
+      "tool": "import_chart_mermaid",
+      "arguments": {
+        "mermaid": "pie title Digits\n    \"Latin\" : 3\n    \"Arabic-Indic\" : ٣"
+      },
+      "expect": {
+        "result": {
+          "issues": [
+            {
+              "line": 3,
+              "message": "Line 3: could not read \"\"Arabic-Indic\" : ٣\"; it was skipped.",
+              "path": "line 3"
+            }
+          ],
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Latin"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "Digits",
+                "values": [
+                  3
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "Digits",
+            "tree": [],
+            "type": "pie",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "import_chart_mermaid",
+      "arguments": {
+        "mermaid": "xychart-beta\n    x-axisé [A, B]\n    x-axis [Q1, Q2]\n    baré [1, 2]\n    bar [3, 4]"
+      },
+      "expect": {
+        "result": {
+          "issues": [],
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "series-1",
+                "name": "é",
+                "values": [
+                  1,
+                  2
+                ]
+              },
+              {
+                "id": "series-2",
+                "name": "Bar 2",
+                "values": [
+                  3,
+                  4
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": "é"
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
         }
       }
     }

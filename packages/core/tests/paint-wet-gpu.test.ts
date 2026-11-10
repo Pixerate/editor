@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { createWetGpuEngine, flowField, normalizeFlow, pigmentOf, wetGpuSupport, WetWorld, type WetGpuJob, type WetGpuProvider, type WetPaperInput } from '../src/paint';
 import { MASS_CHANNELS, P_D0, P_P0, P_RHO, P_SW, PLANE, SET_PLANES, SLOT_PLANES, WET_TILE } from '../src/paint/wet/model';
 import { shadeTile } from '../src/paint/wet/film';
+import { PaintEditorController } from '../src/paint-editor';
 
 /**
  * Engine B needs a GPU. In Node the capability checks run against fake providers; the GPU-vs-CPU
@@ -58,6 +59,119 @@ describe('Engine B capability check (no GPU needed)', () => {
     expect(s.adapter).toBe('test');
     const failing = { limits: { maxStorageBufferBindingSize: 2 ** 31, maxBufferSize: 2 ** 31 }, requestDevice: async () => Promise.reject(new Error('lost')) };
     expect((await wetGpuSupport({ requestAdapter: async () => failing })).reason).toMatch(/did not start \(lost\)/);
+  });
+
+  it('serializes concurrent shade calls so "wet shaded read" is never submitted while mapped', async () => {
+    interface FakeBuf {
+      size: number;
+      label?: string;
+      mapped: boolean;
+      destroyed: boolean;
+      bytes: ArrayBuffer;
+      mapAsync: () => Promise<void>;
+      getMappedRange: (offset?: number, size?: number) => ArrayBuffer;
+      unmap: () => void;
+      destroy: () => void;
+    }
+    const provider: WetGpuProvider = {
+      requestAdapter: async () => ({
+        limits: { maxStorageBufferBindingSize: 2 ** 30, maxBufferSize: 2 ** 30 },
+        info: { vendor: 'fake' },
+        requestDevice: async () => ({
+          createBuffer: ({ size, label }: { size: number; usage: number; label?: string }): FakeBuf => {
+            const buf: FakeBuf = {
+              size,
+              label,
+              mapped: false,
+              destroyed: false,
+              bytes: new ArrayBuffer(size),
+              mapAsync: async () => {
+                buf.mapped = true;
+                await new Promise((r) => setTimeout(r, 10));
+              },
+              getMappedRange: (offset = 0, len = size) => buf.bytes.slice(offset, offset + len),
+              unmap: () => {
+                buf.mapped = false;
+              },
+              destroy: () => {
+                if (buf.mapped) throw new Error(`[Buffer "${label}"] destroyed while mapped.`);
+                buf.destroyed = true;
+              },
+            };
+            return buf;
+          },
+          createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }),
+          createComputePipelineAsync: async () => ({ getBindGroupLayout: () => ({}) }),
+          createBindGroup: () => ({}),
+          createCommandEncoder: () => {
+            const touched: FakeBuf[] = [];
+            return {
+              beginComputePass: () => ({
+                setPipeline: () => {},
+                setBindGroup: () => {},
+                dispatchWorkgroups: () => {},
+                end: () => {},
+              }),
+              copyBufferToBuffer: (src: FakeBuf, _so: number, dst: FakeBuf) => {
+                touched.push(src, dst);
+              },
+              clearBuffer: (dst: FakeBuf) => {
+                touched.push(dst);
+              },
+              finish: () => ({ touched }),
+            };
+          },
+          queue: {
+            writeBuffer: () => {},
+            submit: (cmds: readonly { touched?: FakeBuf[] }[]) => {
+              for (const cmd of cmds) {
+                for (const b of cmd.touched ?? []) {
+                  if (b.mapped) throw new Error(`[Buffer "${b.label}"] used in submit while mapped.`);
+                }
+              }
+            },
+            onSubmittedWorkDone: async () => {},
+          },
+          destroy: () => {},
+        }),
+      }),
+    };
+
+    const { engine } = await createWetGpuEngine(provider);
+    expect(engine).toBeTruthy();
+    const job: WetGpuJob = { slot: 0, lane: 0, neighbours: [-1, -1, -1, -1, -1, -1, -1, -1], width: 256, height: 256 };
+    const [a, b] = await Promise.all([
+      engine!.shade([job], 0, [null], [247, 243, 234], 'display'),
+      engine!.shade([job, job], 0, [null, null], [247, 243, 234], 'display'),
+    ]);
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(2);
+    engine!.destroy();
+  });
+});
+
+describe('wet lead-frame shading', () => {
+  // A lead frame shades on the GPU while a CPU batch runs; `idle()` must wait for it, and a lead
+  // frame that fails (a lost GPU) must not fail whoever waits (the next batch reshades its tiles).
+  it('idle() waits for a lead frame still shading, and settles when it fails', async () => {
+    const c = new PaintEditorController({ width: 64, height: 64, paper: 'cold-pressed', wet: { kernel: 'wasm', threads: 0 } });
+    const wet = (c as unknown as { wet: { displaying: Promise<void> | null; idle(): Promise<void> } }).wet;
+    let fail!: (error: Error) => void;
+    const shading = new Promise<void>((_, reject) => (fail = reject));
+    wet.displaying = shading;
+    shading.catch(() => undefined).finally(() => {
+      if (wet.displaying === shading) wet.displaying = null;
+    });
+
+    let settled = false;
+    const idle = wet.idle().then(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(settled).toBe(false);
+
+    fail(new Error('The GPU is gone (lost).'));
+    await idle;
+    expect(settled).toBe(true);
+    expect(wet.displaying).toBeNull();
   });
 });
 

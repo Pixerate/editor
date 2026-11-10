@@ -4,7 +4,7 @@ import { GRAIN_PATTERNS } from '../paint/grain.js';
 import { type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_LENS_SPECS } from './lens.js';
 import type { CommandSpec } from '../commands/registry.js';
-import type { VectorConstraintInput, VectorEditorController, VectorShapeInput } from './controller.js';
+import type { VectorActionResult, VectorConstraintInput, VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
 import type { VectorConstraintKind, VectorMatrix, VectorTextNode } from './types.js';
 import { VECTOR_CONSTRAINT_KINDS } from './types.js';
@@ -24,7 +24,7 @@ import { isVectorFrame } from './frames.js';
 import { vectorPolarAngles } from './snap.js';
 import { sanitizeVectorShadedPaint } from './shading.js';
 import type { VectorFreeformPoint, VectorPathNode } from './types.js';
-import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
+import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions, type VectorTracePixels } from './trace.js';
 import { bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import type { VectorPdfOptions } from './pdf.js';
 import { VECTOR_DISTORT_BRUSH_MODES, type VectorDistortBrushMode } from './distortBrush.js';
@@ -43,7 +43,27 @@ export interface VectorCommandOptions {
 	group?: string;
 	/** Command scope. Omit for global commands. */
 	scope?: string;
+	/**
+	 * Loads an image that `vector.traceImage` and the stylise commands (`vector.mosaicImage`, …)
+	 * are given by reference instead of as a PNG data URL: an http(s) or asset URL, or a host id
+	 * such as a canvas node's. Agents can name an image but cannot write out its bytes, so without
+	 * this they can only trace PNGs they produced themselves. Return `null` when there is no such
+	 * image; throw (or reject) with a sentence when it cannot be loaded. `maxPixels` is the most the
+	 * commands trace: scale larger images down to fit.
+	 */
+	resolveImage?: VectorImageResolver;
+	/**
+	 * What `resolveImage` accepts, for the `image` argument's description (default "an image
+	 * URL"), e.g. "the id of an image node on the canvas, or an http(s) URL".
+	 */
+	imageReferences?: string;
 }
+
+/** An image a host loaded for a reference: RGBA pixels, or a PNG (data URL or bytes). */
+export type VectorResolvedImage = { image: VectorTracePixels } | { png: string | Uint8Array };
+
+/** See `VectorCommandOptions.resolveImage`. */
+export type VectorImageResolver = (ref: string, options: { maxPixels: number }) => VectorResolvedImage | null | undefined | Promise<VectorResolvedImage | null | undefined>;
 
 /** A node as listed for agents. */
 export interface VectorNodeListing {
@@ -1823,6 +1843,67 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+	// Images for Image Trace and the stylise commands: a PNG data URL decodes at once (so the
+	// commands stay synchronous and can run in atomic batches); anything else is a reference the
+	// host's `resolveImage` loads, which makes the run asynchronous.
+	const resolveImage = options.resolveImage;
+	const IMAGE_WHAT = resolveImage ? 'an image (a PNG data URL, or a reference the editor loads)' : 'a PNG (base64 data URL)';
+	const IMAGE_PARAM = {
+		type: 'string',
+		description: resolveImage
+			? `The image: a data:image/png;base64,… URL, or ${options.imageReferences ?? 'an image URL'} (up to ${VECTOR_TRACE_MAX_PIXELS / 1e6} million pixels).`
+			: 'The image as a data:image/png;base64,… URL (up to 4 million pixels).'
+	} as const;
+	const decodePngBytes = (bytes: Uint8Array, what: string): VectorTracePixels => {
+		if (!isPng(bytes)) fail(`${what} is not a PNG.`);
+		try {
+			return decodePng(bytes, { maxPixels: VECTOR_TRACE_MAX_PIXELS });
+		} catch (e) {
+			return fail(`The PNG could not be read: ${(e as Error).message}`);
+		}
+	};
+	const fromResolved = (ref: string, resolved: VectorResolvedImage | null | undefined): VectorTracePixels => {
+		if (!resolved || typeof resolved !== 'object') return fail(`There is no image "${ref}".`);
+		if ('image' in resolved && resolved.image) return resolved.image;
+		if ('png' in resolved && typeof resolved.png === 'string') {
+			const parsed = parseDataUrl(resolved.png);
+			if (!parsed) fail(`The image "${ref}" was loaded as something other than a PNG data URL.`);
+			return decodePngBytes(parsed!.bytes, `The image "${ref}"`);
+		}
+		if ('png' in resolved && resolved.png instanceof Uint8Array) return decodePngBytes(resolved.png, `The image "${ref}"`);
+		return fail(`The image "${ref}" was loaded as nothing usable (expected { image } or { png }).`);
+	};
+	const withImage = <T,>(image: string, use: (pixels: VectorTracePixels) => T): T | Promise<T> => {
+		if (typeof image !== 'string' || !image.trim()) fail('image is empty.');
+		if (/^data:/i.test(image)) {
+			const parsed = parseDataUrl(image);
+			if (!parsed || !isPng(parsed.bytes)) fail(resolveImage ? 'image must be a PNG data URL (data:image/png;base64,…) or a reference to an image.' : 'image must be a PNG data URL (data:image/png;base64,…).');
+			return use(decodePngBytes(parsed!.bytes, 'image'));
+		}
+		if (!resolveImage) return fail('image must be a PNG data URL (data:image/png;base64,…).');
+		const ref = image.trim();
+		const load = async () => {
+			let resolved: VectorResolvedImage | null | undefined;
+			try {
+				resolved = await resolveImage(ref, { maxPixels: VECTOR_TRACE_MAX_PIXELS });
+			} catch (e) {
+				return fail(`The image "${ref}" could not be loaded: ${e instanceof Error ? e.message : String(e)}`);
+			}
+			return use(fromResolved(ref, resolved));
+		};
+		return load();
+	};
+	const imageResult = (r: VectorActionResult & { id?: string; ids?: string[] }) => {
+		check(r);
+		return {
+			id: r.id,
+			paths: r.ids!.map((id) => {
+				const n = controller.getNode(id) as VectorPathNode;
+				return { id, name: n.name, fill: n.fill, subpaths: n.subpaths.length };
+			})
+		};
+	};
+
 	const traceCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -1830,11 +1911,11 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Image Trace…',
 			keywords: ['trace', 'image trace', 'live trace', 'vectorize', 'bitmap to vector', 'png to svg', 'autotrace', 'posterize'],
 			description:
-				'Traces a PNG (base64 data URL) into vector paths and adds them as one group: `threshold` mode makes one even-odd path where the image is dark (or opaque with channel alpha); `color` mode makes a stacked path per colour (median-cut to `colors`, the most common at the bottom). Placed with its top-left at x, y and `width` wide (default one unit per pixel). One undo step. Returns { id, paths: [{ id, name, fill, subpaths }] }.',
+				'Traces ' + IMAGE_WHAT + ' into vector paths and adds them as one group: `threshold` mode makes one even-odd path where the image is dark (or opaque with channel alpha); `color` mode makes a stacked path per colour (median-cut to `colors`, the most common at the bottom). Placed with its top-left at x, y and `width` wide (default one unit per pixel). One undo step. Returns { id, paths: [{ id, name, fill, subpaths }] }.',
 			params: {
 				type: 'object',
 				properties: {
-					image: { type: 'string', description: 'The image as a data:image/png;base64,… URL (up to 4 million pixels).' },
+					image: IMAGE_PARAM,
 					mode: { type: 'string', enum: ['threshold', 'color'], description: 'threshold (one colour, default) or color (a path per colour).' },
 					channel: { type: 'string', enum: ['luminance', 'alpha'], description: 'Threshold mode: trace dark pixels (luminance, default) or opaque ones (alpha).' },
 					threshold: { type: 'number', minimum: 0, maximum: 1, description: 'Threshold mode: inside where darkness (or alpha) reaches this (default 0.5).' },
@@ -1854,62 +1935,29 @@ export function createVectorCommands(controller: VectorEditorController, options
 			undoable: true,
 			run: (_ctx: unknown, params: { image: string } & VectorTraceOptions & { x?: number; y?: number; width?: number; name?: string }) => {
 				const { image, ...options } = params;
-				const parsed = parseDataUrl(image);
-				if (!parsed || !isPng(parsed.bytes)) fail('image must be a PNG data URL (data:image/png;base64,…).');
-				let decoded: { width: number; height: number; data: ArrayLike<number> };
-				try {
-					decoded = decodePng(parsed!.bytes, { maxPixels: VECTOR_TRACE_MAX_PIXELS });
-				} catch (e) {
-					return fail(`The PNG could not be read: ${(e as Error).message}`);
-				}
-				const r = controller.traceImage(decoded, options);
-				check(r);
-				return {
-					id: r.id,
-					paths: r.ids!.map((id) => {
-						const n = controller.getNode(id) as VectorPathNode;
-						return { id, name: n.name, fill: n.fill, subpaths: n.subpaths.length };
-					})
-				};
+				return withImage(image, (pixels) => imageResult(controller.traceImage(pixels, options)));
 			}
 		}
 	];
 
 	const IMAGE_PLACE = {
-		image: { type: 'string', description: 'The picture as a data:image/png;base64,… URL (up to 4 million pixels).' },
+		image: resolveImage ? IMAGE_PARAM : ({ type: 'string', description: 'The picture as a data:image/png;base64,… URL (up to 4 million pixels).' } as const),
 		x: { type: 'number', description: 'Left edge in document units (default 0).' },
 		y: { type: 'number', description: 'Top edge in document units (default 0).' },
 		width: { type: 'number', exclusiveMinimum: 0, description: 'Width in document units (default: the image width in pixels).' },
 		name: { type: 'string', description: 'Group name (default: the style\'s name).' }
 	} as const;
-	const decodeImage = (image: string) => {
-		const parsed = parseDataUrl(image);
-		if (!parsed || !isPng(parsed.bytes)) fail('image must be a PNG data URL (data:image/png;base64,…).');
-		try {
-			return decodePng(parsed!.bytes, { maxPixels: VECTOR_TRACE_MAX_PIXELS });
-		} catch (e) {
-			return fail(`The PNG could not be read: ${(e as Error).message}`);
-		}
-	};
 	const stylize = (style: VectorStylizeStyle, label: string, keywords: string[], description: string, props: Record<string, unknown>): CommandSpec => ({
 		...base,
 		id: `${prefix}${style}Image`,
 		label,
 		keywords: ['stylize', 'stylise', 'bitmap to vector', 'artistic', 'png to svg', ...keywords],
-		description: `${description} Added as one group placed with its top-left at x, y and width wide; colours of one kind share a compound path. One undo step. Returns { id, paths: [{ id, name, fill, subpaths }] }.`,
+		description: `${resolveImage ? description.replace('a PNG', IMAGE_WHAT) : description} Added as one group placed with its top-left at x, y and width wide; colours of one kind share a compound path. One undo step. Returns { id, paths: [{ id, name, fill, subpaths }] }.`,
 		params: { type: 'object', properties: { ...IMAGE_PLACE, ...props }, required: ['image'], additionalProperties: false },
 		undoable: true,
 		run: (_ctx: unknown, params: { image: string } & VectorStylizeOptions & { x?: number; y?: number; width?: number; name?: string }) => {
 			const { image, ...options } = params;
-			const r = controller.stylizeImage(decodeImage(image), style, options);
-			check(r);
-			return {
-				id: r.id,
-				paths: r.ids!.map((id) => {
-					const n = controller.getNode(id) as VectorPathNode;
-					return { id, name: n.name, fill: n.fill, subpaths: n.subpaths.length };
-				})
-			};
+			return withImage(image, (pixels) => imageResult(controller.stylizeImage(pixels, style, options)));
 		}
 	});
 	const CELL = (dflt: number, what: string) => ({ type: 'number', minimum: 1, description: `${what} in image pixels (default ${dflt}); larger draws fewer, bigger shapes.` });

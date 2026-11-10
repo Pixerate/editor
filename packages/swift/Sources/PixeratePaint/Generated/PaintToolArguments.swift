@@ -693,6 +693,8 @@ public struct SetBrushArguments: Sendable {
 public struct SetColorArguments: Sendable {
     /// Paint colour #rrggbb.
     public var color: String?
+    /// A light / dark pair as the paint colour, instead of color: each side a colour #rrggbb.
+    public var dualColor: JSONValue?
     /// Second colour #rrggbb.
     public var secondaryColor: String?
     /// Lock the paint colour: brushes chosen later keep it instead of taking their default colour (default: unchanged; the editor starts unlocked).
@@ -701,6 +703,7 @@ public struct SetColorArguments: Sendable {
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
     public init(_ args: JSONObject) throws {
         color = try args.string("color")
+        dualColor = args.argument("dualColor")
         secondaryColor = try args.string("secondaryColor")
         locked = try args.bool("locked")
     }

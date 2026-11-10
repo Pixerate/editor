@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
 import { ToolRegistry } from '../src/tools';
-import { pngDataUrl } from '../src/raster/png';
+import { encodePng, pngDataUrl } from '../src/raster/png';
 import {
 	VectorEditorController,
 	createVectorCommands,
@@ -14,6 +14,7 @@ import {
 	vectorTraceContours,
 	type VectorGroupNode,
 	type VectorPathNode,
+	type VectorImageResolver,
 	type VectorTracePixels
 } from '../src/vector';
 
@@ -152,5 +153,86 @@ describe('traceImage through the tool registry', () => {
 		const blank = image(8, 8, () => WHITE);
 		expect((await run('vector.traceImage', { image: pngDataUrl(8, 8, blank.data) })).text).toContain('Nothing to trace');
 		expect((await run('vector.traceImage', { image: 'x', colors: 99 })).isError).toBe(true);
+	});
+});
+
+describe('images by reference (resolveImage)', () => {
+	const setup = (resolveImage?: VectorImageResolver, imageReferences?: string) => {
+		const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [] } });
+		const commands = new CommandRegistry();
+		for (const spec of createVectorCommands(c, { ...(resolveImage ? { resolveImage } : {}), ...(imageReferences ? { imageReferences } : {}) })) commands.register(spec);
+		const tools = new ToolRegistry();
+		tools.register(createCommandToolProvider(commands));
+		const run = async (id: string, params?: unknown) => {
+			const r = await tools.callTool('run_command', { id, ...(params !== undefined ? { params } : {}) });
+			return { isError: !!r.isError, text: r.content?.map((x: any) => x.text).join('') ?? '', ...(r.structuredContent as any) };
+		};
+		return { c, commands, run };
+	};
+
+	it('loads a reference through the host and traces its pixels', async () => {
+		const calls: Array<[string, { maxPixels: number }]> = [];
+		const { c, run } = setup(async (ref, options) => {
+			calls.push([ref, options]);
+			return ref === 'node-1' ? { image: ring } : null;
+		});
+		const r = await run('vector.traceImage', { image: ' node-1 ', width: 120 });
+		expect(r.isError).toBe(false);
+		expect(calls).toEqual([['node-1', { maxPixels: 4_000_000 }]]);
+		expect(r.result.paths).toEqual([{ id: expect.any(String), name: 'Trace', fill: '#000000', subpaths: 2 }]);
+		expect(c.getState().selection).toEqual([r.result.id]);
+		// One undo step, as for a data URL.
+		c.undo();
+		expect(c.getState().document.nodes).toEqual([]);
+	});
+
+	it('accepts a PNG data URL or PNG bytes from the host', async () => {
+		const { run } = setup((ref) => (ref === 'url' ? { png: pngDataUrl(ring.width, ring.height, ring.data) } : { png: encodePng(square.width, square.height, square.data) }));
+		expect((await run('vector.traceImage', { image: 'url' })).result.paths[0].subpaths).toBe(2);
+		expect((await run('vector.traceImage', { image: 'https://example.com/square.png' })).result.paths[0].subpaths).toBe(1);
+	});
+
+	it('stylises a referenced image', async () => {
+		const { run } = setup(() => ({ image: square }));
+		const r = await run('vector.mosaicImage', { image: 'node-1', cell: 10 });
+		expect(r.isError).toBe(false);
+		expect(r.result.paths.length).toBeGreaterThan(0);
+	});
+
+	it('still decodes data URLs synchronously without asking the host', () => {
+		let asked = false;
+		const { commands } = setup(() => {
+			asked = true;
+			return null;
+		});
+		const r = commands.execute<{ id: string }>('vector.traceImage', { image: pngDataUrl(ring.width, ring.height, ring.data) });
+		expect(r.ok && typeof r.result.id).toBe('string');
+		expect(asked).toBe(false);
+	});
+
+	it('fails usefully when the host has no image or cannot load it', async () => {
+		const { c, run } = setup(async (ref) => {
+			if (ref === 'broken') throw new Error('HTTP 404');
+			if (ref === 'jpeg') return { png: 'data:image/jpeg;base64,AAAA' };
+			if (ref === 'odd') return {} as never;
+			return null;
+		});
+		expect((await run('vector.traceImage', { image: 'missing' })).text).toContain('There is no image "missing"');
+		expect((await run('vector.traceImage', { image: 'broken' })).text).toContain('The image "broken" could not be loaded: HTTP 404');
+		expect((await run('vector.traceImage', { image: 'jpeg' })).text).toContain('is not a PNG');
+		expect((await run('vector.traceImage', { image: 'odd' })).text).toContain('expected { image } or { png }');
+		expect((await run('vector.traceImage', { image: 'data:image/jpeg;base64,AAAA' })).text).toContain('or a reference to an image');
+		expect(c.getState().document.nodes).toEqual([]);
+	});
+
+	it('refuses references without a host resolver, and says what it accepts with one', async () => {
+		const plain = setup();
+		expect((await plain.run('vector.traceImage', { image: 'node-1' })).text).toContain('must be a PNG data URL');
+		const described = (cmds: CommandRegistry, id: string) => (cmds.get(id)!.params as any).properties.image.description as string;
+		expect(described(plain.commands, 'vector.traceImage')).toBe('The image as a data:image/png;base64,… URL (up to 4 million pixels).');
+		const hosted = setup(() => null, 'the id of an image node on the canvas');
+		expect(described(hosted.commands, 'vector.traceImage')).toContain('or the id of an image node on the canvas');
+		expect(described(hosted.commands, 'vector.hatchImage')).toContain('or the id of an image node on the canvas');
+		expect(hosted.commands.get('vector.traceImage')!.description).toContain('a reference the editor loads');
 	});
 });

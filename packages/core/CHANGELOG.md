@@ -1,5 +1,41 @@
 # @pixerate/editor
 
+## 0.281.0
+
+### Minor Changes
+
+- 385d9bf: Animated canvas edges: travelling dots, marching dashes, beams and pulses. An edge's animation lives in `edge.data.animation` (kind, speed in canvas units per second or a duration, direction, colour, size, count, length, gap, glow, track opacity, paused), so it saves, copies and undoes with the edge. Core adds `getCanvasEdgePath` (the same paths xyflow draws), `measureSvgPath`, `getCanvasEdgeAnimationRender` (framework-neutral SVG + SMIL), `sampleCanvasEdgeAnimation` (a frame at any time, without a browser) and the agent tools `list_edge_animations`, `set_edge_animation` and `clear_edge_animation` (`createCanvasEdgeAnimationToolProvider`, one undo step per call). React and Svelte add `<AnimatedEdge>` (register it as a React Flow / Svelte Flow edge type; `data.pathType` picks the path) and `<EdgeAnimation>` for your own edges. Both hold the first frame when the user prefers reduced motion.
+
+## 0.280.0
+
+### Minor Changes
+
+- 2980b3e: Vector: `vector.traceImage` and the stylise commands (`vector.mosaicImage`, `halftoneImage`, `lowPolyImage`, `hatchImage`) take an image by reference when the host passes `resolveImage` to `createVectorCommands`. A model can name an image (a canvas node id, a URL) but cannot write out its bytes; the host loads the reference and returns RGBA pixels or a PNG, scaled to at most `maxPixels`. `imageReferences` describes what it accepts in the `image` argument. Data URLs still decode synchronously, and without a resolver nothing changes.
+
+## 0.279.1
+
+### Patch Changes
+
+- d7eda00: Serialize WebGPU wet-paint tile shading and await in-flight lead-frame display shading before starting post-batch shading so the `"wet shaded read"` readback buffer is never submitted while mapped.
+
+## 0.279.0
+
+### Minor Changes
+
+- 6087c67: Add `sanitizeCanvasDocument`, `applyGraphDifferences`, and companion `extras` support to `createCanvasEditorDocument`, and reactive remote persistence controllers (`createEditorRemoteSync`, Svelte `createEditorSync` and React `useEditorSync`). `save` receives the diff from the last saved snapshot and the `baseVersion` it builds on; returning `{ conflict: true }` from a compare-and-set write calls `onConflict` to merge and save again (or reports an `EditorRemoteConflictError`).
+
+  Autosave takes a `baseVersion` (`createAutosaveController`, `createEditorAutosave`, Svelte `createAutosave` / `createEditorAutosave`, React `useAutosave` / `useEditorAutosave`): it is stored in each snapshot's meta, and the recovery check retires snapshots made on an older server version instead of offering them. `createEditorAutosave` adds `recoverIfNewer`.
+
+## 0.278.0
+
+### Minor Changes
+
+- ebf2341: Paint editor: theme-reactive dual colours, and extension PNGs in external saves.
+
+  - A stroke can be painted in a light / dark pair (`DualColor` from `@pixerate/editor/color`): `PaintStrokeInit.color`, `setColor({ light, dark })`, `updateStroke` `color`, a brush's light / dark default, or the `set_color` tool's new `dualColor` argument. The stroke records the pair (`RecordedStroke.dualColor`), which saved documents round-trip.
+  - On a stroke layer the document draws dual-colour strokes in their light side, whoever painted them, and each editor shows them in its own `setColorScheme` side: display, image and PSD exports and the stroke being drawn follow the scheme, while the document, history and change listeners don't hear of a scheme change. Strokes loaded from saved or shared documents follow it too. Plain `#rrggbb`, gradient and effect paint are never recoloured, and pixel layers keep the side painted.
+  - `toJSONExternal(store)` now also stores the PNGs inside extension fields (light, thick-paint channels, fluorescence, thermochromic, ferrofluid, heat, the mixing pad, brush sources, guides and later fields) in the asset store, referring to them as `asset:<id>`, so saved documents hold no inline data URLs; `loadJSONAsync` puts them back and reports any it can't fetch.
+
 ## 0.277.0
 
 ### Minor Changes
