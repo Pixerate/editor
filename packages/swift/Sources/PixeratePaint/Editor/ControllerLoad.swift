@@ -203,7 +203,6 @@ extension PaintEditorController {
         litCaches.removeAll()
         uvCaches.removeAll()
         thermoCaches.removeAll()
-        ageCaches.removeAll()
         xrayNodeCache = nil
         if let raw = ext["stickers"]?.objectValue {
             var stickers = OrderedMap<String, [Sticker]>()

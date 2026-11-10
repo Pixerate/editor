@@ -1065,7 +1065,7 @@
             "assets": {
               "@1": "pixerate-asset:1ta-23buimwz8tw",
               "@2": "pixerate-asset:3n6-15g1gakm7tc",
-              "@3": "pixerate-asset:75e-fo9seyyrz8"
+              "@3": "pixerate-asset:7d6-qhmouqukyu"
             },
             "dpi": 300,
             "format": "pixerate-paint",
@@ -1417,7 +1417,7 @@
           "file": "png/time-machine.13.png",
           "width": 64,
           "height": 64,
-          "sha256": "27869f1f4631af6b13c5e6bc6d400e260248d69a1847583f4ef69799001d8bb6",
+          "sha256": "825eb29cbbf8423371dff8baad60906f7e5eaab711975d92bf598493f89c8b92",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
