@@ -128,8 +128,24 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
               ),
             }
           : undefined,
-      light: brush.light.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' ? { surface: emptyLight() } : null,
-      fluor: brush.fluorescence.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' ? { surface: emptyFluor() } : null,
+      light: brush.light.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' && brush.engine !== 'antimatter' ? { surface: emptyLight() } : null,
+      fluor: brush.fluorescence.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' && brush.engine !== 'antimatter' ? { surface: emptyFluor() } : null,
+      antimatter:
+        brush.engine === 'antimatter'
+          ? {
+              targets: [
+                {
+                  id: 'thumbnail',
+                  editable: true,
+                  lockTransparency: false,
+                  opacity: 1,
+                  offset: { x: 0, y: 0 },
+                  base: surface,
+                  baseLight: brush.light.amount > 0 ? emptyLight() : null,
+                },
+              ],
+            }
+          : null,
       stampArt,
     }
   );
@@ -159,7 +175,7 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
     surface = fillRect(surface, { x: 0, y: 0, width, height }, rgba);
   } else if (b.engine === 'wet') {
     // the wet layer draws its own band
-  } else if (b.engine === 'blender' || b.engine === 'smudge' || (b.engine === 'mixer' && !b.loadsColor) || b.behavior.pickup > 0) {
+  } else if (b.engine === 'blender' || b.engine === 'smudge' || b.engine === 'antimatter' || (b.engine === 'mixer' && !b.loadsColor) || b.behavior.pickup > 0) {
     // Something to move: two bands, the colour over ochre.
     const half = Math.ceil(height / 2);
     surface = fillRect(surface, { x: 0, y: 0, width, height: half }, rgba);

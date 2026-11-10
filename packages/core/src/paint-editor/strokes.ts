@@ -56,6 +56,8 @@ export interface RecordedStroke {
    * readers), or effect paint (the effect it took its colours from; replays render it first).
    */
   paint?: PaintGradientSource | PaintEffectPaint;
+  /** Antimatter brushes: the visible fuel layer ids at the time of the stroke, so a replay reads fuel from (and changes) exactly the same layers. */
+  targets?: string[];
   /**
    * Scraper strokes: the layers it cut through, top to bottom, so a replay cuts the same ones
    * whatever is hidden or locked when it runs (older documents without it derive them again).
@@ -185,6 +187,10 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   else if (paint && paint.type === 'gradient') out.paint = paint;
   if (Array.isArray(r.scrapeLayerIds) && r.scrapeLayerIds.every((v) => typeof v === 'string')) out.scrapeLayerIds = [...(r.scrapeLayerIds as string[])];
   if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
+  if (Array.isArray(r.targets)) {
+    const targets = r.targets.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    if (targets.length) out.targets = targets;
+  }
   return out;
 }
 

@@ -1269,7 +1269,7 @@
                 "additionalProperties": false
               },
               "marks": {
-                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.",
+                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                 "oneOf": [
                   {
                     "type": "object",
@@ -1491,6 +1491,89 @@
                         "minimum": 0,
                         "maximum": 1,
                         "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "antimatter",
+                        "description": "Always \"antimatter\"."
+                      },
+                      "blastRadius": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 6,
+                        "description": "Blast size, in tip radii (default 2.5)."
+                      },
+                      "blastSpacing": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 8,
+                        "description": "Stroke travel between blasts, in tip diameters (default 2)."
+                      },
+                      "threshold": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Paint needed under the tip to fire (default 0.1)."
+                      },
+                      "invert": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Strength of the colour inversion in the blast core (default 1)."
+                      },
+                      "invertMode": {
+                        "type": "string",
+                        "enum": [
+                          "rgb",
+                          "oklab"
+                        ],
+                        "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+                      },
+                      "scorch": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Strength of the soot ring around the blast (default 0.6)."
+                      },
+                      "annihilate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+                      },
+                      "sparks": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+                      },
+                      "sparkReach": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 8,
+                        "description": "How far sparks fly, in tip diameters (default 3)."
+                      },
+                      "crater": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+                      },
+                      "duration": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 2,
+                        "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
                       }
                     },
                     "required": [
@@ -2983,7 +3066,7 @@
         {
           "name": "paint_stroke",
           "title": "Paint a brush stroke",
-          "description": "Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.",
+          "description": "Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers), and antimatter brushes (engine antimatter: antimatter, antimatter-flare, antimatter-charge) detonate where they touch paint across every visible layer, inverting colours in the core, removing alpha, scorching a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer (returning antimatter: { blasts, sparks, fuel, layers, skippedLayers }). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet), for antimatter brushes antimatter, and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -3314,7 +3397,7 @@
                     "additionalProperties": false
                   },
                   "marks": {
-                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.",
+                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                     "oneOf": [
                       {
                         "type": "object",
@@ -3536,6 +3619,89 @@
                             "minimum": 0,
                             "maximum": 1,
                             "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "antimatter",
+                            "description": "Always \"antimatter\"."
+                          },
+                          "blastRadius": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 6,
+                            "description": "Blast size, in tip radii (default 2.5)."
+                          },
+                          "blastSpacing": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 8,
+                            "description": "Stroke travel between blasts, in tip diameters (default 2)."
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Paint needed under the tip to fire (default 0.1)."
+                          },
+                          "invert": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Strength of the colour inversion in the blast core (default 1)."
+                          },
+                          "invertMode": {
+                            "type": "string",
+                            "enum": [
+                              "rgb",
+                              "oklab"
+                            ],
+                            "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+                          },
+                          "scorch": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Strength of the soot ring around the blast (default 0.6)."
+                          },
+                          "annihilate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+                          },
+                          "sparks": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+                          },
+                          "sparkReach": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 8,
+                            "description": "How far sparks fly, in tip diameters (default 3)."
+                          },
+                          "crater": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+                          },
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 2,
+                            "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
                           }
                         },
                         "required": [
@@ -5144,7 +5310,7 @@
                     "additionalProperties": false
                   },
                   "marks": {
-                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.",
+                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                     "oneOf": [
                       {
                         "type": "object",
@@ -5366,6 +5532,89 @@
                             "minimum": 0,
                             "maximum": 1,
                             "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "antimatter",
+                            "description": "Always \"antimatter\"."
+                          },
+                          "blastRadius": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 6,
+                            "description": "Blast size, in tip radii (default 2.5)."
+                          },
+                          "blastSpacing": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 8,
+                            "description": "Stroke travel between blasts, in tip diameters (default 2)."
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Paint needed under the tip to fire (default 0.1)."
+                          },
+                          "invert": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Strength of the colour inversion in the blast core (default 1)."
+                          },
+                          "invertMode": {
+                            "type": "string",
+                            "enum": [
+                              "rgb",
+                              "oklab"
+                            ],
+                            "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+                          },
+                          "scorch": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Strength of the soot ring around the blast (default 0.6)."
+                          },
+                          "annihilate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+                          },
+                          "sparks": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+                          },
+                          "sparkReach": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 8,
+                            "description": "How far sparks fly, in tip diameters (default 3)."
+                          },
+                          "crater": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+                          },
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 2,
+                            "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
                           }
                         },
                         "required": [
@@ -7039,7 +7288,7 @@
                     "additionalProperties": false
                   },
                   "marks": {
-                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.",
+                    "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                     "oneOf": [
                       {
                         "type": "object",
@@ -7261,6 +7510,89 @@
                             "minimum": 0,
                             "maximum": 1,
                             "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "antimatter",
+                            "description": "Always \"antimatter\"."
+                          },
+                          "blastRadius": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 6,
+                            "description": "Blast size, in tip radii (default 2.5)."
+                          },
+                          "blastSpacing": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 8,
+                            "description": "Stroke travel between blasts, in tip diameters (default 2)."
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Paint needed under the tip to fire (default 0.1)."
+                          },
+                          "invert": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Strength of the colour inversion in the blast core (default 1)."
+                          },
+                          "invertMode": {
+                            "type": "string",
+                            "enum": [
+                              "rgb",
+                              "oklab"
+                            ],
+                            "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+                          },
+                          "scorch": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Strength of the soot ring around the blast (default 0.6)."
+                          },
+                          "annihilate": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+                          },
+                          "sparks": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+                          },
+                          "sparkReach": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 8,
+                            "description": "How far sparks fly, in tip diameters (default 3)."
+                          },
+                          "crater": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+                          },
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 2,
+                            "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
                           }
                         },
                         "required": [
@@ -12953,7 +13285,7 @@
                           "additionalProperties": false
                         },
                         "marks": {
-                          "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.",
+                          "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                           "oneOf": [
                             {
                               "type": "object",
@@ -13175,6 +13507,89 @@
                                   "minimum": 0,
                                   "maximum": 1,
                                   "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "antimatter",
+                                  "description": "Always \"antimatter\"."
+                                },
+                                "blastRadius": {
+                                  "type": "number",
+                                  "minimum": 1,
+                                  "maximum": 6,
+                                  "description": "Blast size, in tip radii (default 2.5)."
+                                },
+                                "blastSpacing": {
+                                  "type": "number",
+                                  "minimum": 0.5,
+                                  "maximum": 8,
+                                  "description": "Stroke travel between blasts, in tip diameters (default 2)."
+                                },
+                                "threshold": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Paint needed under the tip to fire (default 0.1)."
+                                },
+                                "invert": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Strength of the colour inversion in the blast core (default 1)."
+                                },
+                                "invertMode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "rgb",
+                                    "oklab"
+                                  ],
+                                  "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+                                },
+                                "scorch": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Strength of the soot ring around the blast (default 0.6)."
+                                },
+                                "annihilate": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+                                },
+                                "sparks": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+                                },
+                                "sparkReach": {
+                                  "type": "number",
+                                  "minimum": 0.5,
+                                  "maximum": 8,
+                                  "description": "How far sparks fly, in tip diameters (default 3)."
+                                },
+                                "crater": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+                                },
+                                "duration": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 2,
+                                  "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
                                 }
                               },
                               "required": [
@@ -17300,7 +17715,7 @@
                 "additionalProperties": false
               },
               "marks": {
-                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.",
+                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                 "oneOf": [
                   {
                     "type": "object",
@@ -17522,6 +17937,89 @@
                         "minimum": 0,
                         "maximum": 1,
                         "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "antimatter",
+                        "description": "Always \"antimatter\"."
+                      },
+                      "blastRadius": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 6,
+                        "description": "Blast size, in tip radii (default 2.5)."
+                      },
+                      "blastSpacing": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 8,
+                        "description": "Stroke travel between blasts, in tip diameters (default 2)."
+                      },
+                      "threshold": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Paint needed under the tip to fire (default 0.1)."
+                      },
+                      "invert": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Strength of the colour inversion in the blast core (default 1)."
+                      },
+                      "invertMode": {
+                        "type": "string",
+                        "enum": [
+                          "rgb",
+                          "oklab"
+                        ],
+                        "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+                      },
+                      "scorch": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Strength of the soot ring around the blast (default 0.6)."
+                      },
+                      "annihilate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+                      },
+                      "sparks": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+                      },
+                      "sparkReach": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 8,
+                        "description": "How far sparks fly, in tip diameters (default 3)."
+                      },
+                      "crater": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+                      },
+                      "duration": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 2,
+                        "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
                       }
                     },
                     "required": [
@@ -18925,7 +19423,7 @@
                 "additionalProperties": false
               },
               "marks": {
-                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or a scraper blade that cuts down through layers.",
+                "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), or a scraper blade that cuts down through layers.",
                 "oneOf": [
                   {
                     "type": "object",
@@ -19147,6 +19645,89 @@
                         "minimum": 0,
                         "maximum": 1,
                         "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Antimatter paint: where the tip touches paint across any visible layer, it detonates — inverting colours in the core, removing alpha, burning a soot ring, denting thick relief, clearing core light, and throwing sparks on the active layer. Missing fields take their defaults.",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "antimatter",
+                        "description": "Always \"antimatter\"."
+                      },
+                      "blastRadius": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 6,
+                        "description": "Blast size, in tip radii (default 2.5)."
+                      },
+                      "blastSpacing": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 8,
+                        "description": "Stroke travel between blasts, in tip diameters (default 2)."
+                      },
+                      "threshold": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Paint needed under the tip to fire (default 0.1)."
+                      },
+                      "invert": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Strength of the colour inversion in the blast core (default 1)."
+                      },
+                      "invertMode": {
+                        "type": "string",
+                        "enum": [
+                          "rgb",
+                          "oklab"
+                        ],
+                        "description": "Colour inversion mode: rgb (default, channel complement) or oklab (flips lightness and hue so mid-grey changes too)."
+                      },
+                      "scorch": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Strength of the soot ring around the blast (default 0.6)."
+                      },
+                      "annihilate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Paint destroyed at the centre — alpha removed, unless the layer has lockTransparency (default 0.25)."
+                      },
+                      "sparks": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How many sparks fly out from each blast on the active layer (default 0.5; 0: none)."
+                      },
+                      "sparkReach": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 8,
+                        "description": "How far sparks fly, in tip diameters (default 3)."
+                      },
+                      "crater": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Depth of the crater dent and raised rim on layers with thick relief (default 0.5)."
+                      },
+                      "duration": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 2,
+                        "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
                       }
                     },
                     "required": [

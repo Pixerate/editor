@@ -54,6 +54,8 @@ function skeleton(b: ResolvedBrush): Brush {
       return { ...brush, medium: 'paint', ...mut };
     case 'particle':
       return { ...brush, marks: { kind: 'particles' }, ...mut };
+    case 'antimatter':
+      return { ...brush, medium: 'paint', marks: { kind: 'antimatter' }, ...mut };
     case 'sticker':
       return { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) }, marks: { kind: 'objects' }, ...mut };
     case 'scraper':

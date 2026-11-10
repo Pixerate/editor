@@ -264,6 +264,16 @@ public struct PaintBrushPanel: View {
                     .font(.caption2)
                     .foregroundStyle(model.hasMutationAgent ? Color.secondary : Color.orange)
             }
+            if brush.engine == "antimatter" {
+                Picker("Invert colours in", selection: Binding(get: { model.antimatterInvertMode }, set: { model.setAntimatterInvertMode($0) })) {
+                    Text(model.tables.labels.invertModes.rgb).tag("rgb")
+                    Text(model.tables.labels.invertModes.oklab).tag("oklab")
+                }
+                .font(.caption)
+                ForEach(model.antimatterSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.antimatterValue(item.path), range: item.min...item.max, step: item.step) { model.setAntimatterValue(item.path, $0) }
+                }
+            }
             if brush.engine == "mixer" || brush.behavior.dirty {
                 HStack(spacing: 6) {
                     Text("Carries").foregroundStyle(.secondary)

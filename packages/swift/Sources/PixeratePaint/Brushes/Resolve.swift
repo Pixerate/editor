@@ -13,7 +13,7 @@ import PixerateRaster
  */
 public typealias Brush = JSONObject
 
-private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "scraper"]
+private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper"]
 /// Engines that pick up and mix paint dab by dab (the exchange ratios apply).
 private let EXCHANGE = ["dab", "wet", "impasto"]
 /// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
@@ -144,6 +144,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("marks.size", "spray.size", ["dab"], marks: ["scatter"]))
     out += each("marks", "sticker", ["density", "sizeJitter", "rotationJitter", "scatter"], ["sticker"])
     out.append(f("marks.colourJitter", "sticker.colorJitter", ["sticker"]))
+    out += each("marks", "antimatter", ["blastRadius", "blastSpacing", "threshold", "invert", "invertMode", "scorch", "annihilate", "sparks", "sparkReach", "crater", "duration"], ["antimatter"])
     out += each("marks", "scraper", ["depth", "sharpness"], ["scraper"])
     out += each("tip.bristle", "bristle", ["count", "stiffness", "splay", "thickness", "load", "jitter"], ["bristle"])
     return out
@@ -194,6 +195,7 @@ public func resolveEngine(_ brush: Brush) -> String {
     let marks = brush.path("marks.kind")?.stringValue
     if marks == "particles" { return "particle" }
     if marks == "objects" { return "sticker" }
+    if marks == "antimatter" { return "antimatter" }
     if marks == "scraper" { return "scraper" }
     if brush.path("tip.shape")?.stringValue == "bristle" { return "bristle" }
     let surface = brush.path("behaviour.surface")?.stringValue

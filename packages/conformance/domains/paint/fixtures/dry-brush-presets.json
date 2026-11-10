@@ -1247,6 +1247,49 @@
             },
             {
               "builtin": true,
+              "category": "paint",
+              "engine": "antimatter",
+              "id": "antimatter",
+              "kind": "mark",
+              "marks": "antimatter",
+              "medium": "paint",
+              "name": "Antimatter",
+              "size": 24,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "antimatter"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "antimatter",
+              "id": "antimatter-flare",
+              "kind": "mark",
+              "light": 0.9,
+              "marks": "antimatter",
+              "medium": "paint",
+              "name": "Antimatter flare",
+              "size": 18,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "antimatter"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "antimatter",
+              "id": "antimatter-charge",
+              "kind": "mark",
+              "marks": "antimatter",
+              "medium": "paint",
+              "name": "Antimatter charge",
+              "size": 32,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "antimatter"
+            },
+            {
+              "builtin": true,
               "category": "eraser",
               "engine": "scraper",
               "id": "paint-scraper",
@@ -1261,7 +1304,7 @@
             }
           ],
           "host": "paint",
-          "total": 89
+          "total": 92
         }
       }
     },

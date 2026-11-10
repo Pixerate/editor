@@ -11,7 +11,7 @@
 
 import type { MixerLoad } from '../paint/exchange';
 import { BLEND_MODES, type BlendModeInfo } from '../raster/blend';
-import type { ImpastoTool, PaintBrush, PaintBrushInput, WetMediumKind, WetTool, LivePatternKind } from './brushes';
+import type { ImpastoTool, InvertMode, PaintBrush, PaintBrushInput, WetMediumKind, WetTool, LivePatternKind } from './brushes';
 import { TILE, type RasterRect } from '../raster/surface';
 import type { FillRegionOptions, PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -489,7 +489,7 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
   return out;
 }
 
-export { BRUSH_SLIDERS, brushEngineControls, GHOST_SLIDERS, IRIDESCENCE_SLIDERS, multiColorSliders, MUTATION_SLIDERS, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
+export { ANTIMATTER_SLIDERS, BRUSH_SLIDERS, brushEngineControls, GHOST_SLIDERS, IRIDESCENCE_SLIDERS, multiColorSliders, MUTATION_SLIDERS, patchBrushValue, type BrushEngineControls, type SliderControl } from './brush-controls';
 import type { SliderControl } from './brush-controls';
 
 export const PAPER_SLIDERS: readonly SliderControl[] = [
@@ -812,6 +812,8 @@ export const PARTICLE_RENDER_LABELS: Readonly<Record<ParticleRender, string>> = 
 export const RIBBON_PAIR_LABELS: Readonly<Record<RibbonPairs, string>> = { adjacent: 'Neighbours', 'first-last': 'Outermost' };
 export const DOT_TEXTURE_ORDER_LABELS: Readonly<Record<DotTextureOrder, string>> = { sequence: 'In turn', random: 'Random' };
 export const DOT_ROTATION_LABELS: Readonly<Record<DotRotation, string>> = { follow: 'Follow motion', random: 'Random', fixed: 'Tip angle' };
+/** Labels of the antimatter colour inversion modes. */
+export const INVERT_MODE_LABELS: Readonly<Record<InvertMode, string>> = { rgb: 'RGB', oklab: 'OKLab' };
 
 /** Labels of the sticker stamps. */
 export const STAMP_LABELS: Readonly<Record<StampKind, string>> = { dot: 'Dot', star: 'Star', heart: 'Heart', leaf: 'Leaf', flower: 'Flower', confetti: 'Confetti', splat: 'Splat', sparkle: 'Sparkle', ring: 'Ring' };

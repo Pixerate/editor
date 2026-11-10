@@ -98,6 +98,7 @@ import {
   type SerializedPaintDocument,
 } from './serialize';
 import { brushLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
+import { AntimatterStrokeDriver, type AntimatterLayerOutput, type AntimatterTarget } from './antimatter';
 import { affineCopy, normalizeBrushStroke, strokeToJSON, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
 import { renderBrushThumbnail, type BrushThumbnail } from './thumbnails';
 import { colorHarmony, DEFAULT_SWATCHES, readSwatch, type ColorWheel, type HarmonyColor, type HarmonyKind, type Swatch } from './color';
@@ -506,6 +507,8 @@ export interface PaintStrokeInit {
   stencils?: boolean;
   /** Mask with these stencils instead (replays pass the ones recorded with the stroke). */
   maskStencils?: readonly Stencil[];
+  /** Antimatter strokes: the fuel layer ids (the visible pixel layers when painted). A replay reads fuel from exactly these and changes the editable ones, whatever is visible now. */
+  targets?: readonly string[];
   /**
    * Scraper brushes: the layers to cut through, top to bottom, instead of the visible unlocked
    * pixel layers from the top (replays pass `RecordedStroke.scrapeLayerIds`).
@@ -794,6 +797,9 @@ export class PaintEditorController {
   private cached: PaintEditorState | null = null;
   private session: PaintStrokeSession | null = null;
   private live: { layerId: string; surface: TiledSurface } | null = null;
+  private liveMulti: Map<string, TiledSurface> | null = null;
+  private liveThickMulti: Map<string, ThickChannels> | null = null;
+  private liveLightMulti: Map<string, TiledSurface | null> | null = null;
   private liveLayers: { key: TiledSurface; layers: PaintLayer[] } | null = null;
   private dirty: RasterRect[] | 'all' = 'all';
   private seedCounter = 1;
@@ -811,6 +817,18 @@ export class PaintEditorController {
   private liveEffectAt: number | null = null;
   /** The view's stroke layers at `effectTime`, each with the document surface it was drawn from (stale once that changes). */
   private animatedLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+  /** Blast animation frames (view only), kept apart from live effect frames so neither replaces the other. */
+  private blastLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+  /** Blast animation light / thick channels (`null` light: none at this frame). */
+  private animatedLight = new Map<string, TiledSurface | null>();
+  private animatedThick = new Map<string, ThickChannels>();
+  private activeBlastAnim: {
+    driver: AntimatterStrokeDriver;
+    committedDoc: PaintDocumentState;
+    dirty: RasterRect | null;
+    ticked: boolean;
+  } | null = null;
+  private playingClock: { now(): number; frame(cb: () => void): () => void } | null = null;
   /** `renderAnimationFrame` / `withEffectTime`: layer surfaces at another time, for one render. */
   private frameOverride: Map<string, TiledSurface> | null = null;
   /** The area each stroke painted (document pixels; `null`: nothing), learnt as it is painted or drawn, so a stroke layer edit redraws only where it changes (see `drawLiveStrokes`). */
@@ -1350,6 +1368,7 @@ export class PaintEditorController {
 
   undo(): string | null {
     this.requireIdle('undoing');
+    this.clearBlastAnimation();
     const e = this.undoStack[this.undoStack.length - 1];
     if (!e) return null;
     if (e.wet) this.requireWetIdle('undoing');
@@ -1376,6 +1395,7 @@ export class PaintEditorController {
 
   redo(): string | null {
     this.requireIdle('redoing');
+    this.clearBlastAnimation();
     const e = this.redoStack[this.redoStack.length - 1];
     if (!e) return null;
     if (e.wet) this.requireWetIdle('redoing');
@@ -1420,6 +1440,7 @@ export class PaintEditorController {
   /** Starts a new canvas: one empty layer over the paper (one undo step; undo brings the old one back). */
   newCanvas(options: Partial<PaintCanvas> & { paper?: Partial<PaperSettings> | string } = {}): PaintDocumentState {
     this.requireIdle('starting a new canvas');
+    this.clearBlastAnimation();
     const next = createPaintDocument({
       width: options.width ?? this.doc.canvas.width,
       height: options.height ?? this.doc.canvas.height,
@@ -3558,6 +3579,15 @@ export class PaintEditorController {
       });
       init = { ...init, seed: seedW, load };
       wet = { driver, surface: () => world.display(id).surface };
+    } else if (brush.engine === 'antimatter') {
+      const targetIds = new Set(this.antimatterTargetsOf(this.doc, init.targets).map((t) => t.id));
+      targetIds.add(layer.id);
+      const wetVisible = this.wet.wetLayerIds().filter((id) => targetIds.has(id));
+      if (wetVisible.length) {
+        this.dryLayersFirst(wetVisible);
+        doc = this.doc;
+        layer = findLayer(this.doc.layers, layer.id)!.layer as PaintPixelLayer;
+      }
     } else if (this.wet.wetLayerIds().includes(layer.id)) {
       // A dry brush on wet paint: the paint dries first (in the same undo step).
       this.dryLayersFirst([layer.id]);
@@ -3605,7 +3635,8 @@ export class PaintEditorController {
     const seed = init.seed ?? mix32((this.seedCounter++ * 0x9e3779b1) >>> 0) & 0x7fffffff;
     const copies = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
     const hasThick = Boolean(doc.thick?.[layer.id]);
-    const needThick = brush.engine === 'impasto' || Boolean(brush.iridescence) || (brush.engine === 'eraser' && hasThick) || Boolean(wet?.driver.init.film);
+    const needThick = brush.engine !== 'antimatter' && (brush.engine === 'impasto' || Boolean(brush.iridescence) || (brush.engine === 'eraser' && hasThick) || Boolean(wet?.driver.init.film));
+    const isSpecialEngine = brush.engine === 'sticker' || brush.engine === 'antimatter';
     const gradient = effect ? null : this.strokeGradient(init, brush, color);
     const session = new PaintStrokeSession(host, {
       layerId: layer.id,
@@ -3631,12 +3662,13 @@ export class PaintEditorController {
       scraper,
       thick: needThick ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
-      light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
+      light: !wet && !isSpecialEngine && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
       // Ferrofluid paint: a twin of the stroke paints the liquid ferrofluid channel.
-      ferro: !wet && brush.engine !== 'sticker' && (brush.ferro.amount > 0 || doc.ferro?.[layer.id]) ? { surface: doc.ferro?.[layer.id] ?? emptyFerro() } : null,
-      fluor: brush.engine !== 'sticker' && (brush.fluorescence.amount > 0 || doc.fluor?.[layer.id]) ? { surface: doc.fluor?.[layer.id] ?? emptyFluor() } : null,
-      thermo: brush.engine !== 'sticker' && (brush.thermochromic.hotColor !== null || doc.thermo?.[layer.id]) ? { surface: doc.thermo?.[layer.id] ?? emptyThermo() } : null,
+      ferro: !wet && !isSpecialEngine && (brush.ferro.amount > 0 || doc.ferro?.[layer.id]) ? { surface: doc.ferro?.[layer.id] ?? emptyFerro() } : null,
+      fluor: !isSpecialEngine && (brush.fluorescence.amount > 0 || doc.fluor?.[layer.id]) ? { surface: doc.fluor?.[layer.id] ?? emptyFluor() } : null,
+      thermo: !isSpecialEngine && (brush.thermochromic.hotColor !== null || doc.thermo?.[layer.id]) ? { surface: doc.thermo?.[layer.id] ?? emptyThermo() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get, variant: (ref) => this.stickerArt.variantFor(ref, this.colorScheme === 'dark') } : undefined,
+      antimatter: brush.engine === 'antimatter' ? { targets: this.antimatterTargetsOf(doc, init.targets), now: () => (this.playingClock ?? defaultEffectClock).now() } : null,
       stampArt: this.stampArt,
       paint: gradient,
       effect,
@@ -3666,6 +3698,9 @@ export class PaintEditorController {
     else if (init.paint) stroke.paint = JSON.parse(JSON.stringify(init.paint));
     if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
     if (init.wet) stroke.steps = [...init.wet.driver.steps];
+    // The fuel layers the stroke read (visible pixel layers at the time, or the replayed ones): a replay reads fuel from exactly these.
+    const fuel = init.antimatter?.targets;
+    if (fuel?.length) stroke.targets = fuel.map((t) => t.id);
     if (init.scraper) stroke.scrapeLayerIds = [...init.scraper.driver.layerIds];
     if (init.selection) {
       const masks = (session.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask');
@@ -3680,6 +3715,7 @@ export class PaintEditorController {
    */
   beginStroke(init: PaintStrokeInit = {}): PaintStrokeSession {
     this.requireIdle('starting another');
+    this.clearBlastAnimation();
     const before = this.doc;
     const host: StrokeSessionHost = {
       update: (layerId, surface, rects) => {
@@ -3688,6 +3724,24 @@ export class PaintEditorController {
           this.liveThick = ch ? { layerId, channels: ch } : null;
           // The wet layer's display is the layer's pixels: show it (not an undo step).
           this.wet.syncDisplays();
+          return;
+        }
+        const amOutputs = this.session?.antimatterOutputs();
+        if (amOutputs) {
+          const liveMulti = new Map<string, TiledSurface>();
+          const liveThickMulti = new Map<string, ThickChannels>();
+          const liveLightMulti = new Map<string, TiledSurface | null>();
+          for (const out of amOutputs) {
+            liveMulti.set(out.id, out.surface);
+            // `null` light / thick: unchanged by the stroke, so the view keeps showing `doc.light` / `doc.thick`.
+            if (out.thick) liveThickMulti.set(out.id, out.thick);
+            if (out.light) liveLightMulti.set(out.id, out.light);
+          }
+          this.liveMulti = liveMulti;
+          this.liveThickMulti = liveThickMulti.size ? liveThickMulti : null;
+          this.liveLightMulti = liveLightMulti.size ? liveLightMulti : null;
+          this.live = { layerId: this.session!.layerId, surface: liveMulti.get(this.session!.layerId) ?? surface };
+          this.emit(rects);
           return;
         }
         if (this.session?.init.scraper) {
@@ -3722,6 +3776,9 @@ export class PaintEditorController {
           return;
         }
         this.live = null;
+        this.liveMulti = null;
+        this.liveThickMulti = null;
+        this.liveLightMulti = null;
         this.liveLayers = null;
         this.liveThick = null;
         this.liveFerro = null;
@@ -3738,8 +3795,8 @@ export class PaintEditorController {
             const snap = this.wetOp.before;
             this.wetOp = null;
             this.pendingWetEvents = [];
-            if (wetStroke) this.wet.restore(snap);
-            this.doc = { ...this.doc, layers: before.layers };
+            this.wet.restore(snap);
+            this.doc = before;
             this.wet.syncDisplays();
           } else if (this.doc.layers !== before.layers) {
             this.doc = { ...this.doc, layers: before.layers };
@@ -3751,6 +3808,21 @@ export class PaintEditorController {
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
         this.paintedBounds.set(stroke, s.result?.bounds ?? null);
+        const amOutputs = s.antimatterOutputs();
+        if (amOutputs) {
+          this.commit(
+            `${brush.name} stroke`,
+            this.withWetEvents(this.applyAntimatterOutputs(this.doc, amOutputs, stroke)),
+            before,
+          );
+          const amDriver = s.antimatterDriver();
+          if (amDriver && brush.antimatter.duration > 0 && amDriver.hasBlasts()) {
+            this.startBlastAnimation(amDriver, s.result?.bounds ?? null);
+          }
+          this.recordMutationStroke(stroke, s.result?.bounds ?? null);
+          this.notifySample('end', s, [], stroke.id);
+          return;
+        }
         if (s.init.scraper) {
           const scraped = s.init.scraper.driver.commitToDocument(this.doc);
           this.commit(`${brush.name} stroke`, { ...scraped.doc, strokes: [...this.doc.strokes, stroke] }, before);
@@ -3941,7 +4013,7 @@ export class PaintEditorController {
   }
 
   /** Runs a whole stroke against `doc` without touching the editor; returns the new document. */
-  private runStroke(doc: PaintDocumentState, init: PaintStrokeInit, points: readonly PenPoint[]): { doc: PaintDocumentState; result: PaintStrokeResult; brush: PaintBrush } {
+  private runStroke(doc: PaintDocumentState, init: PaintStrokeInit, points: readonly PenPoint[]): { doc: PaintDocumentState; result: PaintStrokeResult; brush: PaintBrush; antimatterDriver: AntimatterStrokeDriver | null } {
     let out = doc;
     const host: StrokeSessionHost = {
       update: () => {},
@@ -3950,6 +4022,11 @@ export class PaintEditorController {
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
         this.paintedBounds.set(stroke, s.result?.bounds ?? null);
+        const amOutputs = s.antimatterOutputs();
+        if (amOutputs) {
+          out = this.applyAntimatterOutputs(out, amOutputs, stroke);
+          return;
+        }
         if (s.init.scraper) {
           const scraped = s.init.scraper.driver.commitToDocument(out);
           out = { ...scraped.doc, strokes: [...out.strokes, stroke] };
@@ -4023,12 +4100,13 @@ export class PaintEditorController {
       }
       result.wet = this.wet.isWet(session.layerId);
     }
-    return { doc: out, result, brush: session.init.brush };
+    return { doc: out, result, brush: session.init.brush, antimatterDriver: session.antimatterDriver() };
   }
 
   /** Paints one stroke from data (one undo step). */
   paintStroke(init: PaintStrokeInit & { points: readonly PenPoint[] }): PaintStrokeResult {
     this.requireIdle('painting');
+    this.clearBlastAnimation();
     const points = this.checkPoints(init.points);
     const before = this.doc;
     let run: ReturnType<PaintEditorController['runStroke']>;
@@ -4038,10 +4116,23 @@ export class PaintEditorController {
       this.wetOp = null;
       throw e;
     }
-    const { doc, result, brush } = run;
+    const { doc, result, brush, antimatterDriver } = run;
+    if (!result.strokeId && this.wetOp) {
+      const snap = this.wetOp.before;
+      this.wetOp = null;
+      this.pendingWetEvents = [];
+      this.wet.restore(snap);
+      this.doc = before;
+      this.wet.syncDisplays();
+      this.emit([]);
+      return result;
+    }
     if (result.mixerLoad) this.keepLoad(brush, result.mixerLoad);
     if (doc !== before || this.wetOp) {
       this.commit(`${brush.name} stroke`, this.withWetEvents(doc), before);
+      if (antimatterDriver && brush.antimatter.duration > 0 && antimatterDriver.hasBlasts()) {
+        this.startBlastAnimation(antimatterDriver, result.bounds);
+      }
       const lastStroke = this.doc.strokes[this.doc.strokes.length - 1];
       if (lastStroke && lastStroke.id === result.strokeId) this.recordMutationStroke(lastStroke, result.bounds);
     } else this.emit([]);
@@ -4167,11 +4258,15 @@ export class PaintEditorController {
         }
         // Gradient paint replays as recorded; a recolour paints the one new colour.
         const paint = v.paint && options.color === undefined ? { paint: v.paint } : {};
-        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [], stencils: false, maskStencils: [], ...paint, ...(load && options.brushId === undefined ? { load } : {}) }, v.points);
+        const targets = s.targets && options.layerId === undefined ? { targets: s.targets } : {};
+        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [], stencils: false, maskStencils: [], ...paint, ...targets, ...(load && options.brushId === undefined ? { load } : {}) }, v.points);
         doc = run.doc;
         bounds = unionRect(bounds, run.result.bounds);
         if (run.result.strokeId) ids.push(run.result.strokeId);
         layerIds.add(layerId);
+        if (run.result.antimatter) {
+          for (const lid of run.result.antimatter.layers) layerIds.add(lid);
+        }
       }
     }
     if (doc !== this.doc) this.commit(strokes.length === 1 && repeat === 1 ? 'Replay stroke' : 'Replay strokes', doc);
@@ -5305,9 +5400,10 @@ export class PaintEditorController {
   private currentLayers(): PaintLayer[] {
     const override = this.frameOverride;
     if (override) return Array.from(override).reduce((ls, [id, surface]) => mapLayer(ls, id, (l) => ({ ...(l as PaintPixelLayer), surface })), this.doc.layers);
-    if (this.liveScraper) {
+    const liveMulti = this.liveScraper ?? this.liveMulti;
+    if (liveMulti) {
       let layers = this.doc.layers;
-      for (const [id, surface] of this.liveScraper) {
+      for (const [id, surface] of liveMulti) {
         layers = mapLayer(layers, id, (l) => ({ ...(l as PaintPixelLayer), surface }));
       }
       return layers;
@@ -5416,14 +5512,18 @@ export class PaintEditorController {
   private litLayers(layers: PaintLayer[], useAge = false, paintedLayerCount = 1): PaintLayer[] {
     const thick = this.doc.thick;
     const live = this.liveThick;
+    const liveMulti = this.liveThickMulti;
+    const animThick = this.animatedThick;
     const ferro = this.doc.ferro;
     const liveFerro = this.liveFerro;
     const ageCracks = useAge && isAgeActive(this.age) && this.age.cracks > 0 && this.lighting.relief > 0 ? this.age : null;
-    if (!thick && !live && !ferro && !liveFerro && !ageCracks) return layers;
+    if (!thick && !live && !liveMulti && !animThick.size && !ferro && !liveFerro && !ageCracks) return layers;
     let out = layers;
     const ids = new Set([
       ...Object.keys(thick ?? {}),
       ...(live ? [live.layerId] : []),
+      ...(liveMulti ? liveMulti.keys() : []),
+      ...animThick.keys(),
       ...Object.keys(ferro ?? {}),
       ...(liveFerro ? [liveFerro.layerId] : []),
       ...(ageCracks ? flattenLayers(layers).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).map((l) => l.id) : []),
@@ -5432,7 +5532,7 @@ export class PaintEditorController {
     for (const id of ids) {
       const l = findLayer(out, id)?.layer;
       if (!isPixelLayer(l)) continue;
-      const ch = (live?.layerId === id ? live.channels : thick?.[id]) ?? emptyThickChannels();
+      const ch = (liveMulti?.get(id) ?? (live?.layerId === id ? live.channels : animThick.get(id) ?? thick?.[id])) ?? emptyThickChannels();
       const fSurf = liveFerro?.layerId === id ? liveFerro.surface : ferro?.[id];
       const fSet = (liveFerro?.layerId === id ? liveFerro.settings : this.doc.ferroSettings?.[id]) ?? DEFAULT_FERRO;
       const hasThick = ch.height.tiles.size > 0 || ch.material.tiles.size > 0 || ch.film.tiles.size > 0;
@@ -5483,7 +5583,16 @@ export class PaintEditorController {
    */
   private lightLayers(layers: PaintLayer[]): PaintLayer[] {
     const light = this.doc.light ?? {};
-    const ids = new Set([...Object.keys(light), ...Object.keys(this.doc.thick ?? {})]);
+    const liveLight = this.liveLightMulti;
+    const animLight = this.animatedLight;
+    const ids = new Set([
+      ...Object.keys(light),
+      ...(liveLight ? liveLight.keys() : []),
+      ...animLight.keys(),
+      ...Object.keys(this.doc.thick ?? {}),
+      ...(this.liveThickMulti ? this.liveThickMulti.keys() : []),
+      ...this.animatedThick.keys(),
+    ]);
     if (!ids.size) return layers;
     let out = layers;
     for (const id of ids) {
@@ -5491,10 +5600,12 @@ export class PaintEditorController {
       if (!isPixelLayer(l)) continue;
       let cache = this.lightCaches.get(id);
       if (!cache) this.lightCaches.set(id, (cache = new LightCache()));
-      const glowed = cache.glow(l.surface, light[id], this.liveThick?.layerId === id ? this.liveThick.channels : this.doc.thick?.[id]);
+      const layerLight = liveLight?.has(id) ? (liveLight.get(id) ?? undefined) : animLight.has(id) ? (animLight.get(id) ?? undefined) : light[id];
+      const layerThick = this.liveThickMulti?.get(id) ?? (this.liveThick?.layerId === id ? this.liveThick.channels : this.animatedThick.get(id) ?? this.doc.thick?.[id]);
+      const glowed = cache.glow(l.surface, layerLight, layerThick);
       if (glowed !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: glowed }));
       const committed = findLayer(this.doc.layers, id)?.layer;
-      const spill = light[id] && isPixelLayer(committed) ? cache.spill(committed.surface, light[id], this.lightSpillOf(id)) : null;
+      const spill = layerLight && isPixelLayer(committed) ? cache.spill(committed.surface, layerLight, this.lightSpillOf(id)) : null;
       if (spill) out = insertAfter(out, id, { type: 'pixel', id: `${id}${SPILL_SUFFIX}`, name: `${l.name} light`, visible: l.visible, opacity: l.opacity, blend: 'linear-dodge', surface: spill, offset: { ...l.offset } } as PaintPixelLayer);
     }
     return out;
@@ -5506,7 +5617,7 @@ export class PaintEditorController {
       if (!l.visible) continue;
       if (l.type === 'group') this.backlitLayers(l.children, committed, opacity * l.opacity, out);
       else if (isPixelLayer(l)) {
-        const thick = !committed && this.liveThick?.layerId === l.id ? this.liveThick.channels : this.doc.thick?.[l.id];
+        const thick = !committed ? (this.liveThickMulti?.get(l.id) ?? (this.liveThick?.layerId === l.id ? this.liveThick.channels : this.animatedThick.get(l.id) ?? this.doc.thick?.[l.id])) : this.doc.thick?.[l.id];
         out.push({ surface: l.surface, offset: l.offset, opacity: opacity * l.opacity, ...(thick ? { thick } : {}) });
       }
     }
@@ -5558,7 +5669,8 @@ export class PaintEditorController {
    */
   compositeTiles(rect: RasterRect, onTile: (tx: number, ty: number, data: Uint8ClampedArray, changed: boolean) => void, options: { dirty?: RasterRect[] | 'all'; paper?: boolean } = {}): void {
     const dirty = options.dirty === 'all' ? undefined : options.dirty;
-    this.viewCompositor.compositeTiles(this.renderLayers({ paper: options.paper }, true), rect, this.sources(), onTile, { dirty, checkpointLayerId: this.live?.layerId ?? this.doc.activeLayerId });
+    const multiChanging = (this.liveMulti && this.liveMulti.size > 1) || Boolean(this.activeBlastAnim);
+    this.viewCompositor.compositeTiles(this.renderLayers({ paper: options.paper }, true), rect, this.sources(), onTile, { dirty, checkpointLayerId: multiChanging ? undefined : (this.live?.layerId ?? this.doc.activeLayerId) });
   }
 
   /** The canvas as canvas-sized RGBA (paper included by default). */
@@ -6891,11 +7003,13 @@ export class PaintEditorController {
 
   /** The view's layers: stroke layers playing live effects at `effectTime`, the rest as they are. */
   private animatedView(): PaintLayer[] {
-    if (!this.animatedLayers.size) return this.doc.layers;
+    if (!this.animatedLayers.size && !this.blastLayers.size) return this.doc.layers;
     let layers = this.doc.layers;
-    for (const [id, a] of this.animatedLayers) {
-      const l = findLayer(layers, id)?.layer;
-      if (isPixelLayer(l) && l.surface === a.base) layers = mapLayer(layers, id, () => ({ ...l, surface: a.surface }));
+    for (const frames of [this.animatedLayers, this.blastLayers]) {
+      for (const [id, a] of frames) {
+        const l = findLayer(layers, id)?.layer;
+        if (isPixelLayer(l) && l.surface === a.base) layers = mapLayer(layers, id, () => ({ ...l, surface: a.surface }));
+      }
     }
     return layers;
   }
@@ -6985,6 +7099,11 @@ export class PaintEditorController {
    * stroke is painted, or when nothing is live. The bindings start it while the editor is shown.
    */
   playEffects(clock: { now(): number; frame(cb: () => void): () => void } = defaultEffectClock): { stop(): void } {
+    this.playingClock = clock;
+    if (this.activeBlastAnim && !this.activeBlastAnim.ticked) {
+      this.activeBlastAnim.driver.rebaseTime(clock.now());
+      this.stepBlastAnimation(clock.now());
+    }
     let stopped = false;
     let cancel = () => {};
     let last = -Infinity;
@@ -6993,6 +7112,9 @@ export class PaintEditorController {
       if (stopped) return;
       const now = clock.now();
       const { playing, fps } = this.effectPlaybackState;
+      if (this.activeBlastAnim && !this.session) {
+        this.stepBlastAnimation(now);
+      }
       if (!playing) started = now - this.effectTime;
       if (!playing || this.session || now - last < 1000 / fps - 1 || !this.liveEffects().layers.length) {
         cancel = clock.frame(tick);
@@ -7010,12 +7132,145 @@ export class PaintEditorController {
       );
     };
     cancel = clock.frame(tick);
+    const self = this;
     return {
       stop() {
         stopped = true;
+        if (self.playingClock === clock) self.playingClock = null;
         cancel();
       },
     };
+  }
+
+  /**
+   * The fuel layers of an antimatter stroke: every visible, non-temporary pixel layer (group
+   * opacity multiplied in), or on a replay exactly the recorded `targetIds` whatever their
+   * visibility now. The editable ones (not locked, stroke, sticker or effect layers) change.
+   */
+  private antimatterTargetsOf(doc: PaintDocumentState, targetIds?: readonly string[]): AntimatterTarget[] {
+    const targetSet = targetIds?.length ? new Set(targetIds) : null;
+    const out: AntimatterTarget[] = [];
+    const hasForcedDescendant = (list: readonly PaintLayer[]): boolean =>
+      Boolean(targetSet && list.some((l) => (l.type === 'group' ? hasForcedDescendant(l.children) : targetSet.has(l.id))));
+    const walk = (list: readonly PaintLayer[], groupOpacity: number, groupVisible: boolean) => {
+      for (const l of list) {
+        if (l.type === 'group') {
+          const vis = groupVisible && l.visible;
+          if (vis || hasForcedDescendant(l.children)) {
+            walk(l.children, groupOpacity * (l.visible ? l.opacity : 1), vis);
+          }
+          continue;
+        }
+        if (!isPixelLayer(l) || l.temporary) continue;
+        const vis = groupVisible && l.visible;
+        if (targetSet ? !targetSet.has(l.id) : !vis) continue;
+        const canEdit =
+          !isLayerLocked(l, 'pixels') &&
+          !doc.liveStrokes?.[l.id] &&
+          !doc.stickers?.[l.id]?.length &&
+          !doc.effectLayers?.[l.id];
+        out.push({
+          id: l.id,
+          editable: canEdit,
+          lockTransparency: isLayerLocked(l, 'transparency'),
+          opacity: groupOpacity * (l.visible ? l.opacity : (l.opacity || 1)),
+          offset: { ...l.offset },
+          base: l.surface,
+          baseLight: doc.light?.[l.id] ?? null,
+          baseThick: doc.thick?.[l.id] ?? null,
+        });
+      }
+    };
+    walk(doc.layers, 1, true);
+    return out;
+  }
+
+  /** Applies every target layer's output from an antimatter stroke into a new document state. */
+  private applyAntimatterOutputs(doc: PaintDocumentState, outputs: readonly AntimatterLayerOutput[], stroke: RecordedStroke): PaintDocumentState {
+    let layers = doc.layers;
+    let thick = doc.thick;
+    let light = doc.light;
+    for (const o of outputs) {
+      if (!o.changed) continue;
+      const l = findLayer(layers, o.id)?.layer;
+      if (!isPixelLayer(l)) continue;
+      layers = mapLayer(layers, o.id, () => ({ ...l, surface: o.surface }));
+      // `null` means the stroke left that channel as it was (not "cleared"): keep the layer's light and relief.
+      if (o.thick !== null) thick = withLayerThick(thick, o.id, o.thick);
+      if (o.light !== null) light = withLayerLight(light, o.id, o.light);
+    }
+    return withLiveStroke(
+      {
+        ...doc,
+        layers,
+        strokes: [...doc.strokes, stroke],
+        ...(thick && Object.keys(thick).length ? { thick } : { thick: undefined }),
+        ...(light && Object.keys(light).length ? { light } : { light: undefined }),
+      },
+      stroke,
+    );
+  }
+
+  private startBlastAnimation(driver: AntimatterStrokeDriver, dirty: RasterRect | null): void {
+    // Blast birth times come from `PenPoint.t` (any origin, e.g. an agent's 0-based times): put them on the view's clock.
+    driver.rebaseTime((this.playingClock ?? defaultEffectClock).now());
+    this.activeBlastAnim = {
+      driver,
+      committedDoc: this.doc,
+      dirty,
+      ticked: false,
+    };
+    if (this.playingClock) {
+      this.stepBlastAnimation(this.playingClock.now());
+    }
+  }
+
+  private stepBlastAnimation(now: number): boolean {
+    const anim = this.activeBlastAnim;
+    if (!anim) return false;
+    if (this.doc !== anim.committedDoc || this.session) {
+      this.clearBlastAnimation();
+      return false;
+    }
+    anim.ticked = true;
+    const frame = anim.driver.renderAtTime(now);
+    if (!frame.active) {
+      this.clearBlastAnimation(true);
+      return true;
+    }
+    const nextLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+    const nextLight = new Map<string, TiledSurface | null>();
+    const nextThick = new Map<string, ThickChannels>();
+    const targets = new Map(anim.driver.init.targets.map((t) => [t.id, t]));
+    for (const out of frame.outputs) {
+      const id = out.id;
+      const committed = findLayer(this.doc.layers, id)?.layer;
+      if (!isPixelLayer(committed)) continue;
+      nextLayers.set(id, { base: committed.surface, surface: out.surface });
+      // `null`: the frame leaves that channel as it was before the stroke (not as committed, which has every blast in it).
+      const tgt = targets.get(id);
+      const light = out.light ?? tgt?.baseLight ?? null;
+      if (light || this.doc.light?.[id]) nextLight.set(id, light);
+      const thick = out.thick ?? tgt?.baseThick ?? null;
+      if (thick) nextThick.set(id, thick);
+    }
+    this.blastLayers = nextLayers;
+    this.animatedLight = nextLight;
+    this.animatedThick = nextThick;
+    this.emit(anim.dirty ? [anim.dirty] : 'all');
+    return true;
+  }
+
+  private clearBlastAnimation(emitDirty = false): void {
+    const anim = this.activeBlastAnim;
+    if (!anim) return;
+    this.activeBlastAnim = null;
+    this.blastLayers.clear();
+    this.animatedLight.clear();
+    this.animatedThick.clear();
+    if (emitDirty) {
+      this.emit(anim.dirty ? [anim.dirty] : 'all');
+    }
   }
 
   /**

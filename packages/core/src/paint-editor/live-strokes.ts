@@ -32,6 +32,8 @@ export function liveStrokeRefusal(brush: PaintBrush): string | null {
     case 'blender':
     case 'smudge':
       return `The ${brush.name} brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer.`;
+    case 'antimatter':
+      return `The ${brush.name} brush detonates existing paint across visible layers, so it can't be redrawn on a stroke layer; paint it on a pixel layer (add_layer) or rasterize the layer first (rasterize_stroke_layer).`;
   }
   if (brush.mutation) return `The ${brush.name} brush paints mutation strokes (which fade once an agent reads them), so it goes on a pixel layer (add_layer).`;
   if (brush.light.amount > 0) return `The ${brush.name} brush lays light, which a stroke layer doesn't redraw yet; paint light on a pixel layer (add_layer), or set light.amount to 0 (set_brush).`;

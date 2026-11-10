@@ -18,18 +18,48 @@ import {
   type LivePatternsInput,
   type LivePatternsSettings,
 } from '../paint/live-patterns';
-import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, DEFAULT_STICKER, normalizeBristle, normalizeParticle, normalizeStickerSettings, STAMP_KINDS, type BristleSettings, type ParticleSettings, type StickerSettings } from './mark-settings';
+import {
+  DEFAULT_ANTIMATTER,
+  DEFAULT_BRISTLE,
+  DEFAULT_PARTICLE,
+  DEFAULT_STICKER,
+  INVERT_MODES,
+  normalizeAntimatter,
+  normalizeBristle,
+  normalizeParticle,
+  normalizeStickerSettings,
+  STAMP_KINDS,
+  type AntimatterSettings,
+  type BristleSettings,
+  type InvertMode,
+  type ParticleSettings,
+  type StickerSettings,
+} from './mark-settings';
 
-export { DEFAULT_LIVE_PATTERNS, LIVE_PATTERN_KINDS, LIVE_PATTERN_PRESETS, normalizeLivePatterns, type LivePatternKind, type LivePatternsInput, type LivePatternsSettings };
+export {
+  DEFAULT_ANTIMATTER,
+  DEFAULT_LIVE_PATTERNS,
+  INVERT_MODES,
+  LIVE_PATTERN_KINDS,
+  LIVE_PATTERN_PRESETS,
+  normalizeAntimatter,
+  normalizeLivePatterns,
+  type AntimatterSettings,
+  type InvertMode,
+  type LivePatternKind,
+  type LivePatternsInput,
+  type LivePatternsSettings,
+};
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
  * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
- * Brush), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along).
+ * Brush), `blender` (mixes the colours under and near the tip), `smudge` (drags paint along), or
+ * `antimatter` (animated blasts that invert, scorch and destroy paint across every visible layer).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'scraper';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'scraper'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker', 'antimatter', 'scraper'];
 
 export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'light' | 'custom';
 
@@ -449,6 +479,8 @@ export interface PaintBrush {
   bristle: BristleSettings;
   /** Sticker engine only: the stamps and how they are sprayed. */
   sticker: StickerSettings;
+  /** Antimatter engine only: blast size, spacing, threshold, inversion, scorch, annihilation, sparks, crater and duration. */
+  antimatter: AntimatterSettings;
   /** Scraper engine only: how deep and sharp the blade cuts through the paint stack. */
   scraper: ScraperSettings;
   /** Light paint: the light it lays with its colour (amount 0: none). */
@@ -596,7 +628,7 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'scraper' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns'>> & {
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -626,6 +658,7 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   particle?: Partial<ParticleSettings>;
   bristle?: Partial<BristleSettings>;
   sticker?: Partial<StickerSettings>;
+  antimatter?: Partial<AntimatterSettings>;
 };
 
 /** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab, mixer and wet brushes. */
@@ -772,6 +805,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     particle: normalizeParticle(raw.particle ?? {}, b.particle ?? DEFAULT_PARTICLE),
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
+    antimatter: normalizeAntimatter(raw.antimatter ?? {}, b.antimatter ?? DEFAULT_ANTIMATTER),
     scraper: normalizeScraper(raw.scraper, b.scraper ?? DEFAULT_SCRAPER),
     light: ghost && !wantsLight ? { ...DEFAULT_LIGHT } : normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     fluorescence: normalizeFluorescence(raw.fluorescence ?? {}, b.fluorescence ?? DEFAULT_FLUORESCENCE),
@@ -809,6 +843,7 @@ const BASE_BRUSH: PaintBrush = {
   particle: { ...DEFAULT_PARTICLE },
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
+  antimatter: { ...DEFAULT_ANTIMATTER },
   scraper: { ...DEFAULT_SCRAPER },
   light: { ...DEFAULT_LIGHT },
   fluorescence: { ...DEFAULT_FLUORESCENCE },
