@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.197.0
+
+### Minor Changes
+
+- 88a0172: feat(paint): add vortex paint brush engine (`marks.kind: 'vortex'`), Euclidean distance + Lamb-Oseen displacement field (`paint/displacement.ts`), wet fluid swirl (`WetWorld.swirl`), and `vortex` / `ink-vortex` / `whirlpool` / `wet-vortex` presets (#683)
+
+### Patch Changes
+
+- Updated dependencies [88a0172]
+  - @pixerate/editor@0.284.0
+
 ## 0.196.0
 
 ### Minor Changes
