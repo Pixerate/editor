@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.285.0
+
+### Minor Changes
+
+- d2098bd: feat(paint): add biopaint mycelial ink (`culture` brush facet, `mycelial-ink`, `rot`, and `foxfire` presets, deterministic integer colony simulation, `get_cultures`, `grow_cultures`, `remove_cultures`, and `set_culture_options` tools, high-res replay events, and React, Svelte, and Swift `CulturePanel` / `PaintCulturePanel` controls) (#684)
+
 ## 0.284.0
 
 ### Minor Changes
