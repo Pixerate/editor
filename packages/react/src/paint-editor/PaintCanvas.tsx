@@ -7,6 +7,7 @@ import {
   drawWaterOverlay,
   startDeviceTilt,
   startWetClock,
+  startCultureCatchUp,
   fitZoom,
   guideOverlay,
   handlePaintShortcut,
@@ -121,11 +122,13 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
   }, [state, controller]);
 
   // Live effect paint and biopaint cultures play while the canvas is mounted (idle when nothing is live or paused).
+  // Biopaint grown while closed catches up on mount and whenever another document is opened.
   useEffect(() => {
-    controller.catchUpCultures();
+    const stopCatchUp = startCultureCatchUp(controller);
     const player = controller.playEffects();
     const cultures = controller.playCultures();
     return () => {
+      stopCatchUp();
       player.stop();
       cultures.stop();
     };

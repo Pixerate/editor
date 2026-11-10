@@ -712,6 +712,24 @@ export function startWetClock(controller: PaintEditorController, frame?: (cb: (t
 }
 
 /**
+ * Catches biopaint up on growth while the file was closed: `controller.catchUpCultures()` now and
+ * again whenever the document is replaced (`onDocumentReplaced`: another document opened, or a new
+ * canvas), so a mounted canvas never shows a stale culture. A refusal (e.g. a stroke in progress)
+ * is skipped. Returns a function that stops listening. Bindings call it once per mounted canvas.
+ */
+export function startCultureCatchUp(controller: PaintEditorController): () => void {
+  const catchUp = () => {
+    try {
+      controller.catchUpCultures();
+    } catch {
+      // Busy (a stroke, a gesture): the next replace or mount catches up instead.
+    }
+  };
+  catchUp();
+  return controller.onDocumentReplaced(catchUp);
+}
+
+/**
  * Draws the water overlay (blue where the surface is wet, faint where the paper is damp) into a
  * document-sized 2D context, clearing it first. Draws nothing when the overlay is off.
  */

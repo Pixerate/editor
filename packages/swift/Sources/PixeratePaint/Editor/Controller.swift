@@ -257,6 +257,8 @@ public final class PaintEditorController {
     private var library: LibraryCancellable?
     /// Change listeners (`subscribe`) and how many changes there have been.
     var listeners: [UUID: () -> Void] = [:]
+    /// Listeners for the document being replaced (`onDocumentReplaced`).
+    var documentListeners: [UUID: () -> Void] = [:]
     public internal(set) var version = 0
     /// What each recent change redrew (`emit`): rectangles (a stroke's dabs), or nil for anything, by version, oldest first.
     var dirtyLog: [(version: Int, rects: [RasterRect]?)] = []
@@ -498,6 +500,7 @@ public final class PaintEditorController {
         age = DEFAULT_AGE
         xrayView = false
         commit("New canvas", next)
+        notifyDocumentReplaced()
         return next
     }
 
@@ -1601,7 +1604,8 @@ public final class PaintEditorController {
     func strokeBrush(_ i: PaintStrokeInit) throws -> PaintBrush {
         var b = try i.brushId.map { try requireEntry($0).brush } ?? brush
         if var fixed = i.fixedBrush {
-            fixed.id = b.id
+            // A recorded brush (a replay) keeps its own id unless brushId names another.
+            if i.brushId != nil || !isBrushId(fixed.id) { fixed.id = b.id }
             fixed.builtin = nil
             return fixed
         }
