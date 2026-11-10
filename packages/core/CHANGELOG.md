@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.283.0
+
+### Minor Changes
+
+- fed3058: feat(paint): add painting time machine with non-destructive ageing preview, X-ray radiograph view, and multi-layer paint scraper brush (`set_age`, `get_age`, `bake_age`, `render_xray`, `set_xray_view`, `paint-scraper`)
+
 ## 0.282.0
 
 ### Minor Changes
