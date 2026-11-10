@@ -43,6 +43,7 @@ describe('the paint conformance scenarios', () => {
       // Numbers within CONFORMANCE_NUMBER_TOLERANCE match (trig may differ in the last bits across CPUs); toEqual shows the diff.
       if (!conformanceValuesMatch(out.result, step.expect!.result)) expect(out.result, label).toEqual(step.expect!.result);
       expect(out.isError, label).toBe(step.expect!.isError === true);
+      if ((step.reload || step.load !== undefined) && !conformanceValuesMatch(out.loaded, step.expect!.loaded)) expect(out.loaded, `${label} loaded`).toEqual(step.expect!.loaded);
       if (step.document && !conformanceValuesMatch(out.document, step.expect!.document)) expect(out.document, `${label} document`).toEqual(step.expect!.document);
       if (step.pixels) {
         const recorded = step.expect!.pixels!;
