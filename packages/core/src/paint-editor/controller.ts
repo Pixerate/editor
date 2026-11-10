@@ -229,7 +229,7 @@ import {
   type PaintAgeSettings,
   type XrayResult,
 } from './age';
-import { collectScrapeableLayers, ScraperStrokeDriver } from './scraper';
+import { collectScrapeableLayers, scrapeLayersByIds, ScraperStrokeDriver } from './scraper';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -506,6 +506,11 @@ export interface PaintStrokeInit {
   stencils?: boolean;
   /** Mask with these stencils instead (replays pass the ones recorded with the stroke). */
   maskStencils?: readonly Stencil[];
+  /**
+   * Scraper brushes: the layers to cut through, top to bottom, instead of the visible unlocked
+   * pixel layers from the top (replays pass `RecordedStroke.scrapeLayerIds`).
+   */
+  scrapeLayerIds?: readonly string[];
 }
 
 export interface LayerUpdate {
@@ -1352,7 +1357,10 @@ export class PaintEditorController {
     this.redoStack.push(e);
     const paper = this.doc.paper;
     this.doc = e.before;
+    // Only a step that changed the age (bake_age) moves it; set_age is not an undo step, so the
+    // restored document takes the current age and a save after undo keeps it.
     if (e.before.age !== e.after.age) this.age = normalizeAge(e.before.age, DEFAULT_AGE);
+    else this.doc = this.withAge(this.doc);
     this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.before);
     if (e.wet) {
@@ -1376,6 +1384,7 @@ export class PaintEditorController {
     const paper = this.doc.paper;
     this.doc = e.after;
     if (e.before.age !== e.after.age) this.age = normalizeAge(e.after.age, DEFAULT_AGE);
+    else this.doc = this.withAge(this.doc);
     this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.after);
     if (e.wet) {
@@ -3463,7 +3472,7 @@ export class PaintEditorController {
     let wet: { driver: WetStrokeDriver; surface: () => TiledSurface } | undefined;
     let scraper: { driver: ScraperStrokeDriver } | undefined;
     if (brush.engine === 'scraper') {
-      const { layers: scrapeLayers, stoppedAtLocked } = collectScrapeableLayers(doc);
+      const { layers: scrapeLayers, stoppedAtLocked } = init.scrapeLayerIds ? { layers: scrapeLayersByIds(doc, init.scrapeLayerIds), stoppedAtLocked: null } : collectScrapeableLayers(doc);
       const wetIds = this.wet.wetLayerIds();
       const wetLayerId = scrapeLayers.find((l) => wetIds.includes(l.id))?.id ?? (wetIds.includes(layer.id) ? layer.id : undefined);
       if (wetLayerId) {
@@ -3657,6 +3666,7 @@ export class PaintEditorController {
     else if (init.paint) stroke.paint = JSON.parse(JSON.stringify(init.paint));
     if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
     if (init.wet) stroke.steps = [...init.wet.driver.steps];
+    if (init.scraper) stroke.scrapeLayerIds = [...init.scraper.driver.layerIds];
     if (init.selection) {
       const masks = (session.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask');
       if (masks.length) stroke.stencils = masks.map((x) => ({ ...x }));
@@ -4629,6 +4639,22 @@ export class PaintEditorController {
 
   // --- Time machine: ageing and X-ray ---------------------------------------------
 
+  /** `doc` carrying the editor's current ageing settings (none when they are the defaults). */
+  private withAge(doc: PaintDocumentState): PaintDocumentState {
+    const a = this.age;
+    const hasAge =
+      a.years !== DEFAULT_AGE.years ||
+      a.varnish !== DEFAULT_AGE.varnish ||
+      a.cracks !== DEFAULT_AGE.cracks ||
+      a.fading !== DEFAULT_AGE.fading ||
+      a.dust !== DEFAULT_AGE.dust ||
+      a.seed !== DEFAULT_AGE.seed;
+    if (!hasAge) return doc.age === undefined ? doc : { ...doc, age: undefined };
+    const cur = doc.age;
+    if (cur && cur.years === a.years && cur.varnish === a.varnish && cur.cracks === a.cracks && cur.fading === a.fading && cur.dust === a.dust && cur.seed === a.seed) return doc;
+    return { ...doc, age: { ...a } };
+  }
+
   /** Reads the document's non-destructive ageing preview settings. */
   getAge(): PaintAgeSettings {
     return { ...this.age };
@@ -4645,14 +4671,7 @@ export class PaintEditorController {
       throw new PaintEditorError((e as Error).message);
     }
     this.age = normalizeAge(update, this.age);
-    const hasAge =
-      this.age.years !== DEFAULT_AGE.years ||
-      this.age.varnish !== DEFAULT_AGE.varnish ||
-      this.age.cracks !== DEFAULT_AGE.cracks ||
-      this.age.fading !== DEFAULT_AGE.fading ||
-      this.age.dust !== DEFAULT_AGE.dust ||
-      this.age.seed !== DEFAULT_AGE.seed;
-    this.doc = { ...this.doc, ...(hasAge ? { age: { ...this.age } } : { age: undefined }) };
+    this.doc = this.withAge(this.doc);
     this.emit('all');
     return { ...this.age };
   }

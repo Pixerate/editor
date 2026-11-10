@@ -6,7 +6,7 @@
  */
 
 import { dabRect, rasterizeDab } from '../paint/brush';
-import { isLayerLocked, mapLayer } from '../raster/layers';
+import { findLayer, isLayerLocked, mapLayer } from '../raster/layers';
 import {
   TILE,
   TiledSurface,
@@ -108,6 +108,22 @@ export function collectScrapeableLayers(doc: PaintDocumentState): {
   return { layers: result, stoppedAtLocked };
 }
 
+/**
+ * The pixel layers a recorded scraper stroke cut through (`RecordedStroke.scrapeLayerIds`, top to
+ * bottom), as they are in `doc`. Replays use these instead of `collectScrapeableLayers`, so a
+ * replay that shows and unlocks every layer cuts only what the live stroke cut. Ids that are gone
+ * or no longer plain pixel layers are skipped.
+ */
+export function scrapeLayersByIds(doc: PaintDocumentState, ids: readonly string[]): PaintPixelLayer[] {
+  const out: PaintPixelLayer[] = [];
+  for (const id of ids) {
+    const l = findLayer(doc.layers, id)?.layer;
+    if (!l || l.type !== 'pixel' || doc.liveStrokes?.[l.id] || (doc.stickers?.[l.id]?.length ?? 0) > 0) continue;
+    out.push(l);
+  }
+  return out;
+}
+
 /** Driver that scrapes through `doc`'s visible unlocked pixel layers from top to bottom. */
 export class ScraperStrokeDriver {
   dabCount = 0;
@@ -118,6 +134,8 @@ export class ScraperStrokeDriver {
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
   bounds: RasterRect | null = null;
+  /** The layers this stroke cuts through, top to bottom (recorded with the stroke). */
+  readonly layerIds: readonly string[];
 
   constructor(
     readonly init: ScraperStrokeInit,
@@ -130,6 +148,7 @@ export class ScraperStrokeDriver {
     this.walkers = this.copies.map(
       (c, k) => new PenDabWalker(b, (init.seed + k * 7919) | 0, c.linear)
     );
+    this.layerIds = scrapeLayers.map((l) => l.id);
     this.stack = scrapeLayers.map((layer) => ({
       layer,
       colorTiles: new Map(),

@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint] Replays Re-derived Editor State That Strokes Read at Paint Time; Settings Outside History Were Lost on Undo
+
+- **Issue / Symptom**: (1) `render_xray { strokes: totalStrokes }` differed from `render_xray` when a hidden or locked layer lay under a scraped one: the replay cut layers the live stroke never touched. (2) `set_age` → `undo_paint` of an earlier stroke reset the age in Swift, and in TS kept it in `get_age` but dropped it from the saved document. (3) The first conformance scenario saving a scraper stroke showed the Swift `migrateBrushV1` writing `medium: "paint"` for scraper brushes, which TS does not.
+- **Root Cause**: (1) The scraper picks its layers from current visibility and locks (`collectScrapeableLayers`), and the historical X-ray shows and unlocks every layer before replaying, so the replay derived a different stack. Anything a stroke reads from editor state at paint time and a replay changes must be recorded with the stroke. (2) Undo restores the history entry's document snapshot, which carries whatever `age` it had when the step was made; settings that are not undo steps (`set_age`) must be put back onto the restored document. (3) A gap in Swift coverage: the old time-machine scenario's strokes used unknown brush ids, so no scraper stroke was ever saved in a scenario.
+- **Solution / Workaround**: (1) Scraper strokes record `scrapeLayerIds` (top to bottom) and replays pass them as `PaintStrokeInit.scrapeLayerIds` (`scrapeLayersByIds`); strokes without the field still derive the stack. (2) Undo/redo move the age only when the entry's `before.age` and `after.age` differ (`bake_age`); otherwise the restored document takes the current age (`withAge`), in both TS and Swift. (3) Check that a scenario's steps succeed (not `isError`) before relying on it; `time-machine-history.json` covers these cases.
+
 ### [core/canvas] Animated Edge Dots Ignored `keyPoints`, and Glows Hid Straight Edges
 
 - **Issue / Symptom**: Dots on a reversed or back-and-forth edge (`direction: "reverse"` / `"alternate"`) ran source to target anyway, and a glowing beam or pulse on a perfectly horizontal or vertical edge (a `straight` or `step` edge between aligned nodes) did not draw at all.

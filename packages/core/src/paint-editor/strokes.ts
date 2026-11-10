@@ -56,6 +56,11 @@ export interface RecordedStroke {
    * readers), or effect paint (the effect it took its colours from; replays render it first).
    */
   paint?: PaintGradientSource | PaintEffectPaint;
+  /**
+   * Scraper strokes: the layers it cut through, top to bottom, so a replay cuts the same ones
+   * whatever is hidden or locked when it runs (older documents without it derive them again).
+   */
+  scrapeLayerIds?: string[];
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -178,6 +183,7 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   const paint = effect ? null : readPaintSource(r.paint);
   if (effect) out.paint = effect;
   else if (paint && paint.type === 'gradient') out.paint = paint;
+  if (Array.isArray(r.scrapeLayerIds) && r.scrapeLayerIds.every((v) => typeof v === 'string')) out.scrapeLayerIds = [...(r.scrapeLayerIds as string[])];
   if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
   return out;
 }

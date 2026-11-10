@@ -261,6 +261,58 @@ describe('painting time machine: ageing, X-ray view & scraper brush', () => {
     expect(liveRefusal.isError).toBe(true);
     expect( contentBounds((c.getLayer(top.id) as PaintPixelLayer).surface)).not.toBeNull();
   });
+
+  it('keeps the current age through undo and redo of other steps (set_age is not an undo step), and saves it', async () => {
+    const { c, call } = setup();
+    c.paintStroke({ brushId: 'impasto-brush', color: '#d62828', points: line(24, 60, 136, 60, 10, { pressure: 0.9 }) });
+    expect((await call('set_age', { years: 300, seed: 4 })).isError).toBe(false);
+    expect((await call('undo_paint')).isError).toBe(false);
+    const g = await call('get_age');
+    expect((g.data.age as { years: number }).years).toBe(300);
+    expect(c.document.age?.years).toBe(300);
+    expect(c.toJSON().age?.years).toBe(300);
+    expect((await call('redo_paint')).isError).toBe(false);
+    expect(c.getAge().years).toBe(300);
+    expect(c.document.age?.seed).toBe(4);
+
+    // bake_age is an undo step that changes the age: undo brings the preview years back.
+    await call('bake_age');
+    expect(c.getAge().years).toBe(0);
+    c.undo();
+    expect(c.getAge().years).toBe(300);
+    c.redo();
+    expect(c.getAge().years).toBe(0);
+  });
+
+  it('replays scraper strokes on the layers they cut, so a historical X-ray of every stroke matches the live one', async () => {
+    const { c, call } = setup();
+    const bottomId = c.document.activeLayerId!;
+    c.fillLayer({ layerId: bottomId, color: '#f8fafc', opacity: 1 });
+    const hidden = c.addLayer({ name: 'Hidden underpainting' });
+    c.paintStroke({ layerId: hidden.id, brushId: 'impasto-brush', color: '#ffffff', points: line(20, 60, 140, 60, 12, { pressure: 1 }) });
+    c.updateLayer(hidden.id, { visible: false });
+    const top = c.addLayer({ name: 'Top' });
+    c.fillLayer({ layerId: top.id, color: '#dc2626', opacity: 1 });
+    c.updateLayer(bottomId, { locks: { pixels: true } });
+
+    await call('set_brush', { id: 'paint-scraper', marks: { kind: 'scraper', depth: 1, sharpness: 0.9 }, tip: { size: 36, spacing: 0.08, opacity: 1, flow: 1 } });
+    expect((await call('paint_stroke', { layerId: top.id, points: line(30, 60, 130, 60, 16, { pressure: 1 }) })).isError).toBe(false);
+    const stroke = c.document.strokes[c.document.strokes.length - 1]!;
+    expect(stroke.scrapeLayerIds).toEqual([top.id]);
+    // The hidden layer was not cut by the live stroke.
+    expect(readPixel((c.getLayer(hidden.id) as PaintPixelLayer).surface, 80, 60)[3]).toBe(255);
+    // Saved and loaded, the stroke keeps the layers it cut.
+    const loaded = new PaintEditorController({ width: 160, height: 120 });
+    loaded.loadJSON(c.toJSON());
+    expect(loaded.document.strokes[loaded.document.strokes.length - 1]!.scrapeLayerIds).toEqual([top.id]);
+
+    const total = c.document.strokes.length;
+    const live = await c.renderXray({ maxSide: 160 });
+    const replayed = await c.renderXray({ strokes: total, maxSide: 160 });
+    expect(replayed.meanDensity).toBe(live.meanDensity);
+    expect(replayed.maxDensity).toBe(live.maxDensity);
+    expect(Array.from(replayed.data)).toEqual(Array.from(live.data));
+  });
 });
 
 async function regCallRaw(c: PaintEditorController, strokes: number) {
