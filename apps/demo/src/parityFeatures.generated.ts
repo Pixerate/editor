@@ -2191,7 +2191,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`VortexStrokeDriver`, `buildVortexDisplacement`, `buildVortexVelocityField`, `vortexGuideSegments`, `VORTEX_SLIDERS`, `DEFAULT_VORTEX`, `normalizeVortex` (`/paint-editor`) & `integrateVelocityField`, `warpTiledSurfaceRgba` (`/paint`)",
         "react": "`<BrushPanel>` (`<BrushEditor>`) & vortex guide in `<PaintCanvas>`",
         "svelte": "`<BrushPanel>` (`<BrushEditor>`) & vortex guide in `<PaintCanvas>`",
-        "swift": "✅ `VortexSettings`, `DEFAULT_VORTEX`, `VortexStrokeSummary`, `WetWorld.swirl`, `vortexGuideSegments`; vortex sliders and direction picker in `PaintBrushPanel`, vortex guide (with symmetry copies) in `PaintCanvasView`; the view-only winding animation (`duration`): Planned (#533)"
+        "swift": "✅ `VortexSettings`, `DEFAULT_VORTEX`, `VortexStrokeSummary`, `WetWorld.swirl`, `vortexGuideSegments`; vortex sliders and direction picker in `PaintBrushPanel`, vortex guide (with symmetry copies) in `PaintCanvasView`; the view-only winding animation (`duration`): Planned (#733)"
       }
     ]
   },
