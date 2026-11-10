@@ -1,5 +1,51 @@
 # @pixerate/editor-svelte
 
+## 0.209.0
+
+### Minor Changes
+
+- 385d9bf: Animated canvas edges: travelling dots, marching dashes, beams and pulses. An edge's animation lives in `edge.data.animation` (kind, speed in canvas units per second or a duration, direction, colour, size, count, length, gap, glow, track opacity, paused), so it saves, copies and undoes with the edge. Core adds `getCanvasEdgePath` (the same paths xyflow draws), `measureSvgPath`, `getCanvasEdgeAnimationRender` (framework-neutral SVG + SMIL), `sampleCanvasEdgeAnimation` (a frame at any time, without a browser) and the agent tools `list_edge_animations`, `set_edge_animation` and `clear_edge_animation` (`createCanvasEdgeAnimationToolProvider`, one undo step per call). React and Svelte add `<AnimatedEdge>` (register it as a React Flow / Svelte Flow edge type; `data.pathType` picks the path) and `<EdgeAnimation>` for your own edges. Both hold the first frame when the user prefers reduced motion.
+
+### Patch Changes
+
+- Updated dependencies [385d9bf]
+  - @pixerate/editor@0.281.0
+
+## 0.208.2
+
+### Patch Changes
+
+- Updated dependencies [2980b3e]
+  - @pixerate/editor@0.280.0
+
+## 0.208.1
+
+### Patch Changes
+
+- d7eda00: Serialize WebGPU wet-paint tile shading and await in-flight lead-frame display shading before starting post-batch shading so the `"wet shaded read"` readback buffer is never submitted while mapped.
+- Updated dependencies [d7eda00]
+  - @pixerate/editor@0.279.1
+
+## 0.208.0
+
+### Minor Changes
+
+- 6087c67: Add `sanitizeCanvasDocument`, `applyGraphDifferences`, and companion `extras` support to `createCanvasEditorDocument`, and reactive remote persistence controllers (`createEditorRemoteSync`, Svelte `createEditorSync` and React `useEditorSync`). `save` receives the diff from the last saved snapshot and the `baseVersion` it builds on; returning `{ conflict: true }` from a compare-and-set write calls `onConflict` to merge and save again (or reports an `EditorRemoteConflictError`).
+
+  Autosave takes a `baseVersion` (`createAutosaveController`, `createEditorAutosave`, Svelte `createAutosave` / `createEditorAutosave`, React `useAutosave` / `useEditorAutosave`): it is stored in each snapshot's meta, and the recovery check retires snapshots made on an older server version instead of offering them. `createEditorAutosave` adds `recoverIfNewer`.
+
+### Patch Changes
+
+- Updated dependencies [6087c67]
+  - @pixerate/editor@0.279.0
+
+## 0.207.1
+
+### Patch Changes
+
+- Updated dependencies [ebf2341]
+  - @pixerate/editor@0.278.0
+
 ## 0.207.0
 
 ### Minor Changes

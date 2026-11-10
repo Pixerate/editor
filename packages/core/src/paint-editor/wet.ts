@@ -656,7 +656,11 @@ export class PaintWetLayers {
 
   /** Resolves when no batch is running. */
   async idle(): Promise<void> {
-    while (this.ticking) await this.ticking;
+    while (this.ticking || this.displaying) {
+      // A lead frame's failure is its own (the next batch reshades); waiting just lets it settle.
+      if (this.ticking) await this.ticking;
+      else await this.displaying!.catch(() => undefined);
+    }
   }
 
   settingsOf(layerId: string, medium: WetMediumKind = 'watercolor'): WetLayerSettings {
@@ -940,13 +944,16 @@ export class PaintWetLayers {
         this.ticking = null;
       }
       this.flushDriver();
+      // Let a lead frame started during the batch finish shading first (its failure is not this
+      // batch's: the shading below covers the same tiles and reports a lost GPU itself).
+      if (this.displaying) await this.displaying.catch(() => undefined);
       if (w.gpuActive) {
         const shading = this.syncDisplaysGpu(DISPLAY_TILES_PER_TICK).then(() => undefined);
         this.displaying = shading;
         try {
           await shading;
         } finally {
-          this.displaying = null;
+          if (this.displaying === shading) this.displaying = null;
         }
       } else this.syncDisplays(DISPLAY_TILES_PER_TICK);
       this.retireDry();

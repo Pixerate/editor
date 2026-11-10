@@ -18,6 +18,7 @@ import type { MixerLoad } from '../paint/exchange';
 import { normalizeStencil, type Stencil } from './stencils';
 import { readPaintSource, scalePaintGradient, type PaintGradientSource } from '../paint/gradient-paint';
 import { readPaintEffectPaint, withStrokePath, type PaintEffectPaint } from './effect-paint';
+import { normalizeDualColor, type DualColor } from '../color/dual';
 
 /** An affine map [a, b, c, d, e, f]: (x, y) → (a·x + b·y + e, c·x + d·y + f). */
 export type Affine = readonly [number, number, number, number, number, number];
@@ -28,8 +29,17 @@ export interface RecordedStroke {
   id: string;
   layerId: string;
   brush: PaintBrush;
-  /** #rrggbb */
+  /**
+   * #rrggbb: the colour the document draws the stroke with. A dual-colour stroke on a stroke layer
+   * keeps its light side here, whoever painted it; on a pixel layer, the side it was painted in.
+   */
   color: string;
+  /**
+   * The light / dark pair the colour came from (both #rrggbb), when it came from one. A stroke
+   * layer shows it in the viewer's side (`PaintEditorController.setColorScheme`) without changing
+   * the document; a pixel layer's pixels stay as painted.
+   */
+  dualColor?: DualColor;
   /** Raw pen samples in document pixels, before smoothing. */
   points: PenPoint[];
   seed: number;
@@ -149,6 +159,8 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
     points,
     seed: finite(r.seed) ? r.seed | 0 : 0,
   };
+  const dual = r.dualColor === undefined ? null : normalizeDualColor(r.dualColor);
+  if (dual && /^#[0-9a-f]{6}$/.test(dual.light) && /^#[0-9a-f]{6}$/.test(dual.dark)) out.dualColor = dual;
   const copies = Array.isArray(r.copies) ? r.copies.map(readAffine).filter((m): m is Affine => m !== null) : [];
   if (copies.length) out.copies = copies;
   const load = readLoad(r.load);

@@ -309,3 +309,40 @@ describe("createRevisionTracker", () => {
     expect(r.savedRevision()).toBe(1);
   });
 });
+
+describe("createAutosaveController baseVersion", () => {
+  it("stamps snapshots with baseVersion and retires ones made on an older version", async () => {
+    let version = 3;
+    const first = setup({ baseVersion: () => version });
+    first.controller.ready();
+    first.edit("draft on v3");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(first.meta()).toMatchObject({ dirty: true, baseVersion: 3 });
+    first.controller.destroy();
+
+    // Same server version: the snapshot is offered.
+    const same = setup({ storage: first.storage, baseVersion: 3 });
+    expect((await same.controller.checkRecovery())?.meta.baseVersion).toBe(3);
+    same.controller.destroy();
+
+    // A stricter minimum for this check only retires it without touching later checks' default.
+    const newer = setup({ storage: first.storage, baseVersion: 3 });
+    expect(await newer.controller.checkRecovery({ minimumBaseVersion: 4 })).toBeNull();
+    expect(newer.snapshot()).toBeUndefined();
+    expect(newer.meta()).toBeNull();
+    newer.controller.destroy();
+    version = 0;
+  });
+
+  it("treats snapshots without a stored version as version 0", async () => {
+    const legacy = setup();
+    legacy.controller.ready();
+    legacy.edit("old");
+    await vi.advanceTimersByTimeAsync(1000);
+    legacy.controller.destroy();
+
+    expect(await setup({ storage: legacy.storage, baseVersion: 0 }).controller.checkRecovery()).not.toBeNull();
+    expect(await setup({ storage: legacy.storage, baseVersion: 2 }).controller.checkRecovery()).toBeNull();
+  });
+});
+
