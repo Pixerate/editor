@@ -28,6 +28,7 @@ func strokeResultJSON(_ r: PaintStrokeResult) -> JSONValue {
     if let load = r.mixerLoad { o["mixerLoad"] = loadResult(load) }
     if let wet = r.wet { o["wet"] = .bool(wet) }
     if let am = r.antimatter { o["antimatter"] = am.json }
+    if let skipped = r.skippedStickers, !skipped.isEmpty { o["skippedStickers"] = .array(skipped.map { .string($0) }) }
     return .object(o)
 }
 
@@ -166,6 +167,9 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
     }
     h["set_brush"] = { a in
         let unset = a["unset"]?.arrayValue?.compactMap(\.stringValue) ?? []
+        if let stamps = a["tip"]?.objectValue?["stamps"]?.arrayValue?.compactMap(\.stringValue), !stamps.isEmpty {
+            try c.prepareStickers(stamps)
+        }
         let r = try c.setBrushFacets(a.without("id", "unset"), id: a["id"]?.stringValue, unset: unset)
         return ["brush": .object(r.spec), "engine": .string(r.brush.engine), "problems": .array(r.problems.map { .string($0) })]
     }
@@ -196,6 +200,12 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
     h["paint_stroke"] = { a in
         let x = try PaintStrokeArguments(a)
         let changes = try x.brush.map { try c.brushChanges($0.objectValue ?? [:], from: x.brushId) }
+        if let base = x.brushId != nil ? c.getBrush(x.brushId!) : c.brush {
+            var merged = changes ?? [:]
+            merged["id"] = .string(base.id)
+            let refs = brushStickerRefs(normalizePaintBrush(merged, base))
+            if !refs.isEmpty { try c.prepareStickers(refs) }
+        }
         let points = x.points.compactMap(PenPoint.init(json:))
         var i = PaintStrokeInit(layerId: x.layerId, color: x.color, paint: x.paint, brushId: x.brushId, brush: changes, seed: x.seed)
         i.snapToPerspective = x.snapToPerspective
@@ -206,6 +216,12 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
     h["stroke_path"] = { a in
         let x = try StrokePathArguments(a)
         let changes = try x.brush.map { try c.brushChanges($0.objectValue ?? [:], from: x.brushId) }
+        if let base = x.brushId != nil ? c.getBrush(x.brushId!) : c.brush {
+            var merged = changes ?? [:]
+            merged["id"] = .string(base.id)
+            let refs = brushStickerRefs(normalizePaintBrush(merged, base))
+            if !refs.isEmpty { try c.prepareStickers(refs) }
+        }
         let i = PaintStrokeInit(layerId: x.layerId, color: x.color, paint: x.paint, brushId: x.brushId, brush: changes, seed: x.seed)
         if let subpaths = try? samplePath(x.path, spacing: x.spacing, pressure: x.pressure, speed: x.speed) {
             for pts in subpaths { try await c.prepareStrokePathEffect(i, pts) }

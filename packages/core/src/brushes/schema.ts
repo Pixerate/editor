@@ -8,7 +8,7 @@ import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, STICKER_FRAME_MODES } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
 
@@ -146,6 +146,7 @@ const OBJECTS = object(
     rotationJitter: unit('Random turn as a fraction of ±180° (default 1).'),
     scatter: num(0, 2, 'How far from the path marks land, in tip diameters (default 0.5).'),
     colourJitter: unit('Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2).'),
+    frameMode: oneOf(STICKER_FRAME_MODES, 'Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark.'),
   },
   ['kind'],
 );

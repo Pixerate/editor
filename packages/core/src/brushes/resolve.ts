@@ -141,7 +141,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('tip.stamps', 'stamp', ['dab'], { shapes: ['stamp'], map: ONE_STAMP }),
   f('marks.density', 'spray.density', ['dab'], { marks: ['scatter'] }),
   f('marks.size', 'spray.size', ['dab'], { marks: ['scatter'] }),
-  ...each('marks', 'sticker', ['density', 'sizeJitter', 'rotationJitter', 'scatter'], ['sticker']),
+  ...each('marks', 'sticker', ['density', 'sizeJitter', 'rotationJitter', 'scatter', 'frameMode'], ['sticker']),
   f('marks.colourJitter', 'sticker.colorJitter', ['sticker']),
   ...each('marks', 'antimatter', ['blastRadius', 'blastSpacing', 'threshold', 'invert', 'invertMode', 'scorch', 'annihilate', 'sparks', 'sparkReach', 'crater', 'duration'], ['antimatter']),
   ...each('tip.bristle', 'bristle', ['count', 'stiffness', 'splay', 'thickness', 'load', 'jitter'], ['bristle']),

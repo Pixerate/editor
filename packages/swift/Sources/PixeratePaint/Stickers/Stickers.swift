@@ -35,7 +35,7 @@ private let META: [String: StampMeta] = [
 ]
 
 /// What went wrong with a sticker (`StickerError`).
-public struct StickerError: Error, LocalizedError {
+public struct StickerError: Error, LocalizedError, CustomStringConvertible {
     public let code: String
     public let message: String
     public init(_ code: String, _ message: String) {
@@ -43,6 +43,369 @@ public struct StickerError: Error, LocalizedError {
         self.message = message
     }
     public var errorDescription: String? { message }
+    public var description: String { message }
+}
+
+// MARK: - Sticker provider contract (`stickers/types.ts`, `stickers/helpers.ts`, `stickers/combine.ts`, `stickers/fake.ts`)
+
+public let STICKER_VARIANTS = ["light", "dark"]
+public let STICKER_ART_SIZE = 256
+
+/// How a sticker's art may be used (`StickerLicence`).
+public struct StickerLicence: Equatable, Sendable {
+    public var spdx: String?
+    public var name: String
+    public var attribution: String?
+    public var url: String?
+    public var commercial: Bool
+
+    public init(spdx: String? = nil, name: String, attribution: String? = nil, url: String? = nil, commercial: Bool) {
+        self.spdx = spdx
+        self.name = name
+        self.attribution = attribution
+        self.url = url
+        self.commercial = commercial
+    }
+
+    public var json: JSONObject {
+        var o: JSONObject = ["name": .string(name), "commercial": .bool(commercial)]
+        if let spdx { o["spdx"] = .string(spdx) }
+        if let attribution { o["attribution"] = .string(attribution) }
+        if let url { o["url"] = .string(url) }
+        return o
+    }
+}
+
+/// A themed set of stickers within one provider (`StickerCollection`).
+public struct StickerCollection: Equatable, Sendable {
+    public var id: String
+    public var name: String
+    public var description: String?
+    public var count: Int
+
+    public init(id: String, name: String, description: String? = nil, count: Int) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.count = count
+    }
+
+    public var json: JSONObject {
+        var o: JSONObject = ["id": .string(id), "name": .string(name), "count": .number(Double(count))]
+        if let description { o["description"] = .string(description) }
+        return o
+    }
+}
+
+/// A sticker in a list or search result (`StickerSummary`).
+public struct StickerSummary: Equatable, Sendable {
+    public var id: String
+    public var name: String
+    public var category: String
+    public var tags: [String]?
+    public var description: String?
+    public var width: Double
+    public var height: Double
+    public var thumbnail: String?
+    public var formats: [String]
+    public var licence: StickerLicence
+    public var tintable: Bool
+    public var aiGenerated: Bool?
+    public var variants: [String]?
+    public var collection: String?
+    public var animated: Bool?
+    public var frameCount: Int?
+    public var frameDelay: Double?
+
+    public init(
+        id: String, name: String, category: String, tags: [String]? = nil, description: String? = nil,
+        width: Double, height: Double, thumbnail: String? = nil, formats: [String], licence: StickerLicence,
+        tintable: Bool, aiGenerated: Bool? = nil, variants: [String]? = nil, collection: String? = nil,
+        animated: Bool? = nil, frameCount: Int? = nil, frameDelay: Double? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.tags = tags
+        self.description = description
+        self.width = width
+        self.height = height
+        self.thumbnail = thumbnail
+        self.formats = formats
+        self.licence = licence
+        self.tintable = tintable
+        self.aiGenerated = aiGenerated
+        self.variants = variants
+        self.collection = collection
+        self.animated = animated
+        self.frameCount = frameCount
+        self.frameDelay = frameDelay
+    }
+
+    public var json: JSONObject {
+        var o: JSONObject = [
+            "id": .string(id), "name": .string(name), "category": .string(category),
+            "width": .number(width), "height": .number(height),
+            "formats": .array(formats.map { .string($0) }),
+            "licence": .object(licence.json), "tintable": .bool(tintable),
+        ]
+        if let tags { o["tags"] = .array(tags.map { .string($0) }) }
+        if let description { o["description"] = .string(description) }
+        if let thumbnail { o["thumbnail"] = .string(thumbnail) }
+        if let aiGenerated { o["aiGenerated"] = .bool(aiGenerated) }
+        if let variants { o["variants"] = .array(variants.map { .string($0) }) }
+        if let collection { o["collection"] = .string(collection) }
+        if let animated { o["animated"] = .bool(animated) }
+        if let frameCount { o["frameCount"] = .number(Double(frameCount)) }
+        if let frameDelay { o["frameDelay"] = .number(frameDelay) }
+        return o
+    }
+}
+
+/// Everything about one sticker (`StickerDescription`).
+public struct StickerDescription: Equatable, Sendable {
+    public var summary: StickerSummary
+    public var silhouette: String?
+    public var colours: [String]?
+
+    public init(summary: StickerSummary, silhouette: String? = nil, colours: [String]? = nil) {
+        self.summary = summary
+        self.silhouette = silhouette
+        self.colours = colours
+    }
+
+    public var id: String { get { summary.id } set { summary.id = newValue } }
+    public var name: String { summary.name }
+    public var category: String { summary.category }
+    public var tags: [String]? { summary.tags }
+    public var description: String? { summary.description }
+    public var width: Double { summary.width }
+    public var height: Double { summary.height }
+    public var thumbnail: String? { summary.thumbnail }
+    public var formats: [String] { summary.formats }
+    public var licence: StickerLicence { summary.licence }
+    public var tintable: Bool { summary.tintable }
+    public var aiGenerated: Bool? { summary.aiGenerated }
+    public var variants: [String]? { summary.variants }
+    public var collection: String? { get { summary.collection } set { summary.collection = newValue } }
+    public var animated: Bool? { summary.animated }
+    public var frameCount: Int? { summary.frameCount }
+    public var frameDelay: Double? { summary.frameDelay }
+
+    public var json: JSONObject {
+        var o = summary.json
+        if let silhouette { o["silhouette"] = .string(silhouette) }
+        if let colours { o["colours"] = .array(colours.map { .string($0) }) }
+        return o
+    }
+}
+
+/// A sticker's art (`StickerAsset`). Native Swift providers may also return decoded `.rgba` bytes directly.
+public enum StickerAsset: Equatable, Sendable {
+    case svg(svg: String, silhouette: String? = nil)
+    case image(url: String, width: Int, height: Int)
+    case rgba(width: Int, height: Int, data: [UInt8])
+}
+
+/// One page of results (`StickerPage`).
+public struct StickerPage: Equatable, Sendable {
+    public var items: [StickerSummary]
+    public var total: Int
+    public var next: String?
+
+    public init(items: [StickerSummary], total: Int, next: String? = nil) {
+        self.items = items
+        self.total = total
+        self.next = next
+    }
+}
+
+public struct StickerSearchOptions: Equatable, Sendable {
+    public var category: String?
+    public var collection: String?
+    public var tags: [String]?
+    public var limit: Int?
+    public var after: String?
+    public var commercial: Bool?
+
+    public init(category: String? = nil, collection: String? = nil, tags: [String]? = nil, limit: Int? = nil, after: String? = nil, commercial: Bool? = nil) {
+        self.category = category
+        self.collection = collection
+        self.tags = tags
+        self.limit = limit
+        self.after = after
+        self.commercial = commercial
+    }
+}
+
+public struct StickerLoadOptions: Equatable, Sendable {
+    public var format: String?
+    public var size: Int?
+    public var colour: String?
+    public var variant: String?
+    public var frame: Int?
+
+    public init(format: String? = nil, size: Int? = nil, colour: String? = nil, variant: String? = nil, frame: Int? = nil) {
+        self.format = format
+        self.size = size
+        self.colour = colour
+        self.variant = variant
+        self.frame = frame
+    }
+}
+
+public struct StickerProviderCapabilities: Equatable, Sendable {
+    public var supportsSearch: Bool
+    public var supportsSvg: Bool
+    public var supportsRaster: Bool
+    public var maxSize: Int?
+
+    public init(supportsSearch: Bool, supportsSvg: Bool, supportsRaster: Bool, maxSize: Int? = nil) {
+        self.supportsSearch = supportsSearch
+        self.supportsSvg = supportsSvg
+        self.supportsRaster = supportsRaster
+        self.maxSize = maxSize
+    }
+}
+
+/// The sticker provider contract (`StickerProvider` in `stickers/types.ts`).
+public protocol StickerProvider: Sendable {
+    var id: String { get }
+    var name: String { get }
+    var version: String? { get }
+    var capabilities: StickerProviderCapabilities { get }
+    var namespaced: Bool { get }
+    func list(_ options: StickerSearchOptions) throws -> StickerPage
+    func search(_ query: String, _ options: StickerSearchOptions) throws -> StickerPage
+    func describe(_ id: String) throws -> StickerDescription?
+    func load(_ id: String, _ options: StickerLoadOptions) throws -> StickerAsset
+    func categories() throws -> [(id: String, name: String, count: Int)]?
+    func collections() throws -> [StickerCollection]?
+}
+
+public extension StickerProvider {
+    var version: String? { nil }
+    var namespaced: Bool { false }
+    func categories() throws -> [(id: String, name: String, count: Int)]? { nil }
+    func collections() throws -> [StickerCollection]? { nil }
+}
+
+/// Checks search options, throwing a `StickerError` that names the bad one (`checkStickerSearchOptions`).
+public func checkStickerSearchOptions(_ options: StickerSearchOptions = StickerSearchOptions()) throws {
+    if let limit = options.limit, !(limit >= 1 && limit <= MAX_STICKER_PAGE) {
+        throw StickerError("invalid_argument", "limit must be a whole number from 1 to \(MAX_STICKER_PAGE), got \(limit).")
+    }
+    if let after = options.after, after.range(of: "^\\d+$", options: .regularExpression) == nil {
+        throw StickerError("invalid_argument", "after \"\(after)\" is not a cursor from this provider; pass the next value of the previous page.")
+    }
+}
+
+private func stickerWords(_ s: String) -> [String] {
+    s.lowercased().components(separatedBy: CharacterSet.letters.union(.decimalDigits).inverted).filter { !$0.isEmpty }
+}
+
+/// One page of `items` filtered by `options` and `query` (`stickerPage`).
+public func stickerPage(_ items: [StickerSummary], _ options: StickerSearchOptions = StickerSearchOptions(), query: String = "") throws -> StickerPage {
+    try checkStickerSearchOptions(options)
+    let q = stickerWords(query)
+    let tags = (options.tags ?? []).map { $0.lowercased() }
+    let matches = items.filter { s in
+        if let cat = options.category, s.category != cat { return false }
+        if let col = options.collection, s.collection != col { return false }
+        if !tags.isEmpty && !tags.allSatisfy({ t in (s.tags ?? []).contains { $0.lowercased() == t } }) { return false }
+        if options.commercial == true && !s.licence.commercial { return false }
+        if q.isEmpty { return true }
+        let text = Set(stickerWords(([s.name, s.category, s.description ?? ""] + (s.tags ?? [])).joined(separator: " ")))
+        return q.allSatisfy { w in text.contains { $0.hasPrefix(w) } }
+    }
+    let start = options.after.flatMap { Int($0) } ?? 0
+    let limit = options.limit ?? DEFAULT_STICKER_PAGE
+    let page = Array(matches.dropFirst(start).prefix(limit))
+    return StickerPage(items: page, total: matches.count, next: start + limit < matches.count ? String(start + limit) : nil)
+}
+
+/// The variants a sticker has (`light` always, first; `stickerVariantsOf`).
+public func stickerVariantsOf(_ variants: [String]?) -> [String] {
+    STICKER_VARIANTS.filter { $0 == "light" || (variants?.contains($0) == true) }
+}
+
+/// Checks `load`'s variant against the sticker's (`checkStickerVariant`).
+public func checkStickerVariant(_ s: StickerSummary, _ variant: String?) throws -> String {
+    let v = variant ?? "light"
+    let has = stickerVariantsOf(s.variants)
+    if !has.contains(v) {
+        throw StickerError("unsupported_variant", "Sticker \"\(s.id)\" has no \"\(v)\" variant; it has \(has.joined(separator: ", ")).")
+    }
+    return v
+}
+
+/// Checks `load`'s frame against the sticker's `frameCount` (`checkStickerFrame`).
+public func checkStickerFrame(_ s: StickerSummary, _ frame: Int?) throws -> Int {
+    let f = frame ?? 0
+    let count = (s.animated == true) ? Swift.max(1, s.frameCount ?? 1) : 1
+    if f < 0 || f >= count {
+        throw StickerError("invalid_argument", "Sticker \"\(s.id)\" has \(count) frame(s) (0..\(count - 1)), got frame \(f).")
+    }
+    return f
+}
+
+/// The variant to show on a dark or light background (`stickerVariantFor`).
+public func stickerVariantFor(_ variants: [String]?, dark: Bool) -> String {
+    dark && (variants?.contains("dark") == true) ? "dark" : "light"
+}
+
+/// The collections of an in-memory catalogue with their counts (`stickerCollections`).
+public func stickerCollections(_ items: [StickerSummary], _ names: [String: (name: String, description: String?)] = [:]) -> [StickerCollection] {
+    var order: [String] = []
+    var counts: [String: Int] = [:]
+    for s in items {
+        guard let c = s.collection else { continue }
+        if counts[c] == nil { order.append(c) }
+        counts[c, default: 0] += 1
+    }
+    return order.map { id in
+        let meta = names[id]
+        return StickerCollection(id: id, name: meta?.name ?? id, description: meta?.description, count: counts[id] ?? 0)
+    }
+}
+
+/// The ref of a sticker `id` listed by `provider` (`stickerRefOf`).
+public func stickerRefOf(_ provider: any StickerProvider, _ id: String) -> String {
+    provider.namespaced ? id : "\(provider.id):\(id)"
+}
+
+/// The id to pass to `provider` for `ref`, or nil when the ref names another provider (`stickerIdFor`).
+public func stickerIdFor(_ provider: any StickerProvider, _ ref: String) throws -> String? {
+    let p = try parseStickerRefStrict(ref)
+    if provider.namespaced { return "\(p.provider):\(p.id)" }
+    return p.provider == provider.id ? p.id : nil
+}
+
+/// Holds an editor's sticker provider (`StickersSlot`).
+public final class StickersSlot: @unchecked Sendable {
+    public let fallback: any StickerProvider
+    private var current: (any StickerProvider)?
+    private var listeners: [UUID: (any StickerProvider) -> Void] = [:]
+
+    public init(_ initial: (any StickerProvider)? = nil, fallback: any StickerProvider = EditorStickers()) {
+        self.fallback = fallback
+        self.current = initial
+    }
+
+    public var provider: any StickerProvider { current ?? fallback }
+
+    public func set(_ next: (any StickerProvider)?) {
+        current = next
+        let p = provider
+        for fn in listeners.values { fn(p) }
+    }
+
+    @discardableResult
+    public func subscribe(_ fn: @escaping (any StickerProvider) -> Void) -> () -> Void {
+        let id = UUID()
+        listeners[id] = fn
+        return { [weak self] in self?.listeners.removeValue(forKey: id) }
+    }
 }
 
 /// A stamp's outline as SVG path data in its 100 × 100 box (marching squares, then simplified; `stampOutline`).
@@ -167,9 +530,11 @@ public func stampPixels(_ kind: String, _ size: Int, _ colour: String) -> [UInt8
  * The editor's own sticker library (`editorStickers`): the nine stamps, with their outline
  * (`silhouette`), dominant colour and a 48 px thumbnail.
  */
-public final class EditorStickers: @unchecked Sendable {
+public final class EditorStickers: StickerProvider, @unchecked Sendable {
     public let id = EDITOR_STICKERS_ID
     public let name = "Editor stickers"
+    public let version: String? = "1"
+    public let capabilities = StickerProviderCapabilities(supportsSearch: true, supportsSvg: true, supportsRaster: true, maxSize: 1024)
     private var outlines: [String: String] = [:]
     private var thumbs: [String: String] = [:]
     public init() {}
@@ -181,54 +546,577 @@ public final class EditorStickers: @unchecked Sendable {
         return o
     }
 
-    /// A sticker's summary: id, name, category, tags, description, size, thumbnail, formats, licence, tintable.
-    public func summary(_ k: String) -> JSONObject {
+    public func stickerSummary(_ k: String) -> StickerSummary {
         let m = META[k]!
         if thumbs[k] == nil { thumbs[k] = pngDataUrl(48, 48, stampPixels(k, 48, m.colour)) }
-        return [
-            "id": .string(k), "name": .string(m.name), "category": .string(m.category), "tags": .array(m.tags.map { .string($0) }), "description": .string(m.description),
-            "width": .number(BOX), "height": .number(BOX), "thumbnail": .string(thumbs[k]!), "formats": ["svg", "png"],
-            "licence": ["spdx": "MIT", "name": "MIT", "commercial": true], "tintable": true,
-        ]
+        return StickerSummary(
+            id: k, name: m.name, category: m.category, tags: m.tags, description: m.description,
+            width: BOX, height: BOX, thumbnail: thumbs[k]!, formats: ["svg", "png"],
+            licence: StickerLicence(spdx: "MIT", name: "MIT", commercial: true), tintable: true
+        )
     }
 
-    /// A page of stickers matching the options and query (`stickerPage`).
-    public func page(query: String = "", category: String? = nil, tags: [String]? = nil, commercial: Bool = false, limit: Int? = nil, after: String? = nil) throws -> (items: [JSONObject], total: Int, next: String?) {
-        if let limit, !(limit >= 1 && limit <= MAX_STICKER_PAGE) { throw StickerError("invalid_argument", "limit must be a whole number from 1 to \(MAX_STICKER_PAGE), got \(limit).") }
-        if let after, after.range(of: "^\\d+$", options: .regularExpression) == nil { throw StickerError("invalid_argument", "after \"\(after)\" is not a cursor from this provider; pass the next value of the previous page.") }
-        func words(_ s: String) -> [String] { s.lowercased().components(separatedBy: CharacterSet.letters.union(.decimalDigits).inverted).filter { !$0.isEmpty } }
-        let q = words(query)
-        let tagsL = (tags ?? []).map { $0.lowercased() }
-        let matches = STAMP_KINDS.filter { k in
-            let m = META[k]!
-            if let category, m.category != category { return false }
-            if !tagsL.isEmpty && !tagsL.allSatisfy({ t in m.tags.contains { $0.lowercased() == t } }) { return false }
-            _ = commercial
-            if q.isEmpty { return true }
-            let text = Set(words(([m.name, m.category, m.description] + m.tags).joined(separator: " ")))
-            return q.allSatisfy { w in text.contains { $0.hasPrefix(w) } }
-        }
-        let start = after.flatMap { Int($0) } ?? 0
-        let lim = limit ?? DEFAULT_STICKER_PAGE
-        let page = Array(matches.dropFirst(start).prefix(lim)).map(summary)
-        return (page, matches.count, start + lim < matches.count ? String(start + lim) : nil)
+    /// A sticker's summary as JSON (`summary`).
+    public func summary(_ k: String) -> JSONObject { stickerSummary(k).json }
+
+    public func list(_ options: StickerSearchOptions = StickerSearchOptions()) throws -> StickerPage {
+        try stickerPage(STAMP_KINDS.map(stickerSummary), options)
     }
 
-    /// Everything about one stamp, or nil: the summary, its outline and colour.
-    public func describe(_ id: String) -> JSONObject? {
+    public func search(_ query: String, _ options: StickerSearchOptions = StickerSearchOptions()) throws -> StickerPage {
+        try stickerPage(STAMP_KINDS.map(stickerSummary), options, query: query)
+    }
+
+    public func describe(_ id: String) throws -> StickerDescription? {
         guard STAMP_KINDS.contains(id) else { return nil }
-        var o = summary(id)
-        o["silhouette"] = .string(outline(id))
-        o["colours"] = [.string(META[id]!.colour)]
-        return o
+        return StickerDescription(summary: stickerSummary(id), silhouette: outline(id), colours: [META[id]!.colour])
     }
 
-    /// The categories with how many stickers each holds.
-    public func categories() -> [JSONValue] {
+    public func categories() throws -> [(id: String, name: String, count: Int)]? {
         var cats: [String] = []
         for k in STAMP_KINDS where !cats.contains(META[k]!.category) { cats.append(META[k]!.category) }
-        return cats.map { c in ["id": .string(c), "name": .string(c.prefix(1).uppercased() + c.dropFirst()), "count": .number(Double(STAMP_KINDS.filter { META[$0]!.category == c }.count))] }
+        return cats.map { c in (id: c, name: String(c.prefix(1)).uppercased() + c.dropFirst(), count: STAMP_KINDS.filter { META[$0]!.category == c }.count) }
     }
+
+    public func load(_ id: String, _ options: StickerLoadOptions = StickerLoadOptions()) throws -> StickerAsset {
+        guard STAMP_KINDS.contains(id) else {
+            throw StickerError("unknown_sticker", "The editor has no sticker \"\(id)\"; its stickers are \(STAMP_KINDS.joined(separator: ", ")).")
+        }
+        let s = stickerSummary(id)
+        _ = try checkStickerVariant(s, options.variant)
+        _ = try checkStickerFrame(s, options.frame)
+        let colour = options.colour ?? META[id]!.colour
+        if colour.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) == nil {
+            throw StickerError("invalid_argument", "colour \"\(colour)\" must be #rrggbb.")
+        }
+        if options.format == "png" {
+            let size = options.size ?? 256
+            if !(size >= 8 && size <= 1024) {
+                throw StickerError("invalid_argument", "size must be a whole number of px from 8 to 1024, got \(size).")
+            }
+            return .image(url: pngDataUrl(size, size, stampPixels(id, size, colour.lowercased())), width: size, height: size)
+        }
+        if let f = options.format, f != "svg" {
+            throw StickerError("unsupported_format", "format must be svg or png, got \"\(f)\".")
+        }
+        let d = outline(id)
+        let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 \(Int(BOX)) \(Int(BOX))\" width=\"\(Int(BOX))\" height=\"\(Int(BOX))\"><path fill=\"\(colour.lowercased())\" fill-rule=\"evenodd\" d=\"\(d)\"/></svg>"
+        return .svg(svg: svg, silhouette: d)
+    }
+}
+
+public func editorStickers() -> EditorStickers { EditorStickers() }
+
+// MARK: - Combining providers (`stickers/combine.ts`)
+
+/// Combines multiple `StickerProvider` instances into one namespaced provider (`combineStickerProviders`).
+public func combineStickerProviders(_ providers: [any StickerProvider], id: String = "stickers", name: String? = nil) throws -> any StickerProvider {
+    let ids = providers.map(\.id)
+    if let dup = ids.enumerated().first(where: { i, x in ids[..<i].contains(x) })?.element {
+        throw StickerError("invalid_argument", "Two sticker providers have the id \"\(dup)\"; give each a unique id.")
+    }
+    return CombinedStickerProvider(providers: providers, id: id, name: name ?? providers.map(\.name).joined(separator: " + "))
+}
+
+private final class CombinedStickerProvider: StickerProvider, @unchecked Sendable {
+    let providers: [any StickerProvider]
+    let id: String
+    let name: String
+    let namespaced = true
+    let capabilities: StickerProviderCapabilities
+    private let byId: [String: any StickerProvider]
+
+    init(providers: [any StickerProvider], id: String, name: String) {
+        self.providers = providers
+        self.id = id
+        self.name = name
+        var map: [String: any StickerProvider] = [:]
+        for p in providers { map[p.id] = p }
+        self.byId = map
+        let maxSize: Int? = providers.allSatisfy({ $0.capabilities.maxSize != nil }) ? providers.compactMap(\.capabilities.maxSize).max() : nil
+        self.capabilities = StickerProviderCapabilities(
+            supportsSearch: providers.contains { $0.capabilities.supportsSearch },
+            supportsSvg: providers.contains { $0.capabilities.supportsSvg },
+            supportsRaster: providers.contains { $0.capabilities.supportsRaster },
+            maxSize: maxSize
+        )
+    }
+
+    private func owner(_ ref: String) throws -> (p: any StickerProvider, id: String) {
+        let parsed = try parseStickerRefStrict(ref)
+        guard let p = byId[parsed.provider] else {
+            let names = providers.map(\.id).joined(separator: ", ")
+            throw StickerError("unknown_provider", "No sticker provider \"\(parsed.provider)\"; the providers are \(names.isEmpty ? "none" : names).")
+        }
+        return (p, parsed.id)
+    }
+
+    private func collectionOf(_ p: any StickerProvider, _ c: String) -> String {
+        p.namespaced ? c : "\(p.id):\(c)"
+    }
+
+    private func prefix(_ p: any StickerProvider, _ s: StickerSummary) -> StickerSummary {
+        var out = s
+        out.id = stickerRefOf(p, s.id)
+        if let c = s.collection { out.collection = collectionOf(p, c) }
+        return out
+    }
+
+    private func collectionOwner(_ c: String) throws -> (p: any StickerProvider, collection: String) {
+        guard let i = c.firstIndex(of: ":"), i > c.startIndex, let p = byId[String(c[..<i])] else {
+            throw StickerError("invalid_argument", "No collection \"\(c)\"; collections here are \"provider:collection\" (collections() lists them).")
+        }
+        return (p, p.namespaced ? c : String(c[c.index(after: i)...]))
+    }
+
+    private func runPage(_ query: String?, _ o: StickerSearchOptions) throws -> StickerPage {
+        let limit = o.limit ?? DEFAULT_STICKER_PAGE
+        try checkStickerSearchOptions(StickerSearchOptions(limit: limit))
+        let only = try o.collection.map(collectionOwner)
+        var i = 0
+        var inner: String?
+        if let after = o.after {
+            guard let pipe = after.firstIndex(of: "|"), let idx = Int(after[..<pipe]), idx >= 0, idx < providers.count else {
+                throw StickerError("invalid_argument", "after \"\(after)\" is not a cursor from this provider; pass the next value of the previous page.")
+            }
+            i = idx
+            let rest = String(after[after.index(after: pipe)...])
+            inner = rest.isEmpty ? nil : rest
+        }
+        func get(_ p: any StickerProvider, _ opts: StickerSearchOptions) throws -> StickerPage {
+            if let only, only.p.id != p.id { return StickerPage(items: [], total: 0) }
+            var sub = opts
+            sub.collection = only?.collection
+            return try query == nil ? p.list(sub) : p.search(query!, sub)
+        }
+        var baseOpts = o
+        baseOpts.after = nil
+        baseOpts.collection = nil
+        var total = 0
+        for p in providers {
+            var one = baseOpts
+            one.limit = 1
+            total += try get(p, one).total
+        }
+        var items: [StickerSummary] = []
+        var next: String?
+        while i < providers.count && items.count < limit {
+            let p = providers[i]
+            var sub = baseOpts
+            sub.limit = limit - items.count
+            sub.after = inner
+            let res = try get(p, sub)
+            items.append(contentsOf: res.items.map { prefix(p, $0) })
+            if let rNext = res.next, !res.items.isEmpty {
+                inner = rNext
+                if items.count >= limit { next = "\(i)|\(rNext)" }
+                continue
+            }
+            i += 1
+            inner = nil
+        }
+        if next == nil && items.count >= limit && i < providers.count { next = "\(i)|" }
+        return StickerPage(items: items, total: total, next: next)
+    }
+
+    func list(_ options: StickerSearchOptions) throws -> StickerPage { try runPage(nil, options) }
+    func search(_ query: String, _ options: StickerSearchOptions) throws -> StickerPage { try runPage(query, options) }
+
+    func describe(_ ref: String) throws -> StickerDescription? {
+        guard let o = try? owner(ref), var d = try o.p.describe(o.id) else { return nil }
+        d.summary = prefix(o.p, d.summary)
+        return d
+    }
+
+    func load(_ ref: String, _ options: StickerLoadOptions) throws -> StickerAsset {
+        let o = try owner(ref)
+        return try o.p.load(o.id, options)
+    }
+
+    func categories() throws -> [(id: String, name: String, count: Int)]? {
+        var order: [String] = []
+        var names: [String: String] = [:]
+        var counts: [String: Int] = [:]
+        for p in providers {
+            for c in (try p.categories()) ?? [] {
+                if counts[c.id] == nil {
+                    order.append(c.id)
+                    names[c.id] = c.name
+                }
+                counts[c.id, default: 0] += c.count
+            }
+        }
+        return order.map { (id: $0, name: names[$0] ?? $0, count: counts[$0] ?? 0) }
+    }
+
+    func collections() throws -> [StickerCollection]? {
+        var out: [StickerCollection] = []
+        for p in providers {
+            for var c in (try p.collections()) ?? [] {
+                c.id = collectionOf(p, c.id)
+                out.append(c)
+            }
+        }
+        return out
+    }
+}
+
+// MARK: - Fake sticker provider (`stickers/fake.ts`)
+
+public struct FakeStickerProviderOptions: Sendable {
+    public var id: String = "fake"
+    public var failIds: [String] = []
+    public init(id: String = "fake", failIds: [String] = []) {
+        self.id = id
+        self.failIds = failIds
+    }
+}
+
+public func createFakeStickerProvider(_ options: FakeStickerProviderOptions = FakeStickerProviderOptions()) -> any StickerProvider {
+    FakeStickerProvider(options)
+}
+
+private final class FakeStickerProvider: StickerProvider, @unchecked Sendable {
+    struct Item {
+        let id, name, category: String
+        let tags: [String]
+        let shape: String
+        let colours: (String, String)
+        let commercial: Bool
+        let collection: String?
+        let aiGenerated: Bool
+        let animated: Bool
+        let frameCount: Int?
+        let frameDelay: Double?
+    }
+
+    static let catalogue: [Item] = {
+        var out: [Item] = []
+        let weathers = [("sun", "#f59e0b"), ("moon", "#64748b"), ("cloud", "#94a3b8"), ("rain", "#2563eb"), ("snow", "#e0f2fe"), ("wind", "#14b8a6")]
+        for (w, col) in weathers {
+            out.append(Item(
+                id: "weather-\(w)", name: String(w.prefix(1)).uppercased() + w.dropFirst(), category: "weather", tags: ["weather", w],
+                shape: "badge", colours: (col, "#ffffff"), commercial: true, collection: "outdoors", aiGenerated: true,
+                animated: w == "wind", frameCount: w == "wind" ? 4 : nil, frameDelay: w == "wind" ? 100 : nil
+            ))
+        }
+        let fruits = [("apple", "#dc2626"), ("pear", "#84cc16"), ("cherry", "#be123c"), ("lemon", "#facc15"), ("grape", "#7c3aed")]
+        for (f, col) in fruits {
+            out.append(Item(
+                id: "fruit-\(f)", name: String(f.prefix(1)).uppercased() + f.dropFirst(), category: "food", tags: ["fruit", f],
+                shape: "tile", colours: (col, "#166534"), commercial: true, collection: "kitchen", aiGenerated: false,
+                animated: false, frameCount: nil, frameDelay: nil
+            ))
+        }
+        let badges = [("new", "#16a34a"), ("sale", "#dc2626"), ("hot", "#ea580c"), ("free", "#0891b2")]
+        for (b, col) in badges {
+            out.append(Item(
+                id: "badge-\(b)", name: "\(String(b.prefix(1)).uppercased() + b.dropFirst()) badge", category: "badges", tags: ["badge", "label", b],
+                shape: "badge", colours: (col, "#ffffff"), commercial: true, collection: "shop", aiGenerated: false,
+                animated: false, frameCount: nil, frameDelay: nil
+            ))
+        }
+        out.append(Item(
+            id: "art-sketch", name: "Sketch", category: "art", tags: ["drawing", "non-commercial"],
+            shape: "tile", colours: ("#1f2937", "#fde68a"), commercial: false, collection: nil, aiGenerated: false,
+            animated: false, frameCount: nil, frameDelay: nil
+        ))
+        return out
+    }()
+
+    static let collectionMeta: [String: (name: String, description: String?)] = [
+        "outdoors": ("Outdoors", "Weather, AI-generated."),
+        "kitchen": ("Kitchen", "Fruit tiles with dark variants."),
+        "shop": ("Shop", "Tintable sale badges."),
+    ]
+    static let notchFrames: [(Double, Double)] = [(45, 45), (55, 35), (35, 55), (25, 45)]
+
+    let options: FakeStickerProviderOptions
+    let id: String
+    let name = "Fake stickers"
+    let version: String? = "1"
+    let capabilities = StickerProviderCapabilities(supportsSearch: true, supportsSvg: true, supportsRaster: true, maxSize: 512)
+    private let summaries: [StickerSummary]
+
+    init(_ options: FakeStickerProviderOptions) {
+        self.options = options
+        self.id = options.id
+        self.summaries = Self.catalogue.map(Self.summaryOf)
+    }
+
+    private static func summaryOf(_ s: Item) -> StickerSummary {
+        StickerSummary(
+            id: s.id, name: s.name, category: s.category, tags: s.tags,
+            description: s.shape == "badge" ? "A flat badge (tintable)." : "A two-colour tile.",
+            width: 120, height: 120, formats: ["svg", "png"],
+            licence: s.commercial ? StickerLicence(spdx: "CC0-1.0", name: "CC0 1.0", commercial: true) : StickerLicence(spdx: "CC-BY-NC-4.0", name: "CC BY-NC 4.0", attribution: "Fake Artist", commercial: false),
+            tintable: s.shape == "badge",
+            aiGenerated: s.aiGenerated ? true : nil,
+            variants: s.shape == "tile" ? ["light", "dark"] : nil,
+            collection: s.collection,
+            animated: s.animated ? true : nil,
+            frameCount: s.frameCount,
+            frameDelay: s.frameDelay
+        )
+    }
+
+    func list(_ o: StickerSearchOptions) throws -> StickerPage { try stickerPage(summaries, o) }
+    func search(_ q: String, _ o: StickerSearchOptions) throws -> StickerPage { try stickerPage(summaries, o, query: q) }
+
+    func describe(_ id: String) throws -> StickerDescription? {
+        guard let s = Self.catalogue.first(where: { $0.id == id }) else { return nil }
+        return StickerDescription(
+            summary: Self.summaryOf(s),
+            silhouette: s.shape == "badge" ? "M60 6A54 54 0 1 1 59.9 6Z" : "M10 10H110V110H10Z",
+            colours: s.shape == "badge" ? [s.colours.0] : [s.colours.0, s.colours.1]
+        )
+    }
+
+    func collections() throws -> [StickerCollection]? {
+        stickerCollections(summaries, Self.collectionMeta)
+    }
+
+    func categories() throws -> [(id: String, name: String, count: Int)]? {
+        var cats: [String] = []
+        for s in Self.catalogue where !cats.contains(s.category) { cats.append(s.category) }
+        return cats.map { c in (id: c, name: c, count: Self.catalogue.filter { $0.category == c }.count) }
+    }
+
+    func load(_ id: String, _ o: StickerLoadOptions) throws -> StickerAsset {
+        guard let s = Self.catalogue.first(where: { $0.id == id }) else {
+            throw StickerError("unknown_sticker", "No fake sticker \"\(id)\".")
+        }
+        if options.failIds.contains(id) {
+            throw StickerError("load_failed", "The fake sticker \"\(id)\" failed to load (failIds).")
+        }
+        let summary = Self.summaryOf(s)
+        let variant = try checkStickerVariant(summary, o.variant)
+        let frame = try checkStickerFrame(summary, o.frame)
+        let fill = s.shape == "badge" && o.colour != nil ? o.colour!.lowercased() : s.colours.0
+        let bottom = s.colours.0
+        let top = variant == "dark" ? "#f8fafc" : s.colours.1
+        let (nx, ny) = Self.notchFrames[frame % Self.notchFrames.count]
+        if o.format == "png" {
+            let size = o.size ?? 128
+            if !(size >= 8 && size <= 512) {
+                throw StickerError("invalid_argument", "size must be 8..512 px, got \(size).")
+            }
+            var out = [UInt8](repeating: 0, count: size * size * 4)
+            func hexBytes(_ c: String) -> [UInt8] { hexToRgb8(c).map(UInt8.init) }
+            let fillRgb = hexBytes(fill), topRgb = hexBytes(top), botRgb = hexBytes(bottom)
+            for y in 0..<size {
+                for x in 0..<size {
+                    let u = ((Double(x) + 0.5) / Double(size)) * 120
+                    let v = ((Double(y) + 0.5) / Double(size)) * 120
+                    var rgb: [UInt8]?
+                    if s.shape == "badge" {
+                        let inDisc = JS.hypot(u - 60, v - 60) <= 54
+                        let inNotch = u >= nx && u <= nx + 30 && v >= ny && v <= ny + 30
+                        if inDisc && !inNotch { rgb = fillRgb }
+                    } else if u >= 10 && u <= 110 && v >= 10 && v <= 110 {
+                        rgb = v < 60 ? topRgb : botRgb
+                    }
+                    guard let rgb else { continue }
+                    let i = (y * size + x) * 4
+                    out[i] = rgb[0]; out[i + 1] = rgb[1]; out[i + 2] = rgb[2]; out[i + 3] = 255
+                }
+            }
+            return .image(url: pngDataUrl(size, size, out), width: size, height: size)
+        }
+        if s.shape == "badge" {
+            return .svg(svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 120\" width=\"120\" height=\"120\"><path fill=\"\(fill)\" fill-rule=\"evenodd\" d=\"M60 6A54 54 0 1 1 59.9 6ZM\(Int(nx)) \(Int(ny))H\(Int(nx + 30))V\(Int(ny + 30))H\(Int(nx))Z\"/></svg>")
+        }
+        return .svg(svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 120\" width=\"120\" height=\"120\"><rect x=\"10\" y=\"10\" width=\"100\" height=\"100\" fill=\"\(bottom)\"/><rect x=\"10\" y=\"10\" width=\"100\" height=\"50\" fill=\"\(top)\"/></svg>")
+    }
+}
+
+// MARK: - Sticker art cache (`paint-editor/sticker-art.ts`)
+
+/// Rasterised sticker art (straight RGBA) and whether to recolour it (`StickerArt`).
+public final class StickerArt: @unchecked Sendable {
+    public let width: Int
+    public let height: Int
+    public let data: [UInt8]
+    public let tintable: Bool
+    public let frames: [[UInt8]]?
+    public let frameDelay: Double?
+    public lazy var stampArt: StampArt = {
+        var alpha = [UInt8](repeating: 0, count: width * height)
+        for i in 0..<(width * height) { alpha[i] = data[i * 4 + 3] }
+        return StampArt(width: width, height: height, alpha: alpha)
+    }()
+
+    public init(width: Int, height: Int, data: [UInt8], tintable: Bool, frames: [[UInt8]]? = nil, frameDelay: Double? = nil) {
+        self.width = width
+        self.height = height
+        self.data = data
+        self.tintable = tintable
+        self.frames = frames
+        self.frameDelay = frameDelay
+    }
+}
+
+public typealias StickerArtLookup = (String, String?) -> StickerArt?
+public typealias StickerRasterizer = @Sendable (StickerAsset, Int) throws -> (width: Int, height: Int, data: [UInt8])
+
+public let defaultStickerRasterizer: StickerRasterizer = { asset, _ in
+    switch asset {
+    case .rgba(let width, let height, let data):
+        return (width, height, data)
+    case .image(let url, _, _):
+        if let parsed = parseDataUrl(url), parsed.mime == "image/png" {
+            let png = try decodePng(parsed.bytes)
+            return (png.width, png.height, png.data)
+        }
+        throw StickerError("unsupported_format", "This environment can't draw non-PNG sticker art; pass rasterizeSticker in the paint editor's options (or use a provider that offers png).")
+    case .svg:
+        throw StickerError("unsupported_format", "This environment can't draw SVG sticker art; pass rasterizeSticker in the paint editor's options (or use a provider that offers png).")
+    }
+}
+
+/// Every ref the provider lists (up to `cap`), for "did you mean" refusals (`knownRefs`).
+func knownStickerRefs(_ provider: any StickerProvider, cap: Int = 500) throws -> [String] {
+    var refs: [String] = []
+    var after: String?
+    while refs.count < cap {
+        let page = try provider.list(StickerSearchOptions(limit: MAX_STICKER_PAGE, after: after))
+        refs.append(contentsOf: page.items.map { stickerRefOf(provider, $0.id) })
+        guard let next = page.next, !page.items.isEmpty else { break }
+        after = next
+    }
+    return refs
+}
+
+/// Looks up `ref` in `provider`, refusing an unknown or foreign ref with the closest ones it has (`describeStickerRef`).
+public func describeStickerRef(_ provider: any StickerProvider, _ ref: String) throws -> StickerDescription {
+    let parsed = try parseStickerRefStrict(ref)
+    if let id = try stickerIdFor(provider, ref), let found = try provider.describe(id) {
+        return found
+    }
+    let near = closestStickerRefs(ref, (try? knownStickerRefs(provider)) ?? [])
+    let id = try stickerIdFor(provider, ref)
+    let wher = id == nil && !provider.namespaced ? " The sticker library is \"\(provider.id)\", not \"\(parsed.provider)\"." : ""
+    throw StickerError("unknown_sticker", "No sticker \"\(ref)\".\(wher) Closest: \(near.isEmpty ? "none" : near.joined(separator: ", ")); find_stickers lists them.")
+}
+
+/// Loaded sticker art by ref and variant, with the state of each load (`StickerArtCache`).
+public final class StickerArtCache: @unchecked Sendable {
+    private enum Entry {
+        case ready(StickerArt)
+        case failed(String)
+    }
+
+    private var entries: [String: Entry] = [:]
+    private var variants: [String: [String]] = [:]
+
+    public init() {}
+
+    private static func key(_ ref: String, _ variant: String? = nil) -> String {
+        variant == "dark" ? "\(ref)#dark" : ref
+    }
+
+    public func get(_ ref: String, _ variant: String? = nil) -> StickerArt? {
+        if case .ready(let art)? = entries[Self.key(ref, variant)] { return art }
+        return nil
+    }
+
+    public func variantFor(_ ref: String, dark: Bool) -> String {
+        dark && (variants[ref]?.contains("dark") == true) ? "dark" : "light"
+    }
+
+    public func status(_ ref: String, _ variant: String? = nil) -> (status: String, error: String?) {
+        if editorStampOf(ref) != nil { return ("ready", nil) }
+        guard let e = entries[Self.key(ref, variant)] else { return ("none", nil) }
+        switch e {
+        case .ready: return ("ready", nil)
+        case .failed(let err): return ("failed", err)
+        }
+    }
+
+    @discardableResult
+    public func ensure(_ provider: any StickerProvider, _ ref: String, rasterize: StickerRasterizer = defaultStickerRasterizer, dark: Bool = false) throws -> StickerArt? {
+        if editorStampOf(ref) != nil { return nil }
+        let d: StickerDescription
+        do {
+            d = try describeStickerRef(provider, ref)
+        } catch {
+            let msg = (error as? StickerError)?.message ?? error.localizedDescription
+            entries[Self.key(ref)] = .failed(msg)
+            throw error
+        }
+        variants[ref] = d.variants ?? ["light"]
+        let variant = stickerVariantFor(d.variants, dark: dark)
+        let key = Self.key(ref, variant)
+        if case .ready(let art)? = entries[key] { return art }
+        do {
+            let id = try stickerIdFor(provider, ref)!
+            let max = provider.capabilities.maxSize ?? STICKER_ART_SIZE
+            let size = Swift.min(STICKER_ART_SIZE, max)
+            let v: String? = variant == "dark" ? "dark" : nil
+            let format = d.formats.contains("png") ? "png" : (d.formats.first ?? "svg")
+            let asset = try provider.load(id, StickerLoadOptions(format: format, size: size, variant: v))
+            let px = try rasterize(asset, size)
+            if !(px.width > 0 && px.height > 0) || px.data.count != px.width * px.height * 4 {
+                throw StickerError("load_failed", "The art for \"\(ref)\" came back empty or the wrong size.")
+            }
+            let count = (d.animated == true && (d.frameCount ?? 1) > 1) ? d.frameCount! : 1
+            if count <= 1 {
+                let art = StickerArt(width: px.width, height: px.height, data: px.data, tintable: d.tintable)
+                entries[key] = .ready(art)
+                return art
+            }
+            var frames: [[UInt8]] = [px.data]
+            for f in 1..<count {
+                let fa = try provider.load(id, StickerLoadOptions(format: format, size: size, variant: v, frame: f))
+                let fpx = try rasterize(fa, size)
+                if fpx.width != px.width || fpx.height != px.height || fpx.data.count != px.data.count {
+                    throw StickerError("load_failed", "Frame \(f) of \"\(ref)\" has size \(fpx.width)×\(fpx.height), expected \(px.width)×\(px.height).")
+                }
+                frames.append(fpx.data)
+            }
+            let art = StickerArt(width: px.width, height: px.height, data: px.data, tintable: d.tintable, frames: frames, frameDelay: d.frameDelay ?? 100)
+            entries[key] = .ready(art)
+            return art
+        } catch {
+            let msg = (error as? StickerError)?.message ?? error.localizedDescription
+            entries[key] = .failed(msg)
+            throw error
+        }
+    }
+
+    public func clear() {
+        entries.removeAll()
+        variants.removeAll()
+    }
+}
+
+/// Bilinear RGBA sample of `art` at (x, y) in its pixels (straight alpha, colour weighted by alpha; `sampleArt`).
+public func sampleArt(_ art: StickerArt, _ x: Double, _ y: Double, frame: Int? = nil) -> (r: Double, g: Double, b: Double, a: Double) {
+    let w = art.width, h = art.height
+    let data: [UInt8]
+    if let frame, let frames = art.frames, !frames.isEmpty {
+        let idx = ((frame % frames.count) + frames.count) % frames.count
+        data = frames[idx]
+    } else {
+        data = art.data
+    }
+    let fx = x - 0.5, fy = y - 0.5
+    let x0 = Int(JS.floor(fx)), y0 = Int(JS.floor(fy))
+    let tx = fx - Double(x0), ty = fy - Double(y0)
+    var r = 0.0, g = 0.0, b = 0.0, a = 0.0
+    for k in 0..<4 {
+        let xx = x0 + (k & 1)
+        let yy = y0 + (k >> 1)
+        if xx < 0 || yy < 0 || xx >= w || yy >= h { continue }
+        let wgt = (k & 1 != 0 ? tx : 1 - tx) * (k >> 1 != 0 ? ty : 1 - ty)
+        let i = (yy * w + xx) * 4
+        let al = Double(data[i + 3]) * wgt
+        r += Double(data[i]) * al
+        g += Double(data[i + 1]) * al
+        b += Double(data[i + 2]) * al
+        a += al
+    }
+    return (a > 0 ? r / a / 255 : 0, a > 0 ? g / a / 255 : 0, a > 0 ? b / a / 255 : 0, a / 255)
 }
 
 /// Refs closest to `wanted` by edit distance (ties alphabetical; `closestStickerRefs`).
@@ -279,12 +1167,36 @@ public struct Sticker: Equatable, Sendable {
     public var color: String
     public var opacity: Double
     public var seed: Int
+    /// `dark` when drawn in its sticker's dark variant; nil for light art.
+    public var variant: String? = nil
+    /// 0-based animation frame index when the sticker is animated; nil when 0 or static.
+    public var frame: Int? = nil
+
+    public init(
+        id: String, ref: String, stamp: String? = nil, x: Double, y: Double, size: Double,
+        rotation: Double, color: String, opacity: Double, seed: Int, variant: String? = nil, frame: Int? = nil
+    ) {
+        self.id = id
+        self.ref = ref
+        self.stamp = stamp
+        self.x = x
+        self.y = y
+        self.size = size
+        self.rotation = rotation
+        self.color = color
+        self.opacity = opacity
+        self.seed = seed
+        self.variant = variant
+        self.frame = frame
+    }
 
     public var json: JSONObject {
         var o: JSONObject = ["id": .string(id), "ref": .string(ref)]
         if let stamp { o["stamp"] = .string(stamp) }
         o["x"] = .number(x); o["y"] = .number(y); o["size"] = .number(size); o["rotation"] = .number(rotation)
         o["color"] = .string(color); o["opacity"] = .number(opacity); o["seed"] = .number(Double(seed))
+        if let variant, variant == "dark" { o["variant"] = .string(variant) }
+        if let frame { o["frame"] = .number(Double(frame)) }
         return o
     }
 }
@@ -307,11 +1219,45 @@ func stickerStamp(_ s: Sticker) -> String? {
     return s.stamp.flatMap { STAMP_KINDS.contains($0) ? $0 : nil }
 }
 
+/// Draws a provider sticker from its art (`drawArtSticker`).
+private func drawArtSticker(_ medium: TileMedium, _ s: Sticker, _ art: StickerArt) -> RasterRect {
+    let rect = stickerRect(s)
+    let n = rect.width * rect.height
+    var cov = [Float](repeating: 0, count: n)
+    var field = [Float](repeating: 0, count: n * 3)
+    let a = (s.rotation * Double.pi) / 180
+    let ca = JS.cos(a), sa = JS.sin(a)
+    let scale = Double(Swift.max(art.width, art.height)) / s.size
+    let rgb = hexRgb(s.color)
+    var p = 0
+    for yy in 0..<rect.height {
+        for xx in 0..<rect.width {
+            defer { p += 1 }
+            let dx = Double(rect.x + xx) + 0.5 - s.x
+            let dy = Double(rect.y + yy) + 0.5 - s.y
+            let ax = (dx * ca + dy * sa) * scale + Double(art.width) / 2
+            let ay = (-dx * sa + dy * ca) * scale + Double(art.height) / 2
+            if ax < -1 || ay < -1 || ax > Double(art.width) + 1 || ay > Double(art.height) + 1 { continue }
+            let px = sampleArt(art, ax, ay, frame: s.frame)
+            if !(px.a > 0) { continue }
+            cov[p] = Float(px.a)
+            field[p * 3] = Float(art.tintable ? rgb[0] : px.r)
+            field[p * 3 + 1] = Float(art.tintable ? rgb[1] : px.g)
+            field[p * 3 + 2] = Float(art.tintable ? rgb[2] : px.b)
+        }
+    }
+    medium.deposit(rect, cov, s.opacity, rgb, nil, field)
+    return rect
+}
+
 /// Draws one sticker into a medium; returns the rectangle it touched (`drawSticker`).
 @discardableResult
-func drawSticker(_ medium: TileMedium, _ s: Sticker) -> RasterRect {
+func drawSticker(_ medium: TileMedium, _ s: Sticker, _ art: StickerArtLookup? = nil) -> RasterRect {
+    guard let kind = stickerStamp(s) else {
+        if let a = art?(s.ref, s.variant) { return drawArtSticker(medium, s, a) }
+        return stickerRect(s)
+    }
     let rect = stickerRect(s)
-    guard let kind = stickerStamp(s) else { return rect }
     let n = rect.width * rect.height
     var cov = [Float](repeating: 0, count: n)
     var field = [Float](repeating: 0, count: n * 3)
@@ -399,7 +1345,7 @@ func jitterColor(_ hex: String, _ amount: Double, _ seed: Int, _ i: Int) -> Stri
 }
 
 /// A sticker layer's pixels drawn from its stickers (`stickerSurface`); with `dirty`, only those tiles are redrawn over `base`.
-func stickerSurface(_ stickers: [Sticker], base: TiledSurface? = nil, dirty: [RasterRect]? = nil) -> TiledSurface {
+func stickerSurface(_ stickers: [Sticker], base: TiledSurface? = nil, dirty: [RasterRect]? = nil, art: StickerArtLookup? = nil) -> TiledSurface {
     final class Target: PaintTileTarget {
         var live: [TileKey: ByteTile] = [:]
         var order: [TileKey] = []
@@ -422,7 +1368,7 @@ func stickerSurface(_ stickers: [Sticker], base: TiledSurface? = nil, dirty: [Ra
     let only: Set<TileKey>? = base != nil && dirty != nil ? Set(dirty!.flatMap { tilesInRect($0).map { tileKey($0.tx, $0.ty) } }) : nil
     let target = Target(only)
     let medium = TileMedium(target, blend: nil)
-    for s in stickers where only == nil || tilesInRect(stickerRect(s)).contains(where: { only!.contains(tileKey($0.tx, $0.ty)) }) { drawSticker(medium, s) }
+    for s in stickers where only == nil || tilesInRect(stickerRect(s)).contains(where: { only!.contains(tileKey($0.tx, $0.ty)) }) { drawSticker(medium, s, art) }
     var tiles = OrderedMap<TileKey, Tile>()
     if let only, let base { for (k, t) in base.tiles where !only.contains(k) { tiles.set(k, t) } }
     for k in target.order { if let t = finishTile(target.live[k]!.data, 4, 0) { tiles.set(k, t) } }
@@ -430,7 +1376,7 @@ func stickerSurface(_ stickers: [Sticker], base: TiledSurface? = nil, dirty: [Ra
 }
 
 /// The top-most sticker under a point, by its stamp's shape (`stickerAt`).
-func stickerAt(_ stickers: [Sticker], _ x: Double, _ y: Double) -> Sticker? {
+func stickerAt(_ stickers: [Sticker], _ x: Double, _ y: Double, _ art: StickerArtLookup? = nil) -> Sticker? {
     for s in stickers.reversed() {
         let rad = s.size / 2
         let a = (s.rotation * Double.pi) / 180
@@ -439,8 +1385,13 @@ func stickerAt(_ stickers: [Sticker], _ x: Double, _ y: Double) -> Sticker? {
         let v = (-dx * JS.sin(a) + dy * JS.cos(a)) / rad
         if abs(u) > 1.05 || abs(v) > 1.05 { continue }
         if s.size < 16 { return s }
-        guard let kind = stickerStamp(s) else { return s }
-        if stampCoverage(kind, u, v, s.seed) > 0.25 { return s }
+        if let kind = stickerStamp(s) {
+            if stampCoverage(kind, u, v, s.seed) > 0.25 { return s }
+            continue
+        }
+        guard let pic = art?(s.ref, s.variant) else { return s }
+        let scale = Double(Swift.max(pic.width, pic.height)) / 2
+        if sampleArt(pic, u * scale + Double(pic.width) / 2, v * scale + Double(pic.height) / 2, frame: s.frame).a > 0.25 { return s }
     }
     return nil
 }
@@ -483,6 +1434,12 @@ func normalizeStickerUpdate(_ u: JSONObject) throws -> JSONObject {
         guard let n = v.numberValue, n >= 0 && n <= 1 else { throw PaintEditorError("opacity \(v.stringified()) is out of range; use 0..1.") }
         out["opacity"] = .number(n)
     }
+    if let v = u["frame"] {
+        guard let n = v.numberValue, n.isFinite, n.rounded() == n, n >= 0 else {
+            throw PaintEditorError("frame \(v.stringified()) must be a whole number >= 0.")
+        }
+        out["frame"] = .number(n)
+    }
     return out
 }
 
@@ -490,7 +1447,21 @@ extension Sticker {
     /// A sticker as saved (`json`), or nil when it is not one.
     init?(json: JSONValue) {
         guard let o = json.objectValue, let id = o["id"]?.stringValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue else { return nil }
-        self.init(id: id, ref: o["ref"]?.stringValue ?? o["stamp"]?.stringValue.map { "editor:\($0)" } ?? "", stamp: o["stamp"]?.stringValue, x: x, y: y, size: o["size"]?.numberValue ?? 48, rotation: o["rotation"]?.numberValue ?? 0, color: o["color"]?.stringValue ?? "#000000", opacity: o["opacity"]?.numberValue ?? 1, seed: Int(o["seed"]?.numberValue ?? 0))
+        let variant = o["variant"]?.stringValue == "dark" ? "dark" : nil
+        let frame = o["frame"]?.numberValue.flatMap { $0.isFinite && $0.rounded() == $0 && $0 >= 0 ? Int($0) : nil }
+        self.init(
+            id: id,
+            ref: o["ref"]?.stringValue ?? o["stamp"]?.stringValue.map { "editor:\($0)" } ?? "",
+            stamp: o["stamp"]?.stringValue,
+            x: x, y: y,
+            size: o["size"]?.numberValue ?? 48,
+            rotation: o["rotation"]?.numberValue ?? 0,
+            color: o["color"]?.stringValue ?? "#000000",
+            opacity: o["opacity"]?.numberValue ?? 1,
+            seed: Int(o["seed"]?.numberValue ?? 0),
+            variant: variant,
+            frame: frame
+        )
     }
 
     /// The sticker with a checked update applied (`stamp: null` clears the stamp).
@@ -504,6 +1475,7 @@ extension Sticker {
         if let v = u["rotation"]?.numberValue { s.rotation = v }
         if let v = u["color"]?.stringValue { s.color = v }
         if let v = u["opacity"]?.numberValue { s.opacity = v }
+        if let v = u["frame"]?.numberValue { s.frame = Int(v) }
         return s
     }
 }
@@ -520,6 +1492,8 @@ final class StickerSpray {
     private let seed: Int
     private let paint: PaintGradientSource?
     private let effect: EffectPaintPixels?
+    private let art: StickerArtLookup?
+    private let variant: ((String) -> String)?
     private let smoother: PenSmoother
     private let walkers: [PenDabWalker]
     private let copies: [StrokeCopy]
@@ -530,13 +1504,20 @@ final class StickerSpray {
     private var sampler: PaintGradientSampler?
     private let stamps: [String]
     private let density, sizeJitter, rotationJitter, scatter, colorJitter: Double
+    private let frameMode: String
 
-    init(brush: PaintBrush, target: PaintTileTarget, color: String, seed: Int, copies: [StrokeCopy], nextId: Int, paint: PaintGradientSource?, effect: EffectPaintPixels?) {
+    init(
+        brush: PaintBrush, target: PaintTileTarget, color: String, seed: Int, copies: [StrokeCopy],
+        nextId: Int, paint: PaintGradientSource?, effect: EffectPaintPixels?,
+        art: StickerArtLookup? = nil, variant: ((String) -> String)? = nil
+    ) {
         self.brush = brush
         self.color = color
         self.seed = seed
         self.paint = paint
         self.effect = effect
+        self.art = art
+        self.variant = variant
         let st = brush.sticker
         stamps = (st["stamps"]?.arrayValue ?? []).compactMap(\.stringValue)
         density = st["density"]?.numberValue ?? 0.4
@@ -544,6 +1525,7 @@ final class StickerSpray {
         rotationJitter = st["rotationJitter"]?.numberValue ?? 0
         scatter = st["scatter"]?.numberValue ?? 0
         colorJitter = st["colorJitter"]?.numberValue ?? 0
+        frameMode = st["frameMode"]?.stringValue == "random" ? "random" : "perform"
         smoother = PenSmoother(brush.tip.smoothing, brush.pressureSmoothing)
         self.copies = copies.isEmpty ? [IDENTITY_COPY] : copies
         // One walked dab per sticker: spacing from the density.
@@ -602,10 +1584,25 @@ final class StickerSpray {
         let pick = Int(JS.floor(PixerateRandom.rand01(seed, i, 57) * Double(stamps.count)))
         let ref = pick < stamps.count ? stamps[pick] : "editor:dot"
         let stamp = editorStampOf(ref)
-        if stamp == nil {
+        let v = stamp != nil ? "light" : (variant?(ref) ?? "light")
+        let pic = stamp != nil ? nil : art?(ref, v)
+        if stamp == nil && pic == nil {
             if !skipped.contains(ref) { skipped.append(ref) }
             nextNumber += 1
             return
+        }
+        let frameCount = (pic?.frames?.count ?? 1) > 1 ? pic!.frames!.count : 1
+        let frame: Int
+        if frameCount > 1 {
+            if frameMode == "random" {
+                frame = Int(JS.floor(PixerateRandom.rand01(seed, i, 67) * Double(frameCount))) % frameCount
+            } else {
+                let elapsed = Swift.max(0, d.time ?? 0)
+                let delay = Swift.max(1, pic?.frameDelay ?? 100)
+                frame = Int(JS.floor(elapsed / delay)) % frameCount
+            }
+        } else {
+            frame = 0
         }
         let sticker = Sticker(
             id: "st\(nextNumber)", ref: ref, stamp: stamp,
@@ -614,11 +1611,13 @@ final class StickerSpray {
             rotation: JS.round(((-d.dab.angle * 180) / Double.pi + (PixerateRandom.rand01(seed, i, 59) * 2 - 1) * 180 * rotationJitter) * 10) / 10,
             color: colorJitter > 0 ? jitterColor(base.color, colorJitter, seed, i) : base.color,
             opacity: JS.round(Swift.min(1, d.dab.opacity * brush.tip.opacity * base.alpha) * 1000) / 1000,
-            seed: Int(JS.floor(PixerateRandom.rand01(seed, i, 65) * 1e9))
+            seed: Int(JS.floor(PixerateRandom.rand01(seed, i, 65) * 1e9)),
+            variant: v == "dark" ? "dark" : nil,
+            frame: frame > 0 ? frame : nil
         )
         nextNumber += 1
         stickers.append(sticker)
-        rects.append(drawSticker(medium, sticker))
+        rects.append(drawSticker(medium, sticker, art))
         dabCount += 1
     }
 

@@ -19,6 +19,10 @@ const oneOf = <T extends string>(v: unknown, all: readonly T[], d: T): T => (all
 
 export { STAMP_KINDS, type StampKind } from '../stickers/stamps';
 
+/** How an animated sticker's frames are chosen along a stroke: `perform` advances in real time as the stroke is drawn; `random` picks a seeded frame per mark. */
+export type StickerFrameMode = 'perform' | 'random';
+export const STICKER_FRAME_MODES: readonly StickerFrameMode[] = ['perform', 'random'];
+
 /** Sticker spray settings (each 0..1 unless noted). */
 export interface StickerSettings {
   /**
@@ -36,6 +40,8 @@ export interface StickerSettings {
   scatter: number;
   /** Random colour change (hue and lightness). */
   colorJitter: number;
+  /** Animated stickers: `perform` (default) advances through the frames in real time as the stroke is drawn; `random` picks a seeded frame per mark. */
+  frameMode?: StickerFrameMode;
 }
 
 /** At most this many stickers in a sticker brush. */
@@ -53,6 +59,7 @@ export function normalizeStickerSettings(raw: Partial<StickerSettings> = {}, bas
       }
     });
   const stamps = Array.isArray(raw.stamps) ? refs(raw.stamps) : refs(base.stamps);
+  const frameMode = raw.frameMode === 'random' || raw.frameMode === 'perform' ? raw.frameMode : base.frameMode;
   return {
     stamps: stamps.length ? [...new Set(stamps)].slice(0, MAX_STICKER_STAMPS) : refs(base.stamps.length ? base.stamps : DEFAULT_STICKER.stamps),
     density: unit(raw.density, base.density),
@@ -60,6 +67,7 @@ export function normalizeStickerSettings(raw: Partial<StickerSettings> = {}, bas
     rotationJitter: unit(raw.rotationJitter, base.rotationJitter),
     scatter: typeof raw.scatter === 'number' && Number.isFinite(raw.scatter) ? Math.min(2, Math.max(0, raw.scatter)) : base.scatter,
     colorJitter: unit(raw.colorJitter, base.colorJitter),
+    ...(frameMode === 'random' ? { frameMode: 'random' } : {}),
   };
 }
 

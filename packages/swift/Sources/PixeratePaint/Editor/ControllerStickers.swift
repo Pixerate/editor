@@ -11,8 +11,59 @@ private let MAX_ADD_STICKERS = 500
  * one undo step that redraws only the tiles it touches. Only the editor's own stickers are drawn.
  */
 extension PaintEditorController {
-    /// The sticker library: the editor's own stamps.
+    /// The sticker library: the editor's own stamps by default, or the provider set via `setStickersProvider`.
     public var stickerLibrary: EditorStickers { editorStickerLibrary }
+
+    /// The active sticker provider (`editorStickers()` unless set via `setStickersProvider`).
+    public var stickersProvider: any StickerProvider { stickers.provider }
+
+    /// Sets the sticker library (`nil` goes back to the editor's own stamps); loaded art is forgotten.
+    public func setStickersProvider(_ provider: (any StickerProvider)?) {
+        stickers.set(provider)
+        stickerArt.clear()
+        emit([])
+    }
+
+    /// Loads and rasterises the art of `refs` (provider stickers; editor stamps need none) so sprays and placements can draw them.
+    public func prepareStickers(_ refs: [String]) throws {
+        var unique: [String] = []
+        for r in refs {
+            let norm = try readStickerRef(r)
+            if editorStampOf(norm) == nil && !unique.contains(norm) { unique.append(norm) }
+        }
+        defer { if !unique.isEmpty { emit([]) } }
+        do {
+            for r in unique {
+                _ = try stickerArt.ensure(stickers.provider, r, rasterize: rasterizeSticker, dark: colorScheme == "dark")
+            }
+        } catch let e as StickerError {
+            throw PaintEditorError(e.message)
+        } catch {
+            throw PaintEditorError(error.localizedDescription)
+        }
+    }
+
+    /// Whether a sticker's art is ready to draw in the variant the colour scheme picks: `ready`, `failed` (with why) or `none`.
+    public func stickerArtStatus(_ ref: String) throws -> (status: String, error: String?) {
+        let r = try readStickerRef(ref)
+        return stickerArt.status(r, stickerArt.variantFor(r, dark: colorScheme == "dark"))
+    }
+
+    func readStickerRef(_ ref: String) throws -> String {
+        do {
+            let p = try parseStickerRefStrict(ref)
+            return "\(p.provider):\(p.id)"
+        } catch let e as StickerError {
+            throw PaintEditorError(e.message)
+        }
+    }
+
+    func withStickerVariant(_ s: Sticker) -> Sticker {
+        var out = s
+        let v = editorStampOf(s.ref) != nil ? "light" : stickerArt.variantFor(s.ref, dark: colorScheme == "dark")
+        out.variant = v == "dark" ? "dark" : nil
+        return out
+    }
 
     /// The next free sticker number (ids `st<n>` are unique across the document).
     func nextStickerNumber(_ d: PaintDocumentState? = nil) -> Int {
@@ -50,22 +101,32 @@ extension PaintEditorController {
         if !x.isFinite || !y.isFinite { throw PaintEditorError("x and y must be numbers of document pixels.") }
         guard let id = layerId ?? doc.activeLayerId else { return nil }
         _ = try requireLayer(id)
-        return PixeratePaint.stickerAt(doc.stickers?.get(id) ?? [], x, y)
+        return PixeratePaint.stickerAt(doc.stickers?.get(id) ?? [], x, y, stickerArt.get)
     }
 
-    /// Refuses stickers this port cannot draw (another library's), naming them.
-    private func requireDrawable(_ stickers: [Sticker]) throws {
+    /// Refuses to redraw stickers whose art has not loaded yet, naming them.
+    private func requireStickerArt(_ list: [Sticker]) throws {
         var missing: [String] = []
-        for s in stickers where stickerStamp(s) == nil && !missing.contains(s.ref) { missing.append(s.ref) }
-        if !missing.isEmpty { throw PaintEditorError("The art for \(missing.map { "\"\($0)\"" }.joined(separator: ", ")) can't be drawn: the Swift paint editor draws only the editor's own stickers (find_stickers lists them).") }
+        for s in list where stickerStamp(s) == nil && stickerArt.get(s.ref, s.variant) == nil {
+            if !missing.contains(s.ref) { missing.append(s.ref) }
+        }
+        if !missing.isEmpty {
+            for s in list where stickerStamp(s) == nil && stickerArt.get(s.ref, s.variant) == nil {
+                _ = try? stickerArt.ensure(stickers.provider, s.ref, rasterize: rasterizeSticker, dark: s.variant == "dark")
+                if colorScheme == "dark" {
+                    _ = try? stickerArt.ensure(stickers.provider, s.ref, rasterize: rasterizeSticker, dark: true)
+                }
+            }
+            throw PaintEditorError("The art for \(missing.map { "\"\($0)\"" }.joined(separator: ", ")) has not loaded yet; it is loading now (prepareStickers), so try again when it has.")
+        }
     }
 
     /// Replaces a layer's stickers and redraws its pixels (one undo step); with `dirty`, only the tiles under those rects.
     private func commitStickers(_ label: String, _ layer: PaintLayer, _ stickers: [Sticker], dirty: [RasterRect]? = nil) throws {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it first.") }
-        try requireDrawable(stickers)
+        try requireStickerArt(stickers)
         let partial = dirty != nil && layer.pixelOffset.x == 0 && layer.pixelOffset.y == 0
-        let surface = partial ? stickerSurface(stickers, base: layer.pixelSurface, dirty: dirty) : stickerSurface(stickers)
+        let surface = partial ? stickerSurface(stickers, base: layer.pixelSurface, dirty: dirty, art: stickerArt.get) : stickerSurface(stickers, art: stickerArt.get)
         let next = doc.with { o in
             o.layers = mapLayer(doc.layers, layer.id) { $0.withSurface(surface, offset: LayerOffset(x: 0, y: 0)) }
             var t = o.stickers ?? OrderedMap()
@@ -81,7 +142,9 @@ extension PaintEditorController {
     public func updateSticker(_ layerId: String?, _ id: String, _ update: JSONObject) throws -> Sticker {
         let (layer, stickers) = try stickerLayer(layerId)
         guard let i = stickers.firstIndex(where: { $0.id == id }) else { throw PaintEditorError("Layer \"\(layer.name)\" has no sticker \"\(id)\". Call list_stickers for the ids.") }
-        let next = stickers[i].applying(try readStickerUpdate(update))
+        let u = try readStickerUpdate(update)
+        let applied = stickers[i].applying(u)
+        let next = u["ref"] != nil ? withStickerVariant(applied) : applied
         try commitStickers("Edit sticker", layer, stickers.enumerated().map { $0.offset == i ? next : $0.element }, dirty: [stickerRect(stickers[i]), stickerRect(next)])
         return next
     }
@@ -104,7 +167,7 @@ extension PaintEditorController {
             n += 1
             let seed = raw["seed"]?.numberValue.map { Int($0) } ?? Int(PixerateRandom.mix32(UInt32(truncatingIfNeeded: id &* 0x9E37_79B1)) & 0x7FFF_FFFF)
             let base = Sticker(id: "st\(id)", ref: "", stamp: nil, x: 0, y: 0, size: 48, rotation: 0, color: color, opacity: 1, seed: seed)
-            return base.applying(u)
+            return withStickerVariant(base.applying(u))
         }
         try commitStickers("Add stickers", layer, existing + added, dirty: existing.isEmpty ? nil : added.map(stickerRect))
         return added
@@ -147,44 +210,58 @@ extension PaintEditorController {
 /// The sticker tools of the paint editor (`sticker-tools.ts`, `stickers/tools.ts`).
 func paintStickerHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] {
     var h: [String: PaintToolHandler] = [:]
-    let lib = c.stickerLibrary
-    func agentSummary(_ s: JSONObject) -> JSONValue {
-        var o: JSONObject = ["ref": .string("\(EDITOR_STICKERS_ID):\(s["id"]?.stringValue ?? "")")]
+    func agentSummary(_ p: any StickerProvider, _ s: JSONObject) -> JSONValue {
+        var o: JSONObject = ["ref": .string(stickerRefOf(p, s["id"]?.stringValue ?? ""))]
         for (k, v) in s where k != "id" && k != "thumbnail" { o[k] = v }
         return .object(o)
     }
     h["find_stickers"] = { a in
-        let categories = lib.categories()
-        if let cat = a["category"]?.stringValue, !categories.contains(where: { $0.objectValue?["id"]?.stringValue == cat }) {
-            throw StickerError("invalid_argument", "No category \"\(cat)\" in \"\(lib.name)\"; categories: \(categories.compactMap { $0.objectValue?["id"]?.stringValue }.joined(separator: ", ")).")
+        let p = c.stickersProvider
+        let categories = try p.categories()
+        if let cat = a["category"]?.stringValue, let categories, !categories.contains(where: { $0.id == cat }) {
+            throw StickerError("invalid_argument", "No category \"\(cat)\" in \"\(p.name)\"; categories: \(categories.map(\.id).joined(separator: ", ")).")
         }
-        // The editor's own stickers are in no collection (`listCollections` is a host library's).
-        if a["collection"] != nil { throw StickerError("invalid_argument", "\"\(lib.name)\" has no collections; leave collection out.") }
-        let page = try lib.page(query: (a["query"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines), category: a["category"]?.stringValue, tags: a["tags"]?.arrayValue?.compactMap(\.stringValue), commercial: a["commercial"]?.boolValue == true, limit: a["limit"]?.numberValue.map { Int($0) }, after: a["after"]?.stringValue)
-        var o: JSONObject = ["provider": .string(lib.id), "items": .array(page.items.map(agentSummary)), "total": .number(Double(page.total))]
+        let collections = try p.collections()
+        if let col = a["collection"]?.stringValue {
+            guard let collections, !collections.isEmpty else {
+                throw StickerError("invalid_argument", "\"\(p.name)\" has no collections; leave collection out.")
+            }
+            if !collections.contains(where: { $0.id == col }) {
+                throw StickerError("invalid_argument", "No collection \"\(col)\" in \"\(p.name)\"; collections: \(collections.map(\.id).joined(separator: ", ")).")
+            }
+        }
+        let opts = StickerSearchOptions(
+            category: a["category"]?.stringValue,
+            collection: a["collection"]?.stringValue,
+            tags: a["tags"]?.arrayValue?.compactMap(\.stringValue),
+            limit: a["limit"]?.numberValue.map { Int($0) },
+            after: a["after"]?.stringValue,
+            commercial: a["commercial"]?.boolValue == true ? true : nil
+        )
+        let q = (a["query"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !q.isEmpty && !p.capabilities.supportsSearch {
+            throw StickerError("invalid_argument", "\"\(p.name)\" can't search; leave query out and filter by category instead.")
+        }
+        let page = try q.isEmpty ? p.list(opts) : p.search(q, opts)
+        var o: JSONObject = [
+            "provider": .string(p.id),
+            "items": .array(page.items.map { agentSummary(p, $0.json) }),
+            "total": .number(Double(page.total)),
+        ]
         if let next = page.next { o["next"] = .string(next) }
-        o["categories"] = .array(categories)
+        if let categories {
+            o["categories"] = .array(categories.map { ["id": .string($0.id), "name": .string($0.name), "count": .number(Double($0.count))] })
+        }
+        if let collections, !collections.isEmpty {
+            o["collections"] = .array(collections.map { .object($0.json) })
+        }
         return .object(o)
     }
-    /// A sticker's description by ref, or the error naming the closest refs (`describeStickerRef`).
-    func describe(_ ref: String) throws -> JSONObject {
-        let p = try parseStickerRefStrict(ref)
-        if p.provider == lib.id, let d = lib.describe(p.id) { return d }
-        let near = closestStickerRefs(ref, STAMP_KINDS.map { "\(EDITOR_STICKERS_ID):\($0)" })
-        let wher = p.provider != lib.id ? " The sticker library is \"\(lib.id)\", not \"\(p.provider)\"." : ""
-        throw StickerError("unknown_sticker", "No sticker \"\(ref)\".\(wher) Closest: \(near.isEmpty ? "none" : near.joined(separator: ", ")); find_stickers lists them.")
+    h["describe_sticker"] = { a in
+        let p = c.stickersProvider
+        let d = try describeStickerRef(p, a["ref"]?.stringValue ?? "")
+        return agentSummary(p, d.json)
     }
-    /// Checks refs before stickers are drawn (`prepareStickers`): unknown ones are refused with the closest.
-    func prepare(_ refs: [String]) throws {
-        for r in refs {
-            do {
-                let p = try parseStickerRefStrict(r)
-                let ref = "\(p.provider):\(p.id)"
-                if editorStampOf(ref) == nil { _ = try describe(ref) }
-            } catch let e as StickerError { throw PaintEditorError(e.message) }
-        }
-    }
-    h["describe_sticker"] = { a in agentSummary(try describe(a["ref"]?.stringValue ?? "")) }
     h["list_stickers"] = { a in
         let layerId = a["layerId"]?.stringValue
         return ["layerId": (layerId ?? c.doc.activeLayerId).map { .string($0) } ?? .null, "stickers": .array(try c.listStickers(layerId).map { .object($0.json) })]
@@ -198,19 +275,22 @@ func paintStickerHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
         let layerId = a["layerId"]?.stringValue
         let list = (a["stickers"]?.arrayValue ?? []).map { $0.objectValue ?? [:] }
         for (i, x) in list.enumerated() where x["ref"] == nil && x["stamp"] == nil { throw PaintEditorError("Sticker \(i) needs ref (a sticker ref from find_stickers, e.g. \"editor:star\").") }
-        try prepare(list.map { $0["ref"]?.stringValue ?? "editor:\($0["stamp"]?.stringValue ?? "")" })
+        try c.prepareStickers(list.map { $0["ref"]?.stringValue ?? "editor:\($0["stamp"]?.stringValue ?? "")" })
         return ["layerId": (layerId ?? c.doc.activeLayerId).map { .string($0) } ?? .null, "stickers": .array(try c.addStickers(layerId, list).map { .object($0.json) })]
     }
     h["update_sticker"] = { a in
         // The layer's stickers are redrawn, so every one needs its art (and a new ref too).
         let refs = try c.listStickers(a["layerId"]?.stringValue).map(\.ref)
-        try prepare(a["ref"]?.stringValue.map { refs + [$0] } ?? refs)
-        return .object(try c.updateSticker(a["layerId"]?.stringValue, a["id"]?.stringValue ?? "", a.without("layerId").without("id")).json) }
+        try c.prepareStickers(a["ref"]?.stringValue.map { refs + [$0] } ?? refs)
+        return .object(try c.updateSticker(a["layerId"]?.stringValue, a["id"]?.stringValue ?? "", a.without("layerId").without("id")).json)
+    }
     h["arrange_stickers"] = { a in
-        try prepare(try c.listStickers(a["layerId"]?.stringValue).map(\.ref))
-        return ["order": .array(try c.arrangeStickers(a["layerId"]?.stringValue, (a["ids"]?.arrayValue ?? []).compactMap(\.stringValue), a["to"]?.stringValue ?? "front").map { .string($0) })] }
+        try c.prepareStickers(try c.listStickers(a["layerId"]?.stringValue).map(\.ref))
+        return ["order": .array(try c.arrangeStickers(a["layerId"]?.stringValue, (a["ids"]?.arrayValue ?? []).compactMap(\.stringValue), a["to"]?.stringValue ?? "front").map { .string($0) })]
+    }
     h["remove_stickers"] = { a in
-        try prepare(try c.listStickers(a["layerId"]?.stringValue).map(\.ref))
-        return ["removed": .array(try c.removeStickers(a["layerId"]?.stringValue, a["ids"]?.arrayValue?.compactMap(\.stringValue)).map { .string($0) })] }
+        try c.prepareStickers(try c.listStickers(a["layerId"]?.stringValue).map(\.ref))
+        return ["removed": .array(try c.removeStickers(a["layerId"]?.stringValue, a["ids"]?.arrayValue?.compactMap(\.stringValue)).map { .string($0) })]
+    }
     return h
 }

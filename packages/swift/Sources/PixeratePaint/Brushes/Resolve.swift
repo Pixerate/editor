@@ -142,7 +142,7 @@ let BRUSH_FIELDS: [BrushField] = {
     out.append(f("tip.stamps", "stamp", ["dab"], map: ONE_STAMP, shapes: ["stamp"]))
     out.append(f("marks.density", "spray.density", ["dab"], marks: ["scatter"]))
     out.append(f("marks.size", "spray.size", ["dab"], marks: ["scatter"]))
-    out += each("marks", "sticker", ["density", "sizeJitter", "rotationJitter", "scatter"], ["sticker"])
+    out += each("marks", "sticker", ["density", "sizeJitter", "rotationJitter", "scatter", "frameMode"], ["sticker"])
     out.append(f("marks.colourJitter", "sticker.colorJitter", ["sticker"]))
     out += each("marks", "antimatter", ["blastRadius", "blastSpacing", "threshold", "invert", "invertMode", "scorch", "annihilate", "sparks", "sparkReach", "crater", "duration"], ["antimatter"])
     out += each("tip.bristle", "bristle", ["count", "stiffness", "splay", "thickness", "load", "jitter"], ["bristle"])

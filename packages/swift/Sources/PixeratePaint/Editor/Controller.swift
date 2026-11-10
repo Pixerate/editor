@@ -200,10 +200,19 @@ public final class PaintEditorController {
     var redoStack: [HistoryEntry] = []
     let historyLimit: Int
     public let brushLibrary: BrushLibrary
+    lazy var stickers = StickersSlot(nil, fallback: editorStickerLibrary)
+    public let stickerArt = StickerArtCache()
+    public var rasterizeSticker: StickerRasterizer = defaultStickerRasterizer
     /// Image sources strokes draw with: the brush library's and the open painting's (saved with it).
     public let brushSources = BrushSourceArtCache()
-    /// Art for stamp tips and tip grain: image sources from `brushSources` (editor stamps need none).
-    public var stampArt: StampArtLookup { { [brushSources] ref in brushSources.get(ref) } }
+    /// Art for stamp tips and tip grain: image sources from `brushSources`, or provider stickers from `stickerArt`.
+    public var stampArt: StampArtLookup {
+        { [weak self] ref in
+            guard let self else { return nil }
+            if isBrushSourceRef(ref) { return self.brushSources.get(ref) }
+            return self.stickerArt.get(ref, self.stickerArt.variantFor(ref, dark: self.colorScheme == "dark"))?.stampArt
+        }
+    }
     public internal(set) var brush: PaintBrush { didSet { emit() } }
     /// The active brush as facets (what `get_brush` and the brush editor show).
     var brushSpec: Brush
@@ -314,7 +323,7 @@ public final class PaintEditorController {
         deinit { c.cancel() }
     }
 
-    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions()) throws {
+    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions(), stickers: (any StickerProvider)? = nil) throws {
         self.historyLimit = Swift.max(1, historyLimit ?? 200)
         var paperRaw = paper ?? [:]
         if let presetId {
@@ -369,6 +378,7 @@ public final class PaintEditorController {
             changed: { [unowned self] in emit([]) }
         ), wetOptions)
         self.wetOptions = wetOptions
+        if let stickers { setStickersProvider(stickers) }
     }
 
     // MARK: - History
@@ -1387,6 +1397,20 @@ public final class PaintEditorController {
         s["id"] = .string(next.id)
         s["name"] = .string(next.name)
         brushSpec = s
+        let refs = brushStickerRefs(next)
+        if !refs.isEmpty { try? prepareStickers(refs) }
+    }
+
+    public func setColorScheme(_ scheme: String) {
+        let next = scheme == "dark" ? "dark" : "light"
+        if next == colorScheme { return }
+        colorScheme = next
+        if !colorLocked, let d = brushColour, let hex = brushColourHex(d, colorScheme) {
+            color = hex
+        }
+        let refs = brushStickerRefs(brush)
+        if !refs.isEmpty { try? prepareStickers(refs) }
+        emit()
     }
 
     // MARK: - Colour
@@ -1703,7 +1727,14 @@ public final class PaintEditorController {
                 withLight.film = existingFilm ?? emptySurface(4, 0)
             }
         }
-        if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
+        if brush.engine == "sticker" {
+            withLight.stickerNextId = nextStickerNumber(d)
+            withLight.stickerArt = stickerArt.get
+            withLight.stickerVariant = { [weak self] ref in
+                guard let self else { return "light" }
+                return self.stickerArt.variantFor(ref, dark: self.colorScheme == "dark")
+            }
+        }
         if brush.engine == "antimatter" {
             let sourceDoc = didDry ? doc : d
             withLight.antimatter = antimatterTargets(sourceDoc, i.targets)

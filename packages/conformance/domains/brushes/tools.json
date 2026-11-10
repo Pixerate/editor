@@ -756,6 +756,14 @@
                     "minimum": 0,
                     "maximum": 1,
                     "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                  },
+                  "frameMode": {
+                    "type": "string",
+                    "enum": [
+                      "perform",
+                      "random"
+                    ],
+                    "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                   }
                 },
                 "required": [
@@ -2437,6 +2445,14 @@
                     "minimum": 0,
                     "maximum": 1,
                     "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                  },
+                  "frameMode": {
+                    "type": "string",
+                    "enum": [
+                      "perform",
+                      "random"
+                    ],
+                    "description": "Animated stickers: perform (default) advances through the frames in real time as the stroke is drawn; random picks a seeded frame per mark."
                   }
                 },
                 "required": [

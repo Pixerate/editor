@@ -301,8 +301,7 @@ extension PaintEditorController {
      * sticker from a host's sticker library, which has no art here. A brush picker leaves those out.
      */
     public func canPaint(_ brush: PaintBrush) -> Bool {
-        // Editor stamps and image sources have their art here; a host's library stickers don't.
-        brushStickerRefs(brush).isEmpty && ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter"].contains(brush.engine)
+        ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter"].contains(brush.engine)
     }
 
     // MARK: - Colour

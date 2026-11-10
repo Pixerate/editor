@@ -17,7 +17,7 @@ import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
 import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
-import type { DotRotation, DotTextureOrder, InvertMode, ParticleKind, ParticleRender, RibbonPairs } from '../paint-editor/mark-settings';
+import type { DotRotation, DotTextureOrder, InvertMode, ParticleKind, ParticleRender, RibbonPairs, StickerFrameMode } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';
 
 /** `mark`: lays a material; `tool`: works on paint already down (erases, blends, smudges, wets…). */
@@ -194,6 +194,8 @@ export interface BrushObjectMarks {
   scatter?: number;
   /** Random colour change, hue and lightness (default 0.2). */
   colourJitter?: number;
+  /** Animated stickers: `perform` (default) advances through the frames in real time as the stroke is drawn; `random` picks a seeded frame per mark. */
+  frameMode?: StickerFrameMode;
 }
 
 /** Animated blasts that invert, scorch and destroy paint across every visible layer where the tip touches paint. */

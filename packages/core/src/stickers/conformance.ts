@@ -38,6 +38,11 @@ function checkSummary(s: StickerSummary, provider: StickerProvider, issues: Stic
   }
   if (s.collection !== undefined && (typeof s.collection !== 'string' || !s.collection)) at('collection must be a non-empty string when present');
   if (s.collection !== undefined && !provider.collections && !provider.listCollections) at(`is in collection "${s.collection}" but the provider has no collections()`);
+  if (s.animated !== undefined && typeof s.animated !== 'boolean') at('animated must be a boolean when present');
+  if (s.animated) {
+    if (!(typeof s.frameCount === 'number' && Number.isInteger(s.frameCount) && s.frameCount >= 2)) at('animated sticker must specify an integer frameCount >= 2');
+    if (s.frameDelay !== undefined && !(typeof s.frameDelay === 'number' && s.frameDelay > 0)) at('frameDelay must be a positive number of ms when present');
+  }
 }
 
 /**

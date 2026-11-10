@@ -29,10 +29,12 @@ import {
   normalizeParticle,
   normalizeStickerSettings,
   STAMP_KINDS,
+  STICKER_FRAME_MODES,
   type AntimatterSettings,
   type BristleSettings,
   type InvertMode,
   type ParticleSettings,
+  type StickerFrameMode,
   type StickerSettings,
 } from './mark-settings';
 
@@ -44,11 +46,13 @@ export {
   LIVE_PATTERN_PRESETS,
   normalizeAntimatter,
   normalizeLivePatterns,
+  STICKER_FRAME_MODES,
   type AntimatterSettings,
   type InvertMode,
   type LivePatternKind,
   type LivePatternsInput,
   type LivePatternsSettings,
+  type StickerFrameMode,
 };
 
 /**
