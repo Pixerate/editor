@@ -1,13 +1,14 @@
 ---
 name: pixerate-canvas
-description: How to build and edit a Pixerate design canvas or node graph through its agent tools - drawing freehand pen, highlighter and dry-brush strokes (canvas.drawFreehand), annotating with hand-drawn circles, underlines, arrows, brackets, strikes, crosses and ticks (canvas.circle, canvas.arrow), adding, connecting, updating and laying out nodes (canvas_add_node, canvas_layout), reading state with get_editor_state and looking at it with view_editor, reusable components with variants, instances and overrides (create_component, add_variant, set_instance_properties), align, distribute, lock and layer order, shape boolean operations (unite, subtract, offset path, outline stroke), auto layout frames, and keyframe animation with easing and CSS export. Use when working on a canvas, whiteboard, flow chart, node graph, frame, design system, component library, button variants, layout, alignment, z-order or a canvas animation in a Pixerate editor.
+description: How to build and edit a Pixerate design canvas or node graph through its agent tools - drawing freehand pen, highlighter and dry-brush strokes (canvas.drawFreehand), annotating with hand-drawn circles, underlines, arrows, brackets, strikes, crosses and ticks (canvas.circle, canvas.arrow), adding, connecting, updating and laying out nodes (canvas_add_node, canvas_layout), reading state with get_editor_state and looking at it with view_editor, reusable components with variants, instances and overrides (create_component, add_variant, set_instance_properties), align, distribute, lock and layer order, shape boolean operations (unite, subtract, offset path, outline stroke), auto layout frames, keyframe animation with easing and CSS export, animated edges (dots, dashes, beams: set_edge_animation). Use when working on a canvas, whiteboard, flow chart, node graph, frame, design system, component library, button variants, layout, alignment, z-order, a canvas animation or animated connections in a Pixerate editor.
 ---
 
 # Pixerate canvas
 
 The canvas is an xyflow (React Flow / SvelteFlow) graph: an array of **nodes** and **edges**.
 A node is `{ id, type, position: { x, y }, width?, height?, parentId?, zIndex?, data }`; edges are
-`{ id, source, target, label? }`. Everything a design feature knows lives in `node.data`, so it
+`{ id, source, target, label?, data? }`, with `edge.data.animation` holding an edge's animation
+(dots, dash, beam or pulse; not the keyframe tracks of a node's `data.animation`). Everything a design feature knows lives in `node.data`, so it
 survives copy, paste and JSON:
 
 - `data.label` / `data.name`: text content and layer name. `data.shape`: a shape node
@@ -160,6 +161,20 @@ undo step and is not saved with the document. The host decides what the children
 | `list_explodable_nodes` | List the nodes that can explode (`id`, `label`, `exploded`, `collapsing`), the ids `exploded` and `collapsing` now, whether several can be open at once (`multiple`), and the `readOnly` reason if exploding is disabled. Call it first: it is the only source of explodable ids. |
 | `explode_node` | Explode `node` (an id from `list_explodable_nodes`). Unless `multiple`, the node exploded before collapses (it comes back in `collapsed`). Exploding an exploded node changes nothing (`changed: false`). Returns the ids now `exploded`. Then use `get_editor_state` or `capture_view` to read or see the children. |
 | `collapse_node` | Collapse an exploded `node`. Returns the ids still `exploded` and those still `collapsing` (their children leave when the collapse animation ends). Fails when the node is not exploded. |
+
+### Animate edges
+
+Hosts that draw edges with `<AnimatedEdge>` (or `<EdgeAnimation>` in their own edge) add these.
+An edge's animation is data (`edge.data.animation`): it saves, copies and undoes with the edge.
+Use motion to say something: dots for data or messages flowing, dashes for "live" or "pending",
+a beam for a request or trigger, a pulse for the active or highlighted path. Animate the few
+edges that matter, not the whole graph.
+
+| Tool | Use it to |
+| --- | --- |
+| `list_edge_animations` | List the edges (`id`, `source`, `target`, `label`, `animation` or null), the animation `kinds` with their `defaults`, and the `readOnly` reason if edges cannot change. Call it first: it is the source of edge ids. |
+| `set_edge_animation` | Animate `edges` (ids from `list_edge_animations`) with one `animation`: `kind` (dots, dash, beam, pulse) and optional `speed` (canvas units per second), `duration` (ms per cycle), `direction` (forward = source to target, reverse, alternate), `color`, `size`, `count`, `length`, `gap`, `glow`, `trackOpacity`, `paused`. Replaces what those edges had; all of them change in one undo step. Returns the ids, the `animation` stored and `resolved`, with every default filled in. Then `capture_view` to see it. |
+| `clear_edge_animation` | Stop the animation on `edges`, leaving the plain edge. One undo step. Returns the ids `cleared` and those `unchanged` (they had none). |
 
 ### Proposals (suggest, don't edit)
 
@@ -353,6 +368,14 @@ effects provider (for example Flair); without one the read tools say so and the 
 | `set_scene_transition` | Set (or with `effect` null, remove) the transition effect played when moving to a scene, with its `duration` in ms. |
 
 ## Pitfalls
+
+- **Direction follows the edge, not the screen.** `forward` runs from the edge's `source` to its
+  `target`; read them from `list_edge_animations` before choosing, and use `reverse` rather than
+  re-connecting the edge to flip the flow.
+- **Keep speeds comparable.** `speed` is in canvas units per second, so edges of different lengths
+  move at the same pace; `duration` makes a long edge move faster than a short one. Use the same
+  speed for edges that carry the same kind of flow. Users who ask for reduced motion see the first
+  frame, held still, so motion must not be the only sign of state: pair it with a colour or label.
 
 - **Proposals are not on the canvas.** Their ids are not in `get_editor_state` until accepted, and
   `canvas_connect` or `canvas_update_node` on them fails. Put the whole idea in one proposal (an

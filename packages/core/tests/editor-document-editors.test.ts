@@ -13,9 +13,12 @@ import { TokenStore, createTokensEditorDocument } from "../src/tokens";
 import { createRichTextEditorDocument, createRichTextPreset } from "../src";
 import {
   CanvasScenesStore,
+  applyGraphDifferences,
+  calculateGraphDifferences,
   canvasDocumentContentKey,
   createCanvasEditorDocument,
   createCanvasGestureRecorder,
+  sanitizeCanvasDocument,
   type CanvasEdge,
   type CanvasNode,
   type CanvasViewport,
@@ -469,6 +472,82 @@ describe("editor documents", () => {
       expect(result.isError).toBe(true);
       expect(text(result)).toMatch("not loaded");
       expect(state.nodes.map((n) => n.id)).toEqual(["img"]);
+    });
+
+    it("sanitizes legacy canvas documents and round-trips companion extras", () => {
+      let paintLayer: { strokes: string[] } | undefined = { strokes: ["s1"] };
+      const paintListeners = new Set<() => void>();
+      const { doc, state } = canvas({
+        normalize: (raw) => sanitizeCanvasDocument(raw),
+        extras: {
+          get: () => ({ paint: paintLayer }),
+          load: (raw) => {
+            paintLayer = raw.paint as { strokes: string[] } | undefined;
+          },
+          subscribe: (l) => {
+            paintListeners.add(l);
+            return () => paintListeners.delete(l);
+          },
+        },
+      });
+
+      expect((doc.getDocument() as any).paint).toEqual({ strokes: ["s1"] });
+      const revBefore = doc.revision();
+      paintListeners.forEach((l) => l());
+      expect(doc.revision()).toBe(revBefore + 1);
+
+      // Legacy graph with child before parent, dangling parentId, duplicate node, and dangling edge:
+      doc.loadDocument({
+        nodes: [
+          { id: "child", parentId: "frame", position: { x: 10, y: 10 }, data: { label: "v1" } },
+          { id: "child", parentId: "frame", position: { x: 20, y: 20 }, data: { label: "v2" } },
+          { id: "orphan", parentId: "missing-frame", position: { x: 5, y: 5 }, data: {} },
+          { id: "frame", position: { x: 0, y: 0 }, data: {} },
+        ],
+        edges: [
+          { id: "ok", source: "frame", target: "child" },
+          { id: "dangling", source: "frame", target: "gone" },
+        ],
+        viewport: { x: 0, y: 0, zoom: -1 },
+        paint: { strokes: ["s2"] },
+      } as any);
+
+      expect(state.nodes.map((n) => n.id)).toEqual(["frame", "child", "orphan"]);
+      expect(state.nodes.find((n) => n.id === "child")?.position).toEqual({ x: 20, y: 20 });
+      expect(state.nodes.find((n) => n.id === "orphan")?.parentId).toBeUndefined();
+      expect(state.edges.map((e) => e.id)).toEqual(["ok"]);
+      expect(paintLayer).toEqual({ strokes: ["s2"] });
+
+      // Diff and patch application preserve local selection:
+      const current = [
+        { id: "frame", position: { x: 100, y: 0 }, data: {} },
+        { id: "added", position: { x: 1, y: 2 }, data: {} },
+      ];
+      const diff = calculateGraphDifferences({ nodes: current, edges: [] }, { nodes: state.nodes, edges: state.edges });
+      const patched = applyGraphDifferences(
+        {
+          nodes: state.nodes.map((n) => (n.id === "frame" ? { ...n, selected: true } : n)),
+          edges: state.edges,
+        },
+        diff,
+      );
+      expect(patched.nodes.find((n) => n.id === "frame")).toMatchObject({ position: { x: 100, y: 0 }, selected: true });
+      expect(patched.nodes.map((n) => n.id)).toEqual(["frame", "added"]);
+      expect(patched.edges).toEqual([]);
+    });
+
+    it("sanitizeCanvasDocument breaks a parent cycle at one node and keeps the other links", () => {
+      const doc = sanitizeCanvasDocument({
+        nodes: [
+          { id: "a", parentId: "b", position: { x: 0, y: 0 }, data: {} },
+          { id: "b", parentId: "a", position: { x: 0, y: 0 }, data: {} },
+          { id: "c", parentId: "a", position: { x: 0, y: 0 }, data: {} },
+        ],
+        edges: [],
+      });
+      const parentOf = Object.fromEntries(doc.nodes.map((n) => [n.id, n.parentId]));
+      expect(parentOf).toEqual({ a: undefined, b: "a", c: "a" });
+      expect(doc.nodes[0].id).toBe("a");
     });
   });
 

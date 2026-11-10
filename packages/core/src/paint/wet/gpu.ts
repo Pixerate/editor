@@ -188,6 +188,7 @@ export class WetGpuEngine {
   private outRead: GBuffer | null = null;
   private tileCap = 0;
   private groups: { step: unknown[]; halo: unknown[] } | null = null;
+  private shadeLock: Promise<void> = Promise.resolve();
 
   private constructor(
     private readonly device: GDevice,
@@ -374,6 +375,20 @@ export class WetGpuEngine {
    * 'dried' shows the paint as it would dry. Resolves with one RGBA8 tile per job.
    */
   async shade(jobs: readonly WetGpuJob[], parity: number, src: readonly (Uint8ClampedArray | null)[], paper: readonly [number, number, number], mode: 'display' | 'dried' = 'display'): Promise<Uint8ClampedArray[]> {
+    const prev = this.shadeLock;
+    let release!: () => void;
+    this.shadeLock = new Promise<void>((r) => {
+      release = r;
+    });
+    await prev;
+    try {
+      return await this.runShade(jobs, parity, src, paper, mode);
+    } finally {
+      release();
+    }
+  }
+
+  private async runShade(jobs: readonly WetGpuJob[], parity: number, src: readonly (Uint8ClampedArray | null)[], paper: readonly [number, number, number], mode: 'display' | 'dried'): Promise<Uint8ClampedArray[]> {
     if (this.lostReason) throw new Error(`The GPU is gone (${this.lostReason}).`);
     if (!jobs.length) return [];
     const n = jobs.length;

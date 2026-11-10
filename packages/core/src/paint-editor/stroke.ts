@@ -32,6 +32,13 @@ import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural
 import { StickerSpray, type Sticker } from './stickers';
 import type { StickerArtLookup } from './sticker-art';
 import type { StickerRef, StickerVariant } from '../stickers/types';
+import {
+  AntimatterStrokeDriver,
+  type AntimatterLayerOutput,
+  type AntimatterStats,
+  type AntimatterTarget,
+} from './antimatter';
+import type { DualColor } from '../color/dual';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -57,6 +64,8 @@ export interface StrokeSessionInit {
   seed: number;
   /** The paint colour as #rrggbb (recorded with the stroke). */
   colorHex: string;
+  /** The light / dark pair `colorHex` is one side of, when the colour came from one (recorded with the stroke). */
+  dualColor?: DualColor;
   /** The stroke's extra copies as affine maps (recorded with the stroke); `copies` holds all of them as engine copies. */
   affineCopies: readonly Affine[];
   copies: readonly StrokeCopy[];
@@ -108,6 +117,14 @@ export interface StrokeSessionInit {
    * stroke paints the ferrofluid channel as grey (see `ferro.ts`); `ferroChannel()` returns the result.
    */
   ferro?: { surface: TiledSurface } | null;
+  /**
+   * Antimatter paint: all visible fuel layers before the stroke (with `editable: true` on editable
+   * pixel layers), and the clock for blast playback.
+   */
+  antimatter?: {
+    targets: readonly AntimatterTarget[];
+    now?: () => number;
+  } | null;
 }
 
 export interface PaintStrokeResult {
@@ -123,6 +140,8 @@ export interface PaintStrokeResult {
   wet?: boolean;
   /** Sticker brushes: refs the spray picked but skipped because their art had not loaded yet. */
   skippedStickers?: string[];
+  /** Antimatter paint: blasts fired, sparks spawned, fuel measured, and which layers changed or were skipped. */
+  antimatter?: AntimatterStats;
   /** Vortex brushes: classified stroke shape (`'point' | 'open' | 'closed'`) and maximum displacement (px). */
   vortex?: VortexStrokeSummary;
 }
@@ -163,6 +182,7 @@ export class PaintStrokeSession {
   private vortexDriver: VortexStrokeDriver | null = null;
   private filmBuffer: FilmBuffer | null = null;
   private stickerSpray: StickerSpray | null = null;
+  private antimatter: AntimatterStrokeDriver | null = null;
   /** Light paint: the stroke's twin over the light channel, and what it left there. */
   private readonly lightTwin: PaintStrokeSession | null = null;
   private lightResult: TiledSurface | null = null;
@@ -194,11 +214,12 @@ export class PaintStrokeSession {
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
     const brush = init.brush;
     this.invisibleDaylight = brush.fluorescence.amount > 0 && brush.fluorescence.invisible && brush.engine !== 'eraser' && brush.engine !== 'blender' && brush.engine !== 'smudge';
+    const isAntimatter = brush.engine === 'antimatter';
     if (init.wet) this.wetDriver = init.wet.driver;
-    if (init.light && !init.wet && !init.sticker) this.lightTwin = this.makeLightTwin(init.light.surface);
-    if (init.ferro && !init.wet && !init.sticker) this.ferroTwin = this.makeFerroTwin(init.ferro.surface);
-    if (init.fluor && !init.wet && !init.sticker) this.fluorTwin = this.makeFluorTwin(init.fluor.surface);
-    if (init.thermo && !init.wet && !init.sticker) this.thermoTwin = this.makeThermoTwin(init.thermo.surface);
+    if (init.light && !init.wet && !init.sticker && !isAntimatter) this.lightTwin = this.makeLightTwin(init.light.surface);
+    if (init.ferro && !init.wet && !init.sticker && !isAntimatter) this.ferroTwin = this.makeFerroTwin(init.ferro.surface);
+    if (init.fluor && !init.wet && !init.sticker && !isAntimatter) this.fluorTwin = this.makeFluorTwin(init.fluor.surface);
+    if (init.thermo && !init.wet && !init.sticker && !isAntimatter) this.thermoTwin = this.makeThermoTwin(init.thermo.surface);
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -216,8 +237,21 @@ export class PaintStrokeSession {
   private build(effect: EffectPaintPixels | null): void {
     const init = this.init;
     const brush = init.brush;
-    this.dry = this.wet = this.thickDriver = this.vortexDriver = this.stickerSpray = this.filmBuffer = null;
-    if (init.sticker) {
+    this.dry = this.wet = this.thickDriver = this.vortexDriver = this.stickerSpray = this.filmBuffer = this.antimatter = null;
+    if (brush.engine === 'antimatter' && init.antimatter) {
+      this.antimatter = new AntimatterStrokeDriver({
+        activeLayerId: init.layerId,
+        targets: init.antimatter.targets,
+        brush,
+        color: init.color,
+        seed: init.seed,
+        copies: this.copies,
+        selection: init.selection ?? null,
+        paint: init.paint ?? null,
+        effect,
+        now: init.antimatter.now,
+      });
+    } else if (init.sticker) {
       this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect, art: init.sticker.art, variant: init.sticker.variant });
     } else if (brush.engine === 'impasto' && init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
@@ -289,6 +323,8 @@ export class PaintStrokeSession {
             ? this.stickerSpray.push(this.points)
             : this.vortexDriver
               ? this.vortexDriver.push(this.points)
+              : this.antimatter
+                ? this.antimatter.push(this.points)
               : this.wet!.push(this.points)
       : [];
     this.update(was ? [...rects, was] : rects);
@@ -491,7 +527,27 @@ export class PaintStrokeSession {
       this.vortexDriver.push(points);
       return;
     }
-    this.update(this.dry ? this.dry.push(points) : this.thickDriver ? this.thickDriver.push(points) : this.stickerSpray ? this.stickerSpray.push(points) : this.wet!.push(points));
+    this.update(
+      this.dry
+        ? this.dry.push(points)
+        : this.thickDriver
+          ? this.thickDriver.push(points)
+          : this.stickerSpray
+            ? this.stickerSpray.push(points)
+            : this.antimatter
+              ? this.antimatter.push(points)
+              : this.wet!.push(points),
+    );
+  }
+
+  /** Antimatter strokes: per-layer outputs (pixel surface, light channel, thick channels) after the stroke so far. */
+  antimatterOutputs(): AntimatterLayerOutput[] | null {
+    return this.antimatter ? this.antimatter.layerOutputs() : null;
+  }
+
+  /** Antimatter strokes: the driver, used to play blast animations after commit. */
+  antimatterDriver(): AntimatterStrokeDriver | null {
+    return this.antimatter;
   }
 
   /** Sticker strokes: the stickers sprayed so far. */
@@ -503,6 +559,7 @@ export class PaintStrokeSession {
   thickChannels(): ThickChannels | null {
     if (this.thickDriver) return this.thickDriver.channels();
     if (this.vortexDriver) return this.vortexDriver.reliefChannels();
+    if (this.antimatter) return this.antimatter.layerOutputs().find((o) => o.id === this.layerId)?.thick ?? null;
     const f = this.filmBuffer ?? this.wetDriver?.init.film ?? null;
     if (f && this.init.thick) return { ...this.init.thick.channels, film: f.surface() };
     return null;
@@ -547,6 +604,12 @@ export class PaintStrokeSession {
   private update(rects: RasterRect[]): void {
     if (!rects.length) return;
     for (const r of rects) this.bounds = union(this.bounds, r);
+    if (this.antimatter) {
+      for (const out of this.antimatter.layerOutputs()) {
+        this.host.update(out.id, out.surface, rects);
+      }
+      return;
+    }
     if (this.invisibleDaylight) {
       this.host.update(this.layerId, this.base, rects);
       return;
@@ -616,6 +679,24 @@ export class PaintStrokeSession {
           shape: vSummary.shape,
           maxDisplacement: changed ? Math.max(vSummary.maxDisplacement, this.lightTwin?.result?.vortex?.maxDisplacement ?? 0) : 0,
         },
+      };
+      this.host.commit(this, surface, false);
+      return this.result;
+    }
+    if (this.antimatter) {
+      this.update(this.antimatter.finish());
+      this.closed = true;
+      const stats = this.antimatter.stats();
+      const changed = stats.blasts > 0 && stats.layers.length > 0;
+      const activeOut = this.antimatter.layerOutputs().find((o) => o.id === this.layerId);
+      const surface = changed ? (activeOut?.surface ?? this.base) : null;
+      this.lightResult = activeOut?.light ?? null;
+      this.result = {
+        layerId: this.layerId,
+        bounds: changed ? this.bounds : null,
+        dabs: this.antimatter.dabCount,
+        strokeId: null,
+        antimatter: stats,
       };
       this.host.commit(this, surface, false);
       return this.result;

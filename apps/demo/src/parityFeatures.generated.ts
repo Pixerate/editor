@@ -408,7 +408,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`readZip`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`readZip`, `ZipReadOptions`, `inflateRaw`"
       }
     ]
   },
@@ -726,6 +726,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "✅",
         "react": "Via core",
         "svelte": "Via core",
+        "swift": "Planned (#533)"
+      },
+      {
+        "feature": "Canvas Animated Edges (travelling dots, marching dashes, beams, pulses; speed in canvas units per second, direction, colour, glow, track opacity; stored in `edge.data.animation`, drawn with SMIL on the xyflow edge path, first frame held for reduced motion; frames sampled without a browser; agent tools `list_edge_animations`, `set_edge_animation`, `clear_edge_animation`, one undo step each)",
+        "core": "`getCanvasEdgeAnimationRender`, `sampleCanvasEdgeAnimation`, `getCanvasEdgePath` & `createCanvasEdgeAnimationToolProvider` (`/canvas`)",
+        "react": "`<AnimatedEdge>` & `<EdgeAnimation>`",
+        "svelte": "`<AnimatedEdge>` & `<EdgeAnimation>`",
         "swift": "Planned (#533)"
       },
       {
@@ -1077,11 +1084,11 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
-        "feature": "Vector Image Trace (raster pixels to paths: marching squares at pixel centres, Douglas–Peucker simplification to a tolerance, Bézier fitting with a corner roundness from sharp polygons to smooth curves, minimum area, holes as even-odd subpaths; black-and-white by darkness or alpha with a threshold, or colour by median cut into stacked paths so no gaps open; placed and scaled as one group; PNG data URLs for agents, any browser image in the panels; agent command `vector.traceImage`)",
-        "core": "`traceImage`, `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`",
+        "feature": "Vector Image Trace (raster pixels to paths: marching squares at pixel centres, Douglas–Peucker simplification to a tolerance, Bézier fitting with a corner roundness from sharp polygons to smooth curves, minimum area, holes as even-odd subpaths; black-and-white by darkness or alpha with a threshold, or colour by median cut into stacked paths so no gaps open; placed and scaled as one group; PNG data URLs for agents, or image references (URLs, host ids) a host `resolveImage` loads; any browser image in the panels; agent command `vector.traceImage`)",
+        "core": "`traceImage`, `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`; `createVectorCommands({ resolveImage, imageReferences })`",
         "react": "`<VectorTracePanel>` (in `<VectorToolbar>`)",
         "svelte": "`<VectorTracePanel>` (in `<VectorStylePanel>`)",
-        "swift": "✅ headless (`VectorEditorController.traceImage`, `vector.traceImage`; `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`); the trace panel and the views: Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController.traceImage`, `vector.traceImage`; `traceVectorImage`, `vectorTraceContours`, `quantizeVectorTraceColors`); host image references (`resolveImage`), the trace panel and the views: Planned (#533)"
       },
       {
         "feature": "Vector Lottie Export & Import (Bodymovin v5 JSON: groups mirroring the nodes, paths with solid and gradient fills and strokes (dashes, caps, joins, blend modes), path effects kept live as Lottie modifiers — trim, round corners, pucker & bloat, twist, zig zag, offset, merge, repeater — live booleans as Merge Paths, masks and frames clipped, text, instances and wiggle / envelope effects as drawn, aligned or arrowed strokes as outlines; import of one frame with eased keyframes, layer parenting, precomps, solids and additive masks, modifiers becoming live effects; notes for what was approximated; agent commands `vector.exportLottie`, `vector.importLottie`)",
@@ -1537,182 +1544,182 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`ChartSpec`, `normalizeChartSpec` & `createChartSpec` (`/chart`)",
         "react": "`<ChartCanvas>`",
         "svelte": "`<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartSpec`, `normalizeChartSpec`, `createChartSpec` & `ChartView`"
       },
       {
         "feature": "DOM-free Chart Layout (nice ticks, rotated / thinned category labels, wrapped legends on any side, axis titles, gaps for blank values, monotone smooth curves, selection outlines, pluggable text measuring and themes)",
         "core": "`layoutChart` → `ChartScene` of rects, paths, circles, lines and text with click targets",
         "react": "`<ChartCanvas>` (follows its container's width)",
         "svelte": "`<ChartCanvas>` (follows its container's width)",
-        "swift": "Planned (#533)"
+        "swift": "`layoutChart` → `ChartScene`, `coreTextChartMeasureText` & `ChartView`"
       },
       {
         "feature": "Chart Controller (stable `getState`, `subscribe`, all-or-nothing `update`, selection, `toJSON` / `load`, shared or own `HistoryManager`)",
         "core": "`ChartController`",
         "react": "`useChartEditor`, `useChartController` & `useChartState`",
         "svelte": "`createChartEditor`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartController` & `ChartEditorModel`"
       },
       {
         "feature": "Chart Interaction (click to select title, axes, legend, series, points and categories; drag bars and points to new values as one undo step, stacked bars too; ← → ↑ ↓, Delete, Escape)",
         "core": "`startChartPointDrag`, `handleChartKey`, `chartValueAtPoint` & `describeChartSelection`",
         "react": "`<ChartCanvas>`",
         "svelte": "`<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`startChartPointDrag`, `handleChartKey`, `chartHitTest` & `ChartView`"
       },
       {
         "feature": "Chart Tooltips (hover a bar, point or slice, or anywhere in a category's band for every series there; values written with the series or axis format, shares on 100% stacked and pie charts; custom content; hidden while dragging; `get_chart_tooltip` agent tool)",
         "core": "`chartTooltipAt`, `chartTooltipFor`, `chartCategoryAtPoint` & `sameChartTooltip`",
         "react": "`<ChartCanvas tooltip renderTooltip>`",
         "svelte": "`<ChartCanvas tooltip tooltipContent>`",
-        "swift": "Planned (#533)"
+        "swift": "`chartTooltipAt`, `chartTooltipFor`, `ChartTooltipOverlay` & `ChartView`"
       },
       {
         "feature": "Chart Data Grid (rename, recolour, hide, add and delete series and categories; numbers as typed — `1,200`, `12%`, `(3)`, blank for a gap; TSV / CSV paste grows the grid)",
         "core": "`setValue`, `pasteCells`, `addSeries`, `addCategory`, `parseChartValue`",
         "react": "`<ChartDataGrid>`",
         "svelte": "`<ChartDataGrid>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartController` (`setValue`, `pasteCells`, `addSeries`, `addCategory`, `parseChartValue`)"
       },
       {
         "feature": "Chart Inspector (type, titles, stacking, orientation, curve, points, data labels, legend, axes with fixed bounds, grid lines and number formats, selected series colour / type / order)",
         "core": "`update`, `setAxis`, `setLegend`, `updateSeries`, `moveSeries`",
         "react": "`<ChartInspector>` & `<ChartEditor>`",
         "svelte": "`<ChartInspector>` & `<ChartEditor>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartInspectorView` & `ChartEditorView`"
       },
       {
         "feature": "Chart Data Import / Export (tables with series in columns or rows, CSV / TSV, colours kept by series name) and SVG Export",
         "core": "`chartDataFromTable`, `chartDataToTable`, `importCsv`, `chartToSvg` & `chartSceneToSvg`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`chartDataFromTable`, `chartDataToTable`, `importCsv`, `chartToSvg` & `chartSceneToSvg`"
       },
       {
         "feature": "Chart Commands (`chart.describe`, `update`, `setData`, `setValues` by series and category name, `addSeries`, `addTrendline`, `applyPreset`, `transpose`, `importCsv`, `importMermaid`, `exportSvg`, `exportMermaid`, `exportOoxml`, `recommend`, `checkColors`, …)",
         "core": "`createChartCommands`",
         "react": "`useChartCommands`",
         "svelte": "`useChartCommands`",
-        "swift": "Planned (#533)"
+        "swift": "`createChartCommands`"
       },
       {
         "feature": "Chart Agent Tools (51 tools, one per operation: read, render, check colours, recommend, trendline fits, tooltips, reference lines and bands, callouts, highlight, grouped data, flows, bar race moments and playback, map regions, presets, Mermaid / Office import and export, data and series edits, pointer drags and keys through the real interaction code; write tools hidden while read-only)",
         "core": "`createChartToolProvider`",
         "react": "`useChartToolProvider`",
         "svelte": "`useChartToolProvider`",
-        "swift": "Planned (#533)"
+        "swift": "`createChartToolProvider`"
       },
       {
         "feature": "Chart PNG Previews & Download (CSS-variable paints resolved before drawing, 2× with the longest side ≤ 1024 px; `render_chart { format: \"png\" }` returns the image with the layout warnings; Download PNG in the editor toolbar)",
         "core": "`rasterizeChartSvg`, `resolveChartSvgPaints`, `createChartRasterizer` & `downloadChartPng`",
         "react": "`useChartToolProvider` (rasterizes by default) & `<ChartEditor>`",
         "svelte": "`useChartToolProvider` (rasterizes by default) & `<ChartEditor>`",
-        "swift": "Planned (#533)"
+        "swift": "`rasterizeChartScene`, `resolveChartSvgPaints`, `makeChartCoreGraphicsRasterizer` & `ChartEditorView`"
       },
       {
         "feature": "More Chart Types (bubble, radar, waterfall with totals and connectors, histogram with √n bins, box & whisker with Tukey fences, funnel, squarified treemap)",
         "core": "`layoutChart` families, `chartHistogram`, `chartBoxStats`, `chartSquarify`",
         "react": "`<ChartCanvas>`",
         "svelte": "`<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`layoutChart` families, `chartHistogram`, `chartBoxStats`, `chartSquarify` & `ChartView`"
       },
       {
         "feature": "Chart Annotations (reference lines and target bands on value or numeric x axes, callouts pinned to points, highlight that mutes the rest, a source note, colour by category on one-series charts; Ursula chart-document parity)",
         "core": "`referenceLines`, `referenceBands`, `series.callouts`, `highlight`, `note`, `varyColors`, `addReferenceLine`, `setCallout`, `setHighlight`",
         "react": "`<ChartInspector>` Annotations section & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` Annotations section & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartReferenceLine`, `ChartReferenceBand`, `series.callouts`, `highlight` & `ChartController`"
       },
       {
         "feature": "Slope, Likert & Parliament Charts (before → after slopes with dodged end labels, diverging survey bars with a split or separate neutral and agreement sorting, hemicycle seats with the majority line; Ursula chart-document parity)",
         "core": "`layoutChart` families, `chartLikertColor`, `likertNeutral` / `likertSort`, `parliamentArc` / `parliamentMajority` / `parliamentLabel`",
         "react": "`<ChartInspector>` & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`layoutChart` families, `chartLikertColor`, `ChartLikertNeutral`, `ChartLikertSort` & `ChartView`"
       },
       {
         "feature": "Grouped Data: Nested Treemaps & Sunbursts (`spec.tree` of groups and items up to six levels, path-addressed edits, spreadsheet-style CSV import, a Group / Level / Item / Value grid, Office chartex hierarchy import; Ursula chart-document parity)",
         "core": "`setTree`, `addTreeNode`, `updateTreeNode`, `removeTreeNode`, `importTreeTable`, `chartTreeFromTable`, `chartTreeToRows`",
         "react": "`<ChartTreeGrid>` (inside `<ChartDataGrid>`)",
         "svelte": "`<ChartTreeGrid>` (inside `<ChartDataGrid>`)",
-        "swift": "Planned (#533)"
+        "swift": "`ChartTreeNode`, `chartTreeFromTable`, `chartTreeToRows` & `ChartController`"
       },
       {
         "feature": "Sankey Diagrams (`spec.links` flows between named nodes with loop and repeat checks, columns from the flow chains, one scale for nodes and flows, colour by source / target / grey, node order to untangle crossings, a Source / Target / Value grid; Ursula chart-document parity)",
         "core": "`setLinks`, `addLink`, `updateLink`, `removeLink`, `importLinksTable`, `normalizeChartLinks`, `chartSankeyNodes`",
         "react": "`<ChartLinksGrid>` (inside `<ChartDataGrid>`)",
         "svelte": "`<ChartLinksGrid>` (inside `<ChartDataGrid>`)",
-        "swift": "Planned (#533)"
+        "swift": "`ChartLink`, `normalizeChartLinks`, `chartSankeyNodes` & `ChartController`"
       },
       {
         "feature": "Bar Chart Races (categories as time points and series as names, ranked bars that ease and swap between time points, play / pause / scrub as view state, any moment drawn or rendered; Ursula chart-document parity)",
         "core": "`raceTopN`, `setRaceFrame`, `playRace`, `pauseRace`, `chartRaceRanking`, `layoutChart({ raceFrame })`",
         "react": "`<ChartInspector>` race controls & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` race controls & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`chartRaceRanking`, `ChartDisplayTicker`, `ChartInspectorView` & `ChartView`"
       },
       {
         "feature": "Choropleth Maps (regions of a registered map shaded in equal or given classes, categories matched by ISO code or name, microstate markers, class legend; Europe from Natural Earth 1:50m in the separate `@pixerate/editor/chart-maps` entry; Ursula chart-document parity)",
         "core": "`registerChartMap`, `EUROPE_CHART_MAP`, `matchChartMapRegions`, `chartMapBreaks`, `mapSteps` / `mapThresholds`",
         "react": "`<ChartInspector>` map options & `<ChartCanvas>`",
         "svelte": "`<ChartInspector>` map options & `<ChartCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "`registerChartMap`, `EUROPE_CHART_MAP`, `matchChartMapRegions`, `chartMapBreaks` & `ChartView`"
       },
       {
         "feature": "Secondary Axis, Numeric-X Scatter, Date Axes & Bar Spacing (`yAxis2`, `series.axis`, `series.x` / `sizes`, `xAxis.kind: \"date\"` with calendar label steps, `gapWidth` / `overlap`, fixed tick `step`)",
         "core": "`ChartSpec`, `chartDateLabels`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartSpec`, `chartDateLabels` & `ChartInspectorView`"
       },
       {
         "feature": "Trendlines (linear, exponential, logarithmic, power, polynomial 2–6, moving average; forecast, fixed intercept, equation and R² labels)",
         "core": "`fitChartTrendline`, `addTrendline`, `trendlineFit`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "`fitChartTrendline`, `ChartTrendline` & `ChartController`"
       },
       {
         "feature": "Error Bars & Axis Scales (per-series fixed / percent / standard deviation / standard error / custom error bars, x error bars on scatter; logarithmic value and scatter-x axes with power ticks; reversed value and category axes; Office `c:errBars`, `c:logBase`, `maxMin`; agent tools via `update_chart` / `update_chart_series`)",
         "core": "`series.errorBars`, `axis.scale` / `logBase` / `reverse`, `chartErrorAmounts`, `niceLogScale`, `chartScaleToPixel`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartErrorBars`, `chartErrorAmounts`, `niceLogScale`, `chartScaleToPixel` & `ChartInspectorView`"
       },
       {
         "feature": "Chart Formats, Markers, Labels & Colours (spreadsheet format codes, marker shapes, per-point colours, label position with fit checks and contrast, quick layouts and colour schemes, shaded palette cycling, colour-blind check)",
         "core": "`formatChartNumber`, `CHART_LAYOUT_PRESETS`, `CHART_COLOR_SCHEMES`, `checkChartColors`",
         "react": "`<ChartInspector>`",
         "svelte": "`<ChartInspector>`",
-        "swift": "Planned (#533)"
+        "swift": "`formatChartNumber`, `CHART_LAYOUT_PRESETS`, `CHART_COLOR_SCHEMES`, `checkChartColors` & `ChartInspectorView`"
       },
       {
         "feature": "Chart Text Formats (Mermaid `xychart-beta` / `pie` / `radar-beta` / `sankey-beta` / `treemap-beta` round trip with a `%% @pixerate` comment; Office `c:chartSpace` and chartex read / write; charts in DOCX imports, as `chart` nodes in documents, and in DOCX exports as native Word charts)",
         "core": "`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml`, `chartToOoxml`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`chartToMermaid`, `chartFromMermaid`, `findMermaidCharts`, `chartFromOoxml` & `chartToOoxml`"
       },
       {
         "feature": "Charts in Office Files (every chart in an `.xlsx` with sheet and anchor cell, `.pptx` with slide number, or `.docx`; DrawingML and chartex; `list_open_files`, `list_file_charts`, `get_file_chart`, `load_file_chart` agent tools)",
         "core": "`extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `createOfficeChartToolProvider`",
         "react": "`useOfficeChartToolProvider`",
         "svelte": "`useOfficeChartToolProvider`",
-        "swift": "Planned (#533)"
+        "swift": "`extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `extractDocxCharts` & `createOfficeChartToolProvider`"
       },
       {
         "feature": "Chart Streaming, Presence & Sparklines (lenient partial Mermaid / JSON, steady axes, tweened scenes; agent cursors that act out edits as one undo step; word-sized line / column / win-loss charts)",
         "core": "`ChartStream`, `blendChartScenes`, `ChartDirector`, `ChartPresence`, `layoutSparkline`",
         "react": "`<ChartStreamingView>`, `useChartDirector`, `<ChartSparkline>`",
         "svelte": "`<ChartStreamingView>`, `createChartDirector`, `<ChartSparkline>`",
-        "swift": "Planned (#533)"
+        "swift": "`ChartStream`, `blendChartScenes`, `planChartCommand`, `chartPointAnchor`, `layoutSparkline`"
       },
       {
         "feature": "Chart Summaries & Accessibility (per-series min / max / mean / trend, layout warnings, plain-language description, SVG `<title>` and `<desc>`, recommendations from table shape)",
         "core": "`summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable`",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Planned (#533)"
+        "swift": "`summarizeChart`, `describeChart`, `recommendChartTypes` & `chartFromTable`"
       }
     ]
   },
@@ -1991,11 +1998,11 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`update_brush` keeps facets the host can't use ✅ (`createPaintBrushLibraryToolProvider`); the brush editor views and the other hosts: Planned (#533)"
       },
       {
-        "feature": "Brush Colours, Stamp Tips & Spray (a brush's default colour, palette of up to 16 and `own` colour: hex, `rgba()`, light / dark pairs, gradients or effect paint; choosing a brush with a default colour makes it the paint colour unless the colour is locked; light / dark colours resolve for the host's colour scheme when the brush is chosen and when a stroke starts, and the stroke records the colour, so replays stay exact; stamp tips (every dab a sticker's shape: an editor stamp or any sticker from the sticker library, in the paint colour), textured particle dots from library stickers, a spray can (`marks` scatter: seeded droplets across the tip); presets ballpoint, gel pen, fineliner, crayon, chalk (a light / dark default) and spray can, the highlighter in fluorescent yellow with a palette; `set_color` `locked`, `create_brush` / `update_brush` `colour`, stickers checked against the host's sticker library, image `set_brush_preset` colour; the canvas and vector pickers take default colours too: canvas `selectBrush`, `canvas.drawFreehand` with a brush and no colour, `vector.addBrushstroke` / `setBrushstroke` with `keepColour`; canvas and vector have the same \"Keep my colour\" lock, and a canvas colour taken from a light / dark default follows the scheme while vector strokes already made keep theirs: `canvas.selectBrush`, `canvas.setColorLocked`, `canvas.setColorScheme`, `vector.setColorLocked`, `vector.setColorScheme`)",
+        "feature": "Brush Colours, Stamp Tips & Spray (a brush's default colour, palette of up to 16 and `own` colour: hex, `rgba()`, light / dark pairs, gradients or effect paint; choosing a brush with a default colour makes it the paint colour unless the colour is locked; light / dark colours resolve for the host's colour scheme when the brush is chosen and when a stroke starts, and the stroke records the colour, so replays stay exact; stamp tips (every dab a sticker's shape: an editor stamp or any sticker from the sticker library, in the paint colour), textured particle dots from library stickers, a spray can (`marks` scatter: seeded droplets across the tip); presets ballpoint, gel pen, fineliner, crayon, chalk (a light / dark default) and spray can, the highlighter in fluorescent yellow with a palette; `set_color` `locked`, `create_brush` / `update_brush` `colour`, stickers checked against the host's sticker library, image `set_brush_preset` colour; the canvas and vector pickers take default colours too: canvas `selectBrush`, `canvas.drawFreehand` with a brush and no colour, `vector.addBrushstroke` / `setBrushstroke` with `keepColour`; canvas and vector have the same \"Keep my colour\" lock, and a canvas colour taken from a light / dark default follows the scheme while vector strokes already made keep theirs; paint strokes in a light / dark colour (a brush's pair, `setColor({ light, dark })` or `set_color` `dualColor`) record it; a paint stroke layer keeps the light side in the document and shows each viewer their `setColorScheme` side, outside the document and history (pixel layers keep the side painted): `canvas.selectBrush`, `canvas.setColorLocked`, `canvas.setColorScheme`, `vector.setColorLocked`, `vector.setColorScheme`)",
         "core": "`setColorScheme`, `setColorLocked`, `brushColourHex`, canvas `selectBrush`, `setColorLocked`, `brushSettings` and `colorLocked` option, vector `setColorLocked` and `colorLocked` state, `vectorBrushstrokeDefaultColour`, `PaintBrush.stamp` / `.spray`, `stampSampler`, `snapshotBrushLibrary`",
         "react": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>` and `<VectorAppearancePanel>`, `useCanvasDraw` `selectBrush`, `colorScheme`, `colorLocked` / `setColorLocked` and `brushSettings`",
         "svelte": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>` and `<VectorAppearancePanel>`, `createCanvasDraw` `selectBrush`, `colorScheme` / `setColorScheme`, `colorLocked` / `setColorLocked` and `brushSettings`",
-        "swift": "Brush colours, palettes, `own` colours, the spray can and stamp tips of the editor's stamps and image sources ✅ (`PaintEditorController`, in the brush picker of `PaintEditorView`); stamps of a host's sticker library: — (host sticker libraries are not ported)"
+        "swift": "Brush colours, palettes, `own` colours, the spray can and stamp tips of the editor's stamps and image sources ✅ (`PaintEditorController`, in the brush picker of `PaintEditorView`); stamps of a host's sticker library: — (host sticker libraries are not ported); dual-colour paint strokes (`dualColor`, stroke layers shown in the viewer's scheme, `set_color` `dualColor`): — (not ported yet)"
       },
       {
         "feature": "Image Brush Tips & Tip Grain (Procreate-style shape and grain sources: images added to the shared brush library as sources (`source:<id>`; a PNG read from its transparency, dark or light parts, kept as a grey mask of at most 512 px with its licence and origin) laid as stamp tips with hardness, roundness, angle and pressure size, or tiled inside each dab as tip grain (built-in patterns or image sources; texturised, fixed to the canvas, or moving, rolling with the tip; scale, depth, contrast, invert); several dabs per step (`dynamics.count`) and random flips (`dynamics.flip`) besides scatter and rotation jitter; recorded strokes keep the source refs and saved paintings and library files carry the sources' bytes, so replays, time-lapses and high-resolution exports stay exact; host profiles say which hosts paint tip grain and counts (paint) and which paint without them (image, canvas, vector), stamp and image tips paint editor only; \"Add image tip…\" and \"Add grain image…\" in the brush editor; `add_brush_source`, `list_brush_sources`, `create_brush` / `update_brush` / `set_brush` with `tip.stamps`, `tip.grain`, `dynamics.count` and `dynamics.flip`)",
@@ -2185,6 +2192,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
         "svelte": "`<FerroPanel>` (in `<PaperPanel>`), magnet handles in `<PaintCanvas>` (`/paint-editor`)",
         "swift": "✅ `FerroSettings`, `PaintMagnet`, `ferroFieldAt`, `ferroSpikeHeightAt`, `advectFerro`, `bakeFerroIntoThick`; `PaintEditorController` `addMagnet`, `updateMagnet`, `removeMagnets`, `listMagnets`, `getFerrofluid`, `cureFerrofluid`; `PaintFerroPanel` (in `PaintPaperPanel`) and magnet guides in `PaintCanvasView`"
+      },
+      {
+        "feature": "Antimatter Paint (a `marks.kind: \"antimatter\"` brush engine that measures quantised coverage-weighted combined alpha (`1 - Π(1 - α_i · opacity_i)`) across all visible layers, firing noise-edged radial blasts that combine by maximum in a per-stroke heat field so overlapping blasts never double-invert; inverts core colours (`rgb` or `oklab`), annihilates alpha (respecting transparency lock), burns a sooty scorch ring, clears `doc.light`, carves impasto relief craters (`doc.thick`), and launches white-hot sparks cooling to the brush colour on the active layer; dries visible wet layers and commits every modified visible editable pixel layer in a single undo step with `RecordedStroke.targets` for exact replay; view-only blast expansion animation (`duration`); presets `antimatter`, `antimatter-flare`, `antimatter-charge`; `antimatter` stats in `PaintStrokeResult`)",
+        "core": "`AntimatterStrokeDriver`, `ANTIMATTER_SLIDERS`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterSettings`, `AntimatterStats` (`/paint-editor`)",
+        "react": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
+        "svelte": "Antimatter controls in `<BrushPanel>`'s `<BrushEditor>`, blast playback in `<PaintCanvas>` (`/paint-editor`)",
+        "swift": "✅ `AntimatterStrokeDriver`, `AntimatterSettings`, `DEFAULT_ANTIMATTER`, `normalizeAntimatter`, `AntimatterStats`; Antimatter controls in `PaintBrushPanel`; the view-only blast animation (`duration`, the blast commits at once): Planned (#732)"
       },
       {
         "feature": "Vortex Paint (a `vortex` mark brush (`marks.kind: 'vortex'`, `engine: 'vortex'`; `reach`, `turns`, `pull`, `direction`, `ink`, `duration`) where the drawn stroke defines the shape of a vortex — a tap creates a round whirlpool (`'point'`), an open curve wraps paint around it like a racetrack (`'open'`), and a closed loop uses signed Euclidean distance so paint inside and outside winds coherently (`'closed'`); Lamb-Oseen tangential spin plus inward pull integrated in fixed sub-steps into a single backward displacement field (`integrateVelocityField`) and resampled once with premultiplied bilinear sampling (`warpTiledSurfaceRgba`) across RGBA, impasto relief, light, ferrofluid, fluorescent and thermochromic channels, with optional pre-warp ink and view-only winding animation; on wet layers (`wet-vortex` or any vortex brush on wet paint) `WetWorld.swirl` spins and lifts the fluid directly; mirrored symmetry copies invert spin direction; presets Vortex, Ink vortex, Whirlpool and Wet vortex; `vortex` summary on `paint_stroke` / `stroke_path`)",
@@ -2583,10 +2597,17 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`EditorDocument`"
       },
       {
-        "feature": "Editor Autosave (crash recovery for any `EditorDocument`; restore loads the snapshot into the editor)",
+        "feature": "Editor Autosave (crash recovery for any `EditorDocument`; restore loads the snapshot into the editor; `baseVersion` retires snapshots made on an older server version)",
         "core": "`createEditorAutosave` (`/persistence`)",
         "react": "`useEditorAutosave` & `<RecoveryPrompt>`",
         "svelte": "`createEditorAutosave` & `<RecoveryPrompt>`",
+        "swift": "Planned (#533)"
+      },
+      {
+        "feature": "Editor Remote Sync (saves any `EditorDocument` to a backend after each change: debounced, one save at a time, monotonic versions, compare-and-set conflicts merged with `onConflict`, diffs for collaborators, remote changes applied without echo, flush on hide / teardown)",
+        "core": "`createEditorRemoteSync` (`/persistence`)",
+        "react": "`useEditorSync`",
+        "svelte": "`createEditorSync`",
         "swift": "Planned (#533)"
       },
       {

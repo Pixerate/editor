@@ -16,6 +16,8 @@ let package = Package(
             dependencies: [
                 .product(name: "PixeratePaintUI", package: "Pixerate"),
                 .product(name: "PixeratePaint", package: "Pixerate"),
+                .product(name: "PixerateChartUI", package: "Pixerate"),
+                .product(name: "PixerateChart", package: "Pixerate"),
                 .product(name: "PixerateCore", package: "Pixerate"),
             ],
             path: "Sources/PixerateSwiftDemo",

@@ -17,7 +17,7 @@ import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
 import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
-import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs, VortexDirection } from '../paint-editor/mark-settings';
+import type { DotRotation, DotTextureOrder, InvertMode, ParticleKind, ParticleRender, RibbonPairs, VortexDirection } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';
 
 /** `mark`: lays a material; `tool`: works on paint already down (erases, blends, smudges, wets…). */
@@ -41,8 +41,8 @@ export type BrushTipShape = 'round' | 'flat' | 'chisel' | 'bristle' | 'stamp';
 export const BRUSH_TIP_SHAPES: readonly BrushTipShape[] = ['round', 'flat', 'chisel', 'bristle', 'stamp'];
 
 /** How the tip is laid along the path. */
-export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects' | 'vortex';
-export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects', 'vortex'];
+export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects' | 'antimatter' | 'vortex';
+export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects', 'antimatter', 'vortex'];
 
 /** What the material does on the surface: stays where it lands (`dry`), flows and dries (`wet`) or stands up in relief (`thick`). */
 export type BrushSurface = 'dry' | 'wet' | 'thick';
@@ -196,6 +196,33 @@ export interface BrushObjectMarks {
   colourJitter?: number;
 }
 
+/** Animated blasts that invert, scorch and destroy paint across every visible layer where the tip touches paint. */
+export interface BrushAntimatterMarks {
+  kind: 'antimatter';
+  /** Blast size, in tip radii, 1..6 (default 2.5). */
+  blastRadius?: number;
+  /** Stroke travel between blasts, in tip diameters, 0.5..8 (default 2). */
+  blastSpacing?: number;
+  /** Paint needed under the tip to fire, 0..1 (default 0.1). */
+  threshold?: number;
+  /** Strength of the colour inversion in the blast core, 0..1 (default 1). */
+  invert?: number;
+  /** Colour inversion mode: `rgb` (default) or `oklab` (flips lightness and hue so mid-grey changes too). */
+  invertMode?: InvertMode;
+  /** Strength of the soot ring, 0..1 (default 0.6). */
+  scorch?: number;
+  /** Paint destroyed at the centre — alpha removed, 0..1 (default 0.25). */
+  annihilate?: number;
+  /** How many sparks fly out from each blast, 0..1 (default 0.5). */
+  sparks?: number;
+  /** How far sparks fly, in tip diameters, 0.5..8 (default 3). */
+  sparkReach?: number;
+  /** Depth of the dent on layers with relief, 0..1 (default 0.5). */
+  crater?: number;
+  /** Seconds a blast plays on screen, 0..2 (default 0.7; 0 shows the result at once). */
+  duration?: number;
+}
+
 /** Vortex marks: the drawn path shapes a flow field that pulls and winds surrounding paint at pen-up. */
 export interface BrushVortexMarks {
   kind: 'vortex';
@@ -213,7 +240,7 @@ export interface BrushVortexMarks {
   duration?: number;
 }
 
-export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks | BrushVortexMarks;
+export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks | BrushAntimatterMarks | BrushVortexMarks;
 
 /** Pen feel. Every amount is 0 (off) .. 1 unless noted. */
 export interface BrushDynamics {

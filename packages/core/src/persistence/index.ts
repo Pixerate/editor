@@ -5,6 +5,7 @@ export * from "./migrate";
 export * from "./revisions";
 export * from "./editorDocument";
 export * from "./editorAutosave";
+export * from "./remoteSync";
 export * from "./documentStore";
 export * from "./documentTools";
 export * from "./assets";

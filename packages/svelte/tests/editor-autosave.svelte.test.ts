@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
 import { createEditorAssetRegistry, createMemoryStorage, defineEditorDocument, toEditorDocumentFile } from "@pixerate/editor/persistence";
-import { createEditorAutosave } from "../src/persistence";
+import { createEditorAutosave, createEditorSync } from "../src/persistence";
 
 describe("createEditorAutosave asset garbage collection", () => {
   const big = (seed: number) => `data:image/png;base64,${Array.from({ length: 800 }, (_, i) => "ABCDEFGHIJKLMNOP"[(i * seed) % 16]).join("")}`;
@@ -99,6 +99,25 @@ describe("createEditorAutosave", () => {
     expect(report?.readOnly).toBeNull();
     expect(second.getSource()).toBe("flowchart LR\n  X --> Y\n");
     expect(again.pendingRecovery).toBe(false);
+  });
+
+  it("stamps snapshots with baseVersion and does not offer one made on an older version", async () => {
+    const storage = createMemoryStorage();
+    const first = new DiagramController({ source });
+    const autosave = createEditorAutosave(createDiagramEditorDocument(first), { storage, debounceMs: 5, interval: 20, baseVersion: () => 2 });
+    cleanup.push(() => autosave.destroy());
+    await autosave.checked;
+    first.load("flowchart LR\n  X --> Y\n");
+    await wait(40);
+    expect(JSON.parse(storage.entries.get("diagram:meta")!).baseVersion).toBe(2);
+    autosave.destroy();
+
+    const again = createEditorAutosave(createDiagramEditorDocument(new DiagramController({ source })), { storage, baseVersion: 5 });
+    cleanup.push(() => again.destroy());
+    await again.checked;
+    expect(again.recovery).toBeNull();
+    expect(again.pendingRecovery).toBe(false);
+    expect(storage.entries.has("diagram")).toBe(false);
   });
 });
 
@@ -204,6 +223,37 @@ describe("createCanvasDocument", () => {
     doc.loadDocument({ nodes: [{ id: "b", position: { x: 0, y: 0 }, data: {} }], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
     expect(viewport).toEqual({ x: 0, y: 0, zoom: 1 });
     expect(() => doc.loadDocument({ nodes: [{ id: "_x", position: { x: 0, y: 0 }, data: {} }], edges: [] })).toThrow("ids starting with _ are reserved.");
+  });
+
+  it("drives createEditorSync reactively on node edits and flushes on demand", async () => {
+    let nodes = $state<any[]>([{ id: "a", position: { x: 0, y: 0 }, data: { label: "A" } }]);
+    const doc = createCanvasDocument({
+      getNodes: () => nodes,
+      setNodes: (next) => void (nodes = next),
+      getEdges: () => [],
+      setEdges: () => {},
+      history: new HistoryManager(),
+    });
+    const saved: Array<{ version: number; x: number }> = [];
+    const sync = createEditorSync(doc, {
+      initialVersion: 1,
+      debounceMs: 1000,
+      save: async ({ document, version }) => {
+        saved.push({ version, x: document.nodes[0].position.x });
+      },
+    });
+    cleanup.push(() => sync.destroy(), () => doc.destroy());
+    flushSync();
+
+    nodes = [{ id: "a", position: { x: 42, y: 0 }, data: { label: "A" } }];
+    flushSync();
+    expect(sync.dirty).toBe(true);
+    expect(sync.version).toBe(2);
+
+    await sync.flush();
+    expect(saved).toEqual([{ version: 2, x: 42 }]);
+    expect(sync.dirty).toBe(false);
+    expect(sync.savedVersion).toBe(2);
   });
 });
 

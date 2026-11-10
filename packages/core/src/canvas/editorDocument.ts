@@ -8,6 +8,21 @@ import type { CanvasEdge, CanvasNode } from './types.js';
 /** What the document needs of an edge (React Flow's and Svelte Flow's edges fit). */
 export type CanvasEdgeLike = Pick<CanvasEdge, 'id' | 'source' | 'target'> & { selected?: boolean };
 
+/** Extra top-level fields stored alongside a canvas document (e.g. a companion paint layer). */
+export interface CanvasDocumentExtras<TExtras extends Record<string, unknown> = Record<string, unknown>> {
+	get: () => TExtras;
+	load?: (document: Record<string, unknown>) => void;
+	subscribe?: (listener: () => void) => () => void;
+}
+
+/** Incremental node and edge differences between two canvas snapshots. */
+export interface CanvasGraphDifferences<TNode extends { id: string } = CanvasNode, TEdge extends { id: string } = CanvasEdge> {
+	changedNodes: TNode[];
+	changedEdges: TEdge[];
+	removedNodes: TNode[];
+	removedEdges: TEdge[];
+}
+
 /** A canvas as it is saved: its nodes, edges, (with a scenes store) scenes and (with `getViewport`) the view. */
 export interface CanvasEditorDocument<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdgeLike = CanvasEdge> {
 	nodes: TNode[];
@@ -15,6 +30,7 @@ export interface CanvasEditorDocument<TNode extends CanvasNode = CanvasNode, TEd
 	scenes?: CanvasScene[];
 	/** Where the canvas was looking when it was saved. */
 	viewport?: CanvasViewport;
+	[extraKey: string]: unknown;
 }
 
 export interface CanvasEditorDocumentOptions<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdgeLike = CanvasEdge> {
@@ -62,6 +78,10 @@ export interface CanvasEditorDocumentOptions<TNode extends CanvasNode = CanvasNo
 	 * document as asset references; autosave and the document store save the bytes with it.
 	 */
 	assets?: EditorAssetRegistry;
+	/**
+	 * Companion top-level fields saved and loaded with the canvas (e.g. a full-canvas paint layer).
+	 */
+	extras?: CanvasDocumentExtras;
 }
 
 /** Fields the flow library sets while the canvas is used; they are not part of the document. */
@@ -99,6 +119,198 @@ const isViewport = (value: unknown): value is CanvasViewport => {
 	const v = value as Partial<CanvasViewport> | null;
 	return !!v && typeof v === 'object' && [v.x, v.y, v.zoom].every((n) => typeof n === 'number' && Number.isFinite(n)) && (v.zoom as number) > 0;
 };
+
+/**
+ * Repairs a raw saved canvas document so it passes `checkCanvasDocument` without losing work:
+ * coerces missing node positions/data, deduplicates node and edge ids, clears dangling or cyclic
+ * `parentId` references, orders parent nodes before children, drops edges referencing missing
+ * nodes, strips runtime keys, and drops invalid `viewport` values.
+ */
+export function sanitizeCanvasDocument<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdgeLike = CanvasEdge>(
+	raw: unknown,
+	options: CanvasDocumentOmitOptions & { normalizeNode?: (node: TNode) => TNode } = {}
+): CanvasEditorDocument<TNode, TEdge> {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+		return { nodes: [], edges: [] };
+	}
+	const doc = raw as Record<string, unknown>;
+	const keys = omitKeys(options);
+	const rawNodes = Array.isArray(doc.nodes) ? doc.nodes : [];
+	const rawEdges = Array.isArray(doc.edges) ? doc.edges : [];
+
+	const nodeMap = new Map<string, TNode>();
+	for (const candidate of rawNodes) {
+		if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+		const item = candidate as Record<string, unknown>;
+		if (typeof item.id !== 'string' || item.id.length === 0) continue;
+		const pos = item.position as { x?: unknown; y?: unknown } | undefined;
+		const position = {
+			x: typeof pos?.x === 'number' && Number.isFinite(pos.x) ? pos.x : 0,
+			y: typeof pos?.y === 'number' && Number.isFinite(pos.y) ? pos.y : 0
+		};
+		const data =
+			item.data && typeof item.data === 'object' && !Array.isArray(item.data)
+				? { ...(item.data as Record<string, unknown>) }
+				: {};
+		const cleaned = omit({ ...item, position, data } as unknown as TNode, keys.node);
+		nodeMap.set(item.id, options.normalizeNode ? options.normalizeNode(cleaned) : cleaned);
+	}
+
+	const hasCycle = (nodeId: string, parentId: string): boolean => {
+		let cur: string | undefined = parentId;
+		const seen = new Set<string>([nodeId]);
+		while (cur) {
+			if (seen.has(cur)) return true;
+			seen.add(cur);
+			cur = nodeMap.get(cur)?.parentId;
+		}
+		return false;
+	};
+
+	// Detach one node per cycle and write it back, so later checks see the cycle already broken
+	// (in A ⇄ B only A is detached, and a child of A keeps its parent).
+	const sanitizedNodes: TNode[] = [];
+	for (const node of nodeMap.values()) {
+		if (node.parentId !== undefined && (typeof node.parentId !== 'string' || !nodeMap.has(node.parentId) || hasCycle(node.id, node.parentId))) {
+			const copy = { ...node } as Record<string, unknown>;
+			delete copy.parentId;
+			delete copy.extent;
+			nodeMap.set(node.id, copy as TNode);
+			sanitizedNodes.push(copy as TNode);
+		} else {
+			sanitizedNodes.push(node);
+		}
+	}
+
+	const orderedNodes: TNode[] = [];
+	const placedIds = new Set<string>();
+	const byId = new Map(sanitizedNodes.map((n) => [n.id, n]));
+	const place = (node: TNode) => {
+		if (placedIds.has(node.id)) return;
+		if (node.parentId && byId.has(node.parentId)) {
+			place(byId.get(node.parentId)!);
+		}
+		placedIds.add(node.id);
+		orderedNodes.push(node);
+	};
+	for (const node of sanitizedNodes) place(node);
+
+	const edgeMap = new Map<string, TEdge>();
+	for (const candidate of rawEdges) {
+		if (!isValidCanvasEdge(candidate)) continue;
+		if (!placedIds.has(candidate.source) || !placedIds.has(candidate.target)) continue;
+		edgeMap.set(candidate.id, omit({ ...(candidate as unknown as TEdge) }, keys.edge));
+	}
+
+	const extraEntries = Object.entries(doc).filter(
+		([k, v]) => k !== 'nodes' && k !== 'edges' && k !== 'scenes' && k !== 'viewport' && v !== undefined
+	);
+
+	return {
+		...Object.fromEntries(extraEntries),
+		nodes: orderedNodes,
+		edges: [...edgeMap.values()],
+		...(Array.isArray(doc.scenes) ? { scenes: doc.scenes as CanvasScene[] } : {}),
+		...(isViewport(doc.viewport) ? { viewport: { ...doc.viewport } } : {})
+	};
+}
+
+/**
+ * Pure calculation of graph differences between a current state and a baseline state,
+ * ignoring transient runtime node/edge keys (`selected`, `dragging`, `measured`, `resizing`).
+ */
+export function calculateGraphDifferences<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdgeLike = CanvasEdge
+>(
+	currentState: { nodes?: readonly TNode[]; edges?: readonly TEdge[] },
+	baselineState: { nodes?: readonly TNode[]; edges?: readonly TEdge[] },
+	options?: CanvasDocumentOmitOptions
+): CanvasGraphDifferences<TNode, TEdge> {
+	const currentNodes = currentState.nodes ?? [];
+	const currentEdges = currentState.edges ?? [];
+	const baselineNodes = baselineState.nodes ?? [];
+	const baselineEdges = baselineState.edges ?? [];
+	const keys = omitKeys(options);
+
+	const baselineNodeMap = new Map(baselineNodes.map((n) => [n.id, n]));
+	const baselineEdgeMap = new Map(baselineEdges.map((e) => [e.id, e]));
+	const currentNodeMap = new Map(currentNodes.map((n) => [n.id, n]));
+	const currentEdgeMap = new Map(currentEdges.map((e) => [e.id, e]));
+
+	const removedNodes = baselineNodes.filter((oldNode) => !currentNodeMap.has(oldNode.id));
+	const removedEdges = baselineEdges.filter((oldEdge) => !currentEdgeMap.has(oldEdge.id));
+
+	const changedNodes = currentNodes.filter((newNode) => {
+		const oldNode = baselineNodeMap.get(newNode.id);
+		if (!oldNode) return true;
+		return JSON.stringify(omit(newNode, keys.node)) !== JSON.stringify(omit(oldNode, keys.node));
+	});
+
+	const changedEdges = currentEdges.filter((newEdge) => {
+		const oldEdge = baselineEdgeMap.get(newEdge.id);
+		if (!oldEdge) return true;
+		return JSON.stringify(omit(newEdge, keys.edge)) !== JSON.stringify(omit(oldEdge, keys.edge));
+	});
+
+	return { changedNodes, changedEdges, removedNodes, removedEdges };
+}
+
+/**
+ * Applies a `CanvasGraphDifferences` patch onto an existing `{ nodes, edges }` state,
+ * preserving local selection and runtime measurement state on updated items.
+ */
+export function applyGraphDifferences<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdgeLike = CanvasEdge
+>(
+	state: { nodes: readonly TNode[]; edges: readonly TEdge[] },
+	diff: Partial<CanvasGraphDifferences<TNode, TEdge>>
+): { nodes: TNode[]; edges: TEdge[] } {
+	const removedNodeIds = new Set((diff.removedNodes ?? []).map((n) => n.id));
+	const removedEdgeIds = new Set((diff.removedEdges ?? []).map((e) => e.id));
+	const changedNodeMap = new Map((diff.changedNodes ?? []).map((n) => [n.id, n]));
+	const changedEdgeMap = new Map((diff.changedEdges ?? []).map((e) => [e.id, e]));
+
+	const existingNodeIds = new Set<string>();
+	const nextNodes = state.nodes
+		.filter((n) => !removedNodeIds.has(n.id))
+		.map((n) => {
+			existingNodeIds.add(n.id);
+			const updated = changedNodeMap.get(n.id);
+			if (!updated) return n;
+			return {
+				...updated,
+				...(n.selected !== undefined ? { selected: n.selected } : {}),
+				...(n.measured !== undefined && updated.measured === undefined ? { measured: n.measured } : {})
+			};
+		});
+	for (const [id, node] of changedNodeMap) {
+		if (!existingNodeIds.has(id) && !removedNodeIds.has(id)) {
+			nextNodes.push({ ...node, selected: false });
+		}
+	}
+
+	const existingEdgeIds = new Set<string>();
+	const nextEdges = state.edges
+		.filter((e) => !removedEdgeIds.has(e.id))
+		.map((e) => {
+			existingEdgeIds.add(e.id);
+			const updated = changedEdgeMap.get(e.id);
+			if (!updated) return e;
+			return {
+				...updated,
+				...(e.selected !== undefined ? { selected: e.selected } : {})
+			};
+		});
+	for (const [id, edge] of changedEdgeMap) {
+		if (!existingEdgeIds.has(id) && !removedEdgeIds.has(id)) {
+			nextEdges.push({ ...edge, selected: false });
+		}
+	}
+
+	return { nodes: nextNodes, edges: nextEdges };
+}
 
 function checkCanvasDocument(document: unknown): asserts document is CanvasEditorDocument {
 	const hint = 'A canvas document is { nodes: [{ id, position: { x, y }, data }], edges: [{ id, source, target }], scenes?, viewport? } as get_canvas_document returns it.';
@@ -138,9 +350,16 @@ function checkCanvasDocument(document: unknown): asserts document is CanvasEdito
 export function createCanvasEditorDocument<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdgeLike = CanvasEdge>(
 	options: CanvasEditorDocumentOptions<TNode, TEdge>
 ): EditorDocument<CanvasEditorDocument<TNode, TEdge>> {
-	const { history, scenes } = options;
+	const { history, scenes, extras } = options;
 	const keys = omitKeys(options);
+	const snapshotExtras = () => {
+		if (!extras) return {};
+		const raw = extras.get();
+		if (!raw || typeof raw !== 'object') return {};
+		return Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined));
+	};
 	const snapshot = (): CanvasEditorDocument<TNode, TEdge> => ({
+		...snapshotExtras(),
 		nodes: options.getNodes().map((n) => omit(n, keys.node)),
 		edges: options.getEdges().map((e) => omit(e, keys.edge)),
 		...(scenes ? { scenes: scenes.toJSON().scenes } : {}),
@@ -151,6 +370,7 @@ export function createCanvasEditorDocument<TNode extends CanvasNode = CanvasNode
 		options.setEdges(doc.edges.map((e) => ({ ...e })));
 		if (scenes) scenes.load(doc.scenes ?? []);
 		if (doc.viewport) options.setViewport?.({ ...doc.viewport });
+		extras?.load?.(doc as unknown as Record<string, unknown>);
 	};
 	const check = (document: unknown): CanvasEditorDocument<TNode, TEdge> => {
 		checkCanvasDocument(document);
@@ -182,6 +402,7 @@ export function createCanvasEditorDocument<TNode extends CanvasNode = CanvasNode
 		subscribe: (listener) => {
 			const offs = [history.subscribe(() => listener())];
 			if (scenes) offs.push(scenes.subscribe(() => listener()));
+			if (extras?.subscribe) offs.push(extras.subscribe(() => listener()));
 			if (options.subscribe) offs.push(options.subscribe(listener));
 			return () => offs.forEach((off) => off());
 		},

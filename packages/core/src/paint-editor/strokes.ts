@@ -19,6 +19,7 @@ import type { MixerLoad } from '../paint/exchange';
 import { normalizeStencil, type Stencil } from './stencils';
 import { readPaintSource, scalePaintGradient, type PaintGradientSource } from '../paint/gradient-paint';
 import { readPaintEffectPaint, withStrokePath, type PaintEffectPaint } from './effect-paint';
+import { normalizeDualColor, type DualColor } from '../color/dual';
 
 /** An affine map [a, b, c, d, e, f]: (x, y) → (a·x + b·y + e, c·x + d·y + f). */
 export type Affine = readonly [number, number, number, number, number, number];
@@ -29,8 +30,17 @@ export interface RecordedStroke {
   id: string;
   layerId: string;
   brush: PaintBrush;
-  /** #rrggbb */
+  /**
+   * #rrggbb: the colour the document draws the stroke with. A dual-colour stroke on a stroke layer
+   * keeps its light side here, whoever painted it; on a pixel layer, the side it was painted in.
+   */
   color: string;
+  /**
+   * The light / dark pair the colour came from (both #rrggbb), when it came from one. A stroke
+   * layer shows it in the viewer's side (`PaintEditorController.setColorScheme`) without changing
+   * the document; a pixel layer's pixels stay as painted.
+   */
+  dualColor?: DualColor;
   /** Raw pen samples in document pixels, before smoothing. */
   points: PenPoint[];
   seed: number;
@@ -47,6 +57,8 @@ export interface RecordedStroke {
    * readers), or effect paint (the effect it took its colours from; replays render it first).
    */
   paint?: PaintGradientSource | PaintEffectPaint;
+  /** Antimatter brushes: the visible fuel layer ids at the time of the stroke, so a replay reads fuel from (and changes) exactly the same layers. */
+  targets?: string[];
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -148,6 +160,8 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
     points,
     seed: finite(r.seed) ? r.seed | 0 : 0,
   };
+  const dual = r.dualColor === undefined ? null : normalizeDualColor(r.dualColor);
+  if (dual && /^#[0-9a-f]{6}$/.test(dual.light) && /^#[0-9a-f]{6}$/.test(dual.dark)) out.dualColor = dual;
   const copies = Array.isArray(r.copies) ? r.copies.map(readAffine).filter((m): m is Affine => m !== null) : [];
   if (copies.length) out.copies = copies;
   const load = readLoad(r.load);
@@ -168,6 +182,10 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   if (effect) out.paint = effect;
   else if (paint && paint.type === 'gradient') out.paint = paint;
   if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
+  if (Array.isArray(r.targets)) {
+    const targets = r.targets.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    if (targets.length) out.targets = targets;
+  }
   return out;
 }
 

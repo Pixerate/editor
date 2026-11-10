@@ -1,0 +1,423 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "antimatter",
+  "description": "Antimatter paint blasts across visible layers: no-op on bare canvas, multi-layer inversion, scorch, annihilation and sparks, and single-step undo/redo.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "antimatter",
+        "seed": 11,
+        "points": [
+          {
+            "x": 16,
+            "y": 16
+          },
+          {
+            "x": 48,
+            "y": 16
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "antimatter": {
+            "blasts": 0,
+            "fuel": 0,
+            "layers": [],
+            "skippedLayers": [],
+            "sparks": 0
+          },
+          "bounds": null,
+          "dabs": 12,
+          "layerId": "@1",
+          "strokeId": null
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#ff2200"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 64,
+            "width": 64,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Top"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Top",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "ink-pen",
+        "color": "#0055ff",
+        "brush": {
+          "tip": {
+            "size": 24,
+            "hardness": 1
+          },
+          "dynamics": {
+            "smoothing": 0,
+            "pressureSize": false,
+            "pressureOpacity": false
+          }
+        },
+        "seed": 5,
+        "points": [
+          {
+            "x": 16,
+            "y": 32
+          },
+          {
+            "x": 48,
+            "y": 32
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 63,
+            "x": 0,
+            "y": 16
+          },
+          "dabs": 27,
+          "layerId": "@2",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "antimatter",
+        "color": "#ff3864",
+        "seed": 42,
+        "points": [
+          {
+            "x": 32,
+            "y": 32,
+            "pressure": 1
+          }
+        ]
+      },
+      "pixels": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "antimatter": {
+            "blasts": 1,
+            "fuel": 0.5547,
+            "layers": [
+              "@1",
+              "@2"
+            ],
+            "skippedLayers": [],
+            "sparks": 6
+          },
+          "bounds": {
+            "height": 231,
+            "width": 231,
+            "x": -83,
+            "y": -83
+          },
+          "dabs": 1,
+          "layerId": "@2",
+          "strokeId": "s2"
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@1": "pixerate-asset:4b6-1aptgldlgtn",
+              "@2": "pixerate-asset:7am-1m3j8tmkg7w"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Top",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -37,
+                "y": 6
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#ff2200",
+                  "grain": 0,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@1"
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSize": false,
+                    "pressureSmoothing": 0.4,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 24,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#0055ff",
+                "id": "s1",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "x": 16,
+                    "y": 32
+                  },
+                  {
+                    "x": 48,
+                    "y": 32
+                  }
+                ],
+                "seed": 5
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4,
+                    "smoothing": 0.25
+                  },
+                  "id": "antimatter",
+                  "kind": "mark",
+                  "marks": {
+                    "kind": "antimatter"
+                  },
+                  "medium": "paint",
+                  "name": "Antimatter",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 24,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#ff3864",
+                "id": "s2",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 1,
+                    "x": 32,
+                    "y": 32
+                  }
+                ],
+                "seed": 42,
+                "targets": [
+                  "@1",
+                  "@2"
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/antimatter.5.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "f7adac3fb8c4978b90b972e9327d6568c76afe34d853e470c265375d1807e6a4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "undo_paint",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "nextRedo": "Antimatter stroke",
+          "nextUndo": "Ink pen stroke",
+          "undone": "Antimatter stroke"
+        }
+      }
+    },
+    {
+      "tool": "redo_paint",
+      "arguments": {},
+      "pixels": true,
+      "expect": {
+        "result": {
+          "nextRedo": null,
+          "nextUndo": "Antimatter stroke",
+          "redone": "Antimatter stroke"
+        },
+        "pixels": {
+          "file": "png/antimatter.7.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "f7adac3fb8c4978b90b972e9327d6568c76afe34d853e470c265375d1807e6a4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

@@ -144,6 +144,8 @@ public struct PaintStrokeInit {
     public var start: Point2?
     /// The stroke's points, when known ahead of time (for path-mapped effect paint).
     public var points: [PenPoint]?
+    /// Antimatter replays: the exact layer ids to target regardless of current visibility.
+    public var targets: [String]?
     public init(layerId: String? = nil, color: String? = nil, paint: JSONValue? = nil, brushId: String? = nil, brush: JSONObject? = nil, seed: Int? = nil, copies: [Affine]? = nil, load: MixerLoad? = nil) {
         self.layerId = layerId
         self.color = color
@@ -1570,13 +1572,13 @@ public final class PaintEditorController {
                 throw PaintEditorError("Layer \"\(layer.name)\" has ghost paint fading on it, which uses the wet light channel; paint light on another layer (add_layer), or finish the ghost first (dry_paint).")
             }
         }
-        if brush.fluorescence.amount > 0 && (brush.engine == "sticker" || isWetBrush(brush)) {
-            throw PaintEditorError("The \(brush.name) brush paints \(brush.engine == "sticker" ? "stickers" : "wet media"), which don't take UV-fluorescent ink; use a dry mark brush (uv-marker; list_brush_presets), or set fluorescence.amount to 0 (set_brush).")
+        if brush.fluorescence.amount > 0 && (brush.engine == "sticker" || brush.engine == "antimatter" || isWetBrush(brush)) {
+            throw PaintEditorError("The \(brush.name) brush paints \(brush.engine == "sticker" ? "stickers" : brush.engine == "antimatter" ? "antimatter" : "wet media"), which don't take UV-fluorescent ink; use a dry mark brush (uv-marker; list_brush_presets), or set fluorescence.amount to 0 (set_brush).")
         }
-        if brush.thermochromic.hotColor != nil && (brush.engine == "sticker" || isWetBrush(brush)) {
-            throw PaintEditorError("The \(brush.name) brush paints \(brush.engine == "sticker" ? "stickers" : "wet media"), which don't take thermochromic ink; use a dry mark brush (thermo-ink; list_brush_presets), or remove thermochromic (set_brush).")
+        if brush.thermochromic.hotColor != nil && (brush.engine == "sticker" || brush.engine == "antimatter" || isWetBrush(brush)) {
+            throw PaintEditorError("The \(brush.name) brush paints \(brush.engine == "sticker" ? "stickers" : brush.engine == "antimatter" ? "antimatter" : "wet media"), which don't take thermochromic ink; use a dry mark brush (thermo-ink; list_brush_presets), or remove thermochromic (set_brush).")
         }
-        if brush.ferro.amount > 0 && brush.engine == "sticker" { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't hold liquid ferrofluid; paint ferrofluid with a dab or impasto brush (ferrofluid, ferro-ink; list_brush_presets lists them), or set ferro.amount to 0 (set_brush).") }
+        if brush.ferro.amount > 0 && (brush.engine == "sticker" || brush.engine == "antimatter") { throw PaintEditorError("The \(brush.name) brush sprays stickers, which don't hold liquid ferrofluid; paint ferrofluid with a dab or impasto brush (ferrofluid, ferro-ink; list_brush_presets lists them), or set ferro.amount to 0 (set_brush).") }
         if brush.ferro.amount > 0 && isWetBrush(brush) { throw PaintEditorError("The \(brush.name) brush paints wet media, while ferrofluid is its own magnetic relief fluid; use a dry or impasto brush with ferro (ferrofluid, ferro-ink), or set ferro.amount to 0 (set_brush).") }
         if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         if d.liveStrokes?.get(layer.id) != nil, let e = effect?.source, e.live {
@@ -1593,6 +1595,7 @@ public final class PaintEditorController {
             throw PaintEditorError("Layer \"\(layer.name)\" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).")
         }
         var wetInit: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
+        var didDry = false
         if isWetBrush(brush) {
             // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
             if previewing { throw PaintEditorError("Wet paint can't be previewed; the \(brush.name) brush paints wet media. Suggest it with a dry brush.") }
@@ -1633,6 +1636,15 @@ public final class PaintEditorController {
             i.seed = seedW
             i.load = load
             wetInit = (driver, { (try? world.displayGpu(id).surface) ?? emptySurface(4) })
+        } else if brush.engine == "antimatter" {
+            var targetIds = Set(antimatterTargets(d, i.targets).map(\.id))
+            targetIds.insert(layer.id)
+            let wetVis = wet.wetLayerIds().filter { targetIds.contains($0) }
+            if !wetVis.isEmpty {
+                dryLayersFirst(wetVis)
+                didDry = true
+                if let dried = findLayer(doc.layers, layer.id)?.layer { layer = dried }
+            }
         } else if wet.wetLayerIds().contains(layer.id) {
             // A dry brush on wet paint: the paint dries first (in the same undo step).
             dryLayersFirst([layer.id])
@@ -1691,22 +1703,71 @@ public final class PaintEditorController {
             withLight.thick = d.thick?.get(layer.id) ?? emptyThickChannels()
         } else if brush.engine == "vortex" {
             withLight.relief = d.thick?.get(layer.id)
-        } else if wetInit == nil && brush.engine != "sticker" {
+        } else if wetInit == nil && brush.engine != "sticker" && brush.engine != "antimatter" {
             let existingFilm = d.thick?.get(layer.id)?.film
             if brush.iridescence != nil || (brush.engine == "eraser" && existingFilm != nil && !existingFilm!.tiles.isEmpty) {
                 withLight.film = existingFilm ?? emptySurface(4, 0)
             }
         }
         if brush.engine == "sticker" { withLight.stickerNextId = nextStickerNumber(d) }
+        if brush.engine == "antimatter" {
+            let sourceDoc = didDry ? doc : d
+            withLight.antimatter = antimatterTargets(sourceDoc, i.targets)
+        }
         withLight.stampArt = stampArt
-        if wetInit == nil && brush.engine != "sticker" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
-        if wetInit == nil && brush.engine != "sticker" && (brush.ferro.amount > 0 || d.ferro?.get(layer.id) != nil) { withLight.ferro = d.ferro?.get(layer.id) ?? emptyFerro() }
-        if wetInit == nil && brush.engine != "sticker" && (brush.fluorescence.amount > 0 || d.fluor?.get(layer.id) != nil) { withLight.fluor = d.fluor?.get(layer.id) ?? emptyFluor() }
-        if wetInit == nil && brush.engine != "sticker" && (brush.thermochromic.hotColor != nil || d.thermo?.get(layer.id) != nil) { withLight.thermo = d.thermo?.get(layer.id) ?? emptyThermo() }
+        if wetInit == nil && brush.engine != "sticker" && brush.engine != "antimatter" && (brush.light.amount > 0 || d.light?.get(layer.id) != nil) { withLight.light = d.light?.get(layer.id) ?? emptyLight() }
+        if wetInit == nil && brush.engine != "sticker" && brush.engine != "antimatter" && (brush.ferro.amount > 0 || d.ferro?.get(layer.id) != nil) { withLight.ferro = d.ferro?.get(layer.id) ?? emptyFerro() }
+        if wetInit == nil && brush.engine != "sticker" && brush.engine != "antimatter" && (brush.fluorescence.amount > 0 || d.fluor?.get(layer.id) != nil) { withLight.fluor = d.fluor?.get(layer.id) ?? emptyFluor() }
+        if wetInit == nil && brush.engine != "sticker" && brush.engine != "antimatter" && (brush.thermochromic.hotColor != nil || d.thermo?.get(layer.id) != nil) { withLight.thermo = d.thermo?.get(layer.id) ?? emptyThermo() }
         let session = try PaintStrokeSession(withLight)
         session.maskStencils = i.maskStencils
         if let w = wetInit { wet.driver = w.driver }
         return session
+    }
+
+    /// The fuel layers of an antimatter stroke: every visible, non-temporary pixel layer (group
+    /// opacity multiplied in), or on a replay exactly the recorded `targetIds` whatever their
+    /// visibility now. The editable ones (not locked, stroke, sticker or effect layers) change.
+    /// A port of the TS core's `antimatterTargetsOf`.
+    func antimatterTargets(_ d: PaintDocumentState, _ targetIds: [String]?) -> [AntimatterTarget] {
+        let targetSet: Set<String>? = targetIds.flatMap { $0.isEmpty ? nil : Set($0) }
+        var out: [AntimatterTarget] = []
+        func hasForcedDescendant(_ list: [PaintLayer]) -> Bool {
+            guard let targetSet else { return false }
+            return list.contains { l in l.type == "group" ? hasForcedDescendant(l.children ?? []) : targetSet.contains(l.id) }
+        }
+        func walk(_ list: [PaintLayer], _ groupOpacity: Double, _ groupVisible: Bool) {
+            for l in list {
+                if l.type == "group" {
+                    let vis = groupVisible && l.visible
+                    let children = l.children ?? []
+                    if vis || hasForcedDescendant(children) {
+                        walk(children, groupOpacity * (l.visible ? l.opacity : 1), vis)
+                    }
+                    continue
+                }
+                if !l.isPixel || l.temporary == true { continue }
+                let vis = groupVisible && l.visible
+                if let targetSet { if !targetSet.contains(l.id) { continue } } else if !vis { continue }
+                let canEdit = !isLayerLocked(l.locks, .pixels)
+                    && d.liveStrokes?.get(l.id) == nil
+                    && d.stickers?.get(l.id)?.isEmpty != false
+                    && d.effectLayers?.get(l.id) == nil
+                let base = wet.isWet(l.id) ? ((try? wet.world?.displayGpu(l.id).surface) ?? l.pixelSurface) : l.pixelSurface
+                out.append(AntimatterTarget(
+                    id: l.id,
+                    editable: canEdit,
+                    lockTransparency: isLayerLocked(l.locks, .transparency),
+                    opacity: groupOpacity * (l.visible ? l.opacity : (l.opacity != 0 ? l.opacity : 1)),
+                    offset: l.pixelOffset,
+                    base: base,
+                    baseLight: d.light?.get(l.id),
+                    baseThick: d.thick?.get(l.id)
+                ))
+            }
+        }
+        walk(d.layers, 1, true)
+        return out
     }
 
     func record(_ s: PaintStrokeSession) -> RecordedStroke {
@@ -1717,6 +1778,8 @@ public final class PaintEditorController {
         if let e = i.effect { stroke.effect = e.source } else if let p = i.paint { stroke.paint = p }
         if i.mixerLoad.reservoir != nil || i.mixerLoad.pickup != nil { stroke.load = i.mixerLoad }
         if let w = i.wet { stroke.steps = w.driver.steps }
+        // The fuel layers the stroke read (visible pixel layers at the time, or the replayed ones): a replay reads fuel from exactly these.
+        if s.antimatterDriver != nil, let fuel = i.antimatter, !fuel.isEmpty { stroke.targets = fuel.map(\.id) }
         if i.selection != nil {
             let masks = (s.maskStencils ?? guides.stencils).filter { $0.enabled && $0.mode == "mask" }
             if !masks.isEmpty { stroke.stencils = masks }
@@ -1779,20 +1842,36 @@ public final class PaintEditorController {
                 baseLayers = insertAfter(baseLayers, targetId, temp)
             }
             out = d.with { o in
-                o.layers = mapLayer(baseLayers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
+                if let amOutputs = session.antimatterOutputs {
+                    var nextLayers = baseLayers
+                    for ao in amOutputs where ao.changed {
+                        nextLayers = mapLayer(nextLayers, ao.id) { $0.withSurface(ao.surface) }
+                    }
+                    o.layers = nextLayers
+                    for ao in amOutputs {
+                        if let l = ao.light { o.settingLight(ao.id, l) }
+                        if let th = ao.thick {
+                            var t = o.thick ?? OrderedMap()
+                            if hasThickChannels(th) { t.set(ao.id, th) } else { _ = t.delete(ao.id) }
+                            o.thick = t.isEmpty ? nil : t
+                        }
+                    }
+                } else {
+                    o.layers = mapLayer(baseLayers, session.layerId) { $0.withSurface(surface, offset: wetStroke ? LayerOffset(x: 0, y: 0) : nil) }
+                    o.settingLight(session.layerId, session.lightChannel ?? wetLight)
+                    if let thick {
+                        var t = o.thick ?? OrderedMap()
+                        if hasThickChannels(thick) { t.set(session.layerId, thick) } else { _ = t.delete(session.layerId) }
+                        o.thick = t.isEmpty ? nil : t
+                    }
+                }
                 o.strokes = d.strokes + [stroke]
-                o.settingLight(session.layerId, session.lightChannel ?? wetLight)
                 if let fc = session.ferroChannel {
                     let b = session.initValues.brush
                     o.settingFerro(session.layerId, fc, settings: b.ferro.amount > 0 ? b.ferro : (d.ferroSettings?.get(session.layerId) ?? DEFAULT_FERRO))
                 }
                 o.settingFluor(session.layerId, session.fluorChannel)
                 o.settingThermo(session.layerId, session.thermoChannel)
-                if let thick {
-                    var t = o.thick ?? OrderedMap()
-                    if hasThickChannels(thick) { t.set(session.layerId, thick) } else { _ = t.delete(session.layerId) }
-                    o.thick = t.isEmpty ? nil : t
-                }
                 if let sprayed = session.sprayedStickers {
                     var t = o.stickers ?? OrderedMap()
                     t.set(session.layerId, (t.get(session.layerId) ?? []) + sprayed)
@@ -1862,6 +1941,13 @@ public final class PaintEditorController {
     /// The layers with the live stroke's surface in place (a wet stroke's layer already shows the simulation).
     func currentLayers() -> [PaintLayer] {
         guard let live = liveStroke, live.open, !live.isWet else { return doc.layers }
+        if let amOutputs = live.shown.antimatterOutputs {
+            var next = doc.layers
+            for ao in amOutputs where ao.changed || ao.id == live.layerId {
+                next = mapLayer(next, ao.id) { $0.withSurface(ao.surface) }
+            }
+            return next
+        }
         return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.shown.currentSurface()) }
     }
 

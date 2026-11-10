@@ -60,6 +60,8 @@ struct StrokeSessionInit {
     var film: TiledSurface? = nil
     /// The art of image sources, for stamp tips and tip grain.
     var stampArt: StampArtLookup? = nil
+    /// Antimatter brushes: every visible layer that supplies fuel (and is edited if editable).
+    var antimatter: [AntimatterTarget]? = nil
 }
 
 public struct PaintStrokeResult {
@@ -73,6 +75,8 @@ public struct PaintStrokeResult {
     public var mixerLoad: MixerLoad?
     /// Wet brushes: the paint is wet (it keeps moving until it dries).
     public var wet: Bool?
+    /// Antimatter brushes: blast, spark, fuel and layer summary.
+    public var antimatter: AntimatterStats?
     /// Vortex brushes: the classified stroke shape and peak displacement in pixels.
     public var vortex: VortexStrokeSummary?
 }
@@ -105,6 +109,7 @@ final class PaintStrokeSession: PaintTileTarget {
     private var spray: StickerSpray?
     private var wetDriver: WetStrokeDriver?
     private var thickDriver: ThickStrokeDriver?
+    private var antimatter: AntimatterStrokeDriver?
     private var vortexDriver: VortexStrokeDriver?
     private var filmBuffer: FilmBuffer?
     private let apply: StrokeApply
@@ -138,6 +143,12 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Sticker brushes: the stickers the stroke sprayed, or nil.
     var sprayedStickers: [Sticker]? { spray.flatMap { $0.stickers.isEmpty ? nil : $0.stickers } }
 
+    /// Antimatter brushes: the per-layer outputs after `end()`, or nil.
+    var antimatterOutputs: [AntimatterLayerOutput]? { antimatter?.layerOutputs() }
+
+    /// Antimatter brushes: the driver instance, or nil.
+    var antimatterDriver: AntimatterStrokeDriver? { antimatter }
+
     /// Light paint: the layer's light channel after the stroke, or nil when the stroke has no twin.
     var lightChannel: TiledSurface? { lightTwin?.surfaceAfter.map(shadowToLight) }
 
@@ -168,8 +179,8 @@ final class PaintStrokeSession: PaintTileTarget {
         base = i.surface
         let brush = i.brush
         thermoBefore = i.thermo
-        invisibleDaylight = brush.fluorescence.amount > 0 && brush.fluorescence.invisible && i.wet == nil && brush.engine != "sticker" && brush.engine != "eraser" && brush.engine != "blender" && brush.engine != "smudge"
-        if let light = i.light, i.wet == nil, i.brush.engine != "sticker" {
+        invisibleDaylight = brush.fluorescence.amount > 0 && brush.fluorescence.invisible && i.wet == nil && brush.engine != "sticker" && brush.engine != "antimatter" && brush.engine != "eraser" && brush.engine != "blender" && brush.engine != "smudge"
+        if let light = i.light, i.wet == nil, i.brush.engine != "sticker", i.brush.engine != "antimatter" {
             // The twin paints the light as grey at the brush's light amount (see `light.ts`).
             let grey = Int(JS.round(brush.light.amount * 255))
             let g = Double(grey) / 255
@@ -195,7 +206,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.film = nil
             lightTwin = try PaintStrokeSession(t)
         }
-        if let fluor = i.fluor, i.wet == nil, i.brush.engine != "sticker" {
+        if let fluor = i.fluor, i.wet == nil, i.brush.engine != "sticker", i.brush.engine != "antimatter" {
             var t = i
             t.surface = fluor
             t.lockTransparency = false
@@ -210,7 +221,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.stickerNextId = nil
             fluorTwin = try PaintStrokeSession(t)
         }
-        if let thermo = i.thermo, i.wet == nil, i.brush.engine != "sticker" {
+        if let thermo = i.thermo, i.wet == nil, i.brush.engine != "sticker", i.brush.engine != "antimatter" {
             let hotHex = brush.thermochromic.hotColor ?? i.colorHex
             let hotRgb = hexToRgb8(hotHex)
             var t = i
@@ -237,7 +248,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.stickerNextId = nil
             thermoTwin = try PaintStrokeSession(t)
         }
-        if let ferro = i.ferro, i.wet == nil, i.brush.engine != "sticker" {
+        if let ferro = i.ferro, i.wet == nil, i.brush.engine != "sticker", i.brush.engine != "antimatter" {
             // The twin paints the ferrofluid as grey at the brush's ferro amount (see `ferro.ts`).
             let grey = Int(JS.round(brush.ferro.amount * 255))
             let g = Double(grey) / 255
@@ -307,6 +318,33 @@ final class PaintStrokeSession: PaintTileTarget {
         if brush.engine == "sticker" {
             dry = nil
             spray = StickerSpray(brush: brush, target: self, color: i.colorHex, seed: i.seed, copies: copies, nextId: i.stickerNextId ?? 1, paint: i.paint, effect: i.effect?.pixels)
+            return
+        }
+        if brush.engine == "antimatter" {
+            dry = nil
+            let targets = i.antimatter ?? [
+                AntimatterTarget(
+                    id: i.layerId,
+                    editable: true,
+                    lockTransparency: i.lockTransparency,
+                    opacity: 1,
+                    offset: i.offset,
+                    base: i.surface,
+                    baseLight: i.light,
+                    baseThick: i.thick
+                )
+            ]
+            antimatter = AntimatterStrokeDriver(AntimatterStrokeInit(
+                activeLayerId: i.layerId,
+                targets: targets,
+                brush: brush,
+                color: i.color,
+                seed: i.seed,
+                copies: copies,
+                selection: i.selection,
+                paint: i.paint,
+                effect: i.effect?.pixels
+            ))
             return
         }
         let dabByDab = brush.engine == "mixer" || brush.engine == "blender" || brush.engine == "smudge" || usesPaintExchange(brush, i.paint != nil)
@@ -385,6 +423,11 @@ final class PaintStrokeSession: PaintTileTarget {
             for r in rects { bounds = unionRect(bounds, r) }
             return rects
         }
+        if let am = antimatter {
+            let rects = am.push(filtered)
+            for r in rects { bounds = unionRect(bounds, r) }
+            return rects
+        }
         try lightTwin?.push(filtered)
         try ferroTwin?.push(filtered)
         let fRects = try fluorTwin?.push(filtered) ?? []
@@ -414,6 +457,9 @@ final class PaintStrokeSession: PaintTileTarget {
      * compositor redraws only the changed ones.
      */
     func currentSurface() -> TiledSurface {
+        if let am = antimatter {
+            return am.layerOutputs().first(where: { $0.id == layerId })?.surface ?? base
+        }
         var tiles = shown ?? base.tiles
         for key in stale {
             guard let t = live[key], touchedSet.contains(key) else { continue }
@@ -495,6 +541,17 @@ final class PaintStrokeSession: PaintTileTarget {
                 strokeId: nil,
                 vortex: VortexStrokeSummary(shape: vs.shape, maxDisplacement: changed ? vs.maxDisplacement : 0)
             )
+            result = r
+            return r
+        }
+        if let am = antimatter {
+            for r in am.finish() { bounds = unionRect(bounds, r) }
+            closed = true
+            let stats = am.stats()
+            let changed = stats.blasts > 0 && !stats.layers.isEmpty
+            let activeOut = am.layerOutputs().first(where: { $0.id == layerId })
+            surfaceAfter = changed ? (activeOut?.surface ?? base) : nil
+            let r = PaintStrokeResult(layerId: layerId, bounds: changed ? am.bounds : nil, dabs: am.dabCount, strokeId: nil, antimatter: stats)
             result = r
             return r
         }

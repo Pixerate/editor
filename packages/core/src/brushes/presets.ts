@@ -597,6 +597,29 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     ferro: { amount: 0.7, wavelength: 12, threshold: 0.15 },
     colour: { default: '#0f172a' },
   },
+  // --- Antimatter paint: blasts that invert, scorch and destroy paint across visible layers ---
+  {
+    id: 'antimatter', name: 'Antimatter', kind: 'mark', medium: 'paint', variety: 'antimatter',
+    tip: { shape: 'round', size: 24, hardness: 0.75, spacing: 0.12 },
+    marks: { kind: 'antimatter' },
+    dynamics: { smoothing: 0.25, minSize: 0.4 },
+    colour: { default: '#38bdf8', palette: ['#38bdf8', '#f472b6', '#a855f7', '#fb923c', '#4ade80'] },
+  },
+  {
+    id: 'antimatter-flare', name: 'Antimatter flare', kind: 'mark', medium: 'paint', variety: 'antimatter',
+    tip: { shape: 'round', size: 18, hardness: 0.7, spacing: 0.08 },
+    marks: { kind: 'antimatter', blastRadius: 2, blastSpacing: 1.4, invert: 0.75, invertMode: 'oklab', scorch: 0.35, annihilate: 0.15, sparks: 0.95, sparkReach: 5, crater: 0.3 },
+    dynamics: { smoothing: 0.2, minSize: 0.4 },
+    light: { amount: 0.9 },
+    colour: { default: '#f472b6', palette: ['#f472b6', '#38bdf8', '#facc15', '#a855f7', '#4ade80'] },
+  },
+  {
+    id: 'antimatter-charge', name: 'Antimatter charge', kind: 'mark', medium: 'paint', variety: 'antimatter',
+    tip: { shape: 'round', size: 32, hardness: 0.85, spacing: 0.15 },
+    marks: { kind: 'antimatter', blastRadius: 4.5, blastSpacing: 4.5, threshold: 0.2, invertMode: 'oklab', scorch: 0.8, annihilate: 0.6, sparks: 0.65, sparkReach: 4, crater: 0.85, duration: 1 },
+    dynamics: { smoothing: 0.3, minSize: 0.5 },
+    colour: { default: '#fb923c', palette: ['#fb923c', '#ef4444', '#38bdf8', '#a855f7'] },
+  },
   // --- Vortex paint: draw a shape and the paint around it winds into a vortex of that shape ---
   {
     id: 'vortex', name: 'Vortex', kind: 'mark', medium: 'paint', variety: 'vortex',

@@ -1,10 +1,11 @@
 import Foundation
+import PixerateCore
 
 /**
  * Synchronous zlib (RFC 1950) and raw deflate (RFC 1951), dependency-free, for layer PNGs and PSD
  * ZIP channels. The port of `raster/zlib.ts`: `deflate` writes the same bytes as the TS one.
  *
- * - `inflate` handles stored, fixed and dynamic blocks and refuses to produce more than
+ * - `inflate` handles stored, fixed and dynamic blocks (via `PixerateCore.inflateRaw`) and refuses to produce more than
  *   `maxOutput` bytes (a decompression bomb guard).
  * - `deflate` is a greedy LZ77 (hash chains, 32 KiB window) with one dynamic Huffman block per
  *   64 Ki symbols. It favours simplicity over the last few percent of ratio.
@@ -12,183 +13,13 @@ import Foundation
 
 // MARK: - Shared tables
 
-private let LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258]
-private let LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0]
-private let DIST_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577]
-private let DIST_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13]
-private let CL_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
-
-public struct ZlibError: Error, CustomStringConvertible, Equatable {
-    public let message: String
-    public init(_ message: String) { self.message = message }
-    public var description: String { message }
-}
+private let LENGTH_BASE = DEFLATE_LENGTH_BASE
+private let LENGTH_EXTRA = DEFLATE_LENGTH_EXTRA
+private let DIST_BASE = DEFLATE_DIST_BASE
+private let DIST_EXTRA = DEFLATE_DIST_EXTRA
+private let CL_ORDER = DEFLATE_CL_ORDER
 
 // MARK: - Inflate
-
-private struct Huffman {
-    var counts: [Int]
-    var symbols: [Int]
-}
-
-private func buildHuffman(_ lengths: ArraySlice<UInt8>, _ n: Int) -> Huffman {
-    let base = lengths.startIndex
-    var counts = [Int](repeating: 0, count: 16)
-    for i in 0..<n { counts[Int(lengths[base + i])] += 1 }
-    counts[0] = 0
-    var offs = [Int](repeating: 0, count: 16)
-    for i in 1..<16 { offs[i] = offs[i - 1] + counts[i - 1] }
-    var symbols = [Int](repeating: 0, count: n)
-    for i in 0..<n where lengths[base + i] != 0 {
-        let l = Int(lengths[base + i])
-        symbols[offs[l]] = i
-        offs[l] += 1
-    }
-    return Huffman(counts: counts, symbols: symbols)
-}
-
-private let fixedTables: (Huffman, Huffman) = {
-    var l = [UInt8](repeating: 0, count: 288)
-    for i in 0..<144 { l[i] = 8 }
-    for i in 144..<256 { l[i] = 9 }
-    for i in 256..<280 { l[i] = 7 }
-    for i in 280..<288 { l[i] = 8 }
-    let d = [UInt8](repeating: 5, count: 30)
-    return (buildHuffman(l[...], 288), buildHuffman(d[...], 30))
-}()
-
-private struct BitReader {
-    var pos = 0
-    var bit: UInt32 = 0
-    var bits = 0
-    let data: [UInt8]
-
-    mutating func need(_ n: Int) throws -> Int {
-        while bits < n {
-            if pos >= data.count { throw ZlibError("Unexpected end of compressed data") }
-            bit |= UInt32(data[pos]) << UInt32(bits)
-            pos += 1
-            bits += 8
-        }
-        let v = Int(bit & ((1 << UInt32(n)) &- 1))
-        bit = n >= 32 ? 0 : bit >> UInt32(n)
-        bits -= n
-        return v
-    }
-
-    mutating func decode(_ h: Huffman) throws -> Int {
-        var code = 0
-        var first = 0
-        var index = 0
-        for len in 1..<16 {
-            code |= try need(1)
-            let count = h.counts[len]
-            if code - count < first { return h.symbols[index + (code - first)] }
-            index += count
-            first += count
-            first <<= 1
-            code <<= 1
-        }
-        throw ZlibError("Invalid Huffman code")
-    }
-
-    mutating func align() {
-        bit = 0
-        bits = 0
-    }
-}
-
-/// Inflates raw deflate data (no zlib header).
-public func inflateRaw(_ data: [UInt8], maxOutput: Int? = nil, sizeHint: Int? = nil) throws -> [UInt8] {
-    let max = maxOutput ?? 512 * 1024 * 1024
-    var out: [UInt8] = []
-    out.reserveCapacity(Swift.max(1024, Swift.min(sizeHint ?? data.count * 4, max)))
-    func ensure(_ n: Int) throws {
-        if out.count + n > max { throw ZlibError("Decompressed data exceeds \(max) bytes") }
-    }
-    var br = BitReader(data: data)
-    var final = 0
-    while final == 0 {
-        final = try br.need(1)
-        let type = try br.need(2)
-        if type == 0 {
-            br.align()
-            if br.pos + 4 > data.count { throw ZlibError("Unexpected end of compressed data") }
-            let len = Int(data[br.pos]) | (Int(data[br.pos + 1]) << 8)
-            let nlen = Int(data[br.pos + 2]) | (Int(data[br.pos + 3]) << 8)
-            br.pos += 4
-            if (len ^ 0xFFFF) != nlen { throw ZlibError("Stored block length mismatch") }
-            if br.pos + len > data.count { throw ZlibError("Unexpected end of compressed data") }
-            try ensure(len)
-            out.append(contentsOf: data[br.pos..<(br.pos + len)])
-            br.pos += len
-            continue
-        }
-        let lit: Huffman
-        let dist: Huffman
-        if type == 1 {
-            (lit, dist) = fixedTables
-        } else if type == 2 {
-            let hlit = try br.need(5) + 257
-            let hdist = try br.need(5) + 1
-            let hclen = try br.need(4) + 4
-            var cl = [UInt8](repeating: 0, count: 19)
-            for i in 0..<hclen { cl[CL_ORDER[i]] = UInt8(try br.need(3)) }
-            let clh = buildHuffman(cl[...], 19)
-            var lengths = [UInt8](repeating: 0, count: hlit + hdist)
-            var i = 0
-            while i < hlit + hdist {
-                let sym = try br.decode(clh)
-                if sym < 16 {
-                    lengths[i] = UInt8(sym)
-                    i += 1
-                } else {
-                    var rep = 0
-                    var val: UInt8 = 0
-                    if sym == 16 {
-                        if i == 0 { throw ZlibError("Repeat with no previous length") }
-                        val = lengths[i - 1]
-                        rep = 3 + (try br.need(2))
-                    } else if sym == 17 {
-                        rep = 3 + (try br.need(3))
-                    } else {
-                        rep = 11 + (try br.need(7))
-                    }
-                    if i + rep > hlit + hdist { throw ZlibError("Too many code lengths") }
-                    while rep > 0 {
-                        lengths[i] = val
-                        i += 1
-                        rep -= 1
-                    }
-                }
-            }
-            lit = buildHuffman(lengths[0..<hlit], hlit)
-            dist = buildHuffman(lengths[hlit...], hdist)
-        } else {
-            throw ZlibError("Invalid block type")
-        }
-        while true {
-            let sym = try br.decode(lit)
-            if sym < 256 {
-                try ensure(1)
-                out.append(UInt8(sym))
-            } else if sym == 256 {
-                break
-            } else {
-                let li = sym - 257
-                if li >= 29 { throw ZlibError("Invalid length symbol") }
-                let len = LENGTH_BASE[li] + (try br.need(LENGTH_EXTRA[li]))
-                let di = try br.decode(dist)
-                if di >= 30 { throw ZlibError("Invalid distance symbol") }
-                let d = DIST_BASE[di] + (try br.need(DIST_EXTRA[di]))
-                if d > out.count { throw ZlibError("Distance too far back") }
-                try ensure(len)
-                for _ in 0..<len { out.append(out[out.count - d]) }
-            }
-        }
-    }
-    return out
-}
 
 /// Adler-32 checksum (zlib trailer).
 public func adler32(_ data: [UInt8]) -> UInt32 {

@@ -387,6 +387,10 @@
                 "label": "Stickers"
               },
               {
+                "value": "antimatter",
+                "label": "Antimatter"
+              },
+              {
                 "value": "vortex",
                 "label": "Vortex"
               }
@@ -2333,6 +2337,10 @@
                 "label": "Stickers"
               },
               {
+                "value": "antimatter",
+                "label": "Antimatter"
+              },
+              {
                 "value": "vortex",
                 "label": "Vortex"
               }
@@ -4097,6 +4105,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               },
               {
                 "value": "vortex",
@@ -5644,6 +5656,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               },
               {
                 "value": "vortex",
@@ -7198,6 +7214,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               },
               {
                 "value": "vortex",
@@ -9905,6 +9925,10 @@
               {
                 "value": "objects",
                 "label": "Stickers"
+              },
+              {
+                "value": "antimatter",
+                "label": "Antimatter"
               },
               {
                 "value": "vortex",
