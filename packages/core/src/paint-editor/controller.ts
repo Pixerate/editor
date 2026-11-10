@@ -7451,11 +7451,15 @@ export class PaintEditorController {
     let layers = doc.layers;
     let thick = doc.thick;
     let light = doc.light;
+    let cultures = doc.cultures;
     for (const o of outputs) {
       if (!o.changed) continue;
       const l = findLayer(layers, o.id)?.layer;
       if (!isPixelLayer(l)) continue;
       layers = mapLayer(layers, o.id, () => ({ ...l, surface: o.surface }));
+      // Biopaint threads the blast changed are no longer the culture's own: it can feed on them, as after any stroke.
+      const culture = cultures?.[o.id];
+      if (culture) cultures = { ...cultures, [o.id]: clearOccupancyUnderStroke(culture, l.surface, o.surface) };
       // `null` means the stroke left that channel as it was (not "cleared"): keep the layer's light and relief.
       if (o.thick !== null) thick = withLayerThick(thick, o.id, o.thick);
       if (o.light !== null) light = withLayerLight(light, o.id, o.light);
@@ -7465,6 +7469,7 @@ export class PaintEditorController {
         ...doc,
         layers,
         strokes: [...doc.strokes, stroke],
+        ...(cultures ? { cultures } : {}),
         ...(thick && Object.keys(thick).length ? { thick } : { thick: undefined }),
         ...(light && Object.keys(light).length ? { light } : { light: undefined }),
       },

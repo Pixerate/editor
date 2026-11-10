@@ -16,6 +16,10 @@ fade what they eat (`digest`), and carry the digested colour out into new territ
   layer's alpha was erased so erased threads never leave ghost walls). When a tip crosses foreign
   paint, it gains energy (letting it travel far beyond its bare-canvas `reach`), fades the paint by
   `digest`, and shifts its carried RGB toward the paint it ate.
+- **Painting over threads.** A later stroke takes over only the thread pixels it changes: painted
+  over (as opaque or more), or inverted and scorched by an antimatter blast on any layer it hits,
+  they become foreign paint the culture can feed on and digest. Threads the stroke left alone stay
+  the culture's own, wherever the stroke lands. Antimatter brushes carry no spores themselves.
 - **Anastomosis (`fuse`).** When a growing tip meets an existing thread outside a food source, it
   rolls against `fuse`: on success it draws a connecting bridge segment and stops cleanly, forming
   closed loops instead of tangling.

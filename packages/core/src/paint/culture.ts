@@ -480,6 +480,8 @@ export function clearOccupancyUnderStroke(
   const before = new FastSurface(beforeSurface);
   for (const [key, tile] of afterSurface.tiles) {
     if (!culture.occupancy.tiles.has(key)) continue;
+    // A tile the stroke left alone keeps its threads (the stroke only takes over pixels it changed).
+    if (beforeSurface.tiles.get(key) === tile) continue;
     const tx = (key % (1 << 16)) - (1 << 15);
     const ty = Math.floor(key / (1 << 16)) - (1 << 15);
     const ox = tx * TILE;
@@ -488,11 +490,15 @@ export function clearOccupancyUnderStroke(
     for (let y = 0; y < TILE; y++) {
       const row = (y * TILE) << 2;
       for (let x = 0; x < TILE; x++) {
-        const aAfter = d[row + (x << 2) + 3]!;
+        const i = row + (x << 2);
+        const aAfter = d[i + 3]!;
         if (aAfter === 0) continue;
         const px = ox + x;
         const py = oy + y;
-        if (occ.readByte(px, py) >= 2 && aAfter >= before.readAlpha(px, py)) {
+        if (occ.readByte(px, py) < 2) continue;
+        const [br, bg, bb, ba] = before.readRgba(px, py);
+        if (br === d[i]! && bg === d[i + 1]! && bb === d[i + 2]! && ba === aAfter) continue;
+        if (aAfter >= ba) {
           occ.writeByte(px, py, 0);
         }
       }

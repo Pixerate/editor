@@ -1883,7 +1883,17 @@ public final class PaintEditorController {
                 baseLayers = insertAfter(baseLayers, targetId, temp)
             }
             let layerBefore = findLayer(baseLayers, session.layerId)?.layer
-            let nextCultures = layerBefore.flatMap { applyStrokeCulture(d, session, $0, surface, &result) } ?? d.cultures
+            var nextCultures: OrderedMap<String, LayerCultureState>?
+            if let amOutputs = session.antimatterOutputs {
+                // Biopaint threads a blast changed are no longer the culture's own, on every layer it changed.
+                nextCultures = d.cultures
+                for ao in amOutputs where ao.changed {
+                    guard let culture = nextCultures?.get(ao.id), let l = findLayer(baseLayers, ao.id)?.layer, l.isPixel else { continue }
+                    nextCultures!.set(ao.id, clearOccupancyUnderStroke(culture, l.pixelSurface, ao.surface))
+                }
+            } else {
+                nextCultures = layerBefore.flatMap { applyStrokeCulture(d, session, $0, surface, &result) } ?? d.cultures
+            }
             out = d.with { o in
                 if let amOutputs = session.antimatterOutputs {
                     var nextLayers = baseLayers

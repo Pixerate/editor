@@ -14,7 +14,9 @@ import {
   renderBrushThumbnail,
 } from '../src/paint-editor';
 import { ToolRegistry } from '../src/tools/registry';
+import { readPixel } from '../src/raster/surface';
 import { isqrt } from '../src/paint';
+import { replayPainting, type PaintPixelLayer } from '../src/paint-editor';
 
 describe('Biopaint mycelial ink (#684)', () => {
   it('1. validates culture facet & presets (mycelial-ink, rot, foxfire), round-trips PaintBrush, and unsets via null', async () => {
@@ -614,5 +616,99 @@ describe('Biopaint mycelial ink (#684)', () => {
     expect(events).toContain('culture-grow');
     expect(c.undo()).not.toBe('Culture growth');
     expect(c.undo()).toBe('Culture growth');
+  });
+
+  it('17. an antimatter stroke over a growing culture keeps the growth, frees the threads it burns as food, and replays to the same pixels', async () => {
+    const c = new PaintEditorController({ width: 96, height: 96 });
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'mycelial-ink', brush: { culture: { digest: 0 } }, seed: 5, points: [{ x: 30, y: 48 }, { x: 66, y: 48 }] });
+    let nowMs = 1000;
+    let frameCb: (() => void) | null = null;
+    const player = c.playCultures({ now: () => nowMs, frame: (cb) => { frameCb = cb; return () => { if (frameCb === cb) frameCb = null; }; } });
+    for (let i = 0; i < 6; i++) {
+      nowMs += 100;
+      frameCb?.();
+    }
+    // Live: the antimatter stroke starts while the culture preview is showing.
+    const live = c.beginStroke({ brushId: 'antimatter', brush: { antimatter: { duration: 0 } }, seed: 9 });
+    live.push([{ x: 48, y: 48, pressure: 1 }]);
+    live.end();
+    // From data, after more growth.
+    for (let i = 0; i < 4; i++) {
+      nowMs += 100;
+      frameCb?.();
+    }
+    player.stop();
+    const threads = () => {
+      let n = 0;
+      for (const t of c.document.cultures![layerId]!.occupancy.tiles.values()) for (const v of t.data) if (v >= 2) n++;
+      return n;
+    };
+    const threadsBefore = threads();
+    const res = c.paintStroke({ brushId: 'antimatter', brush: { antimatter: { duration: 0 } }, seed: 11, points: [{ x: 36, y: 48, pressure: 1 }] });
+    // The threads the blast inverted or scorched are foreign paint now (food), as after any other stroke.
+    expect(threads()).toBeLessThan(threadsBefore);
+    expect(res.antimatter!.blasts).toBeGreaterThan(0);
+    expect(res.antimatter!.layers).toEqual([layerId]);
+    const doc = c.document;
+    const grows = (doc.paintEvents ?? []).filter((e) => e.kind === 'culture-grow');
+    expect(grows.length).toBeGreaterThanOrEqual(2);
+    // Each growth run lands before the antimatter stroke that followed it.
+    expect(grows[0]!.at).toBe(1);
+    expect(doc.strokes.map((s) => s.brush.engine)).toEqual(['dab', 'antimatter', 'antimatter']);
+    // The culture keeps living on the burnt layer.
+    expect(c.getCultures().layers.some((x) => x.layerId === layerId)).toBe(true);
+    c.growCultures({ steps: 5 });
+    const target = c.createReplayTarget(1);
+    await replayPainting(c.document, target, { scale: 1 });
+    const a = (c.getLayer(layerId) as PaintPixelLayer).surface;
+    const b = (target.getLayer(layerId) as PaintPixelLayer).surface;
+    let diff = 0;
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+      const u = readPixel(a, x, y);
+      const v = readPixel(b, x, y);
+      for (let k = 0; k < 4; k++) diff = Math.max(diff, Math.abs(u[k]! - v[k]!));
+    }
+    expect(diff).toBeLessThanOrEqual(1);
+    // Undo walks back the stroke, then the growth run before it, as separate steps.
+    expect(c.undo()).toBe('Grow culture');
+    expect(c.undo()).toBe('Antimatter stroke');
+    expect(c.undo()).toBe('Culture growth');
+    expect(c.undo()).toBe('Antimatter stroke');
+    expect(c.undo()).toBe('Culture growth');
+  });
+
+  it('18. a stroke frees only the threads it paints over, so a stroke elsewhere leaves the culture and its replay alone', async () => {
+    const c = new PaintEditorController({ width: 96, height: 96 });
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'mycelial-ink', seed: 5, points: [{ x: 30, y: 48 }, { x: 66, y: 48 }] });
+    c.growCultures({ steps: 6 });
+    const threads = () => {
+      let n = 0;
+      for (const t of c.document.cultures![layerId]!.occupancy.tiles.values()) for (const v of t.data) if (v >= 2) n++;
+      return n;
+    };
+    const before = threads();
+    expect(before).toBeGreaterThan(0);
+    c.paintStroke({ brushId: 'pencil-hb', seed: 11, points: [{ x: 85, y: 5 }, { x: 90, y: 8 }] });
+    expect(threads()).toBe(before);
+    c.growCultures({ steps: 6 });
+    // Nothing was freed, so the culture found no foreign paint to digest: the replay matches exactly.
+    const grows = (c.document.paintEvents ?? []).filter((e) => e.kind === 'culture-grow');
+    expect((grows[1]!.data as { fades: unknown[] }).fades).toEqual([]);
+    const target = c.createReplayTarget(1);
+    await replayPainting(c.document, target, { scale: 1 });
+    const a = (c.getLayer(layerId) as PaintPixelLayer).surface;
+    const b = (target.getLayer(layerId) as PaintPixelLayer).surface;
+    let diff = 0;
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+      const u = readPixel(a, x, y);
+      const v = readPixel(b, x, y);
+      for (let k = 0; k < 4; k++) diff = Math.max(diff, Math.abs(u[k]! - v[k]!));
+    }
+    expect(diff).toBe(0);
+    const n = threads();
+    c.paintStroke({ brushId: 'pencil-hb', seed: 12, points: [{ x: 30, y: 40 }, { x: 66, y: 56 }] });
+    expect(threads()).toBeLessThan(n);
   });
 });

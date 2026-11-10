@@ -583,11 +583,16 @@ public func clearOccupancyUnderStroke(
         for y in 0..<TILE {
             let row = (y * TILE) << 2
             for x in 0..<TILE {
-                let aAfter = Int(d[row + (x << 2) + 3])
+                let i = row + (x << 2)
+                let aAfter = Int(d[i + 3])
                 if aAfter == 0 { continue }
                 let px = ox + x
                 let py = oy + y
-                if occ.readByte(px, py) >= 2 && aAfter >= before.readAlpha(px, py) {
+                if occ.readByte(px, py) < 2 { continue }
+                // The stroke only takes over pixels it changed.
+                let (br, bg, bb, ba) = before.readRgba(px, py)
+                if br == Int(d[i]) && bg == Int(d[i + 1]) && bb == Int(d[i + 2]) && ba == aAfter { continue }
+                if aAfter >= ba {
                     occ.writeByte(px, py, 0)
                 }
             }
