@@ -2074,6 +2074,865 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 178,
+                "width": 159,
+                "x": -64,
+                "y": -74
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:b36-1kg0gw2sto6"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -64,
+                "y": -74
+              }
+            ],
+            "light": {
+              "@1": {
+                "light": "pixerate-asset:ze-1idkq0buuih",
+                "rect": {
+                  "height": 512,
+                  "width": 256,
+                  "x": 0,
+                  "y": -256
+                }
+              }
+            },
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.85
+                  },
+                  "dynamics": {
+                    "minSize": 0.55,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.25,
+                    "tiltOpacity": 0.5,
+                    "tiltRoundness": 0.7,
+                    "tiltSize": 0.9
+                  },
+                  "id": "pencil-hb",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "HB pencil",
+                  "tip": {
+                    "flow": 0.55,
+                    "hardness": 0.7,
+                    "opacity": 0.85,
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.08
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#203060",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 2,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 5,
+                    "y": 28
+                  }
+                ],
+                "seed": 100
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.7
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.2,
+                    "tiltOpacity": 0.35,
+                    "tiltRoundness": 0.75,
+                    "tiltSize": 1
+                  },
+                  "id": "pencil-6b",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "6B pencil",
+                  "tip": {
+                    "flow": 0.75,
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 7,
+                    "spacing": 0.07
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#203060",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 5,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 8,
+                    "y": 28
+                  }
+                ],
+                "seed": 101
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 1
+                  },
+                  "dynamics": {
+                    "angleJitter": 0.02,
+                    "pressureOpacity": true,
+                    "pressureSize": false,
+                    "pressureSmoothing": 0.25,
+                    "rotation": "stroke",
+                    "sizeJitter": 0.06,
+                    "smoothing": 0.15
+                  },
+                  "id": "soft-pastel",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "Soft pastel",
+                  "tip": {
+                    "angle": 90,
+                    "flow": 0.7,
+                    "hardness": 0.55,
+                    "roundness": 0.55,
+                    "shape": "flat",
+                    "size": 32,
+                    "spacing": 0.05
+                  },
+                  "variety": "pastel"
+                },
+                "color": "#203060",
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 8,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 11,
+                    "y": 28
+                  }
+                ],
+                "seed": 102
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.95
+                  },
+                  "dynamics": {
+                    "angleJitter": 0.03,
+                    "pressureOpacity": true,
+                    "pressureSize": false,
+                    "pressureSmoothing": 0.2,
+                    "rotation": "stroke",
+                    "sizeJitter": 0.1,
+                    "smoothing": 0.15,
+                    "tiltSize": 0.6
+                  },
+                  "id": "charcoal-stick",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "Charcoal stick",
+                  "tip": {
+                    "angle": 90,
+                    "flow": 0.5,
+                    "hardness": 0.4,
+                    "opacity": 0.95,
+                    "roundness": 0.35,
+                    "shape": "flat",
+                    "size": 26,
+                    "spacing": 0.05
+                  },
+                  "variety": "charcoal"
+                },
+                "color": "#203060",
+                "id": "s4",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 11,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 14,
+                    "y": 28
+                  }
+                ],
+                "seed": 103
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureFlow": 1,
+                    "pressureSize": false,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.3,
+                    "tiltRoundness": 0.6,
+                    "tiltSize": 0.5
+                  },
+                  "id": "airbrush",
+                  "kind": "mark",
+                  "medium": "spray",
+                  "name": "Airbrush",
+                  "tip": {
+                    "flow": 0.06,
+                    "hardness": 0,
+                    "shape": "round",
+                    "size": 90,
+                    "spacing": 0.04
+                  },
+                  "variety": "airbrush"
+                },
+                "color": "#203060",
+                "id": "s5",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 14,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 17,
+                    "y": 28
+                  }
+                ],
+                "seed": 104
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.1
+                  },
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.3
+                  },
+                  "id": "marker",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Chisel marker",
+                  "tip": {
+                    "angle": 45,
+                    "blend": "multiply",
+                    "hardness": 0.85,
+                    "opacity": 0.6,
+                    "roundness": 0.35,
+                    "shape": "chisel",
+                    "size": 24,
+                    "spacing": 0.04
+                  },
+                  "variety": "marker"
+                },
+                "color": "#203060",
+                "id": "s6",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 17,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 20,
+                    "y": 28
+                  }
+                ],
+                "seed": 105
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#203060",
+                "id": "s7",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 20,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 23,
+                    "y": 28
+                  }
+                ],
+                "seed": 106
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.05,
+                    "pressureSmoothing": 0.45,
+                    "rotation": "stroke",
+                    "smoothing": 0.5,
+                    "velocitySize": -0.3
+                  },
+                  "id": "brush-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Brush pen",
+                  "tip": {
+                    "hardness": 0.9,
+                    "roundness": 0.8,
+                    "shape": "flat",
+                    "size": 14,
+                    "spacing": 0.04
+                  }
+                },
+                "color": "#203060",
+                "id": "s8",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 23,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 26,
+                    "y": 28
+                  }
+                ],
+                "seed": 107
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "dirty": true,
+                      "mix": 0.6,
+                      "pickup": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "smoothing": 0.2
+                  },
+                  "id": "dirty-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Dirty round",
+                  "tip": {
+                    "flow": 0.7,
+                    "hardness": 0.65,
+                    "shape": "round",
+                    "size": 22,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#203060",
+                "id": "s9",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.12549019607843137,
+                    0.18823529411764706,
+                    0.3764705882352941
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 26,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 29,
+                    "y": 28
+                  }
+                ],
+                "seed": 108
+              },
+              {
+                "brush": {
+                  "colour": {
+                    "default": {
+                      "map": {
+                        "by": "distance",
+                        "length": 300,
+                        "repeat": "mirror",
+                        "unit": "px"
+                      },
+                      "space": "pigment",
+                      "stops": [
+                        {
+                          "color": "paint",
+                          "offset": 0
+                        },
+                        {
+                          "color": "secondary",
+                          "offset": 1
+                        }
+                      ],
+                      "type": "gradient"
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "smoothing": 0.2
+                  },
+                  "id": "gradient-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Gradient round",
+                  "tip": {
+                    "flow": 0.9,
+                    "hardness": 0.8,
+                    "shape": "round",
+                    "size": 24,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#203060",
+                "id": "s10",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.12549019607843137,
+                    0.18823529411764706,
+                    0.3764705882352941
+                  ]
+                },
+                "paint": {
+                  "map": {
+                    "by": "distance",
+                    "length": 300,
+                    "repeat": "mirror",
+                    "unit": "px"
+                  },
+                  "space": "pigment",
+                  "stops": [
+                    {
+                      "color": "#203060",
+                      "offset": 0
+                    },
+                    {
+                      "color": "#ffffff",
+                      "offset": 1
+                    }
+                  ],
+                  "type": "gradient"
+                },
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 29,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 32,
+                    "y": 28
+                  }
+                ],
+                "seed": 109
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.15
+                  },
+                  "dynamics": {
+                    "minSize": 0.7,
+                    "opacityJitter": 0.08,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.35
+                  },
+                  "id": "ballpoint",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ballpoint",
+                  "tip": {
+                    "hardness": 0.95,
+                    "opacity": 0.9,
+                    "shape": "round",
+                    "size": 3,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#203060",
+                "id": "s11",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 32,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 35,
+                    "y": 28
+                  }
+                ],
+                "seed": 110
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.9
+                  },
+                  "dynamics": {
+                    "minSize": 0.6,
+                    "opacityJitter": 0.1,
+                    "sizeJitter": 0.1,
+                    "smoothing": 0.2,
+                    "tiltSize": 0.6
+                  },
+                  "id": "crayon",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "Crayon",
+                  "tip": {
+                    "flow": 0.85,
+                    "hardness": 0.7,
+                    "opacity": 0.9,
+                    "shape": "round",
+                    "size": 14,
+                    "spacing": 0.06
+                  },
+                  "variety": "pastel"
+                },
+                "color": "#203060",
+                "id": "s12",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 35,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 38,
+                    "y": 28
+                  }
+                ],
+                "seed": 111
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 1
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "scatter": 0.05,
+                    "sizeJitter": 0.12,
+                    "smoothing": 0.2,
+                    "tiltSize": 0.8
+                  },
+                  "id": "chalk",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "Chalk",
+                  "tip": {
+                    "flow": 0.8,
+                    "hardness": 0.6,
+                    "opacity": 0.95,
+                    "shape": "round",
+                    "size": 18,
+                    "spacing": 0.05
+                  },
+                  "variety": "pastel"
+                },
+                "color": "#203060",
+                "id": "s13",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 38,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 41,
+                    "y": 28
+                  }
+                ],
+                "seed": 112
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "pressureSize": false,
+                    "smoothing": 0.2
+                  },
+                  "id": "spray-can",
+                  "kind": "mark",
+                  "marks": {
+                    "density": 0.7,
+                    "kind": "scatter",
+                    "size": 0.04
+                  },
+                  "medium": "spray",
+                  "name": "Spray can",
+                  "tip": {
+                    "hardness": 0.9,
+                    "opacity": 0.9,
+                    "shape": "round",
+                    "size": 60,
+                    "spacing": 0.08
+                  },
+                  "variety": "airbrush"
+                },
+                "color": "#203060",
+                "id": "s14",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 41,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 44,
+                    "y": 28
+                  }
+                ],
+                "seed": 113
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.05
+                  },
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.3
+                  },
+                  "id": "highlighter",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 0.5
+                  },
+                  "name": "Highlighter",
+                  "tip": {
+                    "angle": 45,
+                    "blend": "multiply",
+                    "hardness": 0.85,
+                    "opacity": 0.6,
+                    "roundness": 0.35,
+                    "shape": "chisel",
+                    "size": 30,
+                    "spacing": 0.04
+                  }
+                },
+                "color": "#203060",
+                "id": "s15",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 44,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 47,
+                    "y": 28
+                  }
+                ],
+                "seed": 114
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.17.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "eda32f97ae1efa45bb5d4265cea5741c0075cb5eda6f07ef67b6987c2eace1be",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

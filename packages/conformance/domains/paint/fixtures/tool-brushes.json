@@ -218,6 +218,356 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 71,
+                "width": 76,
+                "x": -14,
+                "y": -18
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:6ba-2860y8msg5d"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -14,
+                "y": -18
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": {
+                  "blend": "normal",
+                  "color": "#d04020",
+                  "grain": 0,
+                  "opacity": 1,
+                  "pressure": 0.5
+                },
+                "kind": "fill",
+                "layerId": "@1"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.1
+                  },
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.3
+                  },
+                  "id": "marker",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Chisel marker",
+                  "tip": {
+                    "angle": 45,
+                    "blend": "multiply",
+                    "hardness": 0.85,
+                    "opacity": 0.6,
+                    "roundness": 0.35,
+                    "shape": "chisel",
+                    "size": 24,
+                    "spacing": 0.04
+                  },
+                  "variety": "marker"
+                },
+                "color": "#2040d0",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 0,
+                    "y": 16
+                  },
+                  {
+                    "x": 48,
+                    "y": 16
+                  }
+                ],
+                "seed": 120
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "pressureSize": false
+                  },
+                  "id": "eraser-soft",
+                  "kind": "tool",
+                  "name": "Soft eraser",
+                  "tip": {
+                    "flow": 0.6,
+                    "hardness": 0.2,
+                    "shape": "round",
+                    "size": 40,
+                    "spacing": 0.08
+                  },
+                  "tool": "eraser"
+                },
+                "color": "#1f2937",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 6,
+                    "y": 2
+                  },
+                  {
+                    "x": 6,
+                    "y": 30
+                  }
+                ],
+                "seed": 121
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.3
+                  },
+                  "dynamics": {
+                    "minSize": 0.5
+                  },
+                  "id": "eraser-hard",
+                  "kind": "tool",
+                  "name": "Hard eraser",
+                  "tip": {
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 16,
+                    "spacing": 0.06
+                  },
+                  "tool": "eraser"
+                },
+                "color": "#1f2937",
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 14,
+                    "y": 2
+                  },
+                  {
+                    "x": 14,
+                    "y": 30
+                  }
+                ],
+                "seed": 122
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "pressureSize": false,
+                    "smoothing": 0.2
+                  },
+                  "id": "blender",
+                  "kind": "tool",
+                  "name": "Blender",
+                  "tip": {
+                    "hardness": 0.4,
+                    "shape": "round",
+                    "size": 34
+                  },
+                  "tool": "blender"
+                },
+                "color": "#1f2937",
+                "id": "s4",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 24,
+                    "y": 4
+                  },
+                  {
+                    "x": 26,
+                    "y": 28
+                  }
+                ],
+                "seed": 123
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "strength": 0.75
+                  },
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "pressureSize": false,
+                    "smoothing": 0.2
+                  },
+                  "id": "smudge",
+                  "kind": "tool",
+                  "name": "Smudge",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 26,
+                    "spacing": 0.06
+                  },
+                  "tool": "smudge"
+                },
+                "color": "#1f2937",
+                "id": "s5",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 36,
+                    "y": 4
+                  },
+                  {
+                    "x": 40,
+                    "y": 28
+                  }
+                ],
+                "seed": 124
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/tool-brushes.7.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "9d3e30e2001dbd895d14b7965203b4b55ea40adb137817a28b2e4519635af5da",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

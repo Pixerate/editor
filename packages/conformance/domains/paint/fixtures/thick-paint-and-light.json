@@ -344,6 +344,465 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 32,
+                "width": 50,
+                "x": -1,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Glow",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 52,
+                "width": 60,
+                "x": -6,
+                "y": -10
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@1": "pixerate-asset:1uq-l2ubaao1hp",
+              "@2": "pixerate-asset:2ti-24qdfcwodlk"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layerChannels": {
+              "@2": {
+                "film": "pixerate-asset:23a-1pdi3wgy2gb",
+                "height": "pixerate-asset:17y-ts50zkcafj",
+                "material": "pixerate-asset:1r6-1079fwzw3pu",
+                "rect": {
+                  "height": 256,
+                  "width": 512,
+                  "x": -256,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -6,
+                "y": -10
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Glow",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -1,
+                "y": 0
+              }
+            ],
+            "lightSpill": {
+              "@2": {
+                "radius": 8,
+                "strength": 0.7
+              }
+            },
+            "lighting": {
+              "azimuth": 135,
+              "elevation": 40,
+              "relief": 0.8
+            },
+            "paintEvents": [
+              {
+                "at": 1,
+                "kind": "flatten",
+                "layerId": "@1"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.4
+                    },
+                    "surface": "thick",
+                    "thick": {
+                      "gloss": 0.45,
+                      "load": 0.92
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.55,
+                    "rotation": "stroke",
+                    "smoothing": 0.25
+                  },
+                  "id": "impasto-brush",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Impasto brush",
+                  "tip": {
+                    "angle": 90,
+                    "hardness": 0.8,
+                    "roundness": 0.55,
+                    "shape": "flat",
+                    "size": 36,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#c08030",
+                "id": "s1",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.7529411764705882,
+                    0.5019607843137255,
+                    0.18823529411764706
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.3,
+                    "x": 4,
+                    "y": 6
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 20,
+                    "y": 12
+                  },
+                  {
+                    "pressure": 0.5,
+                    "x": 42,
+                    "y": 26
+                  }
+                ],
+                "seed": 81
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.4
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "pigment": 0.75,
+                      "rewet": 0.1,
+                      "water": 0.65
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "glow-wash",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 0.7
+                  },
+                  "medium": "paint",
+                  "name": "Glow wash",
+                  "tip": {
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 40,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#ffcc44",
+                "id": "s2",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    1,
+                    0.8,
+                    0.26666666666666666
+                  ]
+                },
+                "points": [
+                  {
+                    "x": 6,
+                    "y": 26
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 16,
+                    "y": 8
+                  },
+                  {
+                    "x": 30,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.4,
+                    "x": 44,
+                    "y": 6
+                  }
+                ],
+                "seed": 82,
+                "steps": [
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "surface": "thick",
+                    "thick": {
+                      "gloss": 0.85,
+                      "metallic": 0.5,
+                      "thickness": 0.7
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.3,
+                    "smoothing": 0.25
+                  },
+                  "id": "scarab-lacquer",
+                  "iridescence": {
+                    "ior": 1.65,
+                    "pressureToThickness": 0.35,
+                    "thickness": 480
+                  },
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Scarab lacquer",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 22,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#1a3c28",
+                "id": "s3",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.10196078431372549,
+                    0.23529411764705882,
+                    0.1568627450980392
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.4,
+                    "x": 8,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 24,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.5,
+                    "x": 40,
+                    "y": 16
+                  }
+                ],
+                "seed": 83
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "@2": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.45,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "wetEvents": [
+              {
+                "at": 2,
+                "clock": 0,
+                "kind": "dry",
+                "layerId": "@2"
+              }
+            ],
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/thick-paint-and-light.15.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "2afc5d918c6031c6465d394808184524fadd599fa2ded3fc838966c77aeb716b",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

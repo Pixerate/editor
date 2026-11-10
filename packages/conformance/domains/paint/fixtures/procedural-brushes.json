@@ -350,6 +350,523 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 123,
+                "width": 165,
+                "x": -56,
+                "y": -13
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:5vi-1qqkn22od7h"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -56,
+                "y": -13
+              }
+            ],
+            "light": {
+              "@1": {
+                "light": "pixerate-asset:10e-1z6buftvetz",
+                "rect": {
+                  "height": 256,
+                  "width": 512,
+                  "x": -256,
+                  "y": 0
+                }
+              }
+            },
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "smoothing": 0.2
+                  },
+                  "id": "hair-strands",
+                  "kind": "mark",
+                  "marks": {
+                    "count": 22,
+                    "damping": 0.3,
+                    "kind": "particles",
+                    "physics": "string",
+                    "size": 0.025,
+                    "spread": 1,
+                    "stiffness": 0.08
+                  },
+                  "name": "Hair strands",
+                  "tip": {
+                    "flow": 0.6,
+                    "hardness": 0.8,
+                    "opacity": 0.9,
+                    "shape": "round",
+                    "size": 40
+                  }
+                },
+                "color": "#335577",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 6
+                  }
+                ],
+                "seed": 130
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "smoothing": 0.1
+                  },
+                  "id": "spring-ink",
+                  "kind": "mark",
+                  "marks": {
+                    "count": 5,
+                    "damping": 0.1,
+                    "kind": "particles",
+                    "spread": 0.6,
+                    "stiffness": 0.2
+                  },
+                  "name": "Spring ink",
+                  "tip": {
+                    "flow": 0.8,
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 30
+                  }
+                },
+                "color": "#335577",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 7
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 9
+                  }
+                ],
+                "seed": 131
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "smoothing": 0.25
+                  },
+                  "id": "bead-trail",
+                  "kind": "mark",
+                  "marks": {
+                    "count": 3,
+                    "damping": 0.3,
+                    "interval": 0.4,
+                    "kind": "particles",
+                    "render": "sequence",
+                    "size": 0.18,
+                    "stiffness": 0.3
+                  },
+                  "name": "Bead trail",
+                  "tip": {
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 34
+                  }
+                },
+                "color": "#335577",
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 10
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 12
+                  }
+                ],
+                "seed": 132
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "smoothing": 0.1
+                  },
+                  "id": "sparkle-dust",
+                  "kind": "mark",
+                  "marks": {
+                    "count": 6,
+                    "kind": "particles",
+                    "life": 0.4,
+                    "physics": "flow",
+                    "render": "dot",
+                    "size": 0.05,
+                    "speed": 0.7,
+                    "spread": 0.9
+                  },
+                  "name": "Sparkle dust",
+                  "tip": {
+                    "flow": 0.9,
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 60
+                  }
+                },
+                "color": "#335577",
+                "id": "s4",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 13
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 15
+                  }
+                ],
+                "seed": 133
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4,
+                    "rotation": "stroke",
+                    "smoothing": 0.25,
+                    "tiltRoundness": 0.6,
+                    "tiltSize": 0.6
+                  },
+                  "id": "bristle-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Bristle round",
+                  "tip": {
+                    "bristle": {
+                      "count": 28,
+                      "jitter": 0.5,
+                      "load": 0.7,
+                      "splay": 0.6,
+                      "stiffness": 0.45,
+                      "thickness": 0.035
+                    },
+                    "flow": 0.9,
+                    "hardness": 0.85,
+                    "shape": "bristle",
+                    "size": 30
+                  }
+                },
+                "color": "#335577",
+                "id": "s5",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 18
+                  }
+                ],
+                "seed": 134
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "rotation": "stroke",
+                    "smoothing": 0.25,
+                    "tiltSize": 0.5
+                  },
+                  "id": "bristle-flat",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Bristle flat",
+                  "tip": {
+                    "angle": 90,
+                    "bristle": {
+                      "count": 40,
+                      "jitter": 0.45,
+                      "load": 0.65,
+                      "splay": 0.4,
+                      "stiffness": 0.6,
+                      "thickness": 0.025
+                    },
+                    "flow": 0.9,
+                    "hardness": 0.85,
+                    "roundness": 0.3,
+                    "shape": "bristle",
+                    "size": 46
+                  }
+                },
+                "color": "#335577",
+                "id": "s6",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 19
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 21
+                  }
+                ],
+                "seed": 135
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.6
+                  },
+                  "dynamics": {
+                    "rotation": "stroke",
+                    "smoothing": 0.2
+                  },
+                  "id": "dry-brush",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Dry brush",
+                  "tip": {
+                    "angle": 90,
+                    "bristle": {
+                      "count": 48,
+                      "jitter": 0.8,
+                      "load": 0.15,
+                      "splay": 0.7,
+                      "stiffness": 0.35,
+                      "thickness": 0.05
+                    },
+                    "flow": 0.8,
+                    "hardness": 0.9,
+                    "roundness": 0.45,
+                    "shape": "bristle",
+                    "size": 44
+                  }
+                },
+                "color": "#335577",
+                "id": "s7",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 22
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 24
+                  }
+                ],
+                "seed": 136
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.35
+                  },
+                  "id": "light-ribbon",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 0.8
+                  },
+                  "marks": {
+                    "count": 5,
+                    "damping": 0.3,
+                    "kind": "particles",
+                    "physics": "string",
+                    "render": "ribbon",
+                    "ribbonFill": 0.45,
+                    "size": 0.015,
+                    "spread": 1,
+                    "stiffness": 0.05,
+                    "waveAmplitude": 0.25,
+                    "waveLength": 220,
+                    "wavePhaseJitter": 0.25
+                  },
+                  "name": "Light ribbon",
+                  "tip": {
+                    "hardness": 0.8,
+                    "opacity": 0.9,
+                    "shape": "round",
+                    "size": 80
+                  }
+                },
+                "color": "#335577",
+                "id": "s8",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 4,
+                    "y": 25
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 27
+                  }
+                ],
+                "seed": 137
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.9.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "11463c673f20087c1e4dfb0e7ac9bd92dd0d48598dd405c36dde0d9d7e82463b",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }
