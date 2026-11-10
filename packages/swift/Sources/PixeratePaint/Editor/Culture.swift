@@ -19,6 +19,8 @@ public let MAX_CULTURE_SEGMENTS = 200_000
 public let MAX_CATCH_UP_TICKS = 5000
 public let CULTURE_TICKS_PER_SECOND = 24
 public let CULTURE_FP = 256
+/// Alpha of a segment drawn where a tip fed (with `digest`): each follows the fade it digested, which replay relies on.
+let CULTURE_FEED_SEGMENT_ALPHA = 180
 public let CULTURE_ANGLE_STEPS = 1024
 public let CULTURE_ANGLE_MASK = 1023
 
@@ -1133,7 +1135,7 @@ public func stepLayerCulture(
                 }
             }
 
-            let segAlpha = onFood && tip.digestPermille > 0 ? 180 : 215
+            let segAlpha = onFood && tip.digestPermille > 0 ? CULTURE_FEED_SEGMENT_ALPHA : 215
             let seg = CultureRecordedSegment(
                 x0: tip.x,
                 y0: tip.y,
@@ -1246,6 +1248,10 @@ public func stepLayerCulture(
 
 // MARK: - High-resolution replay, summaries & JSON serialization
 
+/// Replays a recorded growth run at `scale` without re-simulating, in the order live growth drew it:
+/// each digest fade lands just before the on-food segment (`alpha` 180) that ends on its pixel. With
+/// the layer's culture `occupancy`, fades spare the colony's threads and segments mark theirs, as live
+/// growth does, so replay at scale 1 matches it exactly; returns the updated occupancy.
 public func applyCultureGrowReplay(
     surface: TiledSurface,
     lightSurface: TiledSurface? = nil,
@@ -1254,16 +1260,18 @@ public func applyCultureGrowReplay(
     data: CultureGrowEventData,
     scale: Double,
     canvasWidth: Int,
-    canvasHeight: Int
-) -> (surface: TiledSurface, lightSurface: TiledSurface?) {
+    canvasHeight: Int,
+    occupancy: TiledSurface? = nil
+) -> (surface: TiledSurface, lightSurface: TiledSurface?, occupancy: TiledSurface?) {
     let layer = FastSurface(surface)
     let stencil = stencilMask.map(FastSurface.init)
+    let occ = occupancy.map(FastSurface.init)
     var light = lightSurface.map(FastSurface.init)
 
-    for f in data.fades {
+    func fade(_ f: CultureRecordedFade) {
         rasterizeFadeDisk(
             layer,
-            nil,
+            occ,
             stencil,
             Int(JS.round(Double(f.x) * scale)),
             Int(JS.round(Double(f.y) * scale)),
@@ -1276,7 +1284,15 @@ public func applyCultureGrowReplay(
         )
     }
 
+    var fi = 0
     for s in data.segments {
+        if fi < data.fades.count {
+            let f = data.fades[fi]
+            if s.alpha == CULTURE_FEED_SEGMENT_ALPHA && f.x == s.x1 >> 8 && f.y == s.y1 >> 8 {
+                fade(f)
+                fi += 1
+            }
+        }
         if s.glowPermille > 0 && light == nil { light = FastSurface(emptySurface(1, 0)) }
         let scaled = CultureRecordedSegment(
             x0: Int(JS.round(Double(s.x0) * scale)),
@@ -1290,10 +1306,15 @@ public func applyCultureGrowReplay(
             alpha: s.alpha,
             glowPermille: s.glowPermille
         )
-        rasterizeSegment(layer, nil, light, stencil, scaled, 0, 0, canvasWidth, canvasHeight, lockTransparency)
+        rasterizeSegment(layer, occ, light, stencil, scaled, 0, 0, canvasWidth, canvasHeight, lockTransparency)
+    }
+    // Fades no segment claimed (data recorded some other way) still land.
+    while fi < data.fades.count {
+        fade(data.fades[fi])
+        fi += 1
     }
 
-    return (layer.commit(), light?.commit() ?? lightSurface)
+    return (layer.commit(), light?.commit() ?? lightSurface, occ?.commit())
 }
 
 public func layerCultureSummary(_ layerId: String, _ culture: LayerCultureState?) -> LayerCultureSummary {
@@ -1757,6 +1778,8 @@ extension PaintEditorController {
         let stencilSurface: TiledSurface? = maskSel.map { sel in
             surfaceFromPixels(width: sel.width, height: sel.height, data: sel.data, channels: 1)
         }
+        let offset = l.pixelOffset
+        let culture = offset.x == 0 && offset.y == 0 ? doc.cultures?.get(layerId) : nil
         let replayed = applyCultureGrowReplay(
             surface: l.pixelSurface,
             lightSurface: doc.light?.get(layerId),
@@ -1765,11 +1788,19 @@ extension PaintEditorController {
             data: eventData,
             scale: s,
             canvasWidth: doc.canvas.width,
-            canvasHeight: doc.canvas.height
+            canvasHeight: doc.canvas.height,
+            // The replay's own colony (seeded by the replayed strokes): fades spare its threads, as they did live.
+            occupancy: culture?.occupancy
         )
         commit("Grow culture", doc.with { d in
             d.layers = mapLayer(d.layers, layerId) { $0.withSurface(replayed.surface, offset: LayerOffset(x: 0, y: 0)) }
             if let ls = replayed.lightSurface { d.settingLight(layerId, ls) }
+            if var c = culture, let occ = replayed.occupancy {
+                c.occupancy = occ
+                var cs = d.cultures ?? OrderedMap()
+                cs.set(layerId, c)
+                d.cultures = cs
+            }
         })
     }
 

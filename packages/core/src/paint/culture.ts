@@ -73,6 +73,8 @@ export type CultureStatus = 'growing' | 'extinct' | 'capped';
 
 /** Fixed-point scale (1 pixel = 256 fixed-point units). */
 export const CULTURE_FP = 256;
+/** Alpha of a segment drawn where a tip fed (with `digest`): each follows the fade it digested, which replay relies on. */
+const CULTURE_FEED_SEGMENT_ALPHA = 180;
 /** Full circle in angle units (0..1023). */
 export const CULTURE_ANGLE_STEPS = 1024;
 export const CULTURE_ANGLE_MASK = 1023;
@@ -1090,7 +1092,7 @@ export function stepLayerCulture(input: StepLayerCultureInput): StepLayerCulture
         }
       }
 
-      const segAlpha = onFood && tip.digestPermille > 0 ? 180 : 215;
+      const segAlpha = onFood && tip.digestPermille > 0 ? CULTURE_FEED_SEGMENT_ALPHA : 215;
       const seg: CultureRecordedSegment = {
         x0: tip.x,
         y0: tip.y,
@@ -1211,6 +1213,13 @@ export function stepLayerCulture(input: StepLayerCultureInput): StepLayerCulture
 // High-resolution replay & summaries
 // ---------------------------------------------------------------------------
 
+/**
+ * Replays a recorded growth run onto `surface` at `scale` without re-simulating, in the order live
+ * growth drew it: each digest fade lands just before the on-food segment (`alpha` 180) that ends on
+ * its pixel. With the layer's culture `occupancy` (the replay editor's, rebuilt by replaying the
+ * seeding strokes), fades skip the culture's own threads and segments mark theirs, as live growth
+ * does, so replay at scale 1 matches it exactly; the updated occupancy is returned.
+ */
 export function applyCultureGrowReplay(
   surface: TiledSurface,
   lightSurface: TiledSurface | undefined,
@@ -1219,16 +1228,18 @@ export function applyCultureGrowReplay(
   data: CultureGrowEventData,
   scale: number,
   canvasWidth: number,
-  canvasHeight: number
-): { surface: TiledSurface; lightSurface?: TiledSurface } {
+  canvasHeight: number,
+  occupancy?: TiledSurface | null
+): { surface: TiledSurface; lightSurface?: TiledSurface; occupancy?: TiledSurface } {
   const layer = new FastSurface(surface);
   const stencil = stencilMask ? new FastSurface(stencilMask) : null;
+  const occ = occupancy ? new FastSurface(occupancy) : null;
   let light = lightSurface ? new FastSurface(lightSurface) : null;
 
-  for (const f of data.fades) {
+  const fade = (f: CultureRecordedFade): void => {
     rasterizeFadeDisk(
       layer,
-      null,
+      occ,
       stencil,
       Math.round(f.x * scale),
       Math.round(f.y * scale),
@@ -1239,13 +1250,19 @@ export function applyCultureGrowReplay(
       canvasWidth,
       canvasHeight
     );
-  }
+  };
 
+  let fi = 0;
   for (const s of data.segments) {
+    const f = data.fades[fi];
+    if (f && s.alpha === CULTURE_FEED_SEGMENT_ALPHA && f.x === s.x1 >> 8 && f.y === s.y1 >> 8) {
+      fade(f);
+      fi++;
+    }
     if (s.glowPermille > 0 && !light) light = new FastSurface(emptySurface(1, 0));
     rasterizeSegment(
       layer,
-      null,
+      occ,
       light,
       stencil,
       {
@@ -1263,10 +1280,13 @@ export function applyCultureGrowReplay(
       lockTransparency
     );
   }
+  // Fades no segment claimed (data recorded some other way) still land.
+  for (; fi < data.fades.length; fi++) fade(data.fades[fi]!);
 
   return {
     surface: layer.commit(),
     lightSurface: light ? light.commit() : lightSurface,
+    ...(occ ? { occupancy: occ.commit() } : {}),
   };
 }
 

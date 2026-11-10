@@ -1320,17 +1320,28 @@ export class PaintEditorController {
   }
 
   /** Commits an uninterrupted run of live culture growth (`playCultures`) as a single undo step before another operation runs. */
-  private flushCulturePreview(): void {
+  /** The shown document with live growth's pending `culture-grow` events, for replays (commits nothing). */
+  private withCulturePreviewEvents(): PaintDocumentState {
     const pv = this.culturePreview;
-    if (!pv) return;
-    this.culturePreview = null;
-    if (pv.shown !== this.doc || pv.shown === pv.base) return;
+    if (!pv || pv.shown !== this.doc || pv.shown === pv.base) return this.doc;
     let doc = pv.shown;
     for (const [layerId, data] of pv.events) {
       if (data.steps > 0 || data.segments.length > 0 || data.fades.length > 0) {
         doc = this.withPaintEvent(doc, { kind: 'culture-grow', layerId, data: data as unknown as Record<string, unknown> });
       }
     }
+    return doc;
+  }
+
+  private flushCulturePreview(): void {
+    const pv = this.culturePreview;
+    if (!pv) return;
+    if (pv.shown !== this.doc || pv.shown === pv.base) {
+      this.culturePreview = null;
+      return;
+    }
+    const doc = this.withCulturePreviewEvents();
+    this.culturePreview = null;
     this.doc = doc;
     const entry: HistoryEntry = {
       label: 'Culture growth',
@@ -4902,6 +4913,8 @@ export class PaintEditorController {
     } catch (e) {
       throw new PaintEditorError((e as Error).message);
     }
+    // Live growth commits first: the new document would otherwise drop its pending replay events.
+    this.flushCulturePreview();
     this.age = normalizeAge(update, this.age);
     this.doc = this.withAge(this.doc);
     this.emit('all');
@@ -4999,7 +5012,8 @@ export class PaintEditorController {
               : { ...l, visible: !hiddenIds.has(l.id) }
           );
         target.doc = { ...target.doc, layers: unlockAll(target.doc.layers) };
-        await replayPainting(this.doc, target, { strokes: options.strokes });
+        // Live growth not yet committed is part of the painting shown: replay it too.
+        await replayPainting(this.withCulturePreviewEvents(), target, { strokes: options.strokes });
         await target.wetIdle();
         const dried = restoreVis(target.driedLayers(target.doc.layers));
         const full = renderXrayPixels(
@@ -5515,6 +5529,7 @@ export class PaintEditorController {
     const ox = l.offset.x;
     const oy = l.offset.y;
     const layerStencil = stencilSurface && (ox || oy) ? translateSurface(stencilSurface, -ox, -oy) : stencilSurface;
+    const culture = this.doc.cultures?.[layerId];
     const replayed = applyCultureGrowReplay(
       l.surface,
       this.doc.light?.[layerId],
@@ -5523,13 +5538,16 @@ export class PaintEditorController {
       { steps: data.steps ?? 0, fades, segments },
       scale,
       width,
-      height
+      height,
+      // The replay's own colony (seeded by the replayed strokes): fades spare its threads, as they did live.
+      culture && !ox && !oy ? culture.occupancy : null
     );
     const nextLight = replayed.lightSurface ? withLayerLight(this.doc.light, layerId, replayed.lightSurface) : this.doc.light;
     this.commit('Grow culture', {
       ...this.doc,
       layers: mapLayer(this.doc.layers, layerId, () => ({ ...l, surface: replayed.surface })),
       ...(nextLight ? { light: nextLight } : {}),
+      ...(culture && replayed.occupancy ? { cultures: { ...(this.doc.cultures ?? {}), [layerId]: { ...culture, occupancy: replayed.occupancy } } } : {}),
     });
   }
 
@@ -5568,7 +5586,7 @@ export class PaintEditorController {
   async timeLapse(options: TimeLapseOptions = {}): Promise<TimeLapse> {
     const target = this.createReplayTarget(1);
     try {
-      return await buildTimeLapse(this.doc, target, options);
+      return await buildTimeLapse(this.withCulturePreviewEvents(), target, options);
     } finally {
       target.dispose();
     }
@@ -5588,7 +5606,7 @@ export class PaintEditorController {
   async renderHighRes(options: { scale: number; paper?: boolean }): Promise<PixelImage> {
     const target = this.createReplayTarget(options.scale);
     try {
-      await replayPainting(this.doc, target, { scale: options.scale });
+      await replayPainting(this.withCulturePreviewEvents(), target, { scale: options.scale });
       await target.wetIdle();
       return target.compositePixels({ paper: options.paper, wet: 'dried' });
     } finally {

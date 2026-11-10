@@ -19,7 +19,9 @@ fade what they eat (`digest`), and carry the digested colour out into new territ
 - **Painting over threads.** A later stroke takes over only the thread pixels it changes: painted
   over (as opaque or more), or inverted and scorched by an antimatter blast on any layer it hits,
   they become foreign paint the culture can feed on and digest. Threads the stroke left alone stay
-  the culture's own, wherever the stroke lands. Antimatter brushes carry no spores themselves.
+  the culture's own, wherever the stroke lands. The `paint-scraper` cuts threads like an eraser:
+  ground it scrapes bare is free to regrow into, and what it leaves stays the colony's. Antimatter
+  brushes carry no spores themselves.
 - **Anastomosis (`fuse`).** When a growing tip meets an existing thread outside a food source, it
   rolls against `fuse`: on success it draws a connecting bridge segment and stops cleanly, forming
   closed loops instead of tangling.
@@ -30,7 +32,8 @@ fade what they eat (`digest`), and carry the digested colour out into new territ
   canvas edge. A layer caps at `2,000` living tips and `200,000` segments (`status: "capped"`).
 - **Stepping and undo.** In headless/agent use, nothing grows until you call `grow_cultures`
   (`steps` 1..2000, default 40), which commits as a single undo step and records a `'culture-grow'`
-  event for exact scaled replay in `export_high_res`. `remove_cultures` kills living tips while
+  event for exact scaled replay in `export_high_res` and `render_xray` with `strokes` (digest fades
+  included; live growth not yet committed is replayed too). `remove_cultures` kills living tips while
   leaving threads already drawn as paint. `set_culture_options({ growWhileClosed: true })` records a
   timestamp on save so reopening catches up elapsed growth as one `"Growth while closed"` undo step.
 - **Presets.**

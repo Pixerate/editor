@@ -711,4 +711,101 @@ describe('Biopaint mycelial ink (#684)', () => {
     c.paintStroke({ brushId: 'pencil-hb', seed: 12, points: [{ x: 30, y: 40 }, { x: 66, y: 56 }] });
     expect(threads()).toBeLessThan(n);
   });
+
+  it('19. digesting growth (digest > 0) over foreign paint replays to the same pixels, fades and threads in live order', async () => {
+    const c = new PaintEditorController({ width: 96, height: 96 });
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'ink-pen', color: '#dc2626', seed: 11, brush: { tip: { size: 16, hardness: 1 } }, points: [{ x: 60, y: 48 }, { x: 70, y: 48 }] });
+    c.paintStroke({ brushId: 'rot', seed: 5, points: [{ x: 30, y: 40 }, { x: 30, y: 56 }] });
+    c.growCultures({ steps: 30 });
+    c.paintStroke({ brushId: 'ink-pen', color: '#2563eb', seed: 12, brush: { tip: { size: 12, hardness: 1 } }, points: [{ x: 20, y: 20 }, { x: 40, y: 24 }] });
+    let nowMs = 1000;
+    let frameCb: (() => void) | null = null;
+    const player = c.playCultures({ now: () => nowMs, frame: (cb) => { frameCb = cb; return () => { if (frameCb === cb) frameCb = null; }; } });
+    for (let i = 0; i < 12; i++) {
+      nowMs += 100;
+      frameCb?.();
+    }
+    player.stop();
+    const grows = (c.document.paintEvents ?? []).filter((e) => e.kind === 'culture-grow');
+    expect(grows.length).toBe(2);
+    for (const g of grows) expect((g.data as { fades: unknown[] }).fades.length).toBeGreaterThan(0);
+    const target = c.createReplayTarget(1);
+    await replayPainting(c.document, target, { scale: 1 });
+    const a = (c.getLayer(layerId) as PaintPixelLayer).surface;
+    const b = (target.getLayer(layerId) as PaintPixelLayer).surface;
+    let diff = 0;
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+      const u = readPixel(a, x, y);
+      const v = readPixel(b, x, y);
+      for (let k = 0; k < 4; k++) diff = Math.max(diff, Math.abs(u[k]! - v[k]!));
+    }
+    expect(diff).toBe(0);
+    // 2x export repaints the same network (a scaled replay, not an upscale).
+    const hi = await c.renderHighRes({ scale: 2, paper: false });
+    let painted = 0;
+    for (let i = 3; i < hi.data.length; i += 4) if (hi.data[i]! > 0) painted++;
+    expect(painted).toBeGreaterThan(4 * 300);
+  });
+
+  it('20. with the time machine: scraper cuts, X-ray replay, set_age and bake_age during live growth keep the growth and its replay', async () => {
+    const c = new PaintEditorController({ width: 96, height: 96 });
+    const layerId = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'ink-pen', color: '#dc2626', seed: 11, brush: { tip: { size: 16, hardness: 1 } }, points: [{ x: 60, y: 48 }, { x: 70, y: 48 }] });
+    c.paintStroke({ brushId: 'rot', seed: 5, points: [{ x: 30, y: 40 }, { x: 30, y: 56 }] });
+    c.growCultures({ steps: 20 });
+    // The scraper cuts through threads like an eraser: what it clears is free ground, what it leaves stays the colony's.
+    const scraped = c.paintStroke({ brushId: 'paint-scraper', seed: 3, points: [{ x: 22, y: 48, pressure: 1 }, { x: 38, y: 48, pressure: 1 }] });
+    expect(scraped.strokeId).toBeTruthy();
+    let nowMs = 1000;
+    let frameCb: (() => void) | null = null;
+    const player = c.playCultures({ now: () => nowMs, frame: (cb) => { frameCb = cb; return () => { if (frameCb === cb) frameCb = null; }; } });
+    const tick = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        nowMs += 100;
+        frameCb?.();
+      }
+    };
+    tick(6);
+    const shown = c.document;
+    // X-ray of the painting replayed up to its last stroke shows the live growth too (and commits nothing).
+    const total = c.document.strokes.length;
+    const live = await c.renderXray({ maxSide: 96 });
+    const replayed = await c.renderXray({ strokes: total, maxSide: 96 });
+    expect(Array.from(replayed.data)).toEqual(Array.from(live.data));
+    expect(c.document).toBe(shown);
+    // set_age during live growth: the growth so far becomes its own step with its replay event.
+    c.setAge({ years: 120, varnish: 0.5 });
+    tick(6);
+    const baked = c.bakeAge();
+    player.stop();
+    expect(baked.layer.id).toBeTruthy();
+    const grows = (c.document.paintEvents ?? []).filter((e) => e.kind === 'culture-grow');
+    expect(grows.length).toBe(3);
+    const target = c.createReplayTarget(1);
+    await replayPainting(c.document, target, { scale: 1 });
+    const a = (c.getLayer(layerId) as PaintPixelLayer).surface;
+    const b = (target.getLayer(layerId) as PaintPixelLayer).surface;
+    let diff = 0;
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+      const u = readPixel(a, x, y);
+      const v = readPixel(b, x, y);
+      for (let k = 0; k < 4; k++) diff = Math.max(diff, Math.abs(u[k]! - v[k]!));
+    }
+    expect(diff).toBe(0);
+    // Undo: the bake (age back to 120 yr), then the growth before it (age stays), then the growth before set_age.
+    expect(c.getAge().years).toBe(0);
+    expect(c.undo()).toBe('Bake age');
+    expect(c.getAge().years).toBe(120);
+    expect(c.undo()).toBe('Culture growth');
+    expect(c.getAge().years).toBe(120);
+    expect(c.undo()).toBe('Culture growth');
+    expect(c.getAge().years).toBe(120);
+    expect(c.undo()).toBe('Paint scraper stroke');
+    expect(c.redo()).toBe('Paint scraper stroke');
+    expect(c.redo()).toBe('Culture growth');
+    expect(c.redo()).toBe('Culture growth');
+    expect(c.redo()).toBe('Bake age');
+    expect(c.getAge().years).toBe(0);
+  });
 });
