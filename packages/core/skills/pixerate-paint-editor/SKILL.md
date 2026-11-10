@@ -138,7 +138,8 @@ inner glow, shadows, stroke, bevel, satin and overlays, as in the image editor
   `direction`, `ink`, `duration`). On wet layers (`wet-vortex` or any vortex brush over wet paint)
   it spins the wet fluid directly. Read [references/vortex.md](references/vortex.md).
 - **Sticker spray** (category `sticker`): stickers by ref (`editor:star`, `editor:leaf`… or any
-  from the host's library: `find_stickers`; tintable ones take the paint colour) sprayed onto an
+  from the host's library: `find_stickers`; tintable ones paint as a flat silhouette in the paint
+  colour, shaped by the art's alpha, and others keep their own pixels) sprayed onto an
   **empty layer**, each staying an object:
   `add_stickers` (exact places), `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`,
   `remove_stickers`. A sticker layer takes no other paint; sprays are refused under an enabled

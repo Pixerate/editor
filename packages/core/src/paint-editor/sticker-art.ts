@@ -174,10 +174,22 @@ export class StickerArtCache {
   }
 }
 
-/** Bilinear RGBA sample of `art` at (x, y) in its pixels (straight alpha, colour weighted by alpha). */
+/**
+ * The pixels drawn for animation frame `frame` of `art`: the frame wrapped to the art's frame count
+ * (negative frames count back from the last, so -1 is the last frame), or `art.data` when the art
+ * is static or `frame` is absent. The canvas (`sampleArt`) and `renderStickerStamp` both choose
+ * frames here.
+ */
+export function stickerArtFrame(art: StickerArt, frame?: number): Uint8ClampedArray {
+  const frames = art.frames;
+  if (frame === undefined || !frames || frames.length === 0) return art.data;
+  return frames[((frame % frames.length) + frames.length) % frames.length] ?? art.data;
+}
+
+/** Bilinear RGBA sample of `art` at (x, y) in its pixels (straight alpha, colour weighted by alpha), in frame `frame` (`stickerArtFrame`). */
 export function sampleArt(art: StickerArt, x: number, y: number, out: number[], frame?: number): number[] {
-  const { width: w, height: h, frames } = art;
-  const data = frame !== undefined && frames && frames.length > 0 ? (frames[((frame % frames.length) + frames.length) % frames.length] ?? art.data) : art.data;
+  const { width: w, height: h } = art;
+  const data = stickerArtFrame(art, frame);
   const fx = x - 0.5;
   const fy = y - 0.5;
   const x0 = Math.floor(fx);
