@@ -140,11 +140,15 @@ function sampleGridPair(
   out[1] = arrY[i00]! * w00 + arrY[i10]! * w10 + arrY[i01]! * w01 + arrY[i11]! * w11;
 }
 
+/** Most sub-steps `integrateVelocityField` takes; beyond it each sub-step moves further. */
+export const MAX_INTEGRATION_STEPS = 960;
+
 /**
  * Integrates a forward velocity field `vel` over `totalTravel` pixels into a single backward
  * displacement field `D` in fixed sub-steps `D'(x) = D(x + v(x)) + v(x)` (using midpoint velocity
  * `v` with backward direction `-vel` so the warp is diffeomorphic and pure rotation preserves
- * radius). Each sub-step's displacement is capped at `maxSubStepPx` so the warp cannot fold.
+ * radius). Sub-steps move at most `maxSubStepPx` each so the warp cannot fold, unless that would
+ * take more than `MAX_INTEGRATION_STEPS`: then they are longer, and the full travel is kept.
  */
 export function integrateVelocityField(
   vel: VelocityGridField,
@@ -159,10 +163,13 @@ export function integrateVelocityField(
     return { rect, step, cols, rows, dx, dy, maxDisplacement: 0 };
   }
 
+  // As many sub-steps as the fastest cell needs to move at most `maxSubStepPx` each, up to
+  // MAX_INTEGRATION_STEPS; past that the sub-steps grow instead, so the travel is never clipped
+  // (a big tip with many turns still turns that many times).
   const totalPeakDisp = totalTravel * maxSpeed;
-  const steps = Math.max(4, Math.min(240, Math.ceil(totalPeakDisp / maxSubStepPx)));
+  const steps = Math.max(4, Math.min(MAX_INTEGRATION_STEPS, Math.ceil(totalPeakDisp / maxSubStepPx)));
   const dt = totalTravel / steps;
-  const stepCap = maxSubStepPx;
+  const stepCap = Math.max(maxSubStepPx, totalPeakDisp / steps);
   const invStep = 1 / step;
 
   // Precompute backward midpoint step vectors (in pixels and in grid units) per cell.

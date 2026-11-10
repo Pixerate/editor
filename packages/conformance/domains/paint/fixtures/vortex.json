@@ -95,7 +95,7 @@
           "layerId": "@1",
           "strokeId": "s3",
           "vortex": {
-            "maxDisplacement": 44.6,
+            "maxDisplacement": 44.44,
             "shape": "point"
           }
         },
@@ -103,7 +103,7 @@
           "file": "png/vortex.3.png",
           "width": 64,
           "height": 64,
-          "sha256": "6c7a018bef13d8a027906eba500b3d748dad208f03f85259cc6c83ce68eff36c",
+          "sha256": "03e500a35f8f2d2d81af9cbb2e56e188b377081352b6f5dc8a3f6683fa4f450d",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -150,7 +150,7 @@
           "file": "png/vortex.4.png",
           "width": 64,
           "height": 64,
-          "sha256": "d51186f0c9c9ac4576eb77e03f4f250902d452739a8b3e79369b3df90f11feb2",
+          "sha256": "2bf2f112e34ee979e669e0fac5ae02d433a0c2c7abd3e893944a79909652f695",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -207,7 +207,7 @@
           "document": {
             "activeLayerId": "@1",
             "assets": {
-              "@1": "pixerate-asset:o76-c5rd1i9606"
+              "@1": "pixerate-asset:o7a-25iel3jgo8j"
             },
             "dpi": 300,
             "format": "pixerate-paint",
@@ -520,7 +520,7 @@
           "file": "png/vortex.5.png",
           "width": 64,
           "height": 64,
-          "sha256": "5735f776273b29994083a62acad8af9d17f0adeac6ee3e29791bb075126fab72",
+          "sha256": "e58596d9fca3529324d0719b51056b29543558338e5d8f3f94c14d58c4d5fa72",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -694,7 +694,7 @@
           "file": "png/vortex.10.png",
           "width": 64,
           "height": 64,
-          "sha256": "3f9a7717a23504e93ea653bdc83f9294ef58ba1503f5f1c3c58bb626a354abbb",
+          "sha256": "838b2ed3e7338b7c778d2163324e321f00b80af7da02fcbb439413ccde23ca68",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -790,7 +790,7 @@
           "file": "png/vortex.12.png",
           "width": 64,
           "height": 64,
-          "sha256": "dcd6767d0ced7eb373ae3adfbd1d0b91cf0308a5c7fb064408570873d5a90835",
+          "sha256": "d4bd209f54586b2222e407a584e9cc0611bb9b51b19866508ae80967417dbde1",
           "maxDelta": 2,
           "meanDelta": 0.1
         }

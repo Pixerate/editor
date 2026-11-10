@@ -125,8 +125,13 @@ private func sampleGridPair(_ arrX: [Float], _ arrY: [Float], _ cols: Int, _ row
     return (x, y)
 }
 
+/// Most sub-steps `integrateVelocityField` takes; beyond it each sub-step moves further.
+public let MAX_INTEGRATION_STEPS = 960
+
 /// Integrates a forward velocity field `vel` over `totalTravel` pixels into a single backward
-/// displacement field `D` in fixed sub-steps `D'(x) = D(x + v(x)) + v(x)`.
+/// displacement field `D` in fixed sub-steps `D'(x) = D(x + v(x)) + v(x)`. Sub-steps move at most
+/// `maxSubStepPx` each, unless that would take more than `MAX_INTEGRATION_STEPS`: then they are
+/// longer, and the full travel is kept.
 public func integrateVelocityField(_ vel: VelocityGridField, _ totalTravel: Double, maxSubStepPx: Double? = nil) -> DisplacementField {
     let rect = vel.rect
     let step = vel.step
@@ -142,10 +147,14 @@ public func integrateVelocityField(_ vel: VelocityGridField, _ totalTravel: Doub
         return DisplacementField(rect: rect, step: step, cols: cols, rows: rows, dx: dx, dy: dy, maxDisplacement: 0)
     }
 
-    let stepCap = maxSubStepPx ?? Swift.max(0.5, Double(step) * 0.45)
+    // As many sub-steps as the fastest cell needs to move at most `maxSubStepPx` each, up to
+    // MAX_INTEGRATION_STEPS; past that the sub-steps grow instead, so the travel is never clipped
+    // (a big tip with many turns still turns that many times).
+    let maxSub = maxSubStepPx ?? Swift.max(0.5, Double(step) * 0.45)
     let totalPeakDisp = totalTravel * maxSpeed
-    let steps = Swift.max(4, Swift.min(240, Int(ceil(totalPeakDisp / stepCap))))
+    let steps = Swift.max(4, Swift.min(MAX_INTEGRATION_STEPS, Int(ceil(totalPeakDisp / maxSub))))
     let dt = totalTravel / Double(steps)
+    let stepCap = Swift.max(maxSub, totalPeakDisp / Double(steps))
     let invStep = 1.0 / Double(step)
 
     var stepX = [Float](repeating: 0, count: count)

@@ -3,6 +3,7 @@ import {
   composeDisplacementFields,
   createDisplacementField,
   integrateVelocityField,
+  MAX_INTEGRATION_STEPS,
   sampleDisplacement,
   sampleRgbaPremultiplied,
   warpTiledSurfaceChannel,
@@ -98,6 +99,42 @@ describe('paint/displacement', () => {
     const composed = composeDisplacementFields(half, half);
     const sc = sampleDisplacement(composed, 42, 32);
     expect(sc.dy).toBeLessThan(half.dy[16 * cols + 21]!);
+  });
+
+  it('keeps the whole travel on big fields: more turns rotate further instead of saturating', () => {
+    // Rigid rotation (angular speed 1/R) over an 800 px grid at the coarsest vortex grid step (4 px).
+    const step = 4;
+    const cols = 201;
+    const rows = 201;
+    const cx = 400;
+    const cy = 400;
+    const R = Math.hypot(400, 400);
+    const vx = new Float32Array(cols * rows);
+    const vy = new Float32Array(cols * rows);
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++) {
+        vx[r * cols + c] = -(r * step - cy) / R;
+        vy[r * cols + c] = (c * step - cx) / R;
+      }
+    const vel: VelocityGridField = { rect: { x: 0, y: 0, width: 800, height: 800 }, step, cols, rows, vx, vy, maxSpeed: 1 };
+    // The backward field at (cx + 200, cy) points to where the pixel came from: rotated back by the angle.
+    const angleAt = (travel: number) => {
+      const d = sampleDisplacement(integrateVelocityField(vel, travel), cx + 200, cy);
+      const a = -Math.atan2(d.dy, 200 + d.dx);
+      return a < 0 ? a + 2 * Math.PI : a;
+    };
+    // 3 rad needs ~945 sub-steps of 1.8 px at the corners; capped at 240 this probe only turned ~2.1 rad.
+    const small = angleAt(1 * R);
+    const big = angleAt(3 * R);
+    expect(small).toBeGreaterThan(0.95);
+    expect(small).toBeLessThan(1.05);
+    expect(big).toBeGreaterThan(2.9);
+    expect(big).toBeLessThan(3.1);
+    // 4 rad needs ~1260: past MAX_INTEGRATION_STEPS the sub-steps lengthen, and the travel still is not clipped.
+    expect(4 * R).toBeGreaterThan(MAX_INTEGRATION_STEPS * 1.8);
+    const far = angleAt(4 * R);
+    expect(far).toBeGreaterThan(3.85);
+    expect(far).toBeLessThan(4.15);
   });
 
   it('resamples RGBA with premultiplied bilinear filtering without dark fringes', () => {
