@@ -33,6 +33,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `editorDocument()` replaces each inline PNG with a content-addressed reference (`pixerate-asset:…`) and doesn't carry the bytes; the TS envelope gets them from its asset registry. Swift has no registry or async asset store yet.
 - **Solution / Workaround**: Persist `toJSON()` (assets inline) and reopen it with `loadJSON`. External asset stores (`loadJSONAsync`) are not ported.
 
+### [swift/paint] Sticker Drag Previews Rely on Document Identity
+
+- **Issue / Symptom**: A sticker drag (`previewSticker`) must undo in one step from before the drag, but any other change in between must end the preview.
+- **Root Cause**: `PaintDocumentState` is a class; the preview keeps `(base, shown)` and is live only while `shown === doc`, as TS compares objects. Setting `doc` normally emits a full redraw, so the preview sets it with `setDocSilently` and emits only the dirty rects.
+- **Solution / Workaround**: Commit sticker changes through `commitStickers`, which commits from `previewBase() ?? doc` and clears the preview. Never copy the document between preview and drop (`doc.with { }` makes a new object and ends the preview).
+
 ### [core|swift/paint-editor] A Replay Recorded the Active Brush's Id With the Stroke's Brush
 
 - **Issue / Symptom**: After `replay_strokes`, `list_strokes` showed the replayed stroke with `brushId: "pencil-6b"` (whatever brush was active) but `brushName: "Antimatter"`. Seen in `antimatter-fuel-targets`; TS and Swift agreed, so the scenario recorded the wrong id.

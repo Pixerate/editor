@@ -326,6 +326,8 @@ public final class PaintEditorController {
     var cultureSpeed = 1.0
     /// The uncommitted live growth run (`playCultures`, ControllerCultureLive.swift), if any.
     var culturePreview: CulturePreview?
+    /// A sticker drag in progress (`previewSticker`): the document before it, so the drop undoes in one step, and the one it showed last.
+    var stickerPreview: (base: PaintDocumentState, shown: PaintDocumentState)?
     /// Extra sources of layers live growth must skip for now, by name (`animatingLayerIds`, which the vortex and blast animations wire into).
     var cultureGrowthHolds: [String: () -> Set<String>] = [:]
     /// Pending paint proposals (`PaintProposals`), shared between proposal tools and evolutionary stroke tools.
