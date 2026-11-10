@@ -15,9 +15,11 @@ The paint editor includes a conservation & archaeology time machine with three p
 - **Cracks (`cracks: 0..1`, `seed`)**: a seeded Voronoi + stress craquelure network whose cell frequency increases with the number of painted layers and local impasto `thick` height. Crack lines both darken with accumulated dirt and carve troughs into the height map before `lightTile` runs, so raking light (`set_lighting` with low `elevation` and high `relief`) catches the crack edges.
 - **Dust (`dust: 0..1`)**: low-frequency gallery dust grain settled across the surface.
 
+Ageing is **one pass over the finished composite** (paper, effect paper and every visible layer, after blend modes, light paint and its spill), above the paint and below any backlight. A Multiply or Overlay glaze is therefore yellowed once, like the paint under it, and a light spill (Linear Dodge) layer adds only its light, never a second helping of dust or bleach. Where paint covers the paper the cracks use the painted layer count and the tallest `thick` height there; bare paper ages as one thin layer. Expect the same aged look whatever blend modes you used, so pick blend modes for the fresh painting and let `set_age` handle the patina.
+
 Like `set_lighting` and `set_uv_light`, `set_age` is document state (`SET` semantics, not an undo step) and is saved with the document. Undoing or redoing another step (a stroke, a fill) keeps the current age; only undoing `bake_age` brings back the `years` it reset. `RenderOptions.age` is on by default in the viewport and `render_preview`, and opt-in (`age: true`) for exports.
 
-Call `bake_age` to commit the aged paint into a new pixel layer (`"Aged (<years> yr)"`) at the top of the stack as a single undo step and reset `years` to `0`.
+Call `bake_age` to commit the aged composite (the paint without the paper, exactly as the preview shows it) into a new pixel layer (`"Aged (<years> yr)"`) at the top of the stack as a single undo step and reset `years` to `0`.
 
 ## 2. X-ray view (`render_xray`, `set_xray_view`)
 

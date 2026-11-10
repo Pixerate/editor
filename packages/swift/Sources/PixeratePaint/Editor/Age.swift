@@ -323,7 +323,7 @@ public func carveAgeCrackHeightTile(
     return any ? out : baseHeightData
 }
 
-/// Ages one 256×256 RGBA tile of a paint layer.
+/// Ages one 256×256 RGBA tile of a paint layer on its own (the editor ages the composite: `ageCompositeRegion`).
 public func ageTile(
     _ colorData: [UInt8],
     _ heightData: [UInt8]?,
@@ -402,44 +402,72 @@ public func agePaperTile(
     return out
 }
 
-/// Per-layer cache of aged colour tiles.
-final class AgeCache {
-    private var tiles: [TileKey: (color: ObjectIdentifier, height: ObjectIdentifier?, key: String, layerCount: Int, offsetX: Int, offsetY: Int, tile: Tile)] = [:]
+/// A painted layer as the composite ageing pass reads it: its alpha marks paint, its thick height feeds the cracks.
+public struct AgeFieldLayer {
+    /// The layer's RGBA pixels (only alpha is read).
+    public var surface: TiledSurface
+    /// The layer's thick paint height (one channel, `0..255`), when it has impasto.
+    public var height: TiledSurface?
+    /// Where the layer sits on the canvas.
+    public var offset: LayerOffset
 
-    func render(
-        _ color: TiledSurface,
-        _ height: TiledSurface?,
-        _ age: PaintAgeSettings,
-        _ layerCount: Int = 1,
-        _ offset: LayerOffset = LayerOffset(x: 0, y: 0)
-    ) -> TiledSurface {
-        if !isAgeActive(age) || color.tiles.isEmpty { return color }
-        let k = ageKey(age)
-        var out = color.tiles
-        for (key, tile) in color.tiles {
-            let hTile = height?.tiles.get(key)
-            let cRef = ObjectIdentifier(tile)
-            let hRef = hTile.map(ObjectIdentifier.init)
-            if let cached = tiles[key],
-               cached.color == cRef,
-               cached.height == hRef,
-               cached.key == k,
-               cached.layerCount == layerCount,
-               cached.offsetX == offset.x,
-               cached.offsetY == offset.y {
-                out.set(key, cached.tile)
-                continue
+    public init(surface: TiledSurface, height: TiledSurface? = nil, offset: LayerOffset) {
+        self.surface = surface
+        self.height = height
+        self.offset = offset
+    }
+}
+
+/**
+ * The time machine's single ageing pass over the composite (`ageCompositeRegion`): ages
+ * straight-alpha RGBA `data` (`rect.width × rect.height`, document pixels `rect`) in place. Where
+ * any `layers` pixel is painted the craquelure uses `layerCount` and the tallest thick height there;
+ * bare ground (paper) ages as one layer with no impasto. Transparent pixels are left alone.
+ */
+public func ageCompositeRegion(
+    _ data: inout [UInt8],
+    _ rect: RasterRect,
+    _ age: PaintAgeSettings,
+    _ layers: [AgeFieldLayer],
+    _ layerCount: Int
+) {
+    if !isAgeActive(age) { return }
+    let n = rect.width * rect.height
+    var covered = [Bool](repeating: false, count: n)
+    var tallest = [UInt8](repeating: 0, count: n)
+    for l in layers {
+        let r = RasterRect(x: rect.x - l.offset.x, y: rect.y - l.offset.y, width: rect.width, height: rect.height)
+        let color = readRegion(l.surface, r)
+        let height = l.height.map { readRegion($0, r) }
+        for p in 0..<n where color[p * 4 + 3] != 0 {
+            covered[p] = true
+            if let height, height[p] > tallest[p] { tallest[p] = height[p] }
+        }
+    }
+    var p = 0
+    for y in 0..<rect.height {
+        let wy = Double(rect.y + y)
+        for x in 0..<rect.width {
+            let i = p * 4
+            if data[i + 3] != 0 {
+                let paint = covered[p]
+                let (r, g, b) = agePixel(
+                    Double(data[i]) / 255,
+                    Double(data[i + 1]) / 255,
+                    Double(data[i + 2]) / 255,
+                    Double(rect.x + x),
+                    wy,
+                    age,
+                    paint ? layerCount : 1,
+                    paint ? Double(tallest[p]) / 255 : 0
+                )
+                // Math.round, as the TypeScript pass stores them.
+                data[i] = UInt8(JS.round(r * 255))
+                data[i + 1] = UInt8(JS.round(g * 255))
+                data[i + 2] = UInt8(JS.round(b * 255))
             }
-            let (tx, ty) = tileCoord(key)
-            let data = ageTile(tile.data, hTile?.data, tx, ty, offset, age, layerCount)
-            let agedTile = finishTile(data, 4, 0) ?? Tile(data: data, uniform: nil)
-            tiles[key] = (cRef, hRef, k, layerCount, offset.x, offset.y, agedTile)
-            out.set(key, agedTile)
+            p += 1
         }
-        for key in Array(tiles.keys) where !color.tiles.has(key) {
-            tiles.removeValue(forKey: key)
-        }
-        return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
     }
 }
 

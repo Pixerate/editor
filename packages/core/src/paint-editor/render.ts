@@ -8,7 +8,7 @@ import { RasterCompositor, type CompositorLayer, type CompositorProfile, type Ra
 import type { RasterRect } from '../raster/surface';
 import type { PaintLayer } from './document';
 import { PaperGrain, renderPaper, type PaperSettings } from './paper';
-import { ageKey, agePaperTile, isAgeActive, type PaintAgeSettings } from './age';
+import { ageCompositeRegion, ageKey, agePaperTile, isAgeActive, type AgeFieldLayer, type PaintAgeSettings } from './age';
 
 /** The paper as a layer of the compositor (generated, never stored). */
 export interface PaperNode extends CompositorLayer {
@@ -39,12 +39,36 @@ export interface ImageNode extends CompositorLayer {
   version: number;
 }
 
-export type ViewLayer = PaintLayer | PaperNode | ImageNode;
+/**
+ * The time machine's ageing as one filter over everything below it (`ageCompositeRegion`), so
+ * varnish, fading, cracks and dust sit over the composite rather than inside each layer.
+ */
+export interface AgeNode extends CompositorLayer {
+  type: 'age';
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  blend: 'normal';
+  age: PaintAgeSettings;
+  /** The painted layers: where they cover, the cracks use `layerCount` and their thick height. */
+  field: readonly AgeFieldLayer[];
+  /** Painted (visible, non-empty) pixel layers: more layers, denser craquelure. */
+  layerCount: number;
+}
+
+export type ViewLayer = PaintLayer | PaperNode | ImageNode | AgeNode;
 
 export const PAPER_NODE_ID = '__paper';
 export const TRACING_NODE_ID = '__tracing';
 export const PAPER_EFFECT_NODE_ID = '__paper_effect';
 export const XRAY_NODE_ID = '__xray';
+export const AGE_NODE_ID = '__age';
+
+/** The ageing pass for the top of the painting (above the paint, below any backlight). */
+export function ageNode(age: PaintAgeSettings, field: readonly AgeFieldLayer[], layerCount: number): AgeNode {
+  return { type: 'age', id: AGE_NODE_ID, name: 'Age', visible: true, opacity: 1, blend: 'normal', age: { ...age }, field, layerCount };
+}
 
 export function paperKey(p: PaperSettings, light?: { azimuth: number; elevation: number }, age?: PaintAgeSettings | null): string {
   const metal = p.metallic ?? 0;
@@ -108,6 +132,13 @@ function paperTile(paper: PaperSettings, r: RasterRect, light?: { azimuth: numbe
 }
 
 const PROFILE: CompositorProfile<ViewLayer, RasterSources> = {
+  isFilterLayer: (layer) => layer.type === 'age',
+  applyFilterRun(layers, acc, r) {
+    for (const l of layers) {
+      const n = l as AgeNode;
+      ageCompositeRegion(acc, r, n.age, n.field, n.layerCount);
+    }
+  },
   contentTile(layer, r) {
     if (layer.type === 'paper') return paperTile((layer as PaperNode).paper, r, (layer as PaperNode).light, (layer as PaperNode).age);
     if (layer.type === 'image') {
@@ -126,6 +157,8 @@ const PROFILE: CompositorProfile<ViewLayer, RasterSources> = {
   layerKey(layer) {
     if (layer.type === 'paper') return paperKey((layer as PaperNode).paper, (layer as PaperNode).light, (layer as PaperNode).age);
     if (layer.type === 'image') return (layer as ImageNode).version;
+    // The field's pixels are already in the signatures of the layers below.
+    if (layer.type === 'age') return [ageKey((layer as AgeNode).age), (layer as AgeNode).layerCount];
     return undefined;
   },
 };

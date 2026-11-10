@@ -11,6 +11,16 @@ import PixerateRaster
 public let PAPER_NODE_ID = "__paper"
 public let TRACING_NODE_ID = "__tracing"
 public let XRAY_NODE_ID = "__xray"
+public let AGE_NODE_ID = "__age"
+
+/// The time machine's ageing as one filter over everything below it (`ageCompositeRegion`).
+public struct AgeNodeSettings {
+    public var age: PaintAgeSettings
+    /// The painted layers: where they cover, the cracks use `layerCount` and their thick height.
+    public var field: [AgeFieldLayer]
+    /// Painted (visible, non-empty) pixel layers: more layers, denser craquelure.
+    public var layerCount: Int
+}
 
 /// An RGBA image under the paint (the tracing image), drawn at its opacity and blend.
 public struct ImageNodeImage {
@@ -25,6 +35,7 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
         case layer(RasterLayer)
         case paper(PaperSettings)
         case image(ImageNodeImage, version: Double)
+        case age(AgeNodeSettings)
     }
 
     public let kind: Kind
@@ -73,6 +84,11 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
         return node
     }
 
+    /// The ageing pass for the top of the painting (above the paint, below any backlight): `ageNode`.
+    public static func age(_ age: PaintAgeSettings, field: [AgeFieldLayer], layerCount: Int) -> ViewLayer {
+        ViewLayer(kind: .age(AgeNodeSettings(age: age, field: field, layerCount: layerCount)), id: AGE_NODE_ID, name: "Age")
+    }
+
     private var raster: RasterLayer? {
         if case .layer(let l) = kind { return l }
         return nil
@@ -83,6 +99,7 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
         case .layer(let l): l.type
         case .paper: "paper"
         case .image: "image"
+        case .age: "age"
         }
     }
 
@@ -125,6 +142,12 @@ func paperTile(_ paper: PaperSettings, _ r: RasterRect, light: (azimuth: Double,
 /// The compositor profile of paint editor stacks: paper and view-only images are content layers.
 func paintCompositorProfile() -> CompositorProfile<ViewLayer, BasicRasterSources> {
     var p = CompositorProfile<ViewLayer, BasicRasterSources>()
+    p.isFilterLayer = { if case .age = $0.kind { return true }; return false }
+    p.applyFilterRun = { layers, acc, r, _, _ in
+        for l in layers {
+            if case .age(let a) = l.kind { ageCompositeRegion(&acc, r, a.age, a.field, a.layerCount) }
+        }
+    }
     p.contentTile = { layer, r, _ in
         switch layer.kind {
         case .paper(let paper): return paperTile(paper, r, light: layer.paperLight, age: layer.paperAge)
@@ -139,7 +162,7 @@ func paintCompositorProfile() -> CompositorProfile<ViewLayer, BasicRasterSources
                 for k in 0..<((x1 - x0) * 4) { out[d + k] = image.data[s + k] }
             }
             return out
-        case .layer:
+        case .layer, .age:
             return nil
         }
     }
@@ -160,6 +183,8 @@ func paintCompositorProfile() -> CompositorProfile<ViewLayer, BasicRasterSources
             }
             return .object(paper.json)
         case .image(_, let version): return .number(version)
+        // The field's pixels are already in the signatures of the layers below.
+        case .age(let a): return .array([.string(ageKey(a.age)), .number(Double(a.layerCount))])
         case .layer: return nil
         }
     }
