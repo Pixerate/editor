@@ -200,6 +200,39 @@ export {
 } from '@pixerate/editor/canvas';
 
 export { ShapeNode, type ShapeNodeProps } from './ShapeNode.js';
+
+// Animated edges: travelling dots, marching dashes, beams and pulses, and their agent tools
+export { AnimatedEdge, EdgeAnimation, usePrefersReducedMotion, type AnimatedEdgeProps, type EdgeAnimationProps } from './AnimatedEdge.js';
+export {
+	CANVAS_EDGE_ANIMATION_KINDS,
+	CANVAS_EDGE_ANIMATION_SCHEMA,
+	createCanvasEdgeAnimationToolProvider,
+	getCanvasEdgeAnimation,
+	getCanvasEdgeAnimationRender,
+	getCanvasEdgePath,
+	measureSvgPath,
+	normalizeCanvasEdgeAnimation,
+	resolveCanvasEdgeAnimation,
+	sampleCanvasEdgeAnimation,
+	setCanvasEdgeAnimation,
+	type CanvasAnimatedEdgePathType,
+	type CanvasEdgeAnimation,
+	type CanvasEdgeAnimationDirection,
+	type CanvasEdgeAnimationElement,
+	type CanvasEdgeAnimationFrame,
+	type CanvasEdgeAnimationKind,
+	type CanvasEdgeAnimationKindInfo,
+	type CanvasEdgeAnimationRender,
+	type CanvasEdgeAnimationRenderOptions,
+	type CanvasEdgeAnimationTiming,
+	type CanvasEdgeAnimationToolProviderOptions,
+	type CanvasEdgeAnimationToolTarget,
+	type CanvasEdgeAnimationToolEdge,
+	type CanvasEdgePath,
+	type CanvasEdgePathParams,
+	type MeasuredSvgPath,
+	type SvgPathPoint
+} from '@pixerate/editor/canvas';
 export { ShapeNodeZoomContext, ShapeNodeZoomProvider, useShapeBrushstroke, useCanvasBrushes } from './useShapeBrushstroke.js';
 
 // Shape nodes and boolean operations (Unite / Intersect / Subtract / Exclude / Divide)

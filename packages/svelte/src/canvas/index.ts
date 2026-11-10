@@ -259,6 +259,41 @@ export {
 } from '@pixerate/editor/canvas';
 
 export { default as ShapeNode } from './ShapeNode.svelte';
+
+// Animated edges: travelling dots, marching dashes, beams and pulses, and their agent tools
+export { default as AnimatedEdge } from './AnimatedEdge.svelte';
+export { default as EdgeAnimation } from './EdgeAnimation.svelte';
+export { createPrefersReducedMotion } from './prefersReducedMotion.svelte.js';
+export {
+	CANVAS_EDGE_ANIMATION_KINDS,
+	CANVAS_EDGE_ANIMATION_SCHEMA,
+	createCanvasEdgeAnimationToolProvider,
+	getCanvasEdgeAnimation,
+	getCanvasEdgeAnimationRender,
+	getCanvasEdgePath,
+	measureSvgPath,
+	normalizeCanvasEdgeAnimation,
+	resolveCanvasEdgeAnimation,
+	sampleCanvasEdgeAnimation,
+	setCanvasEdgeAnimation,
+	type CanvasAnimatedEdgePathType,
+	type CanvasEdgeAnimation,
+	type CanvasEdgeAnimationDirection,
+	type CanvasEdgeAnimationElement,
+	type CanvasEdgeAnimationFrame,
+	type CanvasEdgeAnimationKind,
+	type CanvasEdgeAnimationKindInfo,
+	type CanvasEdgeAnimationRender,
+	type CanvasEdgeAnimationRenderOptions,
+	type CanvasEdgeAnimationTiming,
+	type CanvasEdgeAnimationToolProviderOptions,
+	type CanvasEdgeAnimationToolTarget,
+	type CanvasEdgeAnimationToolEdge,
+	type CanvasEdgePath,
+	type CanvasEdgePathParams,
+	type MeasuredSvgPath,
+	type SvgPathPoint
+} from '@pixerate/editor/canvas';
 export { default as CanvasNodeEffectLayer } from './CanvasNodeEffectLayer.svelte';
 export { default as CanvasEffectsPanel } from './CanvasEffectsPanel.svelte';
 export * from './canvasEffects.svelte.js';

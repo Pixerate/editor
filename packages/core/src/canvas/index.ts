@@ -45,3 +45,6 @@ export * from './proposals.js';
 export * from './changeFeed.js';
 export * from './proposal-tools.js';
 export * from './stickers.js';
+export * from './edgePaths.js';
+export * from './edgeAnimation.js';
+export * from './edge-animation-tools.js';

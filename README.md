@@ -298,7 +298,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Canvas</strong> (47)</summary>
+<summary><strong>Canvas</strong> (48)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -319,6 +319,7 @@ Every feature is available from core and from both framework packages, except wh
 | Canvas Scenes (saved viewports, next / previous) | `CanvasScenesStore` | `useCanvasScenes` | `createCanvasScenes` | Planned (#533) |
 | Canvas Provider Effects (optional: with an `EffectProvider`, shape nodes take an effect fill clipped to the shape or an overlay above it, live and playing or held, with opacity and one undo step per change; scenes take a provider transition played over captured views when stepping into them; agent tools `apply_effect`, `set_canvas_effect_mode`, `set_scene_transition` and the shared effect tools) | `createCanvasEffectsController`, `createCanvasEffectsToolProvider`, `transitionCanvasView` (`/canvas`) | `useCanvasEffects`, `<CanvasEffectsProvider>`, `<CanvasEffectsPanel>`, `useCanvasScenes({ transitions })` | `createCanvasEffects`, `setCanvasEffectsProvider`, `<CanvasEffectsPanel>`, `createCanvasScenes({ transitions })` | Planned (#533) |
 | Canvas Connector Snapping to Shape Sides | ✅ | Via core | Via core | Planned (#533) |
+| Canvas Animated Edges (travelling dots, marching dashes, beams, pulses; speed in canvas units per second, direction, colour, glow, track opacity; stored in `edge.data.animation`, drawn with SMIL on the xyflow edge path, first frame held for reduced motion; frames sampled without a browser; agent tools `list_edge_animations`, `set_edge_animation`, `clear_edge_animation`, one undo step each) | `getCanvasEdgeAnimationRender`, `sampleCanvasEdgeAnimation`, `getCanvasEdgePath` & `createCanvasEdgeAnimationToolProvider` (`/canvas`) | `<AnimatedEdge>` & `<EdgeAnimation>` | `<AnimatedEdge>` & `<EdgeAnimation>` | Planned (#533) |
 | Canvas Arrange Keyboard Shortcuts | `matchArrangeShortcut` | `useCanvasArrangeShortcuts` | `createCanvasArrangeShortcuts` | Planned (#533) |
 | Mermaid Diagram Model (flowchart, state, class, ER, pie, mindmap, quadrant, C4, architecture, sequence, gitGraph, Gantt, timeline, journey, XY, radar; lossless parse / serialise, statement-level edits, `%% @pixerate` layout comment, Ursula's `@ursula` read; sankey, block, packet, kanban, treemap kept as text, sankey and treemap data readable) | `parseMermaid`, `applyEdits`, `serializeMermaid`, `DiagramController`, `parseSankey` & `parseTreemap` (`/diagram`) | `useMermaidDiagram` & `useDiagramState` | `createMermaidDiagram` | Planned (#533) |
 | Mermaid Family Vocabulary (shapes, edge kinds, groups, direction, id scheme, new-node defaults and data fields per family; starter templates and titles) | `familyUI`, `checkFieldData`, `FAMILY_TEMPLATES`, `FAMILY_TITLES` (`/diagram`) | Via core | Via core | Planned (#533) |

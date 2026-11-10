@@ -719,6 +719,13 @@
           "swift": "Planned (#533)"
         },
         {
+          "feature": "Canvas Animated Edges (travelling dots, marching dashes, beams, pulses; speed in canvas units per second, direction, colour, glow, track opacity; stored in `edge.data.animation`, drawn with SMIL on the xyflow edge path, first frame held for reduced motion; frames sampled without a browser; agent tools `list_edge_animations`, `set_edge_animation`, `clear_edge_animation`, one undo step each)",
+          "core": "`getCanvasEdgeAnimationRender`, `sampleCanvasEdgeAnimation`, `getCanvasEdgePath` & `createCanvasEdgeAnimationToolProvider` (`/canvas`)",
+          "react": "`<AnimatedEdge>` & `<EdgeAnimation>`",
+          "svelte": "`<AnimatedEdge>` & `<EdgeAnimation>`",
+          "swift": "Planned (#533)"
+        },
+        {
           "feature": "Canvas Arrange Keyboard Shortcuts",
           "core": "`matchArrangeShortcut`",
           "react": "`useCanvasArrangeShortcuts`",
