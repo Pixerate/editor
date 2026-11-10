@@ -418,6 +418,58 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "film-antimatter",
+        "name": "Film antimatter",
+        "basedOn": "antimatter",
+        "iridescence": {
+          "thickness": 480,
+          "ior": 1.65
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": "#38bdf8",
+              "palette": [
+                "#38bdf8",
+                "#f472b6",
+                "#a855f7",
+                "#fb923c",
+                "#4ade80"
+              ]
+            },
+            "dynamics": {
+              "minSize": 0.4,
+              "smoothing": 0.25
+            },
+            "id": "film-antimatter",
+            "kind": "mark",
+            "marks": {
+              "kind": "antimatter"
+            },
+            "medium": "paint",
+            "name": "Film antimatter",
+            "tip": {
+              "hardness": 0.75,
+              "shape": "round",
+              "size": 24,
+              "spacing": 0.12
+            },
+            "variety": "antimatter"
+          },
+          "engine": "antimatter",
+          "id": "film-antimatter",
+          "problems": [
+            "iridescence dropped: antimatter marks detonate paint, not film."
+          ],
+          "warnings": []
+        }
+      }
     }
   ]
 }

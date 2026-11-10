@@ -771,7 +771,8 @@ public final class ScraperStrokeDriver {
                     if a0 > 0 {
                         let cWrite = getColorTile(entry, key, true)!
                         let idx = pi * 4
-                        let a1 = JS.u8c(a0 * 255 * keep)
+                        // Math.round first (half up), as TS does, not the clamped store's half-to-even.
+                        let a1 = JS.u8c(JS.round(a0 * 255 * keep))
                         cWrite.data[idx + 3] = a1
                         if a1 == 0 {
                             cWrite.data[idx] = 0
@@ -781,7 +782,7 @@ public final class ScraperStrokeDriver {
                     }
                     if h0 > 0 {
                         let hWrite = getHeightTile(entry, key, true)!
-                        hWrite.data[pi] = JS.u8c(h0 * 255 * keep)
+                        hWrite.data[pi] = JS.u8c(JS.round(h0 * 255 * keep))
                     }
                 }
             }

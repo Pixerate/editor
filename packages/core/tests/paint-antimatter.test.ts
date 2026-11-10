@@ -601,6 +601,11 @@ describe('Antimatter review fixes (#714)', () => {
     const topReplayed = (c.getLayer(top.id) as PaintPixelLayer).surface;
     for (const [x, y] of [[32, 32], [20, 40], [44, 24]] as const) expect(readPixel(topReplayed, x, y)).toEqual(readPixel(topAfter, x, y));
     expect(c.getStrokes().at(-1)!.targets).toEqual([fuelId, top.id]);
+    // The replay is recorded with the stroke's brush, not the active one (pencil-6b by default).
+    expect(c.getState().brush.id).not.toBe('antimatter');
+    const replayed = c.getStrokes().at(-1)!;
+    expect(replayed.brush.id).toBe('antimatter');
+    expect(replayed.brush.name).toBe('Antimatter');
   });
 
   it('weights fuel by group opacity and skips temporary layers', () => {

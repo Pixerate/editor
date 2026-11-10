@@ -845,6 +845,7 @@ export class PaintEditorController {
   private listeners = new Set<() => void>();
   private commitListeners = new Set<(event: PaintCommitEvent) => void>();
   private sampleListeners = new Set<(sample: PaintStrokeSample) => void>();
+  private documentListeners = new Set<() => void>();
   /** Origins set by `withOrigin`, innermost last. */
   private origins: string[] = [];
   /** `group` in progress: commits fold into one step, recorded when it ends. */
@@ -1049,6 +1050,23 @@ export class PaintEditorController {
     return () => {
       this.sampleListeners.delete(listener);
     };
+  }
+
+  /**
+   * Hears the document being replaced: a document opened (`loadJSON`, `loadJSONAsync`) or a new
+   * canvas started (`newCanvas`). Called after the new document is in place and the editor is idle,
+   * so a mounted canvas can run `catchUpCultures` for biopaint that grew while the file was closed.
+   * Returns an unsubscribe function.
+   */
+  onDocumentReplaced(listener: () => void): () => void {
+    this.documentListeners.add(listener);
+    return () => {
+      this.documentListeners.delete(listener);
+    };
+  }
+
+  private notifyDocumentReplaced(): void {
+    for (const l of [...this.documentListeners]) l();
   }
 
   private notifySample(phase: PaintStrokeSample['phase'], session: PaintStrokeSession, added: readonly PenPoint[] = [], strokeId?: string | null): void {
@@ -1609,6 +1627,7 @@ export class PaintEditorController {
     }
     this.resetMutations();
     this.commit('New canvas', next);
+    this.notifyDocumentReplaced();
     return next;
   }
 
@@ -3553,7 +3572,11 @@ export class PaintEditorController {
 
   private strokeBrush(init: PaintStrokeInit): PaintBrush {
     let brush = init.brushId !== undefined ? this.requireBrush(init.brushId) : this.brush;
-    if (init.brush) brush = normalizePaintBrush({ ...init.brush, id: brush.id }, brush);
+    // A whole recorded brush (a replay) keeps its own id; changes laid over brushId or the active brush take that brush's id.
+    if (init.brush) {
+      const own = init.brushId === undefined && typeof init.brush.id === 'string' && BRUSH_ID.test(init.brush.id) ? init.brush.id : brush.id;
+      brush = normalizePaintBrush({ ...init.brush, id: own }, brush);
+    }
     return brush;
   }
 
@@ -6788,6 +6811,7 @@ export class PaintEditorController {
     // Provider stickers keep their saved pixels; their art loads now so they can be edited.
     const refs = Object.values(this.doc.stickers ?? {}).flatMap((list) => list.map((x) => x.ref));
     if (refs.some((r) => !editorStampOf(r))) void this.prepareStickers(refs).catch(() => this.emit([]));
+    this.notifyDocumentReplaced();
     return loaded.problems;
   }
 
