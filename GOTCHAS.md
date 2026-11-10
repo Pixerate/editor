@@ -4235,3 +4235,17 @@ All contributors and AI assistants should check this file before starting work a
   1. Warp colour with premultiplied bilinear sampling (`warpTiledSurfaceRgba`), `height` and `film` with bilinear `warpTiledSurfaceChannel`, and `material` with nearest-neighbour `warpTiledSurfaceNearest`.
   2. Route `brush.engine === 'vortex'` on a wet layer (or `wet.tool === 'vortex'`) through `WetStrokeDriver`, which calls `WetWorld.swirl` at `end()` (`rewet` + per-cell velocity impulse capped at `0.1`).
   3. Keep `BRUSH_MARKS_KINDS` in sync across `packages/core/src/brushes/types.ts` and `packages/swift/Sources/PixeratePaint/Brushes/Profiles.swift`, and verify all four new-engine dispatch points (`PaintStrokeSession`, `liveStrokeRefusal`, `resolveEngine`, `renderBrushThumbnail`) plus symmetry copies (`copy.mirrorX !== copy.mirrorY` flips the vortex spin sign).
+
+### [core|swift/paint] Wet Vortex Swirl Lifetime, Clipped Integration Travel, and Gradient Ink
+- **Issue / Symptom**:
+  1. Wet paint stirred by a vortex brush kept circulating forever, each stroke made it worse, `get_wet_layer` still said `flow: none`, and growing the canvas left/up left the swirl where it was.
+  2. Big vortex tips (tip 300, `turns: 6`) wound far less than `turns` said: more turns barely changed the result.
+  3. An inked vortex stroke (`ink > 0`) with gradient paint came out in the single colour.
+- **Root Cause**:
+  1. `WetWorld.swirl` wrapped `lane.flow` in a new closure per stroke and forced `flowStrength = 1`, turning a one-off stir into a permanent, chained flow map the editor's wet settings knew nothing about (and `extend` keeps `l.flow` when the setting is `none`).
+  2. `integrateVelocityField` capped the sub-steps at 240 and clipped each sub-step at ~0.45 grid cells, so the fastest cells lost most of their travel once `turns × radius` needed more steps.
+  3. `DryStroke` has no `paint` option (passing one in an options object is silently ignored); gradient paint only works through `PaintDabStroke` with `engine: 'dab'` (its paint exchange samples the gradient).
+- **Solution / Workaround**:
+  1. Keep the swirl as `lane.swirl` (`WetSwirlState`): one slot, replaced by the next stroke (symmetry copies at the same clock share it), added on top of the flow planes in `fillFlow` and divided by the kernel strength (`kernelFlowStrength`: the user's, or 1 only while a swirl exists). Age it only at `FREE_INTERVAL` boundaries (`afterBatch`, and the idle-skip branch of `step`) so results do not depend on how steps are chunked. Snapshots carry it; `moveWetSnapshot` / `moveSnapshot` translate its patches.
+  2. Take as many sub-steps as needed up to `MAX_INTEGRATION_STEPS`, and beyond that raise the sub-step cap to `peak / steps` so the travel is never clipped.
+  3. For gradient ink, paint the ink with `PaintDabStroke` (`engine: 'dab'`, `pickup: 0`, `EMPTY_MIXER_LOAD`) over a copy-on-write tile target (`layGradientInk`).
