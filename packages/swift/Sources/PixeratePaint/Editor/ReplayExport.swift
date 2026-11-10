@@ -152,7 +152,8 @@ extension PaintEditorController {
 
     /// Repaints this painting into `target`, calling `onStroke` after each stroke (`replayPainting`).
     func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, maxStrokes: Int? = nil, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
-        let source = doc
+        // Live growth not yet committed is part of the painting shown: replay it too.
+        let source = withCulturePreviewEvents()
         let m: Affine = [s, 0, 0, s, 0, 0]
         if let maxStrokes, maxStrokes <= 0 { return }
         // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be),

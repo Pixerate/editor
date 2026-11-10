@@ -832,6 +832,8 @@ extension PaintEditorController {
     @discardableResult
     public func setAge(_ update: JSONObject) throws -> PaintAgeSettings {
         try validateAgeInput(update)
+        // Live growth commits first: the new document would otherwise drop its pending replay events.
+        flushCulturePreview()
         age = normalizeAge(update, age)
         doc = withAge(doc)
         return age

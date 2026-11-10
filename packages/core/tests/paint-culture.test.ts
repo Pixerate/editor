@@ -890,4 +890,28 @@ describe('Biopaint mycelial ink (#684)', () => {
     effects.stop();
     expect((c.document.paintEvents ?? []).some((e) => e.kind === 'culture-grow')).toBe(true);
   });
+  it('23. wet paint flowing on another layer during live growth keeps the run as one undo step with its replay events', async () => {
+    const c = new PaintEditorController({ width: 96, height: 96 });
+    const cultureLayer = c.getState().document.activeLayerId!;
+    c.paintStroke({ brushId: 'mycelial-ink', seed: 5, points: [{ x: 30, y: 30 }, { x: 60, y: 30 }] });
+    const wetLayer = c.addLayer({ name: 'Wash' }).id;
+    c.paintStroke({ layerId: wetLayer, brushId: 'watercolor-round', color: '#1d4ed8', seed: 2, points: [{ x: 20, y: 70, pressure: 0.8 }, { x: 76, y: 70, pressure: 0.8 }] });
+    expect(c.wetState().wet).toBe(true);
+    let nowMs = 1000;
+    let frameCb: (() => void) | null = null;
+    const player = c.playCultures({ now: () => nowMs, frame: (cb) => { frameCb = cb; return () => { if (frameCb === cb) frameCb = null; }; } });
+    for (let i = 0; i < 6; i++) {
+      nowMs += 100;
+      frameCb?.();
+      // The wash flows between growth frames: it replaces the document without an undo step.
+      await c.advanceWet({ steps: 2 });
+    }
+    const undoBefore = c.historyLabels().undo.length;
+    player.stop();
+    expect(c.historyLabels().undo.length).toBe(undoBefore + 1);
+    expect(c.historyLabels().undo.at(-1)).toBe('Culture growth');
+    const grows = (c.document.paintEvents ?? []).filter((e) => e.kind === 'culture-grow' && e.layerId === cultureLayer);
+    expect(grows.length).toBe(1);
+    expect((grows[0]!.data as { steps: number }).steps).toBeGreaterThan(6);
+  });
 });

@@ -482,6 +482,11 @@ public final class PaintEditorModel {
         _ = controller.setCulturePaused(paused)
     }
 
+    /// Sets the live biopaint growth speed (0.25..4, default 1).
+    public func setCultureSpeed(_ speed: Double) {
+        attempt { _ = try controller.setCultureSpeed(speed) }
+    }
+
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
         let size = controller.brush.tip.size
@@ -740,6 +745,36 @@ public final class PaintEditorModel {
             let sleepMs = Swift.max(4.0, 16.0 - elapsed)
             try? await Task.sleep(nanoseconds: UInt64(sleepMs * 1_000_000))
         }
+    }
+
+    /**
+     * Grows living biopaint colonies live with the clock (`playCultures`) about 60 times a second
+     * until the task is cancelled (the editor view runs it). Growth follows the culture pause and
+     * speed, waits during strokes, and commits each uninterrupted run as one undo step ("Culture
+     * growth"), flushed before any other command, undo, redo or save, and when the task ends.
+     */
+    public func runCultureClock() async {
+        func nowMs() -> Double { Date().timeIntervalSinceReferenceDate * 1000 }
+        let player = controller.playCultures(now: nowMs())
+        var growing = false
+        var panelsAt = 0.0
+        while !Task.isCancelled {
+            let labels = (controller.undoLabel, controller.redoLabel)
+            let now = nowMs()
+            // Growth frames redraw the canvas; panels (the colony's tip and segment counts) refresh
+            // a few times a second, and when a run starts, ends or commits.
+            isQuietFrameChange = true
+            player.tick(now: now)
+            isQuietFrameChange = false
+            let running = player.hasPendingRun
+            if running != growing || (running && now - panelsAt > 250) || controller.undoLabel != labels.0 || controller.redoLabel != labels.1 {
+                growing = running
+                panelsAt = now
+                stateRevision &+= 1
+            }
+            try? await Task.sleep(nanoseconds: 16_000_000)
+        }
+        player.stop()
     }
 
     /// The water overlay over the canvas (RGBA tiles, straight alpha), when it is shown.
