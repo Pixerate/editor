@@ -1,0 +1,1484 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "document-load-problems",
+  "description": "Opening documents the editor cannot fully read: a file that is not a painting and one from a newer version are refused with the reason; otherwise every part that cannot be read is left out and reported (missing and undecodable assets, image editor filters and source images, unknown layer types, strokes, wet settings, saved pads, stencils, extension assets, light, thick paint, effect layers, heat and light spill), repeated layer ids get new ones, fields the editor does not know are kept and written back, and the result saves and reopens cleanly. Empty `deep` fields (null, false, 0) are not deep pixels and report nothing.",
+  "setup": {
+    "width": 32,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "get_canvas_info",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-image",
+        "version": 1
+      },
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "blendModes": [
+            "normal",
+            "darken",
+            "multiply",
+            "color-burn",
+            "linear-burn",
+            "darker-color",
+            "lighten",
+            "screen",
+            "color-dodge",
+            "linear-dodge",
+            "lighter-color",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "vivid-light",
+            "linear-light",
+            "pin-light",
+            "hard-mix",
+            "difference",
+            "exclusion",
+            "subtract",
+            "divide",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
+            "pigment",
+            "watercolor",
+            "tint",
+            "highlight",
+            "shadow"
+          ],
+          "bounds": {
+            "height": 32,
+            "width": 32,
+            "x": 0,
+            "y": 0
+          },
+          "brushId": "pencil-6b",
+          "color": "#1f2937",
+          "dpi": 300,
+          "hand": "right",
+          "height": 32,
+          "layerCount": 1,
+          "lighting": {
+            "azimuth": 315,
+            "elevation": 40,
+            "relief": 0.7
+          },
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "paper": {
+            "color": "#f7f3ea",
+            "depth": 0.5,
+            "name": "Cold pressed watercolour",
+            "preset": "cold-pressed"
+          },
+          "redo": null,
+          "secondaryColor": "#ffffff",
+          "strokes": 0,
+          "undo": null,
+          "view": {
+            "mirror": false,
+            "rotation": 0,
+            "zoom": 1
+          },
+          "wet": false,
+          "width": 32
+        },
+        "loaded": {
+          "error": "Not a paint document: format is \"pixerate-image\", expected \"pixerate-paint\"."
+        }
+      }
+    },
+    {
+      "tool": "get_canvas_info",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-paint",
+        "version": 99,
+        "width": 32,
+        "height": 32
+      },
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "blendModes": [
+            "normal",
+            "darken",
+            "multiply",
+            "color-burn",
+            "linear-burn",
+            "darker-color",
+            "lighten",
+            "screen",
+            "color-dodge",
+            "linear-dodge",
+            "lighter-color",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "vivid-light",
+            "linear-light",
+            "pin-light",
+            "hard-mix",
+            "difference",
+            "exclusion",
+            "subtract",
+            "divide",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
+            "pigment",
+            "watercolor",
+            "tint",
+            "highlight",
+            "shadow"
+          ],
+          "bounds": {
+            "height": 32,
+            "width": 32,
+            "x": 0,
+            "y": 0
+          },
+          "brushId": "pencil-6b",
+          "color": "#1f2937",
+          "dpi": 300,
+          "hand": "right",
+          "height": 32,
+          "layerCount": 1,
+          "lighting": {
+            "azimuth": 315,
+            "elevation": 40,
+            "relief": 0.7
+          },
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "paper": {
+            "color": "#f7f3ea",
+            "depth": 0.5,
+            "name": "Cold pressed watercolour",
+            "preset": "cold-pressed"
+          },
+          "redo": null,
+          "secondaryColor": "#ffffff",
+          "strokes": 0,
+          "undo": null,
+          "view": {
+            "mirror": false,
+            "rotation": 0,
+            "zoom": 1
+          },
+          "wet": false,
+          "width": 32
+        },
+        "loaded": {
+          "error": "Paint document version 99 is newer than this editor reads (2); update @pixerate/editor."
+        }
+      }
+    },
+    {
+      "tool": "get_canvas_info",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 0,
+        "height": 32
+      },
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "blendModes": [
+            "normal",
+            "darken",
+            "multiply",
+            "color-burn",
+            "linear-burn",
+            "darker-color",
+            "lighten",
+            "screen",
+            "color-dodge",
+            "linear-dodge",
+            "lighter-color",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "vivid-light",
+            "linear-light",
+            "pin-light",
+            "hard-mix",
+            "difference",
+            "exclusion",
+            "subtract",
+            "divide",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
+            "pigment",
+            "watercolor",
+            "tint",
+            "highlight",
+            "shadow"
+          ],
+          "bounds": {
+            "height": 32,
+            "width": 32,
+            "x": 0,
+            "y": 0
+          },
+          "brushId": "pencil-6b",
+          "color": "#1f2937",
+          "dpi": 300,
+          "hand": "right",
+          "height": 32,
+          "layerCount": 1,
+          "lighting": {
+            "azimuth": 315,
+            "elevation": 40,
+            "relief": 0.7
+          },
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "paper": {
+            "color": "#f7f3ea",
+            "depth": 0.5,
+            "name": "Cold pressed watercolour",
+            "preset": "cold-pressed"
+          },
+          "redo": null,
+          "secondaryColor": "#ffffff",
+          "strokes": 0,
+          "undo": null,
+          "view": {
+            "mirror": false,
+            "rotation": 0,
+            "zoom": 1
+          },
+          "wet": false,
+          "width": 32
+        },
+        "loaded": {
+          "error": "width 0 is out of range; use 1..16384 pixels."
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 40,
+        "height": 30,
+        "dpi": 144,
+        "paper": {
+          "color": "#f8f1e3"
+        },
+        "layers": [
+          {
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "id": "base",
+            "name": "Base",
+            "type": "pixel",
+            "offset": {
+              "x": 2,
+              "y": 1
+            },
+            "asset": "base",
+            "x": 3,
+            "y": 3,
+            "locks": {
+              "pixels": true
+            },
+            "clipped": false,
+            "mask": {
+              "defaultValue": 255,
+              "asset": "base",
+              "x": 0,
+              "y": 0,
+              "density": 0.5,
+              "feather": 2
+            },
+            "edge": {
+              "despill": 2,
+              "ambientColor": [
+                300,
+                -4,
+                12.4
+              ]
+            }
+          },
+          {
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "id": "gone",
+            "name": "Gone",
+            "type": "pixel",
+            "asset": "missing"
+          },
+          {
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "id": "broken",
+            "name": "Broken",
+            "type": "pixel",
+            "asset": "junk"
+          },
+          {
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "id": "holo",
+            "name": "Hologram",
+            "type": "hologram"
+          },
+          {
+            "visible": true,
+            "opacity": 1,
+            "blend": "pass-through",
+            "id": "grp",
+            "name": "Group",
+            "type": "group",
+            "collapsed": true,
+            "children": [
+              {
+                "visible": true,
+                "opacity": 0.5,
+                "blend": "multiply",
+                "id": "inner",
+                "name": "Inner",
+                "type": "pixel",
+                "filters": [
+                  {
+                    "kind": "blur",
+                    "radius": 2
+                  }
+                ],
+                "effects": {
+                  "enabled": true,
+                  "items": [
+                    {
+                      "kind": "stroke",
+                      "size": 2,
+                      "color": "#112233"
+                    },
+                    {
+                      "kind": "nope"
+                    }
+                  ]
+                }
+              },
+              {
+                "visible": true,
+                "opacity": 1,
+                "blend": "normal",
+                "id": "src",
+                "name": "Linked",
+                "type": "pixel",
+                "source": "document"
+              }
+            ]
+          },
+          {
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "id": "base",
+            "name": "Twin",
+            "type": "pixel"
+          }
+        ],
+        "assets": {
+          "base": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC",
+          "junk": "data:image/png;base64,AAAA"
+        },
+        "activeLayerId": "nope",
+        "strokes": [
+          {
+            "bogus": 1
+          }
+        ],
+        "wet": {
+          "tilt": {
+            "angle": 10,
+            "direction": 90
+          },
+          "layers": {
+            "base": 5,
+            "inner": {
+              "params": {
+                "evaporation": 0.3
+              }
+            }
+          }
+        },
+        "mixingPad": {
+          "saved": [
+            {
+              "name": 1
+            },
+            {
+              "id": "pad4",
+              "name": "Kept",
+              "png": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+            }
+          ]
+        },
+        "swatches": [
+          {
+            "color": "#ff0000"
+          },
+          "nope",
+          {
+            "name": "Sky",
+            "color": "#3b82f6"
+          }
+        ],
+        "guides": {
+          "symmetry": {
+            "mode": "vertical"
+          },
+          "stencils": [
+            {
+              "kind": "nope"
+            }
+          ],
+          "references": [
+            {
+              "id": "ref3",
+              "name": "Bad ref",
+              "src": "data:image/png;base64,AAAA"
+            }
+          ]
+        },
+        "light": {
+          "base": "asset:missing"
+        },
+        "layerChannels": {
+          "base": {
+            "height": "garbage"
+          }
+        },
+        "effectLayers": {
+          "base": {}
+        },
+        "heat": "x",
+        "lightSpill": {
+          "base": {
+            "radius": 9999
+          }
+        },
+        "paintEvents": [
+          {
+            "at": 1.5,
+            "layerId": "base",
+            "kind": "fill"
+          },
+          {
+            "at": 2,
+            "layerId": "base",
+            "kind": "clear"
+          },
+          {
+            "at": 3,
+            "kind": "clear"
+          }
+        ],
+        "wetEvents": [
+          {
+            "clock": 2,
+            "kind": "tilt",
+            "data": {
+              "angle": 5,
+              "direction": 0
+            }
+          },
+          {
+            "clock": "x",
+            "kind": "tilt"
+          }
+        ],
+        "origin": {
+          "x": 3.4,
+          "y": -2
+        },
+        "custom": {
+          "kept": true
+        }
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Twin",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "pass-through",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "grp",
+              "locks": {},
+              "name": "Group",
+              "opacity": 1,
+              "parentId": null,
+              "type": "group",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 1,
+              "id": "src",
+              "locks": {},
+              "name": "Linked",
+              "opacity": 1,
+              "parentId": "grp",
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "multiply",
+              "bounds": null,
+              "clipped": false,
+              "depth": 1,
+              "id": "inner",
+              "locks": {},
+              "name": "Inner",
+              "opacity": 0.5,
+              "parentId": "grp",
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "broken",
+              "locks": {},
+              "name": "Broken",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "gone",
+              "locks": {},
+              "name": "Gone",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 5,
+                "y": 4
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "base",
+              "locks": {
+                "pixels": true
+              },
+              "name": "Base",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [
+          "\"light\" refers to asset \"missing\", which could not be read; that part loads empty.",
+          "Layer \"Gone\": asset \"missing\" is missing",
+          "Layer \"Broken\": asset \"junk\" could not be decoded (Not a PNG image.)",
+          "Layer \"Hologram\": unknown layer type \"hologram\"",
+          "Layer \"Inner\": its filters are an image editor feature and were dropped.",
+          "Layer \"Linked\" refers to an image editor source image; it loads empty.",
+          "strokes[0] is not a recorded stroke; skipped.",
+          "wet.layers[\"base\"] is not wet settings; skipped.",
+          "mixingPad.saved[0] is not a saved pad; skipped.",
+          "Reference \"Bad ref\" could not be decoded as a PNG (Not a PNG image.); decode other formats in the browser and pass pixels.",
+          "Stencil 1: kind \"nope\" is not a stencil; use ruler, arc, line, shape.",
+          "The effect of layer \"base\" could not be read; it loads as a plain layer.",
+          "The light spill of layer \"base\" could not be read; it takes the defaults.",
+          "The light paint of layer \"base\" could not be read (not a saved light channel); it loads without light.",
+          "The heat field could not be read; the canvas loads cool.",
+          "The thick paint of layer \"base\" could not be read (not saved thick-paint channels); it loads flat."
+        ],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "base": "<binary>",
+              "base-mask": "<binary>"
+            },
+            "custom": {
+              "kept": true
+            },
+            "dpi": 144,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 20,
+                  "y": 15
+                },
+                "mirror": true,
+                "mode": "vertical",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 30,
+            "layers": [
+              {
+                "asset": "base",
+                "blend": "normal",
+                "edge": {
+                  "ambientColor": [
+                    255,
+                    0,
+                    12
+                  ],
+                  "despill": 1
+                },
+                "id": "base",
+                "locks": {
+                  "pixels": true
+                },
+                "mask": {
+                  "asset": "base-mask",
+                  "defaultValue": 255,
+                  "density": 0.5,
+                  "feather": 2,
+                  "x": 0,
+                  "y": 0
+                },
+                "name": "Base",
+                "offset": {
+                  "x": 2,
+                  "y": 1
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 3,
+                "y": 3
+              },
+              {
+                "blend": "normal",
+                "id": "gone",
+                "name": "Gone",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "broken",
+                "name": "Broken",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "pass-through",
+                "children": [
+                  {
+                    "blend": "multiply",
+                    "id": "inner",
+                    "name": "Inner",
+                    "offset": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "opacity": 0.5,
+                    "type": "pixel",
+                    "visible": true
+                  },
+                  {
+                    "blend": "normal",
+                    "id": "src",
+                    "name": "Linked",
+                    "offset": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "opacity": 1,
+                    "type": "pixel",
+                    "visible": true
+                  }
+                ],
+                "collapsed": true,
+                "id": "grp",
+                "name": "Group",
+                "opacity": 1,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Twin",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "mixingPad": {
+              "saved": [
+                {
+                  "id": "pad4",
+                  "name": "Kept",
+                  "png": "<binary>"
+                }
+              ]
+            },
+            "origin": {
+              "x": 3,
+              "y": -2
+            },
+            "paintEvents": [
+              {
+                "at": 2,
+                "kind": "clear",
+                "layerId": "base"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f8f1e3",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#ff0000"
+              },
+              {
+                "color": "#3b82f6",
+                "name": "Sky"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "inner": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.3,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 10,
+                "direction": 90
+              }
+            },
+            "wetEvents": [
+              {
+                "clock": 2,
+                "data": {
+                  "angle": 5,
+                  "direction": 0
+                },
+                "kind": "tilt"
+              }
+            ],
+            "width": 40
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-load-problems.4.png",
+          "width": 40,
+          "height": 30,
+          "sha256": "16a1b14f0ac0d44acbd109846fb68d2b0648e116d35d985b78144586d20fc900",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Twin",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "pass-through",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "grp",
+              "locks": {},
+              "name": "Group",
+              "opacity": 1,
+              "parentId": null,
+              "type": "group",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 1,
+              "id": "src",
+              "locks": {},
+              "name": "Linked",
+              "opacity": 1,
+              "parentId": "grp",
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "multiply",
+              "bounds": null,
+              "clipped": false,
+              "depth": 1,
+              "id": "inner",
+              "locks": {},
+              "name": "Inner",
+              "opacity": 0.5,
+              "parentId": "grp",
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "broken",
+              "locks": {},
+              "name": "Broken",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "gone",
+              "locks": {},
+              "name": "Gone",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 5,
+                "y": 4
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "base",
+              "locks": {
+                "pixels": true
+              },
+              "name": "Base",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "base": "<binary>",
+              "base-mask": "<binary>"
+            },
+            "custom": {
+              "kept": true
+            },
+            "dpi": 144,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 20,
+                  "y": 15
+                },
+                "mirror": true,
+                "mode": "vertical",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 30,
+            "layers": [
+              {
+                "asset": "base",
+                "blend": "normal",
+                "edge": {
+                  "ambientColor": [
+                    255,
+                    0,
+                    12
+                  ],
+                  "despill": 1
+                },
+                "id": "base",
+                "locks": {
+                  "pixels": true
+                },
+                "mask": {
+                  "asset": "base-mask",
+                  "defaultValue": 255,
+                  "density": 0.5,
+                  "feather": 2,
+                  "x": 0,
+                  "y": 0
+                },
+                "name": "Base",
+                "offset": {
+                  "x": 2,
+                  "y": 1
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 3,
+                "y": 3
+              },
+              {
+                "blend": "normal",
+                "id": "gone",
+                "name": "Gone",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "broken",
+                "name": "Broken",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "pass-through",
+                "children": [
+                  {
+                    "blend": "multiply",
+                    "id": "inner",
+                    "name": "Inner",
+                    "offset": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "opacity": 0.5,
+                    "type": "pixel",
+                    "visible": true
+                  },
+                  {
+                    "blend": "normal",
+                    "id": "src",
+                    "name": "Linked",
+                    "offset": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "opacity": 1,
+                    "type": "pixel",
+                    "visible": true
+                  }
+                ],
+                "collapsed": true,
+                "id": "grp",
+                "name": "Group",
+                "opacity": 1,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Twin",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "mixingPad": {
+              "saved": [
+                {
+                  "id": "pad4",
+                  "name": "Kept",
+                  "png": "<binary>"
+                }
+              ]
+            },
+            "origin": {
+              "x": 3,
+              "y": -2
+            },
+            "paintEvents": [
+              {
+                "at": 2,
+                "kind": "clear",
+                "layerId": "base"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f8f1e3",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#ff0000"
+              },
+              {
+                "color": "#3b82f6",
+                "name": "Sky"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "inner": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.3,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 10,
+                "direction": 90
+              }
+            },
+            "wetEvents": [
+              {
+                "clock": 2,
+                "data": {
+                  "angle": 5,
+                  "direction": 0
+                },
+                "kind": "tilt"
+              }
+            ],
+            "width": 40
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-load-problems.5.png",
+          "width": 40,
+          "height": 30,
+          "sha256": "16a1b14f0ac0d44acbd109846fb68d2b0648e116d35d985b78144586d20fc900",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 8,
+        "height": 6,
+        "paper": {
+          "color": "#ffffff"
+        },
+        "layers": [
+          {
+            "id": "flat",
+            "name": "Flat",
+            "type": "pixel",
+            "asset": "a",
+            "x": 1,
+            "y": 1,
+            "deep": null,
+            "mask": {
+              "defaultValue": 255,
+              "asset": "a",
+              "x": 0,
+              "y": 0,
+              "deep": false
+            }
+          },
+          {
+            "id": "plain",
+            "name": "Plain",
+            "type": "pixel",
+            "asset": "a",
+            "x": 4,
+            "y": 2,
+            "deep": 0
+          }
+        ],
+        "assets": {
+          "a": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+        },
+        "activeLayerId": "plain"
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "plain",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 4,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "plain",
+              "locks": {},
+              "name": "Plain",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 1,
+                "y": 1
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "flat",
+              "locks": {},
+              "name": "Flat",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "plain",
+            "assets": {
+              "flat": "<binary>",
+              "flat-mask": "<binary>",
+              "plain": "<binary>"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 4,
+                  "y": 3
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 6,
+            "layers": [
+              {
+                "asset": "flat",
+                "blend": "normal",
+                "id": "flat",
+                "mask": {
+                  "asset": "flat-mask",
+                  "defaultValue": 255,
+                  "x": 0,
+                  "y": 0
+                },
+                "name": "Flat",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 1
+              },
+              {
+                "asset": "plain",
+                "blend": "normal",
+                "id": "plain",
+                "name": "Plain",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 4,
+                "y": 2
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#ffffff",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#ff0000"
+              },
+              {
+                "color": "#3b82f6",
+                "name": "Sky"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {},
+              "tilt": {
+                "angle": 10,
+                "direction": 90
+              }
+            },
+            "width": 8
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-load-problems.6.png",
+          "width": 8,
+          "height": 6,
+          "sha256": "35d38c57f36ea88f8fa9a583bdcd67bd1deab42d8cb26a7750f005368b7c0540",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

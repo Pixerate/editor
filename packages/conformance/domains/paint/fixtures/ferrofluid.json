@@ -401,6 +401,263 @@
           "meanDelta": 0.1
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 36,
+                "width": 67,
+                "x": -2,
+                "y": 14
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:17i-22ud5o1jwd5"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layerChannels": {
+              "@1": {
+                "height": "pixerate-asset:19a-1gct2gepem0",
+                "material": "pixerate-asset:2ty-f3n9p79yb3",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -2,
+                "y": 14
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 1,
+                "data": {
+                  "advect": true,
+                  "magnets": [
+                    {
+                      "id": "mag1",
+                      "radius": 28,
+                      "strength": 1,
+                      "x": 32,
+                      "y": 32
+                    }
+                  ]
+                },
+                "kind": "magnets",
+                "layerId": ""
+              },
+              {
+                "at": 1,
+                "data": {
+                  "advect": true,
+                  "magnets": [
+                    {
+                      "id": "mag1",
+                      "radius": 32,
+                      "strength": 0.9,
+                      "x": 36,
+                      "y": 30
+                    }
+                  ]
+                },
+                "kind": "magnets",
+                "layerId": ""
+              },
+              {
+                "at": 1,
+                "kind": "cure-ferrofluid",
+                "layerId": "@1"
+              },
+              {
+                "at": 1,
+                "data": {
+                  "advect": false,
+                  "magnets": []
+                },
+                "kind": "magnets",
+                "layerId": ""
+              }
+            ],
+            "paper": {
+              "absorption": 0.3,
+              "color": "#ffffff",
+              "depth": 0,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "smooth",
+              "name": "Smooth bristol",
+              "pattern": "smooth",
+              "permeability": 0.2,
+              "preset": "smooth",
+              "roughness": 0.05,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "smoothing": 0.35
+                  },
+                  "ferro": {
+                    "amount": 0.85
+                  },
+                  "id": "ferrofluid",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Ferrofluid",
+                  "tip": {
+                    "flow": 0.9,
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 28
+                  }
+                },
+                "color": "#111827",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 16,
+                    "y": 32
+                  },
+                  {
+                    "x": 48,
+                    "y": 32
+                  }
+                ],
+                "seed": 42
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/ferrofluid.9.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "6531e33f11c9ad9f9171b85e17233e29162c837531d7f08481d94ea3b8d016b4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

@@ -18,6 +18,8 @@ private final class RecordingHost: ConformanceHost {
     func document() throws -> JSONValue { try inner.document() }
     func pixels(paper: Bool?) throws -> ConformanceImage { try inner.pixels(paper: paper) }
     func isGeneratedId(_ value: String) -> Bool { inner.isGeneratedId(value) }
+    func save() throws -> JSONValue? { try inner.save() }
+    func load(_ document: JSONValue) throws -> [String]? { try inner.load(document) }
 }
 
 /// Runs the scenarios named in `PIXERATE_PAINT_PROBE` (comma-separated ids, or `all`) whether or not

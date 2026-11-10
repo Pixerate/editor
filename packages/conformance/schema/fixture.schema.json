@@ -26,6 +26,8 @@
         "properties": {
           "tool": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Tool name, unprefixed." },
           "arguments": { "type": "object", "description": "Tool arguments; a string @n stands for the id numbered n." },
+          "reload": { "type": "boolean", "description": "Before this call, save the document and open the save again (history cleared), as an app reopening the painting does; expect.loaded records what loading reported." },
+          "load": { "type": "object", "description": "Before this call, open this saved document (the editor's own save format, assets inline); expect.loaded records what loading reported." },
           "document": { "type": "boolean", "description": "Also compare the saved document after this call." },
           "render": { "type": "boolean", "description": "Also compare the render data after this call (what the canvases draw, for editors without pixels: the vector scene)." },
           "pixels": {
@@ -59,6 +61,7 @@
             "properties": {
               "result": { "description": "The normalized structuredContent, or { error: { code, message, details? } }." },
               "isError": { "const": true },
+              "loaded": { "description": "What opening the document reported (steps with reload or load): the normalized problems, or { error } when the document was refused." },
               "document": { "description": "The normalized saved document." },
               "render": { "description": "The normalized render data." },
               "pixels": {

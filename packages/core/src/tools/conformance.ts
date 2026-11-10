@@ -20,6 +20,13 @@ export interface ConformanceStep {
 	tool: string;
 	/** Arguments. A string `@n` is replaced by the id that `@n` stands for. */
 	arguments?: Record<string, unknown>;
+	/**
+	 * Before this call, save the document and open the save again (`host.save`, then `host.load`),
+	 * as an app does when it reopens a painting. What loading reported is recorded in `expect.loaded`.
+	 */
+	reload?: boolean;
+	/** Before this call, open this saved document (`host.load`); what loading reported is recorded in `expect.loaded`. */
+	load?: unknown;
 	/** Also compare the saved document after this call. */
 	document?: boolean;
 	/**
@@ -46,6 +53,8 @@ export interface ConformanceExpectation {
 	/** The normalized `structuredContent`, or `{ error: { code, message, details? } }` for a failed call. */
 	result: unknown;
 	isError?: true;
+	/** What opening the document reported (steps with `reload` or `load`): the normalized problems, or `{ error }` when it was refused. */
+	loaded?: unknown;
 	document?: unknown;
 	/** The normalized render data (steps with `render: true`). */
 	render?: unknown;
@@ -88,6 +97,10 @@ export interface ConformanceHost {
 	 * `render: true`. Editors without render data leave it out.
 	 */
 	render?(): unknown;
+	/** The saved document as the editor's own save gives it, assets inline (for `reload` steps). */
+	save?(): unknown;
+	/** Opens a saved document, replacing the editor's; returns what could not be read (for `reload` and `load` steps). */
+	load?(document: unknown): string[];
 	/** Whether a string is an id this implementation generated in its own format (default: none). */
 	isGeneratedId?(value: string): boolean;
 	dispose?(): void;
@@ -97,6 +110,7 @@ export interface ConformanceHost {
 export interface ConformanceStepOutput {
 	result: unknown;
 	isError: boolean;
+	loaded?: unknown;
 	document?: unknown;
 	render?: unknown;
 	pixels?: { width: number; height: number; data: Uint8Array };
@@ -292,10 +306,25 @@ export async function runConformanceScenario(scenario: ConformanceScenario, host
 	const outputs: ConformanceStepOutput[] = [];
 	try {
 		for (const step of scenario.steps) {
+			let loaded: unknown;
+			if (step.reload || step.load !== undefined) {
+				const label = `Step ${outputs.length + 1} (${step.tool})`;
+				if (step.reload && step.load !== undefined) throw new Error(`${label} has both reload and load; use one.`);
+				if (!host.load || (step.reload && !host.save)) throw new Error(`${label} opens a document, which this host can't.`);
+				let problems: unknown;
+				try {
+					problems = host.load(step.reload ? host.save!() : step.load);
+				} catch (e) {
+					// A document the editor refuses: the error is part of the contract, like a tool's.
+					problems = { error: e instanceof Error ? e.message : String(e) };
+				}
+				loaded = normalizeConformanceValue(problems, ids, isId);
+			}
 			const args = resolveConformanceArguments(step.arguments ?? {}, ids) as Record<string, unknown>;
 			const { value, isError } = conformanceResult(await host.callTool(step.tool, args));
 			const result = normalizeConformanceValue(value, ids, isId);
 			const output: ConformanceStepOutput = { result: step.ignore ? omitConformancePaths(result, step.ignore) : result, isError };
+			if (loaded !== undefined) output.loaded = loaded;
 			if (step.document) output.document = normalizeConformanceValue(host.document(), ids, isId);
 			if (step.render) {
 				if (!host.render) throw new Error(`Step ${outputs.length + 1} (${step.tool}) asks for render data, which this host does not have.`);

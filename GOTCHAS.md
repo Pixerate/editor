@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint] Save → Load Conformance: Clocks, Asset Hashes and Fields Swift Doesn't Model
+
+- **Issue / Symptom**: Adding a `reload` step to every paint scenario (save, then `loadJSON`, then compare the document) failed in three ways that were not loader bugs. (1) `culture` was not deterministic between two TS runs. (2) `culture-replay` matched pixels within tolerance but its document differed in one asset reference. (3) A hand-written wet event with a field outside `data` came back in TS but not in Swift.
+- **Root Cause**: (1) `cultures.lastGrownAt` is wall-clock time, written on save when `growWhileClosed` is on. (2) Editor-document asset references are content hashes of the PNG bytes (`pixerate-asset:<len>-<hash>`), so a layer one level off anywhere changes the reference even though pixel comparison tolerates it. (3) TS keeps a saved event object verbatim; Swift's `WetEvent` / `PaintEvent` keep only the fields they model (`clock`, `at`, `kind`, `layerId`, `data`).
+- **Solution / Workaround**: Leave `document` off a reload step whose document carries a clock (`culture`) or whose pixels already differ within tolerance (`culture-replay`); keep `pixels` and `expect.loaded` on it. Write test documents in the schema's shape (event payloads under `data`). Any other document difference after a reload is a real loader gap. The cross-implementation comparison only proves a feature survives saving because each side also checks its own save → load → save at every reload step (the save after reopening equals the save opened, same pixels; `lastGrownAt` aside): `reopens what it saved unchanged` in `paint-conformance.test.ts` and `RoundTripHost` in `PaintConformanceTests.swift`. Those also cover the two reload steps without a document comparison.
+
+### [swift/paint] `loadJSON` Pairs With `toJSON`, Not `editorDocument()`
+
+- **Issue / Symptom**: Opening the output of `editorDocument()` loads every layer empty.
+- **Root Cause**: `editorDocument()` replaces each inline PNG with a content-addressed reference (`pixerate-asset:…`) and doesn't carry the bytes; the TS envelope gets them from its asset registry. Swift has no registry or async asset store yet.
+- **Solution / Workaround**: Persist `toJSON()` (assets inline) and reopen it with `loadJSON`. External asset stores (`loadJSONAsync`) are not ported.
+
 ### [swift/paint] Sticker Drag Previews Rely on Document Identity
 
 - **Issue / Symptom**: A sticker drag (`previewSticker`) must undo in one step from before the drag, but any other change in between must end the preview.

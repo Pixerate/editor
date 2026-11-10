@@ -542,6 +542,238 @@
           "kind": "paint"
         }
       }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 19,
+                "width": 50,
+                "x": 7,
+                "y": 18
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@2": "pixerate-asset:em-4duas1bv2k"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 24
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 48,
+            "layers": [
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 7,
+                "y": 18
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#dc2626",
+                "id": "s2",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 0.85,
+                    "x": 12,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 0.85,
+                    "x": 52,
+                    "y": 32
+                  }
+                ],
+                "seed": 301794027
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.25,
+                    "smoothing": 0.35
+                  },
+                  "id": "mutation-ink",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "mutation": {},
+                  "name": "Mutation ink",
+                  "tip": {
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.06
+                  }
+                },
+                "color": "#2563eb",
+                "id": "s3",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 12,
+                    "y": 22
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 48,
+                    "y": 22
+                  }
+                ],
+                "seed": 11
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/mutation.12.png",
+          "width": 64,
+          "height": 48,
+          "sha256": "1b7fe7acd8c628f8cfb17a74f52eaecb711bf5dc9406d71208370fd75fa5b103",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
     }
   ]
 }

@@ -19,10 +19,16 @@ public protocol ConformanceHost {
     /// What the canvases draw, as plain data (the vector scene), for steps with `render: true`;
     /// nil (the default) for an editor without render data.
     func render() throws -> JSONValue?
+    /// The saved document as the editor's own save gives it, assets inline (for `reload` steps); nil when the host can't.
+    func save() throws -> JSONValue?
+    /// Opens a saved document, replacing the editor's; returns what could not be read, or nil when the host can't open documents.
+    func load(_ document: JSONValue) throws -> [String]?
 }
 
 extension ConformanceHost {
     public func render() throws -> JSONValue? { nil }
+    public func save() throws -> JSONValue? { nil }
+    public func load(_ document: JSONValue) throws -> [String]? { nil }
 }
 
 /// Straight (not premultiplied) 8-bit RGBA, rows top to bottom.
@@ -43,6 +49,10 @@ public struct ConformanceImage: Equatable, Sendable {
 public struct ConformanceStep: Sendable {
     public var tool: String
     public var arguments: JSONObject
+    /// Save the document and open the save again before the call (`reload: true`).
+    public var reload: Bool = false
+    /// A saved document to open before the call (`load`).
+    public var load: JSONValue? = nil
     public var document: Bool
     /// Also compare the render data (`render: true`).
     public var render: Bool
@@ -80,7 +90,10 @@ public struct ConformanceScenario: Sendable {
             case .object(let p): pixels = .init(paper: p["paper"]?.boolValue)
             default: pixels = nil
             }
-            return ConformanceStep(tool: tool, arguments: s["arguments"]?.objectValue ?? JSONObject(), document: s["document"]?.boolValue == true, render: s["render"]?.boolValue == true, pixels: pixels, ignore: (s["ignore"]?.arrayValue ?? []).compactMap(\.stringValue), expect: expect)
+            var out = ConformanceStep(tool: tool, arguments: s["arguments"]?.objectValue ?? JSONObject(), document: s["document"]?.boolValue == true, render: s["render"]?.boolValue == true, pixels: pixels, ignore: (s["ignore"]?.arrayValue ?? []).compactMap(\.stringValue), expect: expect)
+            out.reload = s["reload"]?.boolValue == true
+            out.load = s["load"]
+            return out
         }
     }
 
@@ -243,6 +256,8 @@ public func conformanceResult(_ result: McpToolResult) -> (value: JSONValue, isE
 public struct ConformanceStepOutput: Sendable {
     public var result: JSONValue
     public var isError: Bool
+    /// What opening the document reported (steps with `reload` or `load`).
+    public var loaded: JSONValue?
     public var document: JSONValue?
     public var render: JSONValue?
     public var pixels: ConformanceImage?
@@ -253,11 +268,29 @@ public func runConformanceScenario(_ scenario: ConformanceScenario, host: some C
     let ids = ConformanceIds()
     var outputs: [ConformanceStepOutput] = []
     for step in scenario.steps {
+        var loaded: JSONValue?
+        if step.reload || step.load != nil {
+            let label = "Step \(outputs.count + 1) (\(step.tool))"
+            if step.reload && step.load != nil { throw ContractError("\(label) has both reload and load; use one.") }
+            guard let document = step.reload ? try host.save() : step.load else { throw ContractError("\(label) opens a document, which this host can't.") }
+            let value: JSONValue
+            do {
+                guard let problems = try host.load(document) else { throw ContractError("\(label) opens a document, which this host can't.") }
+                value = .array(problems.map { .string($0) })
+            } catch let e as ContractError {
+                throw e
+            } catch {
+                // A document the editor refuses: the error is part of the contract, like a tool's.
+                value = ["error": .string((error as? LocalizedError)?.errorDescription ?? "\(error)")]
+            }
+            loaded = normalizeConformanceValue(value, ids, isGeneratedId: host.isGeneratedId)
+        }
         guard case .object(let args) = try resolveConformanceArguments(.object(step.arguments), ids) else { continue }
         let (value, isError) = conformanceResult(await host.callTool(step.tool, args))
         var result = normalizeConformanceValue(value, ids, isGeneratedId: host.isGeneratedId)
         if !step.ignore.isEmpty { result = omitConformancePaths(result, step.ignore) }
         var output = ConformanceStepOutput(result: result, isError: isError)
+        output.loaded = loaded
         if step.document { output.document = normalizeConformanceValue(try host.document(), ids, isGeneratedId: host.isGeneratedId) }
         if step.render {
             guard let render = try host.render() else { throw ContractError("Step \(outputs.count + 1) (\(step.tool)) asks for render data, which this host does not have.") }
@@ -324,6 +357,9 @@ public func compareConformance(_ scenario: ConformanceScenario, _ outputs: [Conf
         let expectedResult = step.expect["result"] ?? .null
         if out.isError != (step.expect["isError"] == .bool(true)) || !conformanceValuesMatch(out.result, expectedResult) {
             fail("result \(out.result.stringified()) ≠ recorded \(expectedResult.stringified())")
+        }
+        if step.reload || step.load != nil, !conformanceValuesMatch(out.loaded ?? .null, step.expect["loaded"] ?? .null) {
+            fail("loading reported \((out.loaded ?? .null).stringified()) ≠ recorded \((step.expect["loaded"] ?? .null).stringified())")
         }
         if step.document, let expected = step.expect["document"], !conformanceValuesMatch(out.document ?? .null, expected) {
             fail("document differs from the recording")
