@@ -25,6 +25,7 @@ import {
   renderBrushThumbnail,
   type PenPoint,
 } from '../src/paint-editor';
+import { FREE_INTERVAL, SWIRL_FADE_INTERVALS } from '../src/paint';
 
 function circleLoopPoints(
   cx: number,
@@ -368,7 +369,9 @@ describe('Vortex paint (#683)', () => {
     });
     expect(res.wet).toBe(true);
     expect(res.vortex?.shape).toBe('closed');
-    expect(res.vortex?.maxDisplacement).toBeGreaterThan(2);
+    // The wet swirl reports how far it moved the water itself (the lift shift, at most ~2.3 px).
+    expect(res.vortex?.maxDisplacement).toBeGreaterThan(0);
+    expect(res.vortex?.maxDisplacement).toBeLessThanOrEqual(3);
 
     // Check WetWorld velocity field is non-zero around the loop
     const vel = c.wet.world?.velocityAt(layerId, 82, 64) ?? [0, 0];
@@ -461,5 +464,65 @@ describe('Vortex paint (#683)', () => {
       const thumb = renderBrushThumbnail(c.getBrush(id)!, { width: 96, height: 32, color: '#2563eb', paper: c.document.paper });
       expect(thumb.data.some((v) => v > 0)).toBe(true);
     }
+  });
+});
+
+describe('Vortex paint on wet layers: the fading swirl', () => {
+  function wetWithSwirl(size = 128) {
+    const c = new PaintEditorController({ width: size, height: size });
+    c.setColor('#2563eb');
+    c.paintStroke({ brushId: 'watercolor-wash', points: [{ x: 30, y: 64, pressure: 0.9 }, { x: 98, y: 64, pressure: 0.9 }] });
+    const layerId = c.document.activeLayerId!;
+    c.paintStroke({ brushId: 'vortex', points: circleLoopPoints(64, 64, 18, 20, true) });
+    return { c, layerId, world: () => c.wet.world! };
+  }
+
+  it('stirs on top of the flow map without becoming it, and fades out after SWIRL_FADE_INTERVALS', async () => {
+    const { c, layerId, world } = wetWithSwirl();
+    const sw = world().swirlOf(layerId);
+    expect(sw?.remaining).toBe(SWIRL_FADE_INTERVALS);
+    // The layer's own flow map is untouched: still none, and get_wet_layer says so.
+    expect(world().hasFlow(layerId)).toBe(false);
+    expect(c.wetLayerInfo(layerId).flow.kind).toBe('none');
+    await c.advanceWet({ steps: FREE_INTERVAL * 2 });
+    expect(world().swirlOf(layerId)?.remaining).toBe(SWIRL_FADE_INTERVALS - 2);
+    await c.advanceWet({ steps: FREE_INTERVAL * SWIRL_FADE_INTERVALS });
+    expect(world().swirlOf(layerId)).toBeNull();
+    expect(world().hasFlow(layerId)).toBe(false);
+  });
+
+  it('replaces the previous swirl instead of chaining it', async () => {
+    const { c, layerId, world } = wetWithSwirl();
+    await c.advanceWet({ steps: FREE_INTERVAL });
+    expect(world().swirlOf(layerId)?.remaining).toBe(SWIRL_FADE_INTERVALS - 1);
+    for (let i = 0; i < 4; i++) {
+      c.paintStroke({ brushId: 'vortex', points: circleLoopPoints(64, 64, 18, 20, i % 2 === 0) });
+      await c.advanceWet({ steps: 3 });
+    }
+    const sw = world().swirlOf(layerId)!;
+    expect(sw.patches.length).toBe(1);
+    expect(sw.remaining).toBe(SWIRL_FADE_INTERVALS);
+    // Strokes with no step between them share the one slot, capped.
+    for (let i = 0; i < 12; i++) c.paintStroke({ brushId: 'vortex', points: [{ x: 64, y: 64, pressure: 1 }] });
+    expect(world().swirlOf(layerId)!.patches.length).toBeLessThanOrEqual(8);
+  });
+
+  it('keeps the swirl in undo snapshots', async () => {
+    const { c, layerId, world } = wetWithSwirl();
+    await c.advanceWet({ steps: FREE_INTERVAL * 3 });
+    expect(world().swirlOf(layerId)?.remaining).toBe(SWIRL_FADE_INTERVALS - 3);
+    c.paintStroke({ brushId: 'vortex', points: circleLoopPoints(64, 64, 18, 20, false) });
+    expect(world().swirlOf(layerId)?.remaining).toBe(SWIRL_FADE_INTERVALS);
+    c.undo();
+    expect(world().swirlOf(layerId)?.remaining).toBe(SWIRL_FADE_INTERVALS - 3);
+  });
+
+  it('moves the swirl with the paint when the canvas grows left or up', () => {
+    const { c, layerId, world } = wetWithSwirl(256);
+    const before = world().swirlOf(layerId)!.patches[0]!.rect;
+    c.extendCanvas({ left: 256, top: 256 });
+    const after = world().swirlOf(layerId)!.patches[0]!.rect;
+    expect(after).toEqual({ ...before, x: before.x + 256, y: before.y + 256 });
+    expect(world().hasFlow(layerId)).toBe(false);
   });
 });

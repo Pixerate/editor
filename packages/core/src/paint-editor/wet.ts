@@ -47,7 +47,6 @@ import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, t
 import { grainCatch, hexToRgb8, PaperGrain, type PaperGrain as PaperGrainType, type PaperSettings } from './paper';
 import type { FilmBuffer } from './thick';
 import {
-  buildVortexDisplacement,
   buildVortexVelocityField,
   classifyVortexShape,
   resolveVortexSpinSign,
@@ -291,7 +290,6 @@ export class WetStrokeDriver {
       brush.tip.smoothing,
       brush.pressureSmoothing
     );
-    const { maxDisplacement } = buildVortexDisplacement(this.vortexPoints, brush, this.copies);
     const speedScale = Math.min(
       0.1,
       Math.max(0.03, (0.045 + 0.015 * vortex.turns) * Math.max(0.3, brush.wet.strength))
@@ -299,6 +297,9 @@ export class WetStrokeDriver {
     const rewetAmount = Math.max(0.2, brush.wet.rewet * 0.45);
 
     let anySwirled = false;
+    // What the swirl itself moved wet paint by at once (px), not the dry vortex's integrated warp:
+    // the water keeps turning after that under the layer's fading swirl.
+    let maxDisplacement = 0;
     for (const copy of this.copies) {
       const mapped = this.vortexPoints.map((p) => copy.map(p));
       const spinSign = resolveVortexSpinSign(
@@ -341,7 +342,7 @@ export class WetStrokeDriver {
         width: clipX1 - clipX0,
         height: clipY1 - clipY0,
       };
-      world.swirl(
+      const shift = world.swirl(
         laneId,
         clipRect,
         {
@@ -354,6 +355,7 @@ export class WetStrokeDriver {
         },
         rewetAmount
       );
+      if (shift > maxDisplacement) maxDisplacement = shift;
       rects.push(clipRect);
       anySwirled = true;
     }
@@ -361,7 +363,7 @@ export class WetStrokeDriver {
     const hasWetOrInk = vortex.ink > 0 || world.stats(laneId).wetCells > 0;
     if (anySwirled && hasWetOrInk) {
       this.dabCount = Math.max(1, this.vortexPoints.length);
-      this.vortexSummary = { shape: primaryClass.shape, maxDisplacement };
+      this.vortexSummary = { shape: primaryClass.shape, maxDisplacement: Math.round(maxDisplacement * 100) / 100 };
     } else {
       this.vortexSummary = { shape: primaryClass.shape, maxDisplacement: 0 };
     }

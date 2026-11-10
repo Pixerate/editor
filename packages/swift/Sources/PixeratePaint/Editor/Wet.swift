@@ -246,7 +246,6 @@ final class WetStrokeDriver {
             brush.tip.smoothing,
             brush.pressureSmoothing
         )
-        let (_, _, maxDisplacement) = buildVortexDisplacement(vortexPoints, brush, copies)
         let speedScale = Swift.min(
             0.1,
             Swift.max(0.03, (0.045 + 0.015 * vortex.turns) * Swift.max(0.3, brush.wet.strength))
@@ -254,6 +253,9 @@ final class WetStrokeDriver {
         let rewetAmount = Swift.max(0.2, brush.wet.rewet * 0.45)
 
         var anySwirled = false
+        // What the swirl itself moved wet paint by at once (px), not the dry vortex's integrated warp:
+        // the water keeps turning after that under the layer's fading swirl.
+        var maxDisplacement = 0.0
         for copy in copies {
             let mapped = vortexPoints.map { copy.map($0) }
             let spinSign = resolveVortexSpinSign(vortex.direction, primaryClass.shape, primaryClass.signedArea, copy)
@@ -286,7 +288,8 @@ final class WetStrokeDriver {
             if clipX1 <= clipX0 || clipY1 <= clipY0 { continue }
             let clipRect = RasterRect(x: clipX0, y: clipY0, width: clipX1 - clipX0, height: clipY1 - clipY0)
             let gridField = VelocityGridField(rect: velocity.rect, step: velocity.step, cols: velocity.cols, rows: velocity.rows, vx: vx, vy: vy, maxSpeed: speedScale)
-            try world.swirl(laneId, clipRect, gridField, rewetAmount: rewetAmount)
+            let shift = try world.swirl(laneId, clipRect, gridField, rewetAmount: rewetAmount)
+            if shift > maxDisplacement { maxDisplacement = shift }
             rects.append(clipRect)
             anySwirled = true
         }
@@ -294,7 +297,7 @@ final class WetStrokeDriver {
         let hasWetOrInk = try (vortex.ink > 0 || world.stats(laneId).wetCells > 0)
         if anySwirled && hasWetOrInk {
             dabCount = Swift.max(1, vortexPoints.count)
-            vortexSummary = VortexStrokeSummary(shape: primaryClass.shape, maxDisplacement: maxDisplacement)
+            vortexSummary = VortexStrokeSummary(shape: primaryClass.shape, maxDisplacement: JS.round(maxDisplacement * 100) / 100)
         } else {
             vortexSummary = VortexStrokeSummary(shape: primaryClass.shape, maxDisplacement: 0)
         }

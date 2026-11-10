@@ -182,6 +182,8 @@ interface Lane {
   lightKey: string;
   /** Half-resolution Gray-Scott reaction-diffusion field outside the wet kernel. */
   livePatterns: LivePatternField;
+  /** The vortex swirl stirring the water on top of the flow map (fading), or `null`. */
+  swirl: WetSwirlState | null;
 }
 
 const noLight = () => new TiledSurface(1, new Map(), 0);
@@ -225,6 +227,7 @@ function newLane(
     lightDisplay: null,
     lightKey: '',
     livePatterns: livePatterns ?? new LivePatternField(width, height),
+    swirl: null,
   };
 }
 
@@ -242,11 +245,39 @@ export interface WetLaneStats {
   wetBounds: RasterRect | null;
 }
 
+/** One footprint of a vortex swirl: per-cell velocity (cells per step) over a document rectangle. */
+export interface WetSwirlPatch {
+  readonly rect: RasterRect;
+  readonly ux: Float32Array;
+  readonly uy: Float32Array;
+}
+
+/**
+ * A layer's vortex swirl (`WetWorld.swirl`): a stir added on top of its flow map that fades out
+ * linearly over `SWIRL_FADE_INTERVALS` free intervals (`FREE_INTERVAL` steps each). A new stroke
+ * replaces it; symmetry copies of one stroke (swirls at the same clock) share it.
+ */
+export interface WetSwirlState {
+  readonly patches: readonly WetSwirlPatch[];
+  /** The clock the swirl was laid at. */
+  readonly clock: number;
+  /** Free intervals left before it is gone (`SWIRL_FADE_INTERVALS` when laid). */
+  readonly remaining: number;
+}
+
+/** Free intervals (`FREE_INTERVAL` steps each) a vortex swirl keeps stirring the water, fading linearly. */
+export const SWIRL_FADE_INTERVALS = 8;
+/** Swirl patches a layer keeps at once (symmetry copies of one stroke); the oldest goes first. */
+const MAX_SWIRL_PATCHES = 8;
+/** Swirl velocity (cells per step) to flow map units, and the largest flow the swirl adds. */
+const SWIRL_FLOW_GAIN = 0.08;
+const SWIRL_FLOW_CAP = 0.015;
+
 /** A copy of the whole simulation (for undo). */
 export interface WetSnapshot {
   readonly clock: number;
   readonly tilt: WetTilt;
-  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean; ghost?: WetGhostState | null; livePatterns?: LivePatternFieldSnapshot }>;
+  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean; ghost?: WetGhostState | null; livePatterns?: LivePatternFieldSnapshot; swirl?: WetSwirlState | null }>;
   /** Per active key: the current set and the deposit planes; and its last flags. */
   readonly slots: ReadonlyMap<number, { planes: Float32Array; last: number }>;
   /** Per-layer live-pattern snapshots (including layers whose water has already dried). */
@@ -578,6 +609,11 @@ export class WetWorld {
     return Boolean(this.laneOf(id).flow);
   }
 
+  /** The layer's vortex swirl still stirring its water (fading), or `null`. Read only. */
+  swirlOf(id: string): WetSwirlState | null {
+    return this.laneOf(id).swirl;
+  }
+
   /** The pixels under a layer's wet paint. */
   getBase(id: string): TiledSurface {
     return this.laneOf(id).base;
@@ -685,8 +721,13 @@ export class WetWorld {
     this.refreshHalos();
   }
 
+  /** The flow strength the kernel runs a lane with: its own, or 1 while only a swirl stirs it. */
+  private kernelFlowStrength(lane: Lane): number {
+    return lane.flowStrength !== 0 ? lane.flowStrength : lane.swirl ? 1 : 0;
+  }
+
   private pack(lane: Lane): void {
-    packWetParams(lane.params, this.paper ?? DEFAULT_WET_PAPER, this.tilt, lane.flowStrength, this.prm);
+    packWetParams(lane.params, this.paper ?? DEFAULT_WET_PAPER, this.tilt, this.kernelFlowStrength(lane), this.prm);
     this.f32.set(this.prm, (this.layout.params + lane.index * PARAM_FLOATS * 4) >> 2);
     this.gpuParamsDirty = true;
   }
@@ -808,6 +849,54 @@ export class WetWorld {
         this.f32[fx + y * S + x] = v ? Math.fround(v[0]) : 0;
         this.f32[fy + y * S + x] = v ? Math.fround(v[1]) : 0;
       }
+    }
+    const sw = lane.swirl;
+    if (!sw) return;
+    // The swirl's stir, faded, on top (divided by the kernel's strength, which multiplies it back).
+    const fade = sw.remaining / SWIRL_FADE_INTERVALS;
+    const k = this.kernelFlowStrength(lane);
+    const gx0 = tx * WET_TILE;
+    const gy0 = ty * WET_TILE;
+    for (const p of sw.patches) {
+      const x0 = Math.max(gx0, p.rect.x);
+      const y0 = Math.max(gy0, p.rect.y);
+      const x1 = Math.min(gx0 + WET_TILE, p.rect.x + p.rect.width);
+      const y1 = Math.min(gy0 + WET_TILE, p.rect.y + p.rect.height);
+      for (let gy = y0; gy < y1; gy++) {
+        for (let gx = x0; gx < x1; gx++) {
+          const i = (gy - p.rect.y) * p.rect.width + (gx - p.rect.x);
+          const sx = Math.max(-SWIRL_FLOW_CAP, Math.min(SWIRL_FLOW_CAP, p.ux[i]! * SWIRL_FLOW_GAIN * fade));
+          const sy = Math.max(-SWIRL_FLOW_CAP, Math.min(SWIRL_FLOW_CAP, p.uy[i]! * SWIRL_FLOW_GAIN * fade));
+          const j = (gy - gy0 + 1) * S + (gx - gx0 + 1);
+          this.f32[fx + j] = Math.fround(this.f32[fx + j] + sx / k);
+          this.f32[fy + j] = Math.fround(this.f32[fy + j] + sy / k);
+        }
+      }
+    }
+  }
+
+  /** Refills the flow planes of a lane's live tiles that a swirl touches (its patches). */
+  private refillSwirlTiles(lane: Lane, sw: WetSwirlState): void {
+    for (const key of this.active) {
+      if (this.laneIndexOf(key) !== lane.index) continue;
+      const [tx, ty] = this.tileXY(key);
+      const gx0 = tx * WET_TILE;
+      const gy0 = ty * WET_TILE;
+      const hit = sw.patches.some((p) => p.rect.x < gx0 + WET_TILE && p.rect.x + p.rect.width > gx0 && p.rect.y < gy0 + WET_TILE && p.rect.y + p.rect.height > gy0);
+      if (hit) this.fillFlow(key);
+    }
+  }
+
+  /** Ages every swirl by `intervals` free intervals: weaker, and gone (the flow map as it was) at the end. */
+  private ageSwirls(intervals: number): void {
+    if (intervals <= 0) return;
+    for (const lane of this.lanes) {
+      const sw = lane?.swirl;
+      if (!lane || !sw) continue;
+      const remaining = Math.max(0, sw.remaining - intervals);
+      lane.swirl = remaining > 0 ? { ...sw, remaining } : null;
+      if (!lane.swirl) this.pack(lane);
+      this.refillSwirlTiles(lane, sw);
     }
   }
 
@@ -948,6 +1037,7 @@ export class WetWorld {
     let woke = false;
     for (const key of wakeups) woke = this.activate(key) || woke;
     if (this.clock % FREE_INTERVAL === 0) {
+      this.ageSwirls(1);
       for (const lane of this.lanes) {
         if (!lane?.ghost || lane.ghost.trigger === 'agent') continue;
         const g = lane.ghost;
@@ -993,6 +1083,7 @@ export class WetWorld {
     let left = Math.max(0, Math.floor(steps));
     while (left > 0) {
       if (!this.active.length) {
+        this.ageSwirls(Math.floor((this.clock + left) / FREE_INTERVAL) - Math.floor(this.clock / FREE_INTERVAL));
         this.clock += left;
         break;
       }
@@ -1012,6 +1103,7 @@ export class WetWorld {
     let left = Math.max(0, Math.floor(steps));
     while (left > 0) {
       if (!this.active.length) {
+        this.ageSwirls(Math.floor((this.clock + left) / FREE_INTERVAL) - Math.floor(this.clock / FREE_INTERVAL));
         this.clock += left;
         break;
       }
@@ -1253,7 +1345,9 @@ export class WetWorld {
    * Swirls the water over `rect` according to a 2D velocity field (`field`: flat `[ux, uy]` array
    * of `rect.width * rect.height * 2`, coarse `{ vx, vy, cols, rows, step }` grid, or `(x, y) => [ux, uy]`),
    * capping per-cell velocity at `0.1`, lifting settled paint via `rewet` so older washes spin
-   * visibly, and installing the swirl flow so subsequent simulation steps keep turning.
+   * visibly. The water then keeps turning under a fading stir (`WetSwirlState`, gone after
+   * `SWIRL_FADE_INTERVALS` free intervals) on top of the layer's own flow map, which is left as
+   * it was. Returns the largest shift (cells) the swirl moved wet paint by at once.
    */
   swirl(
     id: string,
@@ -1270,8 +1364,8 @@ export class WetWorld {
         }
       | ((x: number, y: number) => readonly [number, number]),
     rewetAmount = 0.25
-  ): void {
-    if (rect.width <= 0 || rect.height <= 0) return;
+  ): number {
+    if (rect.width <= 0 || rect.height <= 0) return 0;
     const cap = 0.1;
     const wRect = rect.width;
     const hRect = rect.height;
@@ -1342,7 +1436,7 @@ export class WetWorld {
         anySpin = true;
       }
     }
-    if (!anySpin) return;
+    if (!anySpin) return 0;
 
     if (rewetAmount > 0) {
       this.rewet(
@@ -1357,6 +1451,7 @@ export class WetWorld {
 
     const lane = this.laneOf(id);
     const moves: Array<[number, number, number]> = [];
+    let peak = 0;
     this.footprint(
       id,
       rect,
@@ -1395,6 +1490,8 @@ export class WetWorld {
 
         const sx = Math.round(ux * 16);
         const sy = Math.round(uy * 16);
+        const shift = Math.hypot(sx, sy);
+        if (shift > peak) peak = shift;
         if (sx || sy) {
           const from = this.cell(lane, x - sx, y - sy);
           if (from >= 0 && f[from + P_RHO * PLANE] >= DRY_EPS) {
@@ -1424,31 +1521,17 @@ export class WetWorld {
       });
     }
 
-    // Install the swirl into the lane's flow field so subsequent steps continue spinning.
-    const prevFlow = lane.flow;
-    const rx0 = rect.x;
-    const ry0 = rect.y;
-    const rx1 = rect.x + wRect;
-    const ry1 = rect.y + hRect;
-    const swirlFlow: WetFlowField = (px, py) => {
-      const base: readonly [number, number] = prevFlow ? prevFlow(px, py) : [0, 0];
-      const ix = Math.floor(px) - rx0;
-      const iy = Math.floor(py) - ry0;
-      if (ix < 0 || iy < 0 || ix >= wRect || iy >= hRect) return base;
-      const k = iy * wRect + ix;
-      const fx = Math.max(-0.015, Math.min(0.015, base[0] + uxs[k]! * 0.08));
-      const fy = Math.max(-0.015, Math.min(0.015, base[1] + uys[k]! * 0.08));
-      return [fx, fy] as const;
-    };
-    lane.flow = swirlFlow;
-    if (!(lane.flowStrength > 0)) lane.flowStrength = 1;
+    // Keep stirring for a while: one swirl per layer, faded out over SWIRL_FADE_INTERVALS (it never
+    // becomes the layer's flow map). Symmetry copies of a stroke (same clock) share the slot.
+    const patch: WetSwirlPatch = { rect: { ...rect }, ux: uxs, uy: uys };
+    const prev = lane.swirl;
+    const patches = prev && prev.clock === this.clock ? [...prev.patches, patch].slice(-MAX_SWIRL_PATCHES) : [patch];
+    lane.swirl = { patches, clock: this.clock, remaining: SWIRL_FADE_INTERVALS };
     this.pack(lane);
-    for (const key of this.active) {
-      if (this.laneIndexOf(key) === lane.index) this.fillFlow(key);
-    }
-    void rx1;
-    void ry1;
+    if (prev) this.refillSwirlTiles(lane, prev);
+    this.refillSwirlTiles(lane, lane.swirl);
     this.refreshHalos();
+    return peak;
   }
 
   /** Blends wet paint: each wet cell's suspended pigment (and light) moves `strength` × coverage towards the footprint's mean. */
@@ -2377,7 +2460,7 @@ export class WetWorld {
     const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => {
       const lp = l.livePatterns.snapshot();
       bytes += lp.bytes;
-      return { id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: cloneGhost(l.ghost), livePatterns: lp };
+      return { id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: cloneGhost(l.ghost), livePatterns: lp, swirl: l.swirl };
     });
     return { clock: this.clock, tilt: { ...this.tilt }, lanes, slots, bytes };
   }
@@ -2392,6 +2475,7 @@ export class WetWorld {
       const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light, this.width, this.height, l.ghost);
       lane.lit = !lane.ghost && (lane.lit || Boolean(l.lit));
       if (l.livePatterns) lane.livePatterns.restore(l.livePatterns);
+      lane.swirl = l.swirl ?? null;
       this.lanes[l.index] = lane;
       this.pack(this.lanes[l.index]!);
     }
@@ -2448,7 +2532,8 @@ export interface WetSnapshotLaneMove {
  * pixels in size (a canvas grown on any side): every wet tile, with its water, pigment and
  * deposits, lands `dx` / `dy` further right / down. The shift has to be whole wet tiles
  * (`WET_TILE`); tiles that land outside `to` are dropped. `lane` gives each layer's base and flow
- * map in the new coordinates (default: as they were). Restore it into a world of `to`'s size.
+ * map in the new coordinates (default: as they were); swirls move with the paint. Restore it
+ * into a world of `to`'s size.
  */
 export function moveWetSnapshot(
   snap: WetSnapshot,
@@ -2478,7 +2563,8 @@ export function moveWetSnapshot(
     const moved = lane(l);
     const lp = l.livePatterns ? moveLivePatternSnapshot(l.livePatterns, to, tx0, ty0) : undefined;
     if (lp) bytes += lp.bytes;
-    return { ...l, base: moved.base ?? l.base, light: moved.light ?? l.light, flow: moved.flow === undefined ? l.flow : moved.flow, ...(lp ? { livePatterns: lp } : {}) };
+    const swirl = l.swirl ? { ...l.swirl, patches: l.swirl.patches.map((p) => ({ ...p, rect: { ...p.rect, x: p.rect.x + dx, y: p.rect.y + dy } })) } : l.swirl;
+    return { ...l, base: moved.base ?? l.base, light: moved.light ?? l.light, flow: moved.flow === undefined ? l.flow : moved.flow, ...(lp ? { livePatterns: lp } : {}), ...(swirl !== undefined ? { swirl } : {}) };
   });
   let patterns: Map<string, LivePatternFieldSnapshot> | undefined;
   if (snap.patterns) {

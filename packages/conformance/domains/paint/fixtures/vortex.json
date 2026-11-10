@@ -617,7 +617,7 @@
           "layerId": "@2",
           "strokeId": "s7",
           "vortex": {
-            "maxDisplacement": 41.28,
+            "maxDisplacement": 1,
             "shape": "open"
           },
           "wet": true

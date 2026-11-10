@@ -78,6 +78,34 @@ public struct WetGhostState: Equatable, Sendable {
     }
 }
 
+/// One footprint of a vortex swirl: per-cell velocity (cells per step) over a document rectangle.
+public struct WetSwirlPatch {
+    public let rect: RasterRect
+    public let ux: [Float]
+    public let uy: [Float]
+}
+
+/**
+ * A layer's vortex swirl (`WetWorld.swirl`): a stir added on top of its flow map that fades out
+ * linearly over `SWIRL_FADE_INTERVALS` free intervals (`FREE_INTERVAL` steps each). A new stroke
+ * replaces it; symmetry copies of one stroke (swirls at the same clock) share it.
+ */
+public struct WetSwirlState {
+    public let patches: [WetSwirlPatch]
+    /// The clock the swirl was laid at.
+    public let clock: Int
+    /// Free intervals left before it is gone (`SWIRL_FADE_INTERVALS` when laid).
+    public let remaining: Int
+}
+
+/// Free intervals (`FREE_INTERVAL` steps each) a vortex swirl keeps stirring the water, fading linearly.
+public let SWIRL_FADE_INTERVALS = 8
+/// Swirl patches a layer keeps at once (symmetry copies of one stroke); the oldest goes first.
+private let MAX_SWIRL_PATCHES = 8
+/// Swirl velocity (cells per step) to flow map units, and the largest flow the swirl adds.
+private let SWIRL_FLOW_GAIN = 0.08
+private let SWIRL_FLOW_CAP = 0.015
+
 /// A copy of the whole simulation (for undo).
 public final class WetSnapshot {
     let clock: Int
@@ -101,6 +129,7 @@ public final class WetSnapshot {
         var lit: Bool
         var ghost: WetGhostState?
         var livePatterns: LivePatternFieldSnapshot?
+        var swirl: WetSwirlState? = nil
     }
 
     init(clock: Int, tilt: WetTilt, lanes: [SnapLane], slots: [(key: Int, planes: [Float], last: UInt32)], patterns: OrderedMap<String, LivePatternFieldSnapshot>? = nil, bytes: Int) {
@@ -173,6 +202,8 @@ final class WetLane {
     var lightKey = -1
     var prm: [Float] = []
     var livePatterns: LivePatternField
+    /// The vortex swirl stirring the water on top of the flow map (fading), or nil.
+    var swirl: WetSwirlState?
 
     init(id: String, index: Int, params: WetParams, flow: WetFlowField?, flowStrength: Double, base: TiledSurface, light: TiledSurface?, width: Int, height: Int, ghost: WetGhostState? = nil, livePatterns: LivePatternField? = nil) {
         self.id = id
@@ -452,6 +483,9 @@ public final class WetWorld {
 
     public func hasFlow(_ id: String) throws -> Bool { try laneOf(id).flow != nil }
 
+    /// The layer's vortex swirl still stirring its water (fading), or nil.
+    public func swirlOf(_ id: String) throws -> WetSwirlState? { try laneOf(id).swirl }
+
     /// The pixels under a layer's wet paint.
     public func getBase(_ id: String) throws -> TiledSurface { try laneOf(id).base }
 
@@ -542,8 +576,13 @@ public final class WetWorld {
         refreshHalos()
     }
 
+    /// The flow strength the kernel runs a lane with: its own, or 1 while only a swirl stirs it.
+    private func kernelFlowStrength(_ lane: WetLane) -> Double {
+        lane.flowStrength != 0 ? lane.flowStrength : lane.swirl != nil ? 1 : 0
+    }
+
     private func pack(_ lane: WetLane) {
-        lane.prm = packWetParams(lane.params, paper.paper, tilt, lane.flowStrength)
+        lane.prm = packWetParams(lane.params, paper.paper, tilt, kernelFlowStrength(lane))
     }
 
     // MARK: - Slots
@@ -638,6 +677,48 @@ public final class WetWorld {
                     fy[y * S + x] = 0
                 }
             }
+        }
+        guard let sw = lane.swirl else { return }
+        // The swirl's stir, faded, on top (divided by the kernel's strength, which multiplies it back).
+        let fade = Double(sw.remaining) / Double(SWIRL_FADE_INTERVALS)
+        let k = kernelFlowStrength(lane)
+        let gx0 = tx * WET_TILE, gy0 = ty * WET_TILE
+        for p in sw.patches {
+            let x0 = Swift.max(gx0, p.rect.x), y0 = Swift.max(gy0, p.rect.y)
+            let x1 = Swift.min(gx0 + WET_TILE, p.rect.x + p.rect.width), y1 = Swift.min(gy0 + WET_TILE, p.rect.y + p.rect.height)
+            if x0 >= x1 || y0 >= y1 { continue }
+            for gy in y0..<y1 {
+                for gx in x0..<x1 {
+                    let i = (gy - p.rect.y) * p.rect.width + (gx - p.rect.x)
+                    let sx = Swift.max(-SWIRL_FLOW_CAP, Swift.min(SWIRL_FLOW_CAP, Double(p.ux[i]) * SWIRL_FLOW_GAIN * fade))
+                    let sy = Swift.max(-SWIRL_FLOW_CAP, Swift.min(SWIRL_FLOW_CAP, Double(p.uy[i]) * SWIRL_FLOW_GAIN * fade))
+                    let j = (gy - gy0 + 1) * S + (gx - gx0 + 1)
+                    fx[j] = Float(Double(fx[j]) + sx / k)
+                    fy[j] = Float(Double(fy[j]) + sy / k)
+                }
+            }
+        }
+    }
+
+    /// Refills the flow planes of a lane's live tiles that a swirl touches (its patches).
+    private func refillSwirlTiles(_ lane: WetLane, _ sw: WetSwirlState) {
+        for key in active where laneIndexOf(key) == lane.index {
+            let (tx, ty) = tileXY(key)
+            let gx0 = tx * WET_TILE, gy0 = ty * WET_TILE
+            let hit = sw.patches.contains { p in p.rect.x < gx0 + WET_TILE && p.rect.x + p.rect.width > gx0 && p.rect.y < gy0 + WET_TILE && p.rect.y + p.rect.height > gy0 }
+            if hit { fillFlow(key) }
+        }
+    }
+
+    /// Ages every swirl by `intervals` free intervals: weaker, and gone (the flow map as it was) at the end.
+    private func ageSwirls(_ intervals: Int) {
+        if intervals <= 0 { return }
+        for lane in lanes {
+            guard let lane, let sw = lane.swirl else { continue }
+            let remaining = Swift.max(0, sw.remaining - intervals)
+            lane.swirl = remaining > 0 ? WetSwirlState(patches: sw.patches, clock: sw.clock, remaining: remaining) : nil
+            if lane.swirl == nil { pack(lane) }
+            refillSwirlTiles(lane, sw)
         }
     }
 
@@ -778,6 +859,7 @@ public final class WetWorld {
         var woke = false
         for key in wakeups { woke = activate(key) || woke }
         if clock % FREE_INTERVAL == 0 {
+            ageSwirls(1)
             for lane in lanes {
                 guard let lane, var g = lane.ghost, g.trigger != "agent" else { continue }
                 let amount = g.remaining <= 1 ? 1.0 : 1.0 / Double(g.remaining)
@@ -819,6 +901,7 @@ public final class WetWorld {
         var left = Swift.max(0, steps)
         while left > 0 {
             if active.isEmpty {
+                ageSwirls((clock + left) / FREE_INTERVAL - clock / FREE_INTERVAL)
                 clock += left
                 break
             }
@@ -975,10 +1058,13 @@ public final class WetWorld {
 
     /**
      * Swirls the water over `rect` according to a 2D velocity field (`field`), capping per-cell
-     * velocity at `0.1`, lifting settled paint via `rewet` so older washes spin visibly, and
-     * installing the swirl flow so subsequent simulation steps keep turning.
+     * velocity at `0.1`, lifting settled paint via `rewet` so older washes spin visibly. The water
+     * then keeps turning under a fading stir (`WetSwirlState`, gone after `SWIRL_FADE_INTERVALS`
+     * free intervals) on top of the layer's own flow map, which is left as it was. Returns the
+     * largest shift (cells) the swirl moved wet paint by at once.
      */
-    public func swirl(_ id: String, _ rect: RasterRect, _ field: VelocityGridField, rewetAmount: Double = 0.25) throws {
+    @discardableResult
+    public func swirl(_ id: String, _ rect: RasterRect, _ field: VelocityGridField, rewetAmount: Double = 0.25) throws -> Double {
         try swirl(id, rect, { x, y in
             let step = Double(field.step)
             let ox = Double(field.rect.x)
@@ -1008,8 +1094,9 @@ public final class WetWorld {
         }, rewetAmount: rewetAmount)
     }
 
-    public func swirl(_ id: String, _ rect: RasterRect, _ sampleAt: (Double, Double) -> (Double, Double), rewetAmount: Double = 0.25) throws {
-        if rect.width <= 0 || rect.height <= 0 { return }
+    @discardableResult
+    public func swirl(_ id: String, _ rect: RasterRect, _ sampleAt: (Double, Double) -> (Double, Double), rewetAmount: Double = 0.25) throws -> Double {
+        if rect.width <= 0 || rect.height <= 0 { return 0 }
         let cap = 0.1
         let wRect = rect.width
         let hRect = rect.height
@@ -1036,7 +1123,7 @@ public final class WetWorld {
                 anySpin = true
             }
         }
-        if !anySpin { return }
+        if !anySpin { return 0 }
 
         if rewetAmount > 0 {
             try rewet(id, rect, cov, amount: rewetAmount, paper: [paperBytes[0], paperBytes[1], paperBytes[2]], suspend: true)
@@ -1044,6 +1131,7 @@ public final class WetWorld {
 
         let lane = try laneOf(id)
         var moves: [(UnsafeMutablePointer<Float>, UnsafeMutablePointer<Float>, Double)] = []
+        var peak = 0.0
         try footprint(id, rect, cov, wake: false) { c, w, x, y in
             let rho = Double(c[P_RHO * PL])
             if !(rho >= DRY_EPS) { return }
@@ -1077,6 +1165,8 @@ public final class WetWorld {
 
             let sx = Int(JS.round(ux * 16.0))
             let sy = Int(JS.round(uy * 16.0))
+            let shift = hypot(Double(sx), Double(sy))
+            if shift > peak { peak = shift }
             if sx != 0 || sy != 0 {
                 if let from = self.cell(lane, x - sx, y - sy), Double(from[P_RHO * PL]) >= DRY_EPS {
                     moves.append((from, c, Swift.min(0.45, w * 0.35)))
@@ -1102,26 +1192,18 @@ public final class WetWorld {
             }
         }
 
-        let prevFlow = lane.flow
-        let rx0 = rect.x
-        let ry0 = rect.y
-        let swirlUxs = uxs
-        let swirlUys = uys
-        let swirlFlow: WetFlowField = { px, py in
-            let base = prevFlow?(px, py) ?? (0.0, 0.0)
-            let ix = Int(floor(px)) - rx0
-            let iy = Int(floor(py)) - ry0
-            if ix < 0 || iy < 0 || ix >= wRect || iy >= hRect { return base }
-            let k = iy * wRect + ix
-            let fx = Swift.max(-0.015, Swift.min(0.015, base.0 + Double(swirlUxs[k]) * 0.08))
-            let fy = Swift.max(-0.015, Swift.min(0.015, base.1 + Double(swirlUys[k]) * 0.08))
-            return (fx, fy)
-        }
-        lane.flow = swirlFlow
-        if !(lane.flowStrength > 0) { lane.flowStrength = 1.0 }
+        // Keep stirring for a while: one swirl per layer, faded out over SWIRL_FADE_INTERVALS (it never
+        // becomes the layer's flow map). Symmetry copies of a stroke (same clock) share the slot.
+        let patch = WetSwirlPatch(rect: rect, ux: uxs, uy: uys)
+        let prev = lane.swirl
+        let patches = prev != nil && prev!.clock == clock ? Array((prev!.patches + [patch]).suffix(MAX_SWIRL_PATCHES)) : [patch]
+        let sw = WetSwirlState(patches: patches, clock: clock, remaining: SWIRL_FADE_INTERVALS)
+        lane.swirl = sw
         pack(lane)
-        for key in active where laneIndexOf(key) == lane.index { fillFlow(key) }
+        if let prev { refillSwirlTiles(lane, prev) }
+        refillSwirlTiles(lane, sw)
         refreshHalos()
+        return peak
     }
 
     /// Returns the instantaneous fluid velocity `(ux, uy)` at cell `(x, y)` on `id` (`(0, 0)` when dry or out of bounds).
@@ -1893,7 +1975,7 @@ public final class WetWorld {
         let ls = lanes.compactMap { $0 }.map { l -> WetSnapshot.SnapLane in
             let lp = l.livePatterns.snapshot()
             bytes += lp.bytes
-            return WetSnapshot.SnapLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: l.ghost, livePatterns: lp)
+            return WetSnapshot.SnapLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit, ghost: l.ghost, livePatterns: lp, swirl: l.swirl)
         }
         return WetSnapshot(clock: clock, tilt: tilt, lanes: ls, slots: out, bytes: bytes)
     }
@@ -1907,6 +1989,7 @@ public final class WetWorld {
             let lane = WetLane(id: l.id, index: l.index, params: l.params, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, width: width, height: height, ghost: l.ghost)
             lane.lit = lane.ghost == nil && (lane.lit || l.lit)
             if let lp = l.livePatterns { lane.livePatterns.restore(lp) }
+            lane.swirl = l.swirl
             lanes[l.index] = lane
             pack(lane)
         }
@@ -1945,6 +2028,9 @@ public final class WetWorld {
             if let base = m.base { out.base = base }
             if let light = m.light { out.light = light }
             if let flow = m.flow { out.flow = flow }
+            if let sw = l.swirl {
+                out.swirl = WetSwirlState(patches: sw.patches.map { p in WetSwirlPatch(rect: RasterRect(x: p.rect.x + dx, y: p.rect.y + dy, width: p.rect.width, height: p.rect.height), ux: p.ux, uy: p.uy) }, clock: sw.clock, remaining: sw.remaining)
+            }
             if let lp = l.livePatterns {
                 let movedLp = moveLivePatternSnapshot(lp, to: (width: to.0, height: to.1), tx0: tx0, ty0: ty0)
                 out.livePatterns = movedLp
