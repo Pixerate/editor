@@ -505,6 +505,27 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(model.tick(now: 3000), 0)
     }
 
+    func testTickingPlaysTheAntimatterBlastAnimationOnTheCanvas() async throws {
+        let model = try makeModel(width: 128, height: 128)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        _ = try await call(model.registry, "fill_layer", ["color": "#ff0000"])
+        _ = try await call(model.registry, "paint_stroke", ["points": [["x": 64, "y": 64, "pressure": 1, "t": 0]], "brushId": "antimatter", "seed": 5])
+        let committed = model.controller.compositePixels().data
+        _ = presenter.render()
+        XCTAssertTrue(model.controller.hasActiveBlastAnimation)
+        // The view's clock plays the blast frames over the canvas; the document stays as committed.
+        let doc = model.controller.doc
+        model.tick(now: 1000)
+        XCTAssertGreaterThan(presenter.render(), 0)
+        XCTAssertNotEqual(model.controller.compositePixels().data, committed)
+        model.tick(now: 1400)
+        XCTAssertTrue(model.controller.doc === doc)
+        model.tick(now: 2100)
+        XCTAssertFalse(model.controller.hasActiveBlastAnimation)
+        XCTAssertGreaterThan(presenter.render(), 0)
+        XCTAssertEqual(model.controller.compositePixels().data, committed)
+    }
+
     func testBrushesFollowAnEditThatKeepsTheId() throws {
         let model = try makeModel()
         var saved = try model.controller.brushLibrary.duplicate("pencil-6b", newId: "mine", name: "Before")

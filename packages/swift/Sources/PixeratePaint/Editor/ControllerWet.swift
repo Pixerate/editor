@@ -544,8 +544,10 @@ extension PaintEditorController {
         let thick = doc.thick
         let ferro = doc.ferro
         let ageCracks = useAge && isAgeActive(age) && age.cracks > 0 && lighting.relief > 0 ? age : nil
-        if thick == nil && liveThick == nil && ferro == nil && liveFerro == nil && ageCracks == nil { return layers }
+        let blastIds = blastChannelLayerIds
+        if thick == nil && liveThick == nil && ferro == nil && liveFerro == nil && ageCracks == nil && blastIds.isEmpty { return layers }
         var ids = thick?.keys ?? []
+        for id in blastIds where !ids.contains(id) { ids.append(id) }
         for id in ferro?.keys ?? [] where !ids.contains(id) { ids.append(id) }
         if let live = liveThick, !ids.contains(live.layerId) { ids.append(live.layerId) }
         if let live = liveFerro, !ids.contains(live.layerId) { ids.append(live.layerId) }
@@ -558,7 +560,7 @@ extension PaintEditorController {
         var out = layers
         for id in ids {
             guard let l = findLayer(out, id)?.layer, l.isPixel else { continue }
-            let ch = (liveThick?.layerId == id ? liveThick!.channels : thick?.get(id)) ?? emptyThickChannels()
+            let ch = (liveThick?.layerId == id ? liveThick!.channels : blastViewThick(id, thick?.get(id))) ?? emptyThickChannels()
             let ferroSurf = liveFerro?.layerId == id ? liveFerro!.surface : ferro?.get(id)
             let ferroSettings = liveFerro?.layerId == id ? liveFerro!.settings : (doc.ferroSettings?.get(id) ?? DEFAULT_FERRO)
             let ferroInput = ferroSurf != nil && !ferroSurf!.tiles.isEmpty

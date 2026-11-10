@@ -255,6 +255,8 @@ public final class PaintEditorController {
     var compositedVersions: [ObjectIdentifier: Int] = [:]
     /// The live stroke being painted from pointer input (`beginStroke`), if any.
     var liveStroke: PaintLiveStroke?
+    /// The antimatter blast expansion animation (view only; `ControllerBlastAnimation.swift`).
+    let blastAnimation = BlastAnimationState()
     /// The compositor the canvas view draws with: its per-tile cache makes redraws touch only changed tiles.
     lazy var viewCompositor = createPaintCompositor()
     /// The editor's own sticker library (find_stickers, describe_sticker).
@@ -410,6 +412,7 @@ public final class PaintEditorController {
 
     public func undo() -> String? {
         if liveStroke != nil { return nil }
+        clearBlastAnimation()
         guard let e = undoStack.popLast() else { return nil }
         redoStack.append(e)
         let paper = doc.paper
@@ -430,6 +433,7 @@ public final class PaintEditorController {
 
     public func redo() -> String? {
         if liveStroke != nil { return nil }
+        clearBlastAnimation()
         guard let e = redoStack.popLast() else { return nil }
         undoStack.append(e)
         let paper = doc.paper
@@ -471,6 +475,7 @@ public final class PaintEditorController {
             wet.reset()
         }
         resetMutations()
+        clearBlastAnimation()
         age = DEFAULT_AGE
         xrayView = false
         commit("New canvas", next)
@@ -1921,6 +1926,7 @@ public final class PaintEditorController {
     /// Ends a stroke session and returns `d` with its pixels and its recorded stroke.
     func endStroke(_ d: PaintDocumentState, _ session: PaintStrokeSession) throws -> (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush) {
         var result = try session.end()
+        noteAntimatterDriver(session.antimatterDriver)
         var out = d
         if let surface = session.surfaceAfter {
             let stroke = record(session)
@@ -2017,6 +2023,7 @@ public final class PaintEditorController {
     public func paintStroke(_ i: PaintStrokeInit, points rawPoints: [PenPoint]) throws -> PaintStrokeResult {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before painting another.") }
         let points = try checkPoints(rawPoints)
+        clearBlastAnimation()
         let before = doc
         var i = i
         if i.start == nil { i.start = Point2(x: points[0].x, y: points[0].y) }
@@ -2030,6 +2037,7 @@ public final class PaintEditorController {
         if run.doc !== before || wetOp != nil {
             commit("\(run.brush.name) stroke", withWetEvents(run.doc), before: before)
             queueVortexAnimation(after: run.result)
+            startPendingBlastAnimation(run.result.bounds)
             if let sid = run.result.strokeId, let stroke = doc.strokes.last(where: { $0.id == sid }) {
                 recordMutationStroke(stroke, run.result.bounds)
             }
@@ -2067,7 +2075,7 @@ public final class PaintEditorController {
 
     /// The layers with the live stroke's surface in place (a wet stroke's layer already shows the simulation).
     func currentLayers() -> [PaintLayer] {
-        guard let live = liveStroke, live.open, !live.isWet else { return doc.layers }
+        guard let live = liveStroke, live.open, !live.isWet else { return blastFrameLayers(doc.layers) }
         if let scraper = live.shown.initValues.scraper {
             var layers = doc.layers
             for (id, surface) in scraper.liveSurfaces() {
@@ -2108,7 +2116,7 @@ public final class PaintEditorController {
         var layers = lightLayers(uvLayers(litLayers(thermoLayers(base), liveThick: live, liveFerro: liveFerro, useAge: useAge, paintedLayerCount: paintedCount)), liveThick: live)
         if useAge { layers = ageLayers(layers, paintedLayerCount: paintedCount, liveThick: live) }
         // Backlit paper shines through everything: its light goes on top.
-        let baseIsCommitted = !winding && (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
+        let baseIsCommitted = !winding && (liveStroke?.open != true || liveStroke!.isWet) && !hasActiveBlastAnimation && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
         if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
         if let layerIds {
             layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }
@@ -2143,12 +2151,13 @@ public final class PaintEditorController {
         let light = doc.light ?? OrderedMap()
         var ids = light.keys
         for id in doc.thick?.keys ?? [] where !ids.contains(id) { ids.append(id) }
+        for id in blastChannelLayerIds where !ids.contains(id) { ids.append(id) }
         if ids.isEmpty { return layers }
         var out = layers
         for id in ids {
             guard let l = findLayer(out, id)?.layer, l.isPixel else { continue }
-            let lit = light.get(id)
-            let glowed = glowSurface(l.pixelSurface, lit, liveThick?.layerId == id ? liveThick!.channels : doc.thick?.get(id))
+            let lit = blastViewLight(id, light.get(id))
+            let glowed = glowSurface(l.pixelSurface, lit, liveThick?.layerId == id ? liveThick!.channels : blastViewThick(id, doc.thick?.get(id)))
             if glowed !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(glowed) } }
             if let lit, let committed = findLayer(doc.layers, id)?.layer, committed.isPixel, let spill = computeSpill(committed.pixelSurface, lit, lightSpills[id] ?? DEFAULT_LIGHT_SPILL) {
                 let node = RasterLayer(id: "\(id)::light", name: "\(l.name) light", visible: l.visible, opacity: l.opacity, blend: .mode(.linearDodge), content: .pixel(surface: spill, offset: l.pixelOffset, fillOpacity: nil))
