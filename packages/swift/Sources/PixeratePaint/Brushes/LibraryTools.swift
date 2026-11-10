@@ -52,8 +52,8 @@ private func paintWetTestStroke(_ brush: PaintBrush, _ paper: PaperSettings, _ c
         ))
         _ = try driver.push(thumbnailStroke(width, height))
         _ = try driver.finish()
-        // Blowing only shows once the water has moved.
-        if brush.wet.tool == "blow" { w.step(4) }
+        // Blowing and vortex only show once the water has moved.
+        if brush.wet.tool == "blow" || brush.wet.tool == "vortex" { w.step(brush.wet.tool == "vortex" ? 12 : 4) }
         let surf = try w.display("thumb").surface
         if let film {
             var ch = emptyThickChannels()
@@ -75,11 +75,11 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
     let rgba = rgb + [255]
     var surface = emptySurface(4)
     let bytes = { (c: [Int]) in c.map { UInt8($0) } }
-    if b.engine == "eraser" {
+    if b.engine == "eraser" || b.engine == "scraper" {
         surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: height), bytes(rgba))
     } else if b.engine == "wet" {
         // the wet layer draws its own band
-    } else if b.engine == "blender" || b.engine == "smudge" || b.engine == "antimatter" || (b.engine == "mixer" && !b.loadsColor) || b.behavior.pickup > 0 {
+    } else if b.engine == "blender" || b.engine == "smudge" || b.engine == "antimatter" || b.engine == "vortex" || (b.engine == "mixer" && !b.loadsColor) || b.behavior.pickup > 0 {
         let half = Int(JS.ceil(Double(height) / 2))
         surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: half), bytes(rgba))
         surface = fillRect(surface, RasterRect(x: 0, y: half, width: width, height: height - half), [232, 196, 64, 255])
@@ -95,14 +95,45 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
         )
         if b.engine == "impasto" { i.thick = emptyThickChannels() }
         else if b.iridescence != nil { i.film = emptySurface(4, 0) }
+        if b.engine == "scraper" {
+            let thumbLayer = RasterLayer(id: "thumbnail", name: "thumbnail", content: .pixel(surface: surface, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))
+            i.scraper = ScraperStrokeDriver(ScraperStrokeInit(brush: b, seed: 7, copies: [IDENTITY_COPY], selection: nil, inputFilter: nil), scrapeLayers: [thumbLayer], thickMap: nil)
+        }
         i.stampArt = stampArt
         if b.light.amount > 0 && b.engine != "sticker" { i.light = emptyLight() }
         let session = try PaintStrokeSession(i)
-        try session.push(thumbnailStroke(width, height))
+        let pts = thumbnailStroke(width, height)
+        try session.push(pts)
         _ = try session.end()
+        let beforeCulture = surface
         surface = session.surfaceAfter ?? surface
         let thick = session.thickChannels() ?? session.filmChannel().map { ThickChannels(height: emptySurface(1, 0), material: emptySurface(4, 0), film: $0) }
         light = session.lightChannel
+        if let c = b.culture {
+            let seeded = seedCultureFromStroke(
+                points: pts.map { Point2(x: $0.x, y: $0.y) },
+                brushSize: b.tip.size,
+                color: [rgb[0], rgb[1], rgb[2]],
+                culture: c,
+                strokeSeed: 7,
+                beforeSurface: beforeCulture,
+                afterSurface: surface,
+                canvasWidth: width,
+                canvasHeight: height
+            )
+            let grown = stepLayerCulture(
+                culture: seeded.culture,
+                surface: surface,
+                lightSurface: light ?? (c.glow > 0 ? emptyLight() : nil),
+                paperSeed: paper.seed,
+                paperDepthPermille: Int(JS.round(paper.depth * 1000)),
+                canvasWidth: width,
+                canvasHeight: height,
+                steps: 24
+            )
+            surface = grown.surface
+            if let gl = grown.lightSurface, !gl.tiles.isEmpty { light = gl }
+        }
         // Thick paint is shown lit, and light paint glowing, as on the canvas.
         let lit = thick.map { LitCache().lit(surface, $0, DEFAULT_LIGHTING) } ?? surface
         surface = light != nil || thick != nil ? glowSurface(lit, light, thick) : lit

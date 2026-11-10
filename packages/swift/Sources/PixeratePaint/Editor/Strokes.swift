@@ -44,6 +44,9 @@ public struct RecordedStroke {
     public var steps: [Int]?
     /// Antimatter brushes: the layer ids in stack order that were visible when the stroke was painted.
     public var targets: [String]?
+    /// Scraper strokes: the layers it cut through, top to bottom, so a replay cuts the same ones
+    /// whatever is hidden or locked when it runs (strokes without it derive them again).
+    public var scrapeLayerIds: [String]?
 }
 
 func applyAffine(_ m: Affine, _ x: Double, _ y: Double) -> (x: Double, y: Double) {
@@ -90,6 +93,7 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     if let stencils = s.stencils { o["stencils"] = .array(stencils.map { .object($0.json) }) }
     if let paint = s.paint { o["paint"] = paint.json }
     if let effect = s.effect { o["paint"] = effect.json }
+    if let ids = s.scrapeLayerIds { o["scrapeLayerIds"] = .array(ids.map { .string($0) }) }
     o["brush"] = .object(migrateBrushV1(s.brush))
     return .object(o)
 }
@@ -117,7 +121,8 @@ func strokeBounds(_ points: [PenPoint]) -> (x: Double, y: Double, width: Double,
 /// A stroke moved by `m` (the brush scaled with it).
 func varyStroke(_ stroke: RecordedStroke, _ m: Affine, pressureScale: Double = 1) -> RecordedStroke {
     // A pure rotation or flip has determinant 1 up to rounding: keep the brush size exact then.
-    let det = abs(m[0] * m[3] - m[1] * m[2]).squareRoot()
+    let detSigned = m[0] * m[3] - m[1] * m[2]
+    let det = abs(detSigned).squareRoot()
     let s = abs(det - 1) < 1e-9 ? 1 : det
     var out = stroke
     out.key = newStrokeKey()
@@ -126,13 +131,24 @@ func varyStroke(_ stroke: RecordedStroke, _ m: Affine, pressureScale: Double = 1
         if pressureScale != 1 { q.pressure = Swift.min(1, Swift.max(0, (p.pressure ?? 1) * pressureScale)) }
         return q
     }
-    if s != 1 {
-        var tip = stroke.brush.tip.json.objectValue!
-        tip["size"] = .number(stroke.brush.tip.size * s)
+    let flipVortexDir = detSigned < 0 && (stroke.brush.engine == "vortex" || (stroke.brush.engine == "wet" && stroke.brush.wet.tool == "vortex"))
+    if s != 1 || flipVortexDir {
         var raw = stroke.brush.json()
-        raw["tip"] = .object(tip)
+        if s != 1 {
+            var tip = stroke.brush.tip.json.objectValue!
+            tip["size"] = .number(stroke.brush.tip.size * s)
+            raw["tip"] = .object(tip)
+        }
+        if flipVortexDir {
+            let curV = brushVortex(stroke.brush)
+            if curV.direction == "cw" || curV.direction == "ccw" {
+                var v = curV
+                v.direction = curV.direction == "cw" ? "ccw" : "cw"
+                raw["vortex"] = v.json
+            }
+        }
         out.brush = normalizePaintBrush(raw)
-        if let paint = stroke.paint, paint.map.by == "distance", paint.map.unit != "dabs" {
+        if s != 1, let paint = stroke.paint, paint.map.by == "distance", paint.map.unit != "dabs" {
             var p = paint
             p.map.length = Swift.min(100000, Swift.max(1, (paint.map.length ?? 300) * s))
             out.paint = p

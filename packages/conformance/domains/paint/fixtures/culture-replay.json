@@ -1,0 +1,281 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "culture-replay",
+  "description": "Digesting biopaint growth (rot, digest > 0) over foreign paint, with a scraper cut through its threads, replays in live order with the colony's threads spared: X-ray of the painting replayed to its last stroke matches the live one, and 2x export repaints the network.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "ink-pen",
+        "color": "#dc2626",
+        "seed": 11,
+        "brush": {
+          "tip": {
+            "size": 14,
+            "hardness": 1
+          }
+        },
+        "points": [
+          {
+            "x": 42,
+            "y": 32
+          },
+          {
+            "x": 50,
+            "y": 32
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 22,
+            "width": 30,
+            "x": 31,
+            "y": 21
+          },
+          "dabs": 12,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "rot",
+        "seed": 5,
+        "points": [
+          {
+            "x": 18,
+            "y": 24
+          },
+          {
+            "x": 18,
+            "y": 40
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 36,
+            "width": 20,
+            "x": 8,
+            "y": 14
+          },
+          "culture": {
+            "seeds": 16
+          },
+          "dabs": 14,
+          "layerId": "@1",
+          "strokeId": "s2"
+        }
+      }
+    },
+    {
+      "tool": "grow_cultures",
+      "arguments": {
+        "steps": 24
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 40,
+            "width": 53,
+            "x": 0,
+            "y": 7
+          },
+          "layers": [
+            {
+              "bounds": {
+                "height": 40,
+                "width": 53,
+                "x": 0,
+                "y": 7
+              },
+              "layerId": "@1",
+              "segmentsAdded": 593,
+              "status": "growing",
+              "tipsAlive": 43
+            }
+          ],
+          "segmentsAdded": 593,
+          "status": "growing",
+          "steps": 24,
+          "tipsAlive": 43
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "ink-pen",
+        "color": "#2563eb",
+        "seed": 12,
+        "brush": {
+          "tip": {
+            "size": 10,
+            "hardness": 1
+          }
+        },
+        "points": [
+          {
+            "x": 10,
+            "y": 10
+          },
+          {
+            "x": 28,
+            "y": 14
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 22,
+            "width": 35,
+            "x": 1,
+            "y": 1
+          },
+          "dabs": 37,
+          "layerId": "@1",
+          "strokeId": "s3"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "paint-scraper",
+        "seed": 3,
+        "points": [
+          {
+            "x": 12,
+            "y": 32,
+            "pressure": 1
+          },
+          {
+            "x": 26,
+            "y": 32,
+            "pressure": 1
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 42,
+            "width": 56,
+            "x": -9,
+            "y": 11
+          },
+          "dabs": 9,
+          "layerId": "@1",
+          "strokeId": "s4"
+        }
+      }
+    },
+    {
+      "tool": "grow_cultures",
+      "arguments": {
+        "steps": 16
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 44,
+            "width": 64,
+            "x": 0,
+            "y": 7
+          },
+          "layers": [
+            {
+              "bounds": {
+                "height": 44,
+                "width": 64,
+                "x": 0,
+                "y": 7
+              },
+              "layerId": "@1",
+              "segmentsAdded": 383,
+              "status": "growing",
+              "tipsAlive": 18
+            }
+          ],
+          "segmentsAdded": 383,
+          "status": "growing",
+          "steps": 16,
+          "tipsAlive": 18
+        },
+        "pixels": {
+          "file": "png/culture-replay.6.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "5b3c7c8b30403046602912129b710a2ba72117eccba00b111286e70c2083d959",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "render_xray",
+      "arguments": {
+        "maxSide": 64
+      },
+      "expect": {
+        "result": {
+          "height": 64,
+          "hiddenLayerCount": 0,
+          "layerCount": 1,
+          "maxDensity": 0.513,
+          "meanDensity": 0.084,
+          "strokes": 4,
+          "totalStrokes": 4,
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "render_xray",
+      "arguments": {
+        "strokes": 4,
+        "maxSide": 64
+      },
+      "expect": {
+        "result": {
+          "height": 64,
+          "hiddenLayerCount": 0,
+          "layerCount": 1,
+          "maxDensity": 0.513,
+          "meanDensity": 0.084,
+          "strokes": 4,
+          "totalStrokes": 4,
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "export_high_res",
+      "arguments": {
+        "scale": 2,
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 9150,
+          "data": "<binary>",
+          "height": 128,
+          "mimeType": "image/png",
+          "width": 128
+        }
+      }
+    }
+  ]
+}

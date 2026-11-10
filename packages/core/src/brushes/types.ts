@@ -12,12 +12,13 @@
  */
 
 import type { ColorValue } from '../color/dual';
+import type { CultureSpecies } from '../paint/culture';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
 import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
-import type { DotRotation, DotTextureOrder, InvertMode, ParticleKind, ParticleRender, RibbonPairs, StickerFrameMode } from '../paint-editor/mark-settings';
+import type { DotRotation, DotTextureOrder, InvertMode, ParticleKind, ParticleRender, RibbonPairs, StickerFrameMode, VortexDirection } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';
 
 /** `mark`: lays a material; `tool`: works on paint already down (erases, blends, smudges, wets…). */
@@ -41,8 +42,8 @@ export type BrushTipShape = 'round' | 'flat' | 'chisel' | 'bristle' | 'stamp';
 export const BRUSH_TIP_SHAPES: readonly BrushTipShape[] = ['round', 'flat', 'chisel', 'bristle', 'stamp'];
 
 /** How the tip is laid along the path. */
-export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects' | 'antimatter';
-export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects', 'antimatter'];
+export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects' | 'antimatter' | 'scraper' | 'vortex';
+export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects', 'antimatter', 'scraper', 'vortex'];
 
 /** What the material does on the surface: stays where it lands (`dry`), flows and dries (`wet`) or stands up in relief (`thick`). */
 export type BrushSurface = 'dry' | 'wet' | 'thick';
@@ -225,7 +226,33 @@ export interface BrushAntimatterMarks {
   duration?: number;
 }
 
-export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks | BrushAntimatterMarks;
+/** Cuts down through the paint stack, layer by layer, stopping at locked layers or the paper. */
+export interface BrushScraperMarks {
+  kind: 'scraper';
+  /** Layers removed per full-pressure pass, 0..1 (default 0.5). */
+  depth?: number;
+  /** Blade edge sharpness, 0 (feathered) .. 1 (razor-sharp, default 0.7). */
+  sharpness?: number;
+}
+
+/** Vortex marks: the drawn path shapes a flow field that pulls and winds surrounding paint at pen-up. */
+export interface BrushVortexMarks {
+  kind: 'vortex';
+  /** How far it pulls from the stroke, in tip radii, 1..8 (default 3). Pressure scales the local reach. */
+  reach?: number;
+  /** How far paint winds around the shape, in turns, 0.25..6 (default 1.5). */
+  turns?: number;
+  /** How strongly paint is drawn inward toward the stroke, 0..1 (default 0.3). */
+  pull?: number;
+  /** Winding direction: `follow` (default: loops turn as drawn, open strokes and points turn clockwise), `cw` or `ccw`. */
+  direction?: VortexDirection;
+  /** How much paint colour the stroke lays before winding, 0..1 (default 0: colourless, only moves paint). */
+  ink?: number;
+  /** Seconds the winding animation takes on screen, 0..3 (default 1.2; 0 shows the final result at once). */
+  duration?: number;
+}
+
+export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks | BrushAntimatterMarks | BrushScraperMarks | BrushVortexMarks;
 
 /** Pen feel. Every amount is 0 (off) .. 1 unless noted. */
 export interface BrushDynamics {
@@ -460,6 +487,31 @@ export interface BrushLivePatterns {
 }
 
 /**
+ * Biopaint (`culture`): living ink that seeds spores along a brush stroke, grows outward as
+ * branching threads, steers towards paint on the layer and digests what it crosses.
+ */
+export interface BrushCulture {
+  /** Living species (default `mycelium`). */
+  species?: CultureSpecies;
+  /** How far a colony spreads on bare canvas in tip diameters, 1..100 (default 12). */
+  reach?: number;
+  /** How often threads fork, 0..1 (default 0.4). */
+  branching?: number;
+  /** How much threads meander, 0..1 (default 0.35). */
+  wander?: number;
+  /** How strongly threads steer towards paint, 0..1 (default 0.5). */
+  appetite?: number;
+  /** How much paint is consumed as threads cross it, 0..1 (default 0.25). */
+  digest?: number;
+  /** Chance a thread fuses into another thread it meets rather than deflecting, 0..1 (default 0.7). */
+  fuse?: number;
+  /** Thread width as a fraction of tip size, 0.02..0.5 (default 0.08). */
+  thickness?: number;
+  /** Bioluminescence written to `doc.light`, 0..1 (default 0). */
+  glow?: number;
+}
+
+/**
  * A colour a brush can carry: a solid colour (hex, `#rrggbbaa`, `rgba()` or a light / dark
  * `DualColor`), a gradient, or effect paint.
  */
@@ -506,6 +558,7 @@ export interface Brush {
   ferro?: BrushFerro;
   motion?: BrushMotion;
   livePatterns?: BrushLivePatterns;
+  culture?: BrushCulture;
   colour?: BrushColour;
 }
 

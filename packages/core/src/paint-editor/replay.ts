@@ -30,6 +30,7 @@ import type { WetEvent } from './wet';
 import { scaleStencil } from './stencils';
 import type { Sticker } from './stickers';
 import type { PaintMagnet } from './ferro';
+import type { CultureGrowEventData } from '../paint/culture';
 import type { WetFlowSpec } from '../paint/wet/flow';
 import type { WetParams, WetTilt } from '../paint/wet/model';
 import type { LivePatternsInput, LivePatternsSettings } from '../paint/live-patterns';
@@ -171,6 +172,7 @@ export async function replayPainting(
         });
       } else if (e.kind === 'clear') target.clearLayer(e.layerId);
       else if (e.kind === 'cure-ferrofluid') target.cureFerrofluid(e.layerId);
+      else if (e.kind === 'culture-grow') target.replayCultureGrow(e.layerId, e.data as unknown as CultureGrowEventData, s);
       else if (e.kind === 'live-strokes') {
         const d = e.data as { strokes?: RecordedStroke[]; rasterized?: boolean } | undefined;
         if (d?.rasterized) target.replaceLiveStrokes(e.layerId, null);
@@ -260,7 +262,7 @@ export async function replayPainting(
     strokes++;
     if (!target.getLayer(st.layerId)) continue;
     if (st.paint?.type === 'effect' && st.paint.map?.by === 'path') await target.prepareEffectPaints([st.paint]);
-    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), ...(st.targets ? { targets: st.targets } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))) };
+    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), ...(st.targets ? { targets: st.targets } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))), ...(st.scrapeLayerIds ? { scrapeLayerIds: st.scrapeLayerIds } : {}) };
     if (st.brush.engine === 'wet' && st.steps?.length === st.points.length) {
       // Each point at the clock it was recorded at, the simulation stepped in between.
       await target.wetIdle();

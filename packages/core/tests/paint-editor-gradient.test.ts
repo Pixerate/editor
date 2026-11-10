@@ -193,4 +193,16 @@ describe('gradient paint agent tools', () => {
     d.loadJSON(JSON.parse(JSON.stringify(c.toJSON())));
     expect(d.getState().swatches.at(-1)).toMatchObject({ name: 'Sky', paint: BLUE_YELLOW });
   });
+
+  it('inks a vortex stroke (ink > 0) in the gradient, not the one colour', () => {
+    const c = editor();
+    c.setColor('#ef4444');
+    c.setPaint(BLUE_YELLOW);
+    const r = c.paintStroke({ brushId: 'ink-vortex', brush: { tip: { size: 24 }, marks: { kind: 'vortex', ink: 1, turns: 0.25, reach: 1, duration: 0 } }, points: line(160) });
+    expect(r.strokeId).not.toBeNull();
+    const row = Array.from({ length: 61 }, (_, i) => at(c, 20 + i * 10, 160));
+    expect(row.some(isBlue)).toBe(true);
+    expect(row.some(isYellow)).toBe(true);
+    expect(row.some((p) => p[0] > 200 && p[1] < 100 && p[2] < 100)).toBe(false);
+  });
 });

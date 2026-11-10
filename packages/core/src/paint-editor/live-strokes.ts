@@ -27,8 +27,11 @@ export function liveStrokeRefusal(brush: PaintBrush): string | null {
       return `The ${brush.name} brush sprays stickers, which are their own objects; spray them on an empty pixel layer (add_layer).`;
     case 'eraser':
       return `Erasers don't paint on a stroke layer; delete strokes instead (remove_strokes), or rasterize the layer first (rasterize_stroke_layer).`;
+    case 'scraper':
+      return `The ${brush.name} brush scrapes through painted pixel layers, which a stroke layer can't redraw; rasterize the layer first (rasterize_stroke_layer) or scrape on a pixel layer.`;
     case 'blender':
     case 'smudge':
+    case 'vortex':
       return `The ${brush.name} brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer.`;
     case 'antimatter':
       return `The ${brush.name} brush detonates existing paint across visible layers, so it can't be redrawn on a stroke layer; paint it on a pixel layer (add_layer) or rasterize the layer first (rasterize_stroke_layer).`;
@@ -38,6 +41,7 @@ export function liveStrokeRefusal(brush: PaintBrush): string | null {
   if (brush.fluorescence.amount > 0) return `The ${brush.name} brush lays UV-fluorescent ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or set fluorescence.amount to 0 (set_brush).`;
   if (brush.thermochromic.hotColor !== null) return `The ${brush.name} brush lays thermochromic ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or remove thermochromic (set_brush).`;
   if (brush.ferro.amount > 0) return `The ${brush.name} brush lays ferrofluid, which a stroke layer doesn't redraw; paint ferrofluid on a pixel layer (add_layer), or set ferro.amount to 0 (set_brush).`;
+  if (brush.culture) return `The ${brush.name} brush seeds living biopaint (culture), which a stroke layer can't grow; paint it on a pixel layer (add_layer), or remove culture (set_brush).`;
   if (brush.behavior.pickup > 0) return `The ${brush.name} brush picks up the paint under it (pickup ${brush.behavior.pickup}), so it can't be redrawn on its own; set behavior.pickup to 0 (set_brush) or paint on a pixel layer.`;
   return null;
 }

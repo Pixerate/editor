@@ -269,7 +269,7 @@
       "additionalProperties": false
     },
     "marks": {
-      "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).",
+      "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).",
       "oneOf": [
         {
           "type": "object",
@@ -582,6 +582,87 @@
               "minimum": 0,
               "maximum": 2,
               "description": "Seconds a blast plays on screen (default 0.7; 0 shows the result at once)."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "scraper",
+              "description": "Always \"scraper\"."
+            },
+            "depth": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below."
+            },
+            "sharpness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7)."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Vortex paint: the stroke you draw is the shape of a vortex (a point whirlpool, an open racetrack, or a closed loop) that pulls in and winds surrounding paint at pen-up. Missing fields take their defaults.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "vortex",
+              "description": "Always \"vortex\"."
+            },
+            "reach": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 8,
+              "description": "How far the vortex pulls from the stroke, in tip radii (default 3). Pressure scales the local reach."
+            },
+            "turns": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 6,
+              "description": "How far paint winds around the shape, in turns (default 1.5)."
+            },
+            "pull": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How strongly paint is drawn inward toward the stroke: 0 pure spin, 1 strong whirlpool contraction (default 0.3)."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "follow",
+                "cw",
+                "ccw"
+              ],
+              "description": "Winding direction: follow (default: closed loops turn the way they were drawn; open strokes and points turn clockwise), cw (clockwise) or ccw (counter-clockwise)."
+            },
+            "ink": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How much paint colour the stroke lays before winding: 0 is colourless and only moves existing paint; > 0 lays colour and winds it (default 0)."
+            },
+            "duration": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3,
+              "description": "Seconds the view-only winding animation takes on screen; 0 shows the final result at once (default 1.2)."
             }
           },
           "required": [
@@ -1171,6 +1252,68 @@
           "minimum": 0,
           "maximum": 1,
           "description": "Impasto relief height written to the layer thick map as patterns grow (0..1, default 0)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "culture": {
+      "type": "object",
+      "description": "Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.",
+      "properties": {
+        "species": {
+          "type": "string",
+          "enum": [
+            "mycelium"
+          ],
+          "description": "Living species (default mycelium)."
+        },
+        "reach": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "How far a colony spreads on bare canvas in tip diameters (1..100, default 12)."
+        },
+        "branching": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How often threads fork (0..1, default 0.4)."
+        },
+        "wander": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much threads meander (0..1, default 0.35)."
+        },
+        "appetite": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How strongly threads steer towards paint on the layer (0..1, default 0.5)."
+        },
+        "digest": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25)."
+        },
+        "fuse": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7)."
+        },
+        "thickness": {
+          "type": "number",
+          "minimum": 0.02,
+          "maximum": 0.5,
+          "description": "Thread width as a fraction of tip size (0.02..0.5, default 0.08)."
+        },
+        "glow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Bioluminescence written to doc.light along grown threads (0..1, default 0)."
         }
       },
       "additionalProperties": false

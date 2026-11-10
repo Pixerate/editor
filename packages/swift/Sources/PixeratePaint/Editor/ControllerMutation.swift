@@ -669,6 +669,11 @@ extension PaintEditorController {
                 }
             }
         }
+        // As TS `savedState`: a document that grows while closed records when it was saved, so reopening catches up.
+        if state.growWhileClosed == true {
+            let now = JS.round(Date().timeIntervalSince1970 * 1000)
+            state = state.with { $0.lastGrownAt = now }
+        }
         return state
     }
 }

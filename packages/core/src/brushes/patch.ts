@@ -18,7 +18,9 @@ export type BrushPatch = {
     ? Partial<Brush['tip']>
     : K extends 'ferro'
       ? number | BrushFerro
-      : Brush[K];
+      : K extends 'culture'
+        ? Brush['culture'] | null
+        : Brush[K];
 };
 
 const FACETS = BRUSH_JSON_SCHEMA.properties!;
@@ -34,11 +36,18 @@ export const BRUSH_PATCH_PROPERTIES: Readonly<Record<string, JsonSchema>> = (() 
       BRUSH_FACET_SCHEMAS.ferro,
     ],
   };
-  return { ...rest, tip: { ...tip, description: `${tip.description} In a patch, shape may be left out to keep it.` }, ferro };
+  const culture: JsonSchema = {
+    description: `${BRUSH_FACET_SCHEMAS.culture.description ?? 'Biopaint mycelial ink.'} Pass null to remove the culture facet.`,
+    anyOf: [
+      BRUSH_FACET_SCHEMAS.culture,
+      { type: 'null', description: 'Remove the culture facet.' },
+    ],
+  };
+  return { ...rest, tip: { ...tip, description: `${tip.description} In a patch, shape may be left out to keep it.` }, ferro, culture };
 })();
 
 /** The facets a patch can remove (`unset`), back to the engine's defaults. */
-export const UNSETTABLE_BRUSH_FACETS = ['description', 'tags', 'medium', 'variety', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'ferro', 'motion', 'livePatterns', 'colour'] as const;
+export const UNSETTABLE_BRUSH_FACETS = ['description', 'tags', 'medium', 'variety', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'ferro', 'motion', 'livePatterns', 'culture', 'colour'] as const;
 export type UnsettableBrushFacet = (typeof UNSETTABLE_BRUSH_FACETS)[number];
 
 /** The `unset` argument of tools that take a patch. */
@@ -55,6 +64,10 @@ export function mergeBrushPatch<T extends Record<string, unknown>>(base: T, patc
   const out: Record<string, unknown> = { ...base };
   for (const [k, rawV] of Object.entries(patch)) {
     if (rawV === undefined) continue;
+    if (path === '' && k === 'culture' && rawV === null) {
+      delete out[k];
+      continue;
+    }
     const v = path === '' && k === 'ferro' && typeof rawV === 'number' ? { amount: rawV } : rawV;
     const rawOld = out[k];
     const old = path === '' && k === 'ferro' && typeof rawOld === 'number' ? { amount: rawOld } : rawOld;

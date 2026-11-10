@@ -142,6 +142,8 @@ extension PaintEditorController {
         target.doc = PaintDocumentState(canvas: target.doc.canvas, paper: paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [])
         target.lighting = lighting
         target.uvLight = uvLight
+        target.age = age
+        target.doc.age = isAgeActive(age) ? age : nil
         // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
         target.effectsProvider = effectsProvider
         if Int(w) == width && Int(h) == height { target.effectPaintPixels = effectPaintPixels }
@@ -149,13 +151,15 @@ extension PaintEditorController {
     }
 
     /// Repaints this painting into `target`, calling `onStroke` after each stroke (`replayPainting`).
-    func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
+    func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, maxStrokes: Int? = nil, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
         let source = doc
         let m: Affine = [s, 0, 0, s, 0, 0]
+        if let maxStrokes, maxStrokes <= 0 { return }
         // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be),
         // as the scaled strokes ask for it (scaling a stroke-mapped effect scales its map length).
         // A path-mapped stroke has a canvas-sized render of its own: those are rendered one at a time below.
-        try await target.prepareEffectPaints(source.strokes.map { s == 1 ? $0 : varyStroke($0, m) }.compactMap(\.effect).filter { $0.map?.by != "path" })
+        let strokesToPrepare = maxStrokes.map { Array(source.strokes.prefix($0)) } ?? source.strokes
+        try await target.prepareEffectPaints(strokesToPrepare.map { s == 1 ? $0 : varyStroke($0, m) }.compactMap(\.effect).filter { $0.map?.by != "path" })
         enum Item { case stroke(RecordedStroke), paint(PaintEvent), wet(WetEvent) }
         var items: [(item: Item, at: Double, order: Int)] = []
         var order = 0
@@ -181,6 +185,8 @@ extension PaintEditorController {
         }
         var strokes = 0
         for entry in items {
+            if let maxStrokes, strokes >= maxStrokes, case .stroke = entry.item { break }
+            if let maxStrokes, entry.at > Double(maxStrokes) { break }
             switch entry.item {
             case .wet(let e):
                 try advanceTo(e.clock)
@@ -308,6 +314,8 @@ extension PaintEditorController {
                     _ = try target.flattenRelief(e.layerId)
                 case "cure-ferrofluid":
                     _ = try target.cureFerrofluid(e.layerId)
+                case "culture-grow":
+                    try target.applyCultureGrowEvent(e.layerId, d, scale: s)
                 default:
                     continue
                 }
@@ -323,6 +331,7 @@ extension PaintEditorController {
                 i.stencils = false
                 i.maskStencils = (st.stencils ?? []).map { s == 1 ? $0 : scaleStencil($0, s) }
                 i.targets = st.targets
+                i.scrapeLayerIds = st.scrapeLayerIds
                 if st.brush.engine == "wet", let steps = st.steps, steps.count == st.points.count, !steps.isEmpty {
                     // Each point at the clock it was recorded at, the simulation stepped in between.
                     try advanceTo(steps[0])

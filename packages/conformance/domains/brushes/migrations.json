@@ -153,6 +153,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -317,6 +321,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -506,6 +514,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -670,6 +682,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -859,6 +875,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1023,6 +1043,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -1211,6 +1235,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1375,6 +1403,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -1570,6 +1602,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -1734,6 +1770,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -1926,6 +1966,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2090,6 +2134,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -2278,6 +2326,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2442,6 +2494,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -2632,6 +2688,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -2797,6 +2857,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -2985,6 +3049,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3149,6 +3217,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -3405,6 +3477,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3605,6 +3681,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3783,6 +3863,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -3947,6 +4031,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -4134,6 +4222,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -4298,6 +4390,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -4488,6 +4584,10 @@
         "crater": 0.5,
         "duration": 0.7
       },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
       "light": {
         "amount": 0,
         "pressure": false
@@ -4655,6 +4755,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,
@@ -4834,6 +4938,10 @@
         "sparkReach": 3,
         "crater": 0.5,
         "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
       },
       "light": {
         "amount": 0,

@@ -10,6 +10,7 @@ import PixerateRaster
 
 public let PAPER_NODE_ID = "__paper"
 public let TRACING_NODE_ID = "__tracing"
+public let XRAY_NODE_ID = "__xray"
 
 /// An RGBA image under the paint (the tracing image), drawn at its opacity and blend.
 public struct ImageNodeImage {
@@ -36,6 +37,8 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
     public let edge: LayerEdgeColor?
     /// The paper: where the light comes from, for metallic paper (nil otherwise).
     public private(set) var paperLight: (azimuth: Double, elevation: Double)?
+    /// The paper: time-machine ageing (yellowed varnish and dust), nil when unaged.
+    public private(set) var paperAge: PaintAgeSettings?
     private let kids: [ViewLayer]?
 
     public init(_ layer: RasterLayer) {
@@ -62,10 +65,11 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
         kids = nil
     }
 
-    /// The paper as a compositor layer; `light` relights metallic paper (`paperNode`).
-    public static func paper(_ paper: PaperSettings, light: PaintLighting? = nil) -> ViewLayer {
+    /// The paper as a compositor layer; `light` relights metallic paper (`paperNode`); `age` applies yellowed varnish and dust.
+    public static func paper(_ paper: PaperSettings, light: PaintLighting? = nil, age: PaintAgeSettings? = nil) -> ViewLayer {
         let node = ViewLayer(kind: .paper(paper), id: PAPER_NODE_ID, name: "Paper")
         if (paper.metallic ?? 0) > 0, let light { node.paperLight = (light.azimuth, light.elevation) }
+        if let age, isAgeActive(age), (age.varnish > 0 || age.dust > 0) { node.paperAge = age }
         return node
     }
 
@@ -104,11 +108,13 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
 /// A paper tile (cached by the paper settings and the rect).
 private let paperTiles = Locked(OrderedMap<String, [UInt8]>())
 
-func paperTile(_ paper: PaperSettings, _ r: RasterRect, light: (azimuth: Double, elevation: Double)? = nil) -> [UInt8] {
+func paperTile(_ paper: PaperSettings, _ r: RasterRect, light: (azimuth: Double, elevation: Double)? = nil, age: PaintAgeSettings? = nil) -> [UInt8] {
     let lightKey = light.map { "|\($0.azimuth),\($0.elevation)" } ?? ""
-    let key = "\(JSONValue.object(paper.json).stringified())|\(r.x),\(r.y),\(r.width),\(r.height)\(lightKey)"
+    let agePart = age.map { "|age:\(ageKey($0))" } ?? ""
+    let key = "\(JSONValue.object(paper.json).stringified())|\(r.x),\(r.y),\(r.width),\(r.height)\(lightKey)\(agePart)"
     if let t = paperTiles.with({ $0.get(key) }) { return t }
-    let t = renderPaper(paper, r, paperGrain(paper), light: light)
+    let base = renderPaper(paper, r, paperGrain(paper), light: light)
+    let t = age != nil ? agePaperTile(base, r.x, r.y, r.width, r.height, age!) : base
     paperTiles.with { cache in
         if cache.count > 512, let first = cache.first { _ = cache.delete(first.key) }
         cache.set(key, t)
@@ -121,7 +127,7 @@ func paintCompositorProfile() -> CompositorProfile<ViewLayer, BasicRasterSources
     var p = CompositorProfile<ViewLayer, BasicRasterSources>()
     p.contentTile = { layer, r, _ in
         switch layer.kind {
-        case .paper(let paper): return paperTile(paper, r, light: layer.paperLight)
+        case .paper(let paper): return paperTile(paper, r, light: layer.paperLight, age: layer.paperAge)
         case .image(let image, _):
             var out = [UInt8](repeating: 0, count: r.width * r.height * 4)
             let x0 = Swift.max(0, r.x), y0 = Swift.max(0, r.y)
@@ -139,7 +145,20 @@ func paintCompositorProfile() -> CompositorProfile<ViewLayer, BasicRasterSources
     }
     p.layerKey = { layer in
         switch layer.kind {
-        case .paper(let paper): return layer.paperLight.map { .array([.object(paper.json), .number($0.azimuth), .number($0.elevation)]) } ?? .object(paper.json)
+        case .paper(let paper):
+            if layer.paperLight != nil || layer.paperAge != nil {
+                var arr: [JSONValue] = [.object(paper.json)]
+                if let l = layer.paperLight {
+                    arr.append(.number(l.azimuth))
+                    arr.append(.number(l.elevation))
+                } else {
+                    arr.append(.null)
+                    arr.append(.null)
+                }
+                if let a = layer.paperAge { arr.append(.string(ageKey(a))) }
+                return .array(arr)
+            }
+            return .object(paper.json)
         case .image(_, let version): return .number(version)
         case .layer: return nil
         }

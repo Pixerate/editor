@@ -25,14 +25,16 @@ The paint editor adds no storage or compositor of its own. Paper is a compositor
 
 ## Brushes
 
-`PaintBrushEngine` (`brushes.ts`) is one of `dab`, `eraser`, `mixer`, `blender`, `smudge`, `wet`, `impasto`, `particle`, `bristle`, `sticker` and `antimatter`.
+`PaintBrushEngine` (`brushes.ts`) is one of `dab`, `eraser`, `mixer`, `blender`, `smudge`, `wet`, `impasto`, `particle`, `bristle`, `sticker`, `magnet`, `vortex`, `antimatter` and `heat`.
 
 - **Dry media** (`dab`): pencils, pastels, charcoal, markers and inks. The paint editor's own `PenDabWalker` (pressure, tilt, twist, velocity, rotation modes, seeded jitter) feeds the shared `rasterizeDab`, with the paper's grain catching on its peaks, into the shared coverage map and tile writer. Brush rotation is fixed, follows the stroke, or follows the pen's barrel.
 - **Blending** (`mixer`, `blender`, `smudge`): the Mixer Brush (a reservoir that picks up and mixes paint, in RGB or pigment), a blender that mixes nearby colours, and smudge. They all go through one pick-up / mix exchange (`paint/exchange.ts`). Brush behaviours add pick-up, mix, dirty brush (keeps the last colour) and multi-coloured brushes.
+- **Vortex paint** (`vortex`, #683): a `mark` brush (`marks.kind: 'vortex'`; presets `vortex`, `ink-vortex`, `whirlpool` and `wet-vortex`) where the stroke drawn is the shape of a vortex (`'point'`, `'open'` racetrack or `'closed'` loop). While the pen is down only the guide outline (`reach`) is shown; at pen-up a Euclidean distance transform and Lamb-Oseen tangential + radial pull velocity field are integrated into a single `DisplacementField` (`paint/displacement.ts`) and resampled once in premultiplied RGBA (plus thick relief and light/reactive twins). On wet layers it spins the live fluid via `WetWorld.swirl` instead of drying it first.
 - **Gradient paint** (`PaintSource`, #273): any engine can paint a gradient sampled per dab by distance, pressure, tilt, speed, direction, time, across the tip or at random.
 - **Procedural brushes** (`particle`, #242): `string` (strands of masses on springs), `spring`, `orbit` and `flow` particles, each drawn as dots, a line or a sequence of beads.
 - **Bristle brushes** (`bristle`): a tuft of bristles that splay with pressure, flatten with tilt, lag at turns and run dry one by one.
 - **Stickers** (`sticker`): procedural stamps (dot, star, heart, leaf, flower, confetti, splat, sparkle, ring) sprayed onto a sticker layer, where each stays an object that can be moved, turned, resized, recoloured or deleted.
+- **Biopaint** (`culture`, #684): a brush facet (`species: 'mycelium'`, `reach`, `branching`, `wander`, `appetite`, `digest`, `fuse`, `thickness`, `glow`; presets `mycelial-ink`, `rot`, `foxfire`) that seeds living spores along any dry, particle or bristle stroke (`paint/culture.ts`, `Culture.swift`). Tips creep across the layer in deterministic fixed-point integer arithmetic (`CULTURE_FP = 256`, 1024-entry integer cosine table, 32-bit integer hash), sensing ahead for existing paint, paper grain and occupancy, fading paint by `digest` while shifting their carried colour toward what they ate, branching into finer threads, fusing into closed loops (`fuse`), and writing bioluminescence to `doc.light` when `glow > 0`. Growth runs live via `playCultures(clock)` (committed as one undo step when interrupted) or headlessly via `grow_cultures`, records `{ kind: 'culture-grow' }` replay events so high-res exports scale the exact network without re-simulating, and optionally catches up up to 5,000 ticks on reopen when `growWhileClosed` is set.
 - **Antimatter** (`antimatter`, #682): a `marks.kind: 'antimatter'` brush that does nothing over bare canvas, but where it touches existing paint across any visible layer (`1 - Π(1 - α_i · opacity_i)` weighted by quantised coverage), accumulates fuel and detonates noise-edged radial blasts combined by maximum in a per-stroke heat field. Each blast inverts core colours (`rgb` or `oklab`), destroys alpha (`annihilate`, respecting transparency locks), burns a sooty scorch ring, clears `doc.light`, carves impasto relief craters (`doc.thick`), and launches white-hot sparks cooling to the brush colour on the active layer. It dries visible wet paint first and commits all affected visible editable pixel layers in one undo step (`RecordedStroke.targets`).
 - **Library**: built-in presets, saving and removing brushes, JSON import / export and thumbnails rendered from a test stroke.
 
@@ -127,7 +129,7 @@ An agent that contributes while the user paints suggests rather than paints:
 | 4–5. Oils and replay | #241 | Thick paint and lighting, oils, paint loading and thinners, drying controls, tilt and drips, time-lapse and high-resolution export |
 | 6. Procedural | #242 | Particle and bristle brushes, stickers, stencils |
 | 7. Paths | #271, #274, #277, #305, #306 | Brushstrokes on canvas and vector paths through one shared renderer |
-| Later | #273, #275, #284, #682, #685, #686 | Gradient paint, canvas paint-layer helpers, provider effects, antimatter paint, ghost paint and invisible ink, mutation paint |
+| Later | #273, #275, #284, #682, #683, #684, #685, #686 | Gradient paint, canvas paint-layer helpers, provider effects, antimatter paint, vortex paint, biopaint (mycelial ink), ghost paint and invisible ink, mutation paint |
 
 ## Decisions
 

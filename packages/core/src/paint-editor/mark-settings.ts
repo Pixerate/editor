@@ -284,3 +284,47 @@ export function normalizeAntimatter(raw: Partial<AntimatterSettings> = {}, base:
     duration: range(raw.duration, 0, 2, base.duration),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Vortex brushes
+// ---------------------------------------------------------------------------
+
+/** Winding direction of a vortex stroke: `follow` (loops turn the way they were drawn; open strokes and points turn clockwise), `cw` (clockwise) or `ccw` (counter-clockwise). */
+export type VortexDirection = 'follow' | 'cw' | 'ccw';
+export const VORTEX_DIRECTIONS: readonly VortexDirection[] = ['follow', 'cw', 'ccw'];
+
+/** Vortex engine settings. Sizes are multiples of the tip radius (`varyStroke` scales `tip.size`). */
+export interface VortexSettings {
+  /** How far the vortex pulls from the stroke, in tip radii (1..8, default 3). Pressure scales the local reach. */
+  reach: number;
+  /** How far paint winds around the stroke, in turns of the shape (0.25..6, default 1.5). */
+  turns: number;
+  /** How strongly paint is drawn inward toward the stroke (0..1, default 0.3). */
+  pull: number;
+  /** Winding direction (`follow`, `cw`, `ccw`, default `follow`). */
+  direction: VortexDirection;
+  /** How much paint colour the stroke lays before winding (0..1, default 0: colourless, only moves existing paint). */
+  ink: number;
+  /** Seconds the view-only winding animation takes on screen (0..3, default 1.2; 0 shows the final result at once). */
+  duration: number;
+}
+
+export const DEFAULT_VORTEX: Readonly<VortexSettings> = {
+  reach: 3,
+  turns: 1.5,
+  pull: 0.3,
+  direction: 'follow',
+  ink: 0,
+  duration: 1.2,
+};
+
+export function normalizeVortex(raw: Partial<VortexSettings> = {}, base: VortexSettings = DEFAULT_VORTEX): VortexSettings {
+  return {
+    reach: range(raw.reach, 1, 8, base.reach),
+    turns: range(raw.turns, 0.25, 6, base.turns),
+    pull: unit(raw.pull, base.pull),
+    direction: oneOf(raw.direction, VORTEX_DIRECTIONS, base.direction),
+    ink: unit(raw.ink, base.ink),
+    duration: range(raw.duration, 0, 3, base.duration),
+  };
+}

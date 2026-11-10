@@ -264,6 +264,17 @@ public struct PaintBrushPanel: View {
                     .font(.caption2)
                     .foregroundStyle(model.hasMutationAgent ? Color.secondary : Color.orange)
             }
+            if brush.engine == "vortex" || (brush.engine == "wet" && brush.wet.tool == "vortex") {
+                ForEach(model.vortexSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.vortexValue(item.path), range: item.min...item.max, step: item.step) { model.setVortexValue(item.path, $0) }
+                }
+                Picker("Direction", selection: Binding(get: { model.vortexDirection }, set: { model.setVortexDirection($0) })) {
+                    Text("Follow shape").tag("follow")
+                    Text("Clockwise").tag("cw")
+                    Text("Counter-clockwise").tag("ccw")
+                }
+                .font(.caption)
+            }
             if brush.engine == "antimatter" {
                 Picker("Invert colours in", selection: Binding(get: { model.antimatterInvertMode }, set: { model.setAntimatterInvertMode($0) })) {
                     Text(model.tables.labels.invertModes.rgb).tag("rgb")
@@ -369,6 +380,79 @@ public struct PaintPaperPanel: View {
             PaintLightPanel(model: model)
             PaintUvHeatPanel(model: model)
             PaintFerroPanel(model: model)
+            PaintTimeMachinePanel(model: model)
+            PaintCulturePanel(model: model)
+        }
+    }
+}
+
+/// Time machine (`TimeMachinePanel`): non-destructive ageing preview (years, varnish, cracks, fading, dust, seed), Bake age, X-ray radiograph view toggle, and a quick button to select the `paint-scraper` brush preset.
+public struct PaintTimeMachinePanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let age = model.age
+        let isAged = age.years > 0 && (age.varnish > 0 || age.cracks > 0 || age.fading > 0 || age.dust > 0)
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("Time machine")
+            Toggle("X-ray radiograph view", isOn: Binding(get: { model.xrayView }, set: { model.setXrayView($0) }))
+            ForEach(model.ageSliders, id: \.path) { c in
+                PaintSliderRow(label: c.label, value: model.ageValue(c.path), range: c.min...c.max, step: c.step, unit: c.path == "years" ? "yr" : "", onChange: { model.setAge(c.path, $0) })
+            }
+            HStack(spacing: 4) {
+                Button("Fresh (0 yr)") { model.setAgeYears(0) }.disabled(age.years == 0)
+                Button("Age 300 yr") { model.setAgeYears(300) }
+                Button("New crack seed") { model.newAgeSeed() }
+                Button("Bake age") { model.bakeAge() }.disabled(!isAged)
+            }
+            .controlSize(.small)
+            Button("Use Paint Scraper brush") { model.selectBrush("paint-scraper") }
+                .controlSize(.small)
+        }
+    }
+}
+
+/// Biopaint (`CulturePanel`): living mycelial ink brush controls, colony status, manual Grow / Pause / Kill actions, and grow-while-closed toggle.
+public struct PaintCulturePanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let state = model.cultures
+        let enabled = model.brushHasCulture
+        let activeId = model.activeLayer?.id
+        let activeSummary = activeId.flatMap { id in state.layers.first { $0.layerId == id } }
+        let totalTips = state.layers.reduce(0) { $0 + $1.tips }
+        let totalSegments = state.layers.reduce(0) { $0 + $1.segments }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                PanelHeading("Biopaint (mycelial ink)")
+                Spacer()
+                Toggle("Carry spores", isOn: Binding(get: { enabled }, set: { model.setBrushCultureEnabled($0) }))
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+            }
+            if enabled {
+                ForEach(model.cultureSliders, id: \.path) { item in
+                    PaintSliderRow(label: item.label, value: model.cultureValue(item.path), range: item.min...item.max, step: item.step) {
+                        model.setCultureValue(item.path, $0)
+                    }
+                }
+            }
+            HStack(spacing: 4) {
+                Button("Grow +24") { model.growCultures(steps: 24) }.disabled(totalTips == 0)
+                Button(state.paused ? "Resume" : "Pause") { model.setCulturePaused(!state.paused) }.disabled(totalTips == 0)
+                Button("Kill colony") { model.removeCultures(layerId: activeId) }.disabled((activeSummary?.tips ?? 0) == 0)
+            }
+            .controlSize(.small)
+            Toggle("Grow while closed", isOn: Binding(get: { state.growWhileClosed }, set: { model.setCultureOptions(growWhileClosed: $0) }))
+                .font(.caption)
+            if totalTips > 0 || totalSegments > 0 {
+                Text("\(totalTips) living tips · \(totalSegments) segments · \( activeSummary?.status ?? "idle")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

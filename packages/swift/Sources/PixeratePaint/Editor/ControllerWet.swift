@@ -539,29 +539,38 @@ extension PaintEditorController {
         return ["layerId": .string(l.id), "flattened": true]
     }
 
-    /// The layers with thick paint and/or ferrofluid relief lit (each layer's pixels replaced by its lit tiles).
-    func litLayers(_ layers: [PaintLayer], liveThick: (layerId: String, channels: ThickChannels)? = nil, liveFerro: (layerId: String, surface: TiledSurface, settings: FerroSettings)? = nil) -> [PaintLayer] {
+    /// The layers with thick paint, ferrofluid spikes and craquelure crack relief lit.
+    func litLayers(_ layers: [PaintLayer], liveThick: (layerId: String, channels: ThickChannels)? = nil, liveFerro: (layerId: String, surface: TiledSurface, settings: FerroSettings)? = nil, useAge: Bool = false, paintedLayerCount: Int = 1) -> [PaintLayer] {
         let thick = doc.thick
         let ferro = doc.ferro
-        if thick == nil && liveThick == nil && ferro == nil && liveFerro == nil { return layers }
+        let ageCracks = useAge && isAgeActive(age) && age.cracks > 0 && lighting.relief > 0 ? age : nil
+        let blastIds = blastChannelLayerIds
+        if thick == nil && liveThick == nil && ferro == nil && liveFerro == nil && ageCracks == nil && blastIds.isEmpty { return layers }
         var ids = thick?.keys ?? []
+        for id in blastIds where !ids.contains(id) { ids.append(id) }
         for id in ferro?.keys ?? [] where !ids.contains(id) { ids.append(id) }
         if let live = liveThick, !ids.contains(live.layerId) { ids.append(live.layerId) }
         if let live = liveFerro, !ids.contains(live.layerId) { ids.append(live.layerId) }
+        if ageCracks != nil {
+            for l in flattenLayers(layers) where l.isPixel && l.visible && !l.pixelSurface.tiles.isEmpty && !ids.contains(l.id) {
+                ids.append(l.id)
+            }
+        }
         let magnets = doc.magnets ?? []
         var out = layers
         for id in ids {
             guard let l = findLayer(out, id)?.layer, l.isPixel else { continue }
-            let ch = (liveThick?.layerId == id ? liveThick!.channels : thick?.get(id)) ?? emptyThickChannels()
+            let ch = (liveThick?.layerId == id ? liveThick!.channels : blastViewThick(id, thick?.get(id))) ?? emptyThickChannels()
             let ferroSurf = liveFerro?.layerId == id ? liveFerro!.surface : ferro?.get(id)
             let ferroSettings = liveFerro?.layerId == id ? liveFerro!.settings : (doc.ferroSettings?.get(id) ?? DEFAULT_FERRO)
             let ferroInput = ferroSurf != nil && !ferroSurf!.tiles.isEmpty
                 ? FerroLayerInput(surface: ferroSurf!, magnets: magnets, settings: ferroSettings, offset: l.pixelOffset)
                 : nil
-            if ch.height.tiles.isEmpty && ch.film.tiles.isEmpty && ferroInput == nil { continue }
+            let hasCracks = ageCracks != nil && !l.pixelSurface.tiles.isEmpty
+            if ch.height.tiles.isEmpty && ch.film.tiles.isEmpty && ferroInput == nil && !hasCracks { continue }
             let cache = litCaches[id] ?? LitCache()
             litCaches[id] = cache
-            let lit = cache.lit(l.pixelSurface, ch, lighting, viewTilt, ferroInput)
+            let lit = cache.lit(l.pixelSurface, ch, lighting, viewTilt, ferroInput, ageCracks, paintedLayerCount, l.pixelOffset)
             if lit !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(lit) } }
         }
         return out
@@ -591,6 +600,7 @@ extension PaintEditorController {
         if !thermo.isEmpty { out["thermo"] = .object(thermo) }
         if let heat = doc.heat, let savedHeat = heatToJSON(heat) { out["heat"] = savedHeat }
         if uvLight != DEFAULT_UV_LIGHT { out["uvLight"] = uvLight.json }
+        if let docAge = doc.age { out["age"] = docAge.json }
         return out
     }
 

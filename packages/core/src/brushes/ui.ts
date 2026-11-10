@@ -12,7 +12,7 @@
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { BRUSH_SLIDERS, brushEngineControls, type SliderControl } from '../paint-editor/brush-controls';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
 import { BrushLibraryError, type AddBrushSourceResult, type BrushLibrary, type BrushLibraryEntry, type SaveBrushResult } from './library';
 import { normalizeBrushSpec } from './normalize';
 import { brushColourKind, checkBrush, checkBrushEdit, degrade, PAINT_PROFILE, type BrushHostProfile, type BrushIssue, type BrushSupport } from './profiles';
@@ -73,7 +73,8 @@ const options = (values: readonly string[], labels: Readonly<Record<string, stri
 const MEDIUM_LABELS: Readonly<Record<BrushMedium, string>> = { paint: 'Paint', ink: 'Ink', dry: 'Dry media', spray: 'Spray' };
 const TOOL_LABELS: Readonly<Record<BrushTool, string>> = { eraser: 'Eraser', blender: 'Blender', smudge: 'Smudge', water: 'Add water', dryer: 'Dry', blow: 'Blow', blot: 'Blot', 'wet-blend': 'Wet blend', 'wet-drag': 'Wet smudge' };
 const SHAPE_LABELS: Readonly<Record<string, string>> = { round: 'Round', flat: 'Flat', chisel: 'Chisel', bristle: 'Bristle', stamp: 'Stamp' };
-const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', particles: 'Particles', objects: 'Stickers', antimatter: 'Antimatter' };
+const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', scatter: 'Spray', particles: 'Particles', objects: 'Stickers', antimatter: 'Antimatter', scraper: 'Scraper', vortex: 'Vortex' };
+const VORTEX_DIRECTION_LABELS: Readonly<Record<string, string>> = { follow: 'Follow stroke', cw: 'Clockwise', ccw: 'Counter-clockwise' };
 const SURFACE_LABELS: Readonly<Record<string, string>> = { dry: 'Dry', wet: 'Wet (flows)', thick: 'Thick (impasto)' };
 const ROTATION_LABELS: Readonly<Record<string, string>> = { fixed: 'Fixed', stroke: 'Follow stroke', barrel: 'Pen barrel' };
 const PHYSICS_LABELS: Readonly<Record<string, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow', elastic: 'Elastic', fuzzy: 'Fuzzy' };
@@ -98,6 +99,7 @@ const ARIA: Readonly<Record<string, string>> = {
   'marks.stampOrder': 'Dot texture order',
   'marks.stampRotation': 'Dot rotation',
   'marks.invertMode': 'Inversion mode',
+  'marks.direction': 'Vortex direction',
   'behaviour.wet.medium': 'Wet medium',
   'behaviour.thick.applicator': 'Impasto tool',
   'light.pressure': 'Light follows pressure',
@@ -177,7 +179,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   // Tip grain: texture inside each dab, where the host has it and the brush lays dabs.
-  const dabs = DAB_ENGINES.has(engine) && engineOk && shape !== 'bristle' && marks !== 'particles' && marks !== 'objects';
+  const dabs = DAB_ENGINES.has(engine) && engineOk && shape !== 'bristle' && marks !== 'particles' && marks !== 'objects' && marks !== 'vortex';
   const grain = brush.tip.grain;
   if (dabs && full(profile.tipGrain ?? 'none')) {
     add('grain', 'Tip grain', [
@@ -194,6 +196,8 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     const particles = marks === 'particles' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('particle.') && c.path !== 'particle.waveSpeed') : [];
     const objects = marks === 'objects' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('sticker.')) : [];
     const antimatter = marks === 'antimatter' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('antimatter.')) : [];
+    const scraper = marks === 'scraper' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('scraper.')) : [];
+    const vortex = marks === 'vortex' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('vortex.')) : [];
     const render = value('marks.render');
     add('marks', 'Marks', [
       choice('marks.kind', 'Laid as', options(profile.marks, MARKS_LABELS), 'continuous'),
@@ -203,9 +207,12 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
       marks === 'particles' && shape === 'stamp' && choice('marks.stampOrder', 'Texture order', options(DOT_TEXTURE_ORDERS, { sequence: 'In turn', random: 'Random' })),
       marks === 'particles' && shape === 'stamp' && choice('marks.stampRotation', 'Texture turn', options(DOT_ROTATIONS, { follow: 'Follow motion', random: 'Random', fixed: 'Tip angle' })),
       marks === 'antimatter' && choice('marks.invertMode', 'Inversion mode', options(INVERT_MODES, { rgb: 'RGB', oklab: 'OKLab' }), 'rgb'),
+      marks === 'vortex' && choice('marks.direction', 'Direction', options(VORTEX_DIRECTIONS, VORTEX_DIRECTION_LABELS), 'follow'),
       ...particles.map((c) => slider(c)),
       ...objects.map((c) => slider(c)),
       ...antimatter.map((c) => slider(c)),
+      ...scraper.map((c) => slider(c)),
+      ...vortex.map((c) => slider(c)),
     ]);
   }
 
@@ -226,7 +233,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|antimatter|iridescence)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|antimatter|scraper|vortex|iridescence|culture)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
   const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
@@ -241,6 +248,19 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.scale', label: 'Pattern scale', ariaLabel: 'Brush pattern scale', min: 0.5, max: 4, step: 0.1, value: brush.livePatterns.scale ?? 1 }),
     engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.contrast', label: 'Pattern contrast', ariaLabel: 'Brush pattern contrast', min: 0, max: 2, step: 0.05, value: brush.livePatterns.contrast ?? 1 }),
     engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.relief', label: 'Pattern relief', ariaLabel: 'Brush pattern relief', min: 0, max: 1, step: 0.05, value: brush.livePatterns.relief ?? 0 }),
+    !isTool && full(profile.culture ?? 'none') && marks !== 'objects' && withNote({ kind: 'toggle', path: 'culture', label: 'Biopaint (mycelial ink)', ariaLabel: 'Brush biopaint', value: Boolean(brush.culture) }),
+    ...(brush.culture && !isTool && full(profile.culture ?? 'none')
+      ? [
+          slider({ path: 'culture.reach', label: 'Reach', min: 1, max: 100, step: 1 }),
+          slider({ path: 'culture.branching', label: 'Branching', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.wander', label: 'Wander', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.appetite', label: 'Appetite', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.digest', label: 'Digest', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.fuse', label: 'Fuse', min: 0, max: 1, step: 0.01 }),
+          slider({ path: 'culture.thickness', label: 'Thread width', min: 0.02, max: 0.5, step: 0.01 }),
+          slider({ path: 'culture.glow', label: 'Bioluminescence', min: 0, max: 1, step: 0.01 }),
+        ]
+      : []),
   ]);
 
   if (!isTool && full(profile.light) && engineOk && engineControls?.light) {
@@ -301,7 +321,7 @@ export interface BrushEditorScope {
   note: string | null;
 }
 
-const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', continuous: 'continuous marks', antimatter: 'antimatter marks' };
+const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', continuous: 'continuous marks', antimatter: 'antimatter marks', scraper: 'scraper marks', vortex: 'vortex marks' };
 
 function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
   switch (issue.facet) {
@@ -338,6 +358,8 @@ function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
       return 'ghost paint';
     case 'mutation':
       return 'mutation paint';
+    case 'culture':
+      return 'biopaint';
     case 'motion':
       return 'motion';
     case 'dynamics.velocity':
@@ -459,6 +481,7 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
       delete next.ghost;
       delete next.mutation;
       delete next.ferro;
+      delete next.culture;
       delete next.colour;
       next.tool = next.tool ?? 'eraser';
       if (next.tip.shape === 'stamp') next.tip = { shape: 'round', ...(next.tip.size !== undefined ? { size: next.tip.size } : {}) };
@@ -471,6 +494,9 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
   } else if (path === 'iridescence') {
     if (value) next.iridescence = next.iridescence ?? { thickness: 400 };
     else delete next.iridescence;
+  } else if (path === 'culture') {
+    if (value) next.culture = next.culture ?? { species: 'mycelium' };
+    else delete next.culture;
   } else if (path === 'tip.grain.source' && (value === undefined || value === '')) {
     delete next.tip.grain;
   } else if (path === 'livePatterns.pattern' && (value === undefined || value === '')) {

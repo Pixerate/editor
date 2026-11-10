@@ -597,6 +597,28 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     ferro: { amount: 0.7, wavelength: 12, threshold: 0.15 },
     colour: { default: '#0f172a' },
   },
+  // --- Biopaint (culture): mycelial ink that grows through the painting and feeds on it ---
+  {
+    id: 'mycelial-ink', name: 'Mycelial ink', kind: 'mark', medium: 'ink', variety: 'biopaint',
+    tip: { shape: 'round', size: 8, hardness: 0.9, spacing: 0.08 },
+    dynamics: { smoothing: 0.35, minSize: 0.25 },
+    culture: {},
+    colour: { default: '#1c1917' },
+  },
+  {
+    id: 'rot', name: 'Rot', kind: 'mark', medium: 'ink', variety: 'biopaint',
+    tip: { shape: 'round', size: 12, hardness: 0.75 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+    culture: { reach: 16, branching: 0.5, appetite: 0.8, digest: 0.75, thickness: 0.12 },
+    colour: { default: '#3f2e21' },
+  },
+  {
+    id: 'foxfire', name: 'Foxfire', kind: 'mark', medium: 'ink', variety: 'biopaint',
+    tip: { shape: 'round', size: 10, hardness: 0.8, spacing: 0.08 },
+    dynamics: { smoothing: 0.35, minSize: 0.3 },
+    culture: { reach: 15, branching: 0.45, glow: 0.85 },
+    colour: { default: '#4ade80', palette: ['#4ade80', '#2dd4bf', '#a3e635', '#38bdf8', '#c084fc'] },
+  },
   // --- Antimatter paint: blasts that invert, scorch and destroy paint across visible layers ---
   {
     id: 'antimatter', name: 'Antimatter', kind: 'mark', medium: 'paint', variety: 'antimatter',
@@ -619,5 +641,39 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     marks: { kind: 'antimatter', blastRadius: 4.5, blastSpacing: 4.5, threshold: 0.2, invertMode: 'oklab', scorch: 0.8, annihilate: 0.6, sparks: 0.65, sparkReach: 4, crater: 0.85, duration: 1 },
     dynamics: { smoothing: 0.3, minSize: 0.5 },
     colour: { default: '#fb923c', palette: ['#fb923c', '#ef4444', '#38bdf8', '#a855f7'] },
+  },
+  // --- Scraper: cuts down through the paint stack layer by layer ---
+  {
+    id: 'paint-scraper', name: 'Paint scraper', kind: 'mark', medium: 'paint', variety: 'scraper',
+    tip: { shape: 'flat', size: 28, hardness: 0.9, spacing: 0.06, angle: 30, roundness: 0.35 },
+    marks: { kind: 'scraper' },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5 },
+  },
+  // --- Vortex paint: draw a shape and the paint around it winds into a vortex of that shape ---
+  {
+    id: 'vortex', name: 'Vortex', kind: 'mark', medium: 'paint', variety: 'vortex',
+    tip: { shape: 'round', size: 24, hardness: 0.7 },
+    marks: { kind: 'vortex' },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+  },
+  {
+    id: 'ink-vortex', name: 'Ink vortex', kind: 'mark', medium: 'paint', variety: 'vortex',
+    tip: { shape: 'round', hardness: 0.75 },
+    marks: { kind: 'vortex', ink: 0.85 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+    colour: { default: '#2563eb', palette: ['#2563eb', '#dc2626', '#f59e0b', '#10b981', '#7c3aed', '#ec4899'] },
+  },
+  {
+    id: 'whirlpool', name: 'Whirlpool', kind: 'mark', medium: 'paint', variety: 'vortex',
+    tip: { shape: 'round', size: 28, hardness: 0.65 },
+    marks: { kind: 'vortex', reach: 4, turns: 2.5, pull: 0.75 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+  },
+  {
+    id: 'wet-vortex', name: 'Wet vortex', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 28, hardness: 0.6 },
+    marks: { kind: 'vortex', reach: 3.5, pull: 0.35 },
+    dynamics: { smoothing: 0.3, minSize: 0.35 },
+    behaviour: { surface: 'wet', wet: { water: 0.6, rewet: 0.35 } },
   },
 ];

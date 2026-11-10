@@ -7,8 +7,8 @@
 import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
-import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, STICKER_FRAME_MODES } from '../paint-editor/mark-settings';
+import { BRUSH_ID, BRUSH_ROTATIONS, CULTURE_SPECIES, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, STICKER_FRAME_MODES, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
 
@@ -170,6 +170,30 @@ const ANTIMATTER = object(
   ['kind'],
 );
 
+const SCRAPER = object(
+  'A scraper blade that cuts down through the visible paint stack layer by layer, removing alpha and thick height and carrying leftover depth into the layer below, stopping at locked layers or the paper. Missing fields take their defaults.',
+  {
+    kind: { type: 'string', const: 'scraper', description: 'Always "scraper".' },
+    depth: unit('Layers removed per full-pressure pass, 0..1 (default 0.5). Any depth left after emptying the top visible layer carries into the layer below.'),
+    sharpness: unit('Blade edge sharpness, 0 feathered .. 1 razor-sharp (default 0.7).'),
+  },
+  ['kind'],
+);
+
+const VORTEX = object(
+  'Vortex paint: the stroke you draw is the shape of a vortex (a point whirlpool, an open racetrack, or a closed loop) that pulls in and winds surrounding paint at pen-up. Missing fields take their defaults.',
+  {
+    kind: { type: 'string', const: 'vortex', description: 'Always "vortex".' },
+    reach: num(1, 8, 'How far the vortex pulls from the stroke, in tip radii (default 3). Pressure scales the local reach.'),
+    turns: num(0.25, 6, 'How far paint winds around the shape, in turns (default 1.5).'),
+    pull: unit('How strongly paint is drawn inward toward the stroke: 0 pure spin, 1 strong whirlpool contraction (default 0.3).'),
+    direction: oneOf(VORTEX_DIRECTIONS, 'Winding direction: follow (default: closed loops turn the way they were drawn; open strokes and points turn clockwise), cw (clockwise) or ccw (counter-clockwise).'),
+    ink: unit('How much paint colour the stroke lays before winding: 0 is colourless and only moves existing paint; > 0 lays colour and winds it (default 0).'),
+    duration: num(0, 3, 'Seconds the view-only winding animation takes on screen; 0 shows the final result at once (default 1.2).'),
+  },
+  ['kind'],
+);
+
 const DYNAMICS = object('Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing. Every amount 0 (off) .. 1 unless noted; missing fields take their defaults.', {
   pressureSize: bool('Pressure scales the size, down to minSize (default true).'),
   pressureOpacity: bool('Pressure scales the opacity (default false).'),
@@ -300,6 +324,18 @@ const LIVE_PATTERNS = object('Gray-Scott reaction-diffusion patterns (spots, str
   relief: unit('Impasto relief height written to the layer thick map as patterns grow (0..1, default 0).'),
 });
 
+const CULTURE = object('Biopaint: living mycelial ink that seeds spores along a brush stroke, grows outward as branching hyphal threads, steers towards paint on the layer and digests what it crosses.', {
+  species: oneOf(CULTURE_SPECIES, 'Living species (default mycelium).'),
+  reach: num(1, 100, 'How far a colony spreads on bare canvas in tip diameters (1..100, default 12).'),
+  branching: unit('How often threads fork (0..1, default 0.4).'),
+  wander: unit('How much threads meander (0..1, default 0.35).'),
+  appetite: unit('How strongly threads steer towards paint on the layer (0..1, default 0.5).'),
+  digest: unit('How much paint is consumed as threads cross it; 0 grows over paint without changing it (0..1, default 0.25).'),
+  fuse: unit('Chance a thread fuses into another thread it meets rather than deflecting (0..1, default 0.7).'),
+  thickness: num(0.02, 0.5, 'Thread width as a fraction of tip size (0.02..0.5, default 0.08).'),
+  glow: unit('Bioluminescence written to doc.light along grown threads (0..1, default 0).'),
+});
+
 const SOLID: JsonSchema = {
   type: 'string',
   pattern: '^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$',
@@ -360,7 +396,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
       'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.',
     ),
     tip: TIP,
-    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), or antimatter (detonations that invert, scorch and destroy paint across every visible layer).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, ANTIMATTER] },
+    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, ANTIMATTER, SCRAPER, VORTEX] },
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
@@ -372,6 +408,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     ferro: FERRO,
     motion: MOTION,
     livePatterns: LIVE_PATTERNS,
+    culture: CULTURE,
     colour: COLOUR,
   },
   ['id', 'name', 'kind', 'tip'],
@@ -381,7 +418,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
 export const BRUSH_FACET_SCHEMAS = {
   tip: TIP,
   tipGrain: TIP_GRAIN,
-  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS, antimatter: ANTIMATTER },
+  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS, antimatter: ANTIMATTER, scraper: SCRAPER, vortex: VORTEX },
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
@@ -393,6 +430,7 @@ export const BRUSH_FACET_SCHEMAS = {
   ferro: FERRO,
   motion: MOTION,
   livePatterns: LIVE_PATTERNS,
+  culture: CULTURE,
   colour: COLOUR,
   paint: PAINT,
 } as const;

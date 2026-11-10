@@ -87,7 +87,7 @@ import { samplePath, type PathSampleOptions } from './path-samples';
 import type { Hand } from './input';
 import { mix32 } from './noise';
 import { clonePaper, grainCatch, hexToRgb8, normalizePaper, paperPreset, type PaperSettings } from './paper';
-import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, PAPER_EFFECT_NODE_ID, TRACING_NODE_ID, type ImageNode, type ViewLayer } from './render';
+import { createPaintCompositor, downsampleRgba, paperGrain, paperNode, PAPER_EFFECT_NODE_ID, TRACING_NODE_ID, XRAY_NODE_ID, type ImageNode, type ViewLayer } from './render';
 import {
   deserializePaintDocument,
   deserializePaintDocumentAsync,
@@ -127,9 +127,10 @@ import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
 import { BacklightCache, backlightOf, type BacklitLayer } from './backlight';
 import { DEFAULT_LIGHT_SPILL, LightCache, emptyLight, lightFromJSON, lightInfo, lightToJSON, mergeLight, normalizeLightSpill, scaleLight, type LightSpill } from './light';
 import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
-import { brushTakesPaint } from './brushes';
+import { brushTakesPaint, brushVortex, isWetBrush } from './brushes';
 import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
-import { isWetBrush } from './brushes';
+import { warpTiledSurfaceRgba, type DisplacementField } from '../paint/displacement';
+import { vortexWindingField, type VortexStrokeSummary } from './vortex';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { MAX_WET_LANES, type WetBackendInfo, type WetGhostState, type WetSnapshot } from '../paint/wet/world';
@@ -219,6 +220,38 @@ import {
   type FerroSettings,
   type PaintMagnet,
 } from './ferro';
+import {
+  AgeCache,
+  DEFAULT_AGE,
+  isAgeActive,
+  normalizeAge,
+  renderXrayPixels,
+  validateAgeInput,
+  type PaintAgeInput,
+  type PaintAgeSettings,
+  type XrayResult,
+} from './age';
+import { collectScrapeableLayers, scrapeLayersByIds, ScraperStrokeDriver } from './scraper';
+import {
+  applyCultureGrowReplay,
+  clearOccupancyUnderStroke,
+  cloneLayerCulture,
+  CULTURE_TICKS_PER_SECOND,
+  culturesExtensionFromJSON,
+  culturesExtensionToJSON,
+  layerCultureSummary,
+  MAX_CATCH_UP_TICKS,
+  mergeLayerCultures,
+  seedCultureFromStroke,
+  stepLayerCulture,
+  translateLayerCulture,
+  type CultureGrowEventData,
+  type CultureRecordedFade,
+  type CultureRecordedSegment,
+  type CultureStatus,
+  type LayerCulture,
+  type LayerCultureSummary,
+} from '../paint/culture';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 /** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
@@ -313,6 +346,33 @@ export interface PaintLayerLivePatternsInfo extends LivePatternStats {
   wetBounds: RasterRect | null;
 }
 
+/** Biopaint (`culture`) state as panels and tools see it. */
+export interface PaintCulturesStateInfo {
+  layers: LayerCultureSummary[];
+  growWhileClosed: boolean;
+  pendingCatchUpTicks: number;
+  paused: boolean;
+  speed: number;
+  growing: boolean;
+}
+
+export interface GrowCulturesLayerResult {
+  layerId: string;
+  segmentsAdded: number;
+  tipsAlive: number;
+  bounds: RasterRect | null;
+  status: CultureStatus;
+}
+
+export interface GrowCulturesResult {
+  steps: number;
+  segmentsAdded: number;
+  tipsAlive: number;
+  bounds: RasterRect | null;
+  status: CultureStatus;
+  layers: GrowCulturesLayerResult[];
+}
+
 export interface PaintEditorState {
   document: PaintDocumentState;
   /** The active brush (possibly edited from its preset). */
@@ -375,6 +435,12 @@ export interface PaintEditorState {
   mutations: readonly PaintMutationInfo[];
   /** Whether an agent is listening for mutation requests (`onMutationRequest` or `setMutationAgentConnected`). */
   hasMutationAgent: boolean;
+  /** Non-destructive time-machine ageing preview settings (saved with the document, not undo steps). */
+  age: PaintAgeSettings;
+  /** Whether the X-ray radiograph view is switched on in the viewport (editor state, not saved with the document). */
+  xrayView: boolean;
+  /** Biopaint (`culture`) colonies across layers, and playback controls. */
+  cultures: PaintCulturesStateInfo;
   /** Increments on every change. */
   version: number;
 }
@@ -493,6 +559,11 @@ export interface PaintStrokeInit {
   maskStencils?: readonly Stencil[];
   /** Antimatter strokes: the fuel layer ids (the visible pixel layers when painted). A replay reads fuel from exactly these and changes the editable ones, whatever is visible now. */
   targets?: readonly string[];
+  /**
+   * Scraper brushes: the layers to cut through, top to bottom, instead of the visible unlocked
+   * pixel layers from the top (replays pass `RecordedStroke.scrapeLayerIds`).
+   */
+  scrapeLayerIds?: readonly string[];
 }
 
 export interface LayerUpdate {
@@ -630,6 +701,11 @@ export interface RenderOptions {
    * for previews and picks.
    */
   wet?: 'display' | 'dried';
+  /**
+   * Apply the non-destructive ageing preview (`set_age`); on by default for the view, opt-in
+   * (`true`) for exports.
+   */
+  age?: boolean;
 }
 
 export interface PixelImage {
@@ -757,6 +833,14 @@ export class PaintEditorController {
   private selectedSticker: string | null = null;
   /** A sticker drag in progress (`previewSticker`): the document before it, so the drop undoes in one step, and the one it showed last. */
   private stickerPreview: { base: PaintDocumentState; shown: PaintDocumentState } | null = null;
+  /** Uncommitted live culture growth run (`playCultures`): commits as one undo step when interrupted by a stroke, undo, or save. */
+  private culturePreview: {
+    base: PaintDocumentState;
+    shown: PaintDocumentState;
+    events: Map<string, CultureGrowEventData>;
+  } | null = null;
+  private culturePaused = false;
+  private cultureSpeed = 1;
   private readonly encodeImage: ImageEncoder | undefined;
   private listeners = new Set<() => void>();
   private commitListeners = new Set<(event: PaintCommitEvent) => void>();
@@ -791,6 +875,23 @@ export class PaintEditorController {
   private liveEffectAt: number | null = null;
   /** The view's stroke layers at `effectTime`, each with the document surface it was drawn from (stale once that changes). */
   private animatedLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+  /** View-only vortex winding animations per layer (dropped as soon as the layer's document surface changes). */
+  private vortexAnimations = new Map<
+    string,
+    {
+      base: TiledSurface;
+      surface: TiledSurface;
+      preInkSurface: TiledSurface;
+      /** Keyframes of the winding along the paint's arcs (`vortexWindingField`). */
+      frames: readonly DisplacementField[];
+      offset: { x: number; y: number };
+      lockTransparency: boolean;
+      selection: { width: number; height: number; data: ArrayLike<number> } | null;
+      bounds: RasterRect | null;
+      durationMs: number;
+      startAt: number | null;
+    }
+  >();
   /** Blast animation frames (view only), kept apart from live effect frames so neither replaces the other. */
   private blastLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
   /** Blast animation light / thick channels (`null` light: none at this frame). */
@@ -802,6 +903,7 @@ export class PaintEditorController {
     dirty: RasterRect | null;
     ticked: boolean;
   } | null = null;
+  /** The clock `playEffects` is playing on (blast and vortex animations are timed on it). */
   private playingClock: { now(): number; frame(cb: () => void): () => void } | null = null;
   /** `renderAnimationFrame` / `withEffectTime`: layer surfaces at another time, for one render. */
   private frameOverride: Map<string, TiledSurface> | null = null;
@@ -837,6 +939,14 @@ export class PaintEditorController {
   private readonly thermoCaches = new Map<string, ThermoCache>();
   private liveFluor: { layerId: string; surface: TiledSurface } | null = null;
   private liveThermo: { layerId: string; surface: TiledSurface } | null = null;
+  /** Non-destructive time-machine ageing preview settings (saved with the document, not undo steps). */
+  private age: PaintAgeSettings = { ...DEFAULT_AGE };
+  private readonly ageCaches = new Map<string, AgeCache>();
+  /** Whether the X-ray radiograph view is shown in the viewport (editor state, not saved). */
+  private xrayView = false;
+  private xrayNodeCache: { version: number; node: ImageNode } | null = null;
+  /** Live scraper surfaces while a scraper stroke is in progress. */
+  private liveScraper: Map<string, TiledSurface> | null = null;
   /** Set while an operation that changes wet paint runs: the simulation before it (for undo). */
   private wetOp: { before: WetSnapshot | null } | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
@@ -1180,6 +1290,9 @@ export class PaintEditorController {
       heat: heatStats(this.doc.heat),
       mutations: this.mutations.map((m) => this.toMutationInfo(m)),
       hasMutationAgent: this.mutationListeners.size > 0 || this.mutationAgentConnected,
+      age: { ...this.age },
+      xrayView: this.xrayView,
+      cultures: this.getCultures(),
       version: this.version,
     };
     return this.cached;
@@ -1225,7 +1338,64 @@ export class PaintEditorController {
     if (this.grouping?.pending && !this.grouping.inside) throw new PaintEditorError(`"${this.grouping.label}" is still being painted (one undo step); wait for it to finish before ${what}.`);
   }
 
-  private commit(label: string, next: PaintDocumentState, before = this.doc): void {
+  /** Commits an uninterrupted run of live culture growth (`playCultures`) as a single undo step before another operation runs. */
+  /** The shown document with live growth's pending `culture-grow` events, for replays (commits nothing). */
+  private withCulturePreviewEvents(): PaintDocumentState {
+    const pv = this.culturePreview;
+    if (!pv || pv.shown !== this.doc || pv.shown === pv.base) return this.doc;
+    let doc = pv.shown;
+    for (const [layerId, data] of pv.events) {
+      if (data.steps > 0 || data.segments.length > 0 || data.fades.length > 0) {
+        doc = this.withPaintEvent(doc, { kind: 'culture-grow', layerId, data: data as unknown as Record<string, unknown> });
+      }
+    }
+    return doc;
+  }
+
+  private flushCulturePreview(): void {
+    const pv = this.culturePreview;
+    if (!pv) return;
+    if (pv.shown !== this.doc || pv.shown === pv.base) {
+      this.culturePreview = null;
+      return;
+    }
+    const doc = this.withCulturePreviewEvents();
+    this.culturePreview = null;
+    this.doc = doc;
+    const entry: HistoryEntry = {
+      label: 'Culture growth',
+      origin: 'user',
+      before: pv.base,
+      after: doc,
+    };
+    this.undoStack.push(entry);
+    if (this.undoStack.length > this.historyLimit) this.undoStack.shift();
+    this.redoStack = [];
+    this.docRevision++;
+    this.notifyCommit({ kind: 'execute', label: entry.label, origin: entry.origin });
+  }
+
+  /**
+   * Flushes live culture growth before a change that was built from the live document, and carries
+   * the flushed `culture-grow` events into it: otherwise `next` (built from the preview) would replace
+   * the flushed document and drop the events replay needs.
+   */
+  private flushCultureInto(next: PaintDocumentState, before: PaintDocumentState): { next: PaintDocumentState; before: PaintDocumentState } {
+    const shown = this.doc;
+    this.flushCulturePreview();
+    if (this.doc === shown) return { next, before };
+    const flushed = this.doc;
+    const base = shown.paintEvents ?? [];
+    const added = (flushed.paintEvents ?? []).slice(base.length);
+    if (next !== shown && added.length) {
+      const own = next.paintEvents ?? [];
+      next = { ...next, paintEvents: [...own.slice(0, base.length), ...added, ...own.slice(base.length)] };
+    } else if (next === shown) next = flushed;
+    return { next, before: before === shown ? flushed : before };
+  }
+
+  private commit(label: string, nextIn: PaintDocumentState, beforeIn = this.doc): void {
+    const { next, before } = this.flushCultureInto(nextIn, beforeIn);
     if (this.grouping) {
       // Inside `group`: the change joins the group's one step, and listeners hear it when the group ends.
       this.grouping.changed = true;
@@ -1253,7 +1423,9 @@ export class PaintEditorController {
    * Commits `next` as a new undo step, or with `commitToHistory` false folds it into the last step
    * when that step has the same label (the later values of one slider drag).
    */
-  private commitOrAmend(label: string, next: PaintDocumentState, commitToHistory: boolean): void {
+  private commitOrAmend(label: string, nextIn: PaintDocumentState, commitToHistory: boolean): void {
+    // A flushed growth run becomes the last step, so the change below commits as its own step.
+    const { next } = this.flushCultureInto(nextIn, this.doc);
     const last = this.undoStack[this.undoStack.length - 1];
     if (commitToHistory || !last || last.label !== label || last.wet || this.wetOp || this.grouping) {
       this.commit(label, next);
@@ -1332,6 +1504,8 @@ export class PaintEditorController {
 
   undo(): string | null {
     this.requireIdle('undoing');
+    this.flushCulturePreview();
+    this.culturePaused = true;
     this.clearBlastAnimation();
     const e = this.undoStack[this.undoStack.length - 1];
     if (!e) return null;
@@ -1340,6 +1514,10 @@ export class PaintEditorController {
     this.redoStack.push(e);
     const paper = this.doc.paper;
     this.doc = e.before;
+    // Only a step that changed the age (bake_age) moves it; set_age is not an undo step, so the
+    // restored document takes the current age and a save after undo keeps it.
+    if (e.before.age !== e.after.age) this.age = normalizeAge(e.before.age, DEFAULT_AGE);
+    else this.doc = this.withAge(this.doc);
     this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.before);
     if (e.wet) {
@@ -1355,6 +1533,7 @@ export class PaintEditorController {
 
   redo(): string | null {
     this.requireIdle('redoing');
+    this.flushCulturePreview();
     this.clearBlastAnimation();
     const e = this.redoStack[this.redoStack.length - 1];
     if (!e) return null;
@@ -1363,6 +1542,8 @@ export class PaintEditorController {
     this.undoStack.push(e);
     const paper = this.doc.paper;
     this.doc = e.after;
+    if (e.before.age !== e.after.age) this.age = normalizeAge(e.after.age, DEFAULT_AGE);
+    else this.doc = this.withAge(this.doc);
     this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.after);
     if (e.wet) {
@@ -1407,6 +1588,10 @@ export class PaintEditorController {
     });
     this.extensions = {};
     this.nextMagnetId = 1;
+    this.age = { ...DEFAULT_AGE };
+    this.ageCaches.clear();
+    this.xrayView = false;
+    this.xrayNodeCache = null;
     this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
     this.tracingVersion++;
     if (this.wet.world || this.wet.patterns.size) {
@@ -1504,6 +1689,8 @@ export class PaintEditorController {
         }
         if (next.fluor?.[id] && (ox || oy)) next = { ...next, fluor: { ...next.fluor, [id]: translateSurface(next.fluor[id], ox, oy) } };
         if (next.thermo?.[id] && (ox || oy)) next = { ...next, thermo: { ...next.thermo, [id]: translateSurface(next.thermo[id], ox, oy) } };
+        if (next.light?.[id] && (ox || oy)) next = { ...next, light: { ...next.light, [id]: translateSurface(next.light[id], ox, oy) } };
+        if (next.cultures?.[id] && (ox || oy)) next = { ...next, cultures: { ...next.cultures, [id]: translateLayerCulture(next.cultures[id], ox, oy, width, height) } };
       }
     }
     if (this.wet.world) {
@@ -1801,6 +1988,7 @@ export class PaintEditorController {
       ...this.fluorWithout(removedIds),
       ...this.thermoWithout(removedIds),
       ...this.ferroWithout(removedIds),
+      ...this.culturesWithout(removedIds),
     });
     return { removed: id, activeLayerId: active };
   }
@@ -1821,6 +2009,7 @@ export class PaintEditorController {
     const ferroSettings: Record<string, FerroSettings> = { ...(this.doc.ferroSettings ?? {}) };
     const fluor: Record<string, TiledSurface> = { ...(this.doc.fluor ?? {}) };
     const thermo: Record<string, TiledSurface> = { ...(this.doc.thermo ?? {}) };
+    const cultures: Record<string, LayerCulture> = { ...(this.doc.cultures ?? {}) };
     const copy = (l: PaintLayer): PaintLayer => {
       const id = newPaintLayerId();
       if (light[l.id]) light[id] = light[l.id];
@@ -1831,6 +2020,7 @@ export class PaintEditorController {
       if (thermo[l.id]) thermo[id] = thermo[l.id];
       if (thick[l.id]) thick[id] = thick[l.id];
       if (stickers[l.id]) stickers[id] = stickers[l.id].map((x) => ({ ...x }));
+      if (cultures[l.id]) cultures[id] = cloneLayerCulture(cultures[l.id]!);
       // Stroke ids are unique across the document: the copies get new ones.
       if (liveStrokes[l.id]) liveStrokes[id] = liveStrokes[l.id].map((x) => ({ ...x, id: `s${this.strokeCounter++}`, layerId: id }));
       return l.type === 'group' ? { ...l, id, children: l.children.map(copy) } : { ...l, id };
@@ -1851,6 +2041,7 @@ export class PaintEditorController {
         ...(this.doc.thermo ? { thermo } : {}),
         ...(this.doc.ferro ? { ferro } : {}),
         ...(this.doc.ferroSettings ? { ferroSettings } : {}),
+        ...(this.doc.cultures ? { cultures } : {}),
       }),
     );
     return this.describeLayer(dup);
@@ -1920,6 +2111,15 @@ export class PaintEditorController {
     const mergedThermo = this.doc.thermo?.[upper.id] || this.doc.thermo?.[below.id] ? mergeFourChannel(toDoc(this.doc.thermo?.[below.id], below), upper.visible ? toDoc(this.doc.thermo?.[upper.id], upper) : undefined) : undefined;
     const thermoAfter = this.thermoWithout([upper.id, below.id]).thermo ?? (this.doc.thermo ? { ...this.doc.thermo } : undefined);
     const thermo = mergedThermo ? { ...(thermoAfter ?? {}), [below.id]: mergedThermo } : thermoAfter;
+    const toDocCulture = (c: LayerCulture | undefined, l: PaintPixelLayer) =>
+      c ? (l.offset.x || l.offset.y ? translateLayerCulture(c, l.offset.x, l.offset.y, this.doc.canvas.width, this.doc.canvas.height) : c) : undefined;
+    const mergedCulture =
+      this.doc.cultures?.[upper.id] || this.doc.cultures?.[below.id]
+        ? mergeLayerCultures(toDocCulture(this.doc.cultures?.[below.id], below), upper.visible ? toDocCulture(this.doc.cultures?.[upper.id], upper) : undefined)
+        : undefined;
+    const culturesRemoved = this.culturesWithout([upper.id, below.id]);
+    const culturesAfter = 'cultures' in culturesRemoved ? culturesRemoved.cultures : (this.doc.cultures ? { ...this.doc.cultures } : undefined);
+    const cultures = mergedCulture ? { ...(culturesAfter ?? {}), [below.id]: mergedCulture } : culturesAfter;
     this.commit(
       'Merge down',
       this.withWetEvents({
@@ -1934,6 +2134,7 @@ export class PaintEditorController {
         ...(thermo ? { thermo } : {}),
         ...(ferro !== undefined ? { ferro } : {}),
         ...(ferroSettings !== undefined ? { ferroSettings } : {}),
+        cultures,
       }),
     );
     return this.describeLayer(merged);
@@ -1961,6 +2162,7 @@ export class PaintEditorController {
           ...this.fluorWithout([l.id]),
           ...this.thermoWithout([l.id]),
           ...this.ferroWithout([l.id]),
+          ...this.culturesWithout([l.id]),
         },
         { kind: 'clear', layerId: l.id },
       ),
@@ -3388,7 +3590,10 @@ export class PaintEditorController {
       if (!l.visible) throw new PaintEditorError(`Layer "${l.name}" is hidden; show it (update_layer visible true) to paint on it.`);
       return l;
     })();
-    const brush = this.strokeBrush(init);
+    let brush = this.strokeBrush(init);
+    if (brush.engine === 'vortex' && this.wet.wetLayerIds().includes(layer.id)) {
+      brush = { ...brush, engine: 'wet', wet: { ...brush.wet, tool: 'vortex' }, vortex: brushVortex(brush) };
+    }
     const mutRefusal = mutationBrushRefusal(brush);
     if (mutRefusal) throw new PaintEditorError(mutRefusal);
     // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
@@ -3426,6 +3631,11 @@ export class PaintEditorController {
       if (brush.engine === 'sticker') throw new PaintEditorError(`Sticker brushes spray objects and cannot lay ferrofluid (${brush.name}); paint ferrofluid with a dab or particle brush (ferrofluid, ferro-ink; list_brush_presets lists them), or set ferro.amount to 0 (set_brush).`);
       if (brush.engine === 'wet') throw new PaintEditorError(`Wet brushes cannot lay ferrofluid (${brush.name}); paint ferrofluid with a dry or impasto brush (ferrofluid, ferro-ink), or set ferro.amount to 0 (set_brush).`);
     }
+    if (brush.culture) {
+      if (brush.engine === 'sticker') throw new PaintEditorError(`Sticker brushes spray objects and cannot carry biopaint spores (${brush.name}); paint with a dab, particle or bristle brush (mycelial-ink, rot, foxfire), or set culture to null (set_brush).`);
+      if (brush.engine === 'wet') throw new PaintEditorError(`Wet brushes cannot carry biopaint spores (${brush.name}); paint with a dry or impasto brush (mycelial-ink, rot, foxfire), or set culture to null (set_brush).`);
+      if (brush.engine === 'eraser' || brush.engine === 'blender' || brush.engine === 'smudge') throw new PaintEditorError(`Tool brushes (${brush.name}) cannot carry biopaint spores; set culture to null (set_brush).`);
+    }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
       if (why) throw new PaintEditorError(`Layer "${layer.name}" is a stroke layer. ${why}`);
@@ -3445,7 +3655,45 @@ export class PaintEditorController {
       throw new PaintEditorError(`Layer "${layer.name}" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).`);
     }
     let wet: { driver: WetStrokeDriver; surface: () => TiledSurface } | undefined;
-    if (isWetBrush(brush)) {
+    let scraper: { driver: ScraperStrokeDriver } | undefined;
+    if (brush.engine === 'scraper') {
+      const { layers: scrapeLayers, stoppedAtLocked } = init.scrapeLayerIds ? { layers: scrapeLayersByIds(doc, init.scrapeLayerIds), stoppedAtLocked: null } : collectScrapeableLayers(doc);
+      const wetIds = this.wet.wetLayerIds();
+      const wetLayerId = scrapeLayers.find((l) => wetIds.includes(l.id))?.id ?? (wetIds.includes(layer.id) ? layer.id : undefined);
+      if (wetLayerId) {
+        const w = findLayer(doc.layers, wetLayerId)?.layer;
+        throw new PaintEditorError(`Layer "${w?.name ?? wetLayerId}" holds wet paint; dry it first (dry_paint) before scraping.`);
+      }
+      if (!scrapeLayers.length) {
+        if (stoppedAtLocked) {
+          throw new PaintEditorError(`Layer "${stoppedAtLocked.name}" is locked; unlock it (update_layer locks) before scraping.`);
+        }
+        throw new PaintEditorError('There are no visible unlocked pixel layers to scrape.');
+      }
+      layer = scrapeLayers[0]!;
+      const scrapeMask = init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null;
+      const seedSc = init.seed ?? mix32((this.seedCounter * 0x9e3779b1) >>> 0) & 0x7fffffff;
+      const copiesSc = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
+      const perspectiveSc = this.guides.perspective;
+      const snapperSc = init.snapToPerspective && perspectiveSc.enabled && perspectiveSc.snap ? new PerspectiveSnapper(perspectiveSc) : null;
+      const useStencilsSc = init.stencils !== false;
+      const stencilSnapperSc = useStencilsSc && this.guides.stencils.some((x) => x.enabled && x.mode === 'guide') ? new StencilSnapper(this.guides.stencils) : null;
+      const filterSc = snapperSc || stencilSnapperSc ? (p: PenPoint) => (stencilSnapperSc ? stencilSnapperSc.snap(snapperSc ? snapperSc.snap(p) : p) : snapperSc!.snap(p)) : undefined;
+      scraper = {
+        driver: new ScraperStrokeDriver(
+          {
+            brush,
+            seed: seedSc,
+            copies: [IDENTITY_AFFINE, ...copiesSc].map(affineCopy),
+            selection: scrapeMask,
+            inputFilter: filterSc,
+          },
+          scrapeLayers,
+          doc.thick,
+        ),
+      };
+      init = { ...init, seed: seedSc };
+    } else if (isWetBrush(brush)) {
       this.requireWetIdle('painting');
       if (layer.offset.x || layer.offset.y) {
         // The wet simulation works in canvas space: move the pixels into it (same picture, not an undo step).
@@ -3552,6 +3800,7 @@ export class PaintEditorController {
     const copies = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
     const hasThick = Boolean(doc.thick?.[layer.id]);
     const needThick = brush.engine !== 'antimatter' && (brush.engine === 'impasto' || Boolean(brush.iridescence) || (brush.engine === 'eraser' && hasThick) || Boolean(wet?.driver.init.film));
+    const needRelief = brush.engine === 'vortex' && hasThick;
     const isSpecialEngine = brush.engine === 'sticker' || brush.engine === 'antimatter';
     const gradient = effect ? null : this.strokeGradient(init, brush, color);
     const session = new PaintStrokeSession(host, {
@@ -3575,7 +3824,9 @@ export class PaintEditorController {
       mixerLoad: init.load ?? brushLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]),
       secondary: rgbaOf(this.secondaryColor),
       wet,
+      scraper,
       thick: needThick ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
+      relief: needRelief ? { channels: doc.thick![layer.id]! } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && !isSpecialEngine && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
       // Ferrofluid paint: a twin of the stroke paints the liquid ferrofluid channel.
@@ -3616,6 +3867,7 @@ export class PaintEditorController {
     // The fuel layers the stroke read (visible pixel layers at the time, or the replayed ones): a replay reads fuel from exactly these.
     const fuel = init.antimatter?.targets;
     if (fuel?.length) stroke.targets = fuel.map((t) => t.id);
+    if (init.scraper) stroke.scrapeLayerIds = [...init.scraper.driver.layerIds];
     if (init.selection) {
       const masks = (session.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask');
       if (masks.length) stroke.stencils = masks.map((x) => ({ ...x }));
@@ -3629,6 +3881,7 @@ export class PaintEditorController {
    */
   beginStroke(init: PaintStrokeInit = {}): PaintStrokeSession {
     this.requireIdle('starting another');
+    this.flushCulturePreview();
     this.clearBlastAnimation();
     const before = this.doc;
     const host: StrokeSessionHost = {
@@ -3658,6 +3911,11 @@ export class PaintEditorController {
           this.emit(rects);
           return;
         }
+        if (this.session?.init.scraper) {
+          this.liveScraper = this.session.init.scraper.driver.liveSurfaces();
+          this.emit(rects);
+          return;
+        }
         this.live = { layerId, surface };
         const ch = this.session?.thickChannels();
         this.liveThick = ch ? { layerId, channels: ch } : null;
@@ -3673,6 +3931,9 @@ export class PaintEditorController {
       sampled: (s, points) => {
         this.notifySample('points', s, points);
         this.previewPathStroke(s);
+        if (s.init.brush.engine === 'vortex' || (s.init.brush.engine === 'wet' && s.init.brush.wet.tool === 'vortex')) {
+          this.emit([]);
+        }
       },
       commit: (s, surface, cancelled) => {
         this.session = null;
@@ -3693,6 +3954,7 @@ export class PaintEditorController {
         this.liveFerro = null;
         this.liveFluor = null;
         this.liveThermo = null;
+        this.liveScraper = null;
         const wetStroke = Boolean(s.init.wet);
         if (wetStroke) this.wet.driver = null;
         const brush = s.init.brush;
@@ -3731,6 +3993,12 @@ export class PaintEditorController {
           this.notifySample('end', s, [], stroke.id);
           return;
         }
+        if (s.init.scraper) {
+          const scraped = s.init.scraper.driver.commitToDocument(this.doc);
+          this.commit(`${brush.name} stroke`, { ...scraped.doc, strokes: [...this.doc.strokes, stroke] }, before);
+          this.notifySample('end', s, [], stroke.id);
+          return;
+        }
         if (wetStroke && this.wet.instantDry) {
           this.wet.dry(s.layerId);
           this.logWet({ kind: 'dry', layerId: s.layerId, at: this.doc.strokes.length + 1 });
@@ -3761,6 +4029,7 @@ export class PaintEditorController {
         const ferroSettings = fc ? withLayerFerroSettings(this.doc.ferroSettings, ferro, l.id, brush.ferro.amount > 0 ? brush.ferro : (this.doc.ferroSettings?.[l.id] ?? DEFAULT_FERRO)) : this.doc.ferroSettings;
         const fluor = withLayerLight(this.doc.fluor, l.id, s.fluorChannel());
         const thermo = withLayerLight(this.doc.thermo, l.id, s.thermoChannel());
+        const cultures = this.applyStrokeCulture(this.doc, s, l, surface, s.result!);
         let next = this.withWetEvents(
             withLiveStroke(
               {
@@ -3774,6 +4043,7 @@ export class PaintEditorController {
                 ...(thermo ? { thermo } : {}),
                 ...(ferro ? { ferro } : { ferro: undefined }),
                 ...(ferroSettings ? { ferroSettings } : { ferroSettings: undefined }),
+                ...(cultures ? { cultures } : { cultures: undefined }),
               },
               stroke,
             ),
@@ -3788,6 +4058,11 @@ export class PaintEditorController {
           next = canonical;
         }
         this.commit(`${brush.name} stroke`, next, before);
+        const anim = s.vortexAnimation();
+        const committed = anim ? findLayer(this.doc.layers, l.id)?.layer : undefined;
+        if (anim && isPixelLayer(committed)) {
+          this.queueVortexAnimation(l.id, committed.surface, l.offset, isLayerLocked(l, 'transparency'), s.init.selection ?? null, s.result?.bounds ?? null, anim);
+        }
         this.recordMutationStroke(stroke, s.result?.bounds ?? null);
         // After the commit, so a listener that paints in reply finds the editor idle.
         this.notifySample('end', s, [], stroke.id);
@@ -3915,7 +4190,7 @@ export class PaintEditorController {
   }
 
   /** Runs a whole stroke against `doc` without touching the editor; returns the new document. */
-  private runStroke(doc: PaintDocumentState, init: PaintStrokeInit, points: readonly PenPoint[]): { doc: PaintDocumentState; result: PaintStrokeResult; brush: PaintBrush; antimatterDriver: AntimatterStrokeDriver | null } {
+  private runStroke(doc: PaintDocumentState, init: PaintStrokeInit, points: readonly PenPoint[]): { doc: PaintDocumentState; result: PaintStrokeResult; brush: PaintBrush; session: PaintStrokeSession; antimatterDriver: AntimatterStrokeDriver | null } {
     let out = doc;
     const host: StrokeSessionHost = {
       update: () => {},
@@ -3927,6 +4202,11 @@ export class PaintEditorController {
         const amOutputs = s.antimatterOutputs();
         if (amOutputs) {
           out = this.applyAntimatterOutputs(out, amOutputs, stroke);
+          return;
+        }
+        if (s.init.scraper) {
+          const scraped = s.init.scraper.driver.commitToDocument(out);
+          out = { ...scraped.doc, strokes: [...out.strokes, stroke] };
           return;
         }
         const targetId = this.tempLayerTargets.get(s.layerId);
@@ -3963,6 +4243,7 @@ export class PaintEditorController {
           : out.ferroSettings;
         const fl = s.fluorChannel();
         const th = s.thermoChannel();
+        const cultures = this.applyStrokeCulture(out, s, l, surface, s.result!);
         out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
@@ -3973,6 +4254,7 @@ export class PaintEditorController {
           ...(fc ? { ferro: nextFerro, ferroSettings: nextFerroSettings } : {}),
           ...(fl ? { fluor: withLayerLight(out.fluor, l.id, fl) } : {}),
           ...(th ? { thermo: withLayerLight(out.thermo, l.id, th) } : {}),
+          ...(cultures ? { cultures } : { cultures: undefined }),
         }, stroke);
       },
     };
@@ -3997,12 +4279,13 @@ export class PaintEditorController {
       }
       result.wet = this.wet.isWet(session.layerId);
     }
-    return { doc: out, result, brush: session.init.brush, antimatterDriver: session.antimatterDriver() };
+    return { doc: out, result, brush: session.init.brush, session, antimatterDriver: session.antimatterDriver() };
   }
 
   /** Paints one stroke from data (one undo step). */
   paintStroke(init: PaintStrokeInit & { points: readonly PenPoint[] }): PaintStrokeResult {
     this.requireIdle('painting');
+    this.flushCulturePreview();
     this.clearBlastAnimation();
     const points = this.checkPoints(init.points);
     const before = this.doc;
@@ -4013,7 +4296,7 @@ export class PaintEditorController {
       this.wetOp = null;
       throw e;
     }
-    const { doc, result, brush, antimatterDriver } = run;
+    const { doc, result, brush, session, antimatterDriver } = run;
     if (!result.strokeId && this.wetOp) {
       const snap = this.wetOp.before;
       this.wetOp = null;
@@ -4030,6 +4313,11 @@ export class PaintEditorController {
       if (antimatterDriver && brush.antimatter.duration > 0 && antimatterDriver.hasBlasts()) {
         this.startBlastAnimation(antimatterDriver, result.bounds);
       }
+      const anim = session.vortexAnimation();
+      const l = findLayer(this.doc.layers, session.layerId)?.layer;
+      if (anim && isPixelLayer(l)) {
+        this.queueVortexAnimation(l.id, l.surface, l.offset, isLayerLocked(l, 'transparency'), session.init.selection ?? null, result.bounds, anim);
+      }
       const lastStroke = this.doc.strokes[this.doc.strokes.length - 1];
       if (lastStroke && lastStroke.id === result.strokeId) this.recordMutationStroke(lastStroke, result.bounds);
     } else this.emit([]);
@@ -4042,7 +4330,7 @@ export class PaintEditorController {
    * with an optional `pressure` profile along each. All of it is one undo step. A given `seed`
    * seeds the first subpath; the next ones take the following seeds.
    */
-  strokePath(init: Omit<PaintStrokeInit, 'start' | 'copies' | 'load'> & PathSampleOptions & { path: string }): { layerId: string; bounds: RasterRect | null; dabs: number; strokeIds: string[]; mixerLoad?: MixerLoad; wet?: boolean } {
+  strokePath(init: Omit<PaintStrokeInit, 'start' | 'copies' | 'load'> & PathSampleOptions & { path: string }): { layerId: string; bounds: RasterRect | null; dabs: number; strokeIds: string[]; mixerLoad?: MixerLoad; wet?: boolean; vortex?: VortexStrokeSummary } {
     this.requireIdle('painting');
     if (typeof init.path !== 'string' || !init.path.trim()) throw new PaintEditorError('path is empty; give SVG path data in document pixels, e.g. "M 10 10 C 40 0 80 60 120 30".');
     let subpaths: PenPoint[][];
@@ -4074,13 +4362,28 @@ export class PaintEditorController {
     if (run?.result.mixerLoad) this.keepLoad(run.brush, run.result.mixerLoad);
     if (doc !== before || this.wetOp) {
       this.commit(`${run?.brush.name ?? 'Brush'} path stroke`, this.withWetEvents(doc), before);
+      if (run) {
+        const anim = run.session.vortexAnimation();
+        const l = findLayer(this.doc.layers, run.session.layerId)?.layer;
+        if (anim && isPixelLayer(l)) {
+          this.queueVortexAnimation(l.id, l.surface, l.offset, isLayerLocked(l, 'transparency'), run.session.init.selection ?? null, run.result.bounds, anim);
+        }
+      }
       for (const sid of strokeIds) {
         const recorded = this.doc.strokes.find((s) => s.id === sid);
         if (recorded) this.recordMutationStroke(recorded, this.paintedBounds.get(recorded) ?? null);
       }
     } else this.emit([]);
     const layerId = run?.result.layerId ?? stroke.layerId ?? this.doc.activeLayerId ?? '';
-    return { layerId, bounds, dabs, strokeIds, ...(run?.result.mixerLoad ? { mixerLoad: run.result.mixerLoad } : {}), ...(run?.result.wet !== undefined ? { wet: run.result.wet } : {}) };
+    return {
+      layerId,
+      bounds,
+      dabs,
+      strokeIds,
+      ...(run?.result.mixerLoad ? { mixerLoad: run.result.mixerLoad } : {}),
+      ...(run?.result.wet !== undefined ? { wet: run.result.wet } : {}),
+      ...(run?.result.vortex ? { vortex: run.result.vortex } : {}),
+    };
   }
 
   /** Checks stroke samples (finite x and y, pressure 0..1) and returns them; throws a sentence naming the bad point. */
@@ -4629,6 +4932,687 @@ export class PaintEditorController {
     };
   }
 
+  // --- Time machine: ageing and X-ray ---------------------------------------------
+
+  /** `doc` carrying the editor's current ageing settings (none when they are the defaults). */
+  private withAge(doc: PaintDocumentState): PaintDocumentState {
+    const a = this.age;
+    const hasAge =
+      a.years !== DEFAULT_AGE.years ||
+      a.varnish !== DEFAULT_AGE.varnish ||
+      a.cracks !== DEFAULT_AGE.cracks ||
+      a.fading !== DEFAULT_AGE.fading ||
+      a.dust !== DEFAULT_AGE.dust ||
+      a.seed !== DEFAULT_AGE.seed;
+    if (!hasAge) return doc.age === undefined ? doc : { ...doc, age: undefined };
+    const cur = doc.age;
+    if (cur && cur.years === a.years && cur.varnish === a.varnish && cur.cracks === a.cracks && cur.fading === a.fading && cur.dust === a.dust && cur.seed === a.seed) return doc;
+    return { ...doc, age: { ...a } };
+  }
+
+  /** Reads the document's non-destructive ageing preview settings. */
+  getAge(): PaintAgeSettings {
+    return { ...this.age };
+  }
+
+  /**
+   * Sets the non-destructive ageing preview (`years` 0..500, `varnish` 0..1, `cracks` 0..1,
+   * `fading` 0..1, `dust` 0..1, `seed` >= 0). Saved with the document, not an undo step.
+   */
+  setAge(update: PaintAgeInput): PaintAgeSettings {
+    try {
+      validateAgeInput(update);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    // Live growth commits first: the new document would otherwise drop its pending replay events.
+    this.flushCulturePreview();
+    this.age = normalizeAge(update, this.age);
+    this.doc = this.withAge(this.doc);
+    this.emit('all');
+    return { ...this.age };
+  }
+
+  /**
+   * Commits the current aged look into a new pixel layer at the top of the stack and resets the
+   * preview `years` to 0 so the painting is not aged twice. One undo step.
+   */
+  bakeAge(options: { name?: string } = {}): { layer: PaintLayerInfo; age: PaintAgeSettings; bounds: RasterRect | null } {
+    this.requireIdle('baking ageing');
+    this.requireWetIdle('baking ageing');
+    if (options.name !== undefined && typeof options.name !== 'string') {
+      throw new PaintEditorError('name must be a string.');
+    }
+    if (!isAgeActive(this.age)) {
+      throw new PaintEditorError('Ageing is off (years is 0 or all effects are 0); call set_age with years above 0 before baking.');
+    }
+    const before = this.doc;
+    const bakedAge: PaintAgeSettings = { ...this.age };
+    const agedPixels = this.compositePixels({ paper: false, wet: 'dried', age: true });
+    const surface = surfaceFromPixels(agedPixels, 4);
+    const bounds = contentBounds(surface);
+    const label = options.name?.trim() ? options.name.trim() : `Aged (${Math.round(bakedAge.years)} yr)`;
+    const newLayer: PaintPixelLayer = {
+      ...createPaintLayer(label),
+      surface,
+    };
+    const nextAge: PaintAgeSettings = { ...this.age, years: 0 };
+    this.age = nextAge;
+    const hasAge =
+      nextAge.varnish !== DEFAULT_AGE.varnish ||
+      nextAge.cracks !== DEFAULT_AGE.cracks ||
+      nextAge.fading !== DEFAULT_AGE.fading ||
+      nextAge.dust !== DEFAULT_AGE.dust ||
+      nextAge.seed !== DEFAULT_AGE.seed;
+    const nextDoc: PaintDocumentState = {
+      ...this.doc,
+      layers: [...this.doc.layers, newLayer],
+      activeLayerId: newLayer.id,
+      ...(hasAge ? { age: { ...nextAge } } : { age: undefined }),
+    };
+    this.commit('Bake age', nextDoc, before);
+    return {
+      layer: this.describeLayer(newLayer),
+      age: bakedAge,
+      bounds,
+    };
+  }
+
+  /** Whether the X-ray radiograph view is switched on in the viewport. */
+  getXrayView(): boolean {
+    return this.xrayView;
+  }
+
+  /** Switches the X-ray radiograph view on or off in the viewport (editor state, not an undo step). */
+  setXrayView(on: boolean): boolean {
+    if (typeof on !== 'boolean') throw new PaintEditorError('on must be true or false.');
+    if (this.xrayView === on) return on;
+    this.xrayView = on;
+    this.emit('all');
+    return on;
+  }
+
+  /**
+   * Renders a read-only X-ray radiograph of the painting, compositing every pixel layer (visible
+   * and hidden) with density = `opacity × (thick height + lightness weight)`. With `strokes: k`,
+   * replays the painting from its recorded strokes up to `k` strokes first.
+   */
+  async renderXray(options: { strokes?: number; maxSide?: number } = {}): Promise<XrayResult> {
+    this.requireWetIdle('rendering X-ray');
+    const maxSide = options.maxSide ?? 512;
+    if (!(Number.isInteger(maxSide) && maxSide >= 16 && maxSide <= 2048)) {
+      throw new PaintEditorError(`maxSide ${options.maxSide} is out of range; use a whole number 16..2048.`);
+    }
+    const totalStrokes = this.doc.strokes.length;
+    if (options.strokes !== undefined) {
+      if (!(Number.isInteger(options.strokes) && options.strokes >= 0 && options.strokes <= totalStrokes)) {
+        throw new PaintEditorError(`strokes ${options.strokes} is out of range; the painting has ${totalStrokes} recorded strokes, so use 0..${totalStrokes}.`);
+      }
+      const target = this.createReplayTarget(1);
+      try {
+        const hiddenIds = new Set(flattenLayers(this.doc.layers).filter((l) => !l.visible).map((l) => l.id));
+        const unlockAll = (list: readonly PaintLayer[]): PaintLayer[] =>
+          list.map((l) =>
+            l.type === 'group'
+              ? { ...l, visible: true, locks: undefined, children: unlockAll(l.children) }
+              : { ...l, visible: true, locks: undefined }
+          );
+        const restoreVis = (list: readonly PaintLayer[]): PaintLayer[] =>
+          list.map((l) =>
+            l.type === 'group'
+              ? { ...l, visible: !hiddenIds.has(l.id), children: restoreVis(l.children) }
+              : { ...l, visible: !hiddenIds.has(l.id) }
+          );
+        target.doc = { ...target.doc, layers: unlockAll(target.doc.layers) };
+        // Live growth not yet committed is part of the painting shown: replay it too.
+        await replayPainting(this.withCulturePreviewEvents(), target, { strokes: options.strokes });
+        await target.wetIdle();
+        const dried = restoreVis(target.driedLayers(target.doc.layers));
+        const full = renderXrayPixels(
+          target.doc.canvas.width,
+          target.doc.canvas.height,
+          dried,
+          target.doc.thick,
+          options.strokes,
+          totalStrokes
+        );
+        return this.scaleXray(full, maxSide);
+      } finally {
+        target.dispose();
+      }
+    }
+    const dried = this.driedLayers(this.currentLayers());
+    const full = renderXrayPixels(
+      this.doc.canvas.width,
+      this.doc.canvas.height,
+      dried,
+      this.doc.thick,
+      totalStrokes,
+      totalStrokes
+    );
+    return this.scaleXray(full, maxSide);
+  }
+
+  private scaleXray(full: XrayResult, maxSide: number): XrayResult {
+    const k = Math.min(1, maxSide / Math.max(full.width, full.height));
+    if (k >= 1) return full;
+    const w = Math.max(1, Math.round(full.width * k));
+    const h = Math.max(1, Math.round(full.height * k));
+    return {
+      ...full,
+      width: w,
+      height: h,
+      data: downsampleRgba(full.data, full.width, full.height, w, h),
+    };
+  }
+
+  private xrayNode(base: PaintLayer[]): ImageNode {
+    const version = this.version;
+    if (this.xrayNodeCache?.version === version) return this.xrayNodeCache.node;
+    const x = renderXrayPixels(
+      this.doc.canvas.width,
+      this.doc.canvas.height,
+      base,
+      this.doc.thick,
+      this.doc.strokes.length,
+      this.doc.strokes.length
+    );
+    const node: ImageNode = {
+      type: 'image',
+      id: XRAY_NODE_ID,
+      name: 'X-ray',
+      visible: true,
+      opacity: 1,
+      blend: 'normal',
+      image: { width: x.width, height: x.height, data: x.data },
+      version,
+    };
+    this.xrayNodeCache = { version, node };
+    return node;
+  }
+
+  // --- Biopaint (`culture`) -------------------------------------------------------
+
+  private culturesWithout(ids: readonly string[]): { cultures?: Record<string, LayerCulture> } {
+    const c = this.doc.cultures;
+    if (!c || !ids.some((id) => c[id])) return {};
+    const out = { ...c };
+    for (const id of ids) delete out[id];
+    return { cultures: Object.keys(out).length ? out : undefined };
+  }
+
+  /**
+   * Updates `doc.cultures[layer.id]` when a stroke commits: places spores along the stroke (and its
+   * symmetry copies) when `brush.culture` is set, or clears occupancy under the new paint when a
+   * non-culture stroke paints over existing threads so living tips treat fresh paint as food.
+   */
+  private applyStrokeCulture(
+    doc: PaintDocumentState,
+    s: PaintStrokeSession,
+    layer: PaintPixelLayer,
+    afterSurface: TiledSurface,
+    result: PaintStrokeResult
+  ): Record<string, LayerCulture> | undefined {
+    const brush = s.init.brush;
+    const existing = doc.cultures?.[layer.id];
+    if (!brush.culture) {
+      if (!existing) return doc.cultures;
+      const vortex = s.vortexWarp();
+      if (vortex) {
+        // A vortex moves the threads with the paint: ink it laid frees what it covered, then the
+        // colony's occupancy winds along with its threads (so they stay its own, not food).
+        const inked = clearOccupancyUnderStroke(existing, layer.surface, vortex.preWarpSurface()!);
+        return { ...(doc.cultures ?? {}), [layer.id]: { ...inked, occupancy: vortex.warpMask(inked.occupancy) } };
+      }
+      const cleared = clearOccupancyUnderStroke(existing, layer.surface, afterSurface);
+      return cleared === existing ? doc.cultures : { ...(doc.cultures ?? {}), [layer.id]: cleared };
+    }
+    const copies = [IDENTITY_AFFINE, ...s.init.affineCopies];
+    let current = existing;
+    let totalSeeds = 0;
+    const ox = layer.offset.x;
+    const oy = layer.offset.y;
+    for (let ci = 0; ci < copies.length; ci++) {
+      const m = copies[ci]!;
+      const copyPoints = s.points.map((p) => {
+        const tx = m[0] * p.x + m[2] * p.y + m[4];
+        const ty = m[1] * p.x + m[3] * p.y + m[5];
+        return { x: tx - ox, y: ty - oy };
+      });
+      const seeded = seedCultureFromStroke({
+        existing: current,
+        points: copyPoints,
+        brushSize: brush.tip.size,
+        color: [s.init.color[0], s.init.color[1], s.init.color[2]],
+        culture: brush.culture,
+        strokeSeed: (s.init.seed + ci * 7919) | 0,
+        beforeSurface: ci === 0 ? layer.surface : afterSurface,
+        afterSurface,
+        canvasWidth: doc.canvas.width,
+        canvasHeight: doc.canvas.height,
+        offsetX: ox,
+        offsetY: oy,
+      });
+      current = seeded.culture;
+      totalSeeds += seeded.seedsAdded;
+    }
+    result.culture = { seeds: totalSeeds };
+    this.culturePaused = false;
+    return current ? { ...(doc.cultures ?? {}), [layer.id]: current } : doc.cultures;
+  }
+
+  /** Biopaint (`culture`) state across all layers, plus `growWhileClosed` and `pendingCatchUpTicks`. */
+  getCultures(now: number = Date.now()): PaintCulturesStateInfo {
+    const layers: LayerCultureSummary[] = [];
+    let growing = false;
+    for (const l of flattenLayers(this.doc.layers)) {
+      if (!isPixelLayer(l)) continue;
+      const c = this.doc.cultures?.[l.id];
+      if (!c) continue;
+      const sum = layerCultureSummary(l.id, c);
+      if (sum.bounds && (l.offset.x || l.offset.y)) {
+        sum.bounds = { ...sum.bounds, x: sum.bounds.x + l.offset.x, y: sum.bounds.y + l.offset.y };
+      }
+      if (sum.tips > 0 && sum.status === 'growing') growing = true;
+      layers.push(sum);
+    }
+    const growWhileClosed = this.doc.growWhileClosed === true;
+    let pendingCatchUpTicks = 0;
+    if (growWhileClosed && growing && typeof this.doc.lastGrownAt === 'number' && Number.isFinite(this.doc.lastGrownAt) && now > this.doc.lastGrownAt) {
+      const elapsedSec = (now - this.doc.lastGrownAt) / 1000;
+      pendingCatchUpTicks = Math.min(MAX_CATCH_UP_TICKS, Math.max(0, Math.floor(elapsedSec * CULTURE_TICKS_PER_SECOND)));
+    }
+    return {
+      layers,
+      growWhileClosed,
+      pendingCatchUpTicks,
+      paused: this.culturePaused,
+      speed: this.cultureSpeed,
+      growing,
+    };
+  }
+
+  private stepCulturesInternal(targetLayerIds: readonly string[], steps: number): {
+    nextDoc: PaintDocumentState;
+    layerResults: GrowCulturesLayerResult[];
+    events: Map<string, CultureGrowEventData>;
+    dirty: RasterRect[];
+  } {
+    let doc = this.doc;
+    const { width, height } = doc.canvas;
+    const maskSel = this.stencilSelection();
+    const stencilSurface = maskSel ? surfaceFromPixels({ width: maskSel.width, height: maskSel.height, data: new Uint8ClampedArray(maskSel.data) }, 1) : null;
+    const paperDepthPermille = Math.round((doc.paper.depth ?? 0) * 1000);
+    const paperSeed = doc.paper.seed ?? 1;
+    const layerResults: GrowCulturesLayerResult[] = [];
+    const events = new Map<string, CultureGrowEventData>();
+    const dirty: RasterRect[] = [];
+
+    for (const layerId of targetLayerIds) {
+      const l = findLayer(doc.layers, layerId)?.layer;
+      if (!isPixelLayer(l)) continue;
+      const c = doc.cultures?.[layerId];
+      if (!c) {
+        layerResults.push({ layerId, segmentsAdded: 0, tipsAlive: 0, bounds: null, status: 'extinct' });
+        continue;
+      }
+      const ox = l.offset.x;
+      const oy = l.offset.y;
+      const layerStencil = stencilSurface && (ox || oy) ? translateSurface(stencilSurface, -ox, -oy) : stencilSurface;
+      const stepped = stepLayerCulture({
+        culture: c,
+        surface: l.surface,
+        lightSurface: doc.light?.[layerId],
+        stencilMask: layerStencil,
+        lockTransparency: isLayerLocked(l, 'transparency'),
+        paperSeed,
+        paperDepthPermille,
+        canvasWidth: width,
+        canvasHeight: height,
+        offsetX: ox,
+        offsetY: oy,
+        steps,
+      });
+      if (stepped.segmentsAdded > 0 || stepped.culture !== c) {
+        const nextCultures = { ...(doc.cultures ?? {}), [layerId]: stepped.culture };
+        const nextLight = stepped.lightSurface ? withLayerLight(doc.light, layerId, stepped.lightSurface) : doc.light;
+        doc = {
+          ...doc,
+          layers: mapLayer(doc.layers, layerId, () => ({ ...l, surface: stepped.surface })),
+          cultures: nextCultures,
+          ...(nextLight ? { light: nextLight } : {}),
+        };
+      }
+      if (stepped.segmentsAdded > 0) {
+        if (ox || oy) {
+          const dxFp = ox * 256;
+          const dyFp = oy * 256;
+          events.set(layerId, {
+            steps: stepped.eventData.steps,
+            fades: stepped.eventData.fades.map((f) => ({ ...f, x: f.x + ox, y: f.y + oy })),
+            segments: stepped.eventData.segments.map((s) => ({
+              ...s,
+              x0: s.x0 + dxFp,
+              y0: s.y0 + dyFp,
+              x1: s.x1 + dxFp,
+              y1: s.y1 + dyFp,
+            })),
+          });
+        } else {
+          events.set(layerId, stepped.eventData);
+        }
+      }
+      const sum = layerCultureSummary(layerId, stepped.culture);
+      const bounds = sum.bounds ? { ...sum.bounds, x: sum.bounds.x + ox, y: sum.bounds.y + oy } : null;
+      if (bounds) dirty.push(bounds);
+      layerResults.push({
+        layerId,
+        segmentsAdded: stepped.segmentsAdded,
+        tipsAlive: stepped.tipsAlive,
+        bounds,
+        status: stepped.status,
+      });
+    }
+    return { nextDoc: doc, layerResults, events, dirty };
+  }
+
+  /**
+   * Advances living biopaint (`culture`) colonies by `steps` ticks (1..2000, default 40) on
+   * `layerId` (or all layers with living tips when omitted) as a single undo step.
+   */
+  growCultures(options: { layerId?: string; steps?: number } = {}): GrowCulturesResult {
+    this.requireIdle('growing cultures');
+    this.requireWetIdle('growing cultures');
+    this.flushCulturePreview();
+    const steps = options.steps ?? 40;
+    if (!(Number.isInteger(steps) && steps >= 1 && steps <= 2000)) {
+      throw new PaintEditorError(`steps ${options.steps} is out of range; use a whole number 1..2000.`);
+    }
+    let targetIds: string[];
+    if (options.layerId !== undefined) {
+      const l = this.requireLayer(options.layerId);
+      if (!isPixelLayer(l)) throw new PaintEditorError(`Layer "${l.name}" is a group; grow cultures on a pixel layer.`);
+      if (this.doc.liveStrokes?.[l.id]) throw new PaintEditorError(`Layer "${l.name}" is a stroke layer; biopaint cultures only grow on pixel layers.`);
+      if (this.doc.effectLayers?.[l.id]) throw new PaintEditorError(`Layer "${l.name}" is an effect layer; rasterize it first (rasterize_effect_layer) or grow cultures on a pixel layer.`);
+      if (this.wet.wetLayerIds().includes(l.id)) throw new PaintEditorError(`Layer "${l.name}" holds wet paint; dry it first (dry_paint) before growing cultures on it.`);
+      if (isLayerLocked(l, 'pixels')) throw new PaintEditorError(`Layer "${l.name}" has its pixels locked; unlock it first.`);
+      if (!l.visible) throw new PaintEditorError(`Layer "${l.name}" is hidden; show it first.`);
+      targetIds = [l.id];
+    } else {
+      targetIds = flattenLayers(this.doc.layers)
+        .filter(
+          (l): l is PaintPixelLayer =>
+            isPixelLayer(l) &&
+            l.visible &&
+            !isLayerLocked(l, 'pixels') &&
+            !this.doc.liveStrokes?.[l.id] &&
+            !this.doc.effectLayers?.[l.id] &&
+            Boolean(this.doc.cultures?.[l.id]?.tips.length)
+        )
+        .map((l) => l.id);
+      for (const id of targetIds) {
+        if (this.wet.wetLayerIds().includes(id)) {
+          const l = this.requireLayer(id);
+          throw new PaintEditorError(`Layer "${l.name}" holds wet paint; dry it first (dry_paint) before growing cultures on it.`);
+        }
+      }
+      if (!targetIds.length && this.doc.activeLayerId) {
+        const active = this.getLayer(this.doc.activeLayerId);
+        if (isPixelLayer(active)) {
+          if (this.doc.liveStrokes?.[active.id]) throw new PaintEditorError(`Layer "${active.name}" is a stroke layer; biopaint cultures only grow on pixel layers.`);
+          if (this.doc.effectLayers?.[active.id]) throw new PaintEditorError(`Layer "${active.name}" is an effect layer; rasterize it first (rasterize_effect_layer) or grow cultures on a pixel layer.`);
+          if (this.wet.wetLayerIds().includes(active.id)) throw new PaintEditorError(`Layer "${active.name}" holds wet paint; dry it first (dry_paint) before growing cultures on it.`);
+          targetIds = [active.id];
+        }
+      }
+    }
+
+    const before = this.doc;
+    this.culturePaused = false;
+    const { nextDoc, layerResults, events } = this.stepCulturesInternal(targetIds, steps);
+    let doc = nextDoc;
+    for (const [layerId, data] of events) {
+      doc = this.withPaintEvent(doc, { kind: 'culture-grow', layerId, data: data as unknown as Record<string, unknown> });
+    }
+    if (doc !== before) {
+      this.commit('Grow culture', doc, before);
+    } else {
+      this.emit([]);
+    }
+    let segmentsAdded = 0;
+    let tipsAlive = 0;
+    let bounds: RasterRect | null = null;
+    let status: CultureStatus = 'extinct';
+    for (const r of layerResults) {
+      segmentsAdded += r.segmentsAdded;
+      tipsAlive += r.tipsAlive;
+      bounds = unionRect(bounds, r.bounds);
+      if (r.status === 'capped') status = 'capped';
+      else if (r.status === 'growing' && status !== 'capped') status = 'growing';
+    }
+    return { steps, segmentsAdded, tipsAlive, bounds, status, layers: layerResults };
+  }
+
+  /** Kills the living colony on `layerId` (default the active layer): clears living tips while keeping drawn threads as paint (one undo step). */
+  removeCultures(layerId?: string): { layerId: string; removedTips: number; status: CultureStatus } {
+    this.requireIdle('removing cultures');
+    this.flushCulturePreview();
+    const l = this.paintTarget(layerId, 'remove the cultures of');
+    const c = this.doc.cultures?.[l.id];
+    if (!c || (c.tips.length === 0 && c.status !== 'growing')) {
+      return { layerId: l.id, removedTips: 0, status: c?.status ?? 'extinct' };
+    }
+    const removedTips = c.tips.length;
+    const nextCulture: LayerCulture = {
+      ...c,
+      tips: [],
+      status: 'extinct',
+    };
+    this.commit('Kill culture', {
+      ...this.doc,
+      cultures: { ...(this.doc.cultures ?? {}), [l.id]: nextCulture },
+    });
+    return { layerId: l.id, removedTips, status: 'extinct' };
+  }
+
+  /** Configures document-wide culture options (`growWhileClosed`). Saved with the document, not an undo step. */
+  setCultureOptions(options: { growWhileClosed?: boolean }): { growWhileClosed: boolean } {
+    if (options.growWhileClosed !== undefined && typeof options.growWhileClosed !== 'boolean') {
+      throw new PaintEditorError('growWhileClosed must be true or false.');
+    }
+    this.flushCulturePreview();
+    const growWhileClosed = options.growWhileClosed ?? (this.doc.growWhileClosed === true);
+    this.docRevision++;
+    this.doc = {
+      ...this.doc,
+      ...(growWhileClosed ? { growWhileClosed: true } : { growWhileClosed: undefined, lastGrownAt: undefined }),
+    };
+    this.emit([]);
+    return { growWhileClosed };
+  }
+
+  /** Pauses or unpauses live culture growth in the editor. */
+  setCulturePaused(paused: boolean): boolean {
+    if (typeof paused !== 'boolean') throw new PaintEditorError('paused must be true or false.');
+    if (!paused) this.culturePaused = false;
+    else {
+      this.flushCulturePreview();
+      this.culturePaused = true;
+    }
+    this.emit([]);
+    return this.culturePaused;
+  }
+
+  /** Sets live culture growth speed multiplier (`0.25..4`, default `1`). */
+  setCultureSpeed(speed: number): number {
+    if (!(typeof speed === 'number' && Number.isFinite(speed) && speed >= 0.25 && speed <= 4)) {
+      throw new PaintEditorError(`speed ${speed} is out of range; use 0.25..4.`);
+    }
+    this.cultureSpeed = speed;
+    this.emit([]);
+    return this.cultureSpeed;
+  }
+
+  /**
+   * Runs any pending offline growth (`growWhileClosed` + `lastGrownAt`) up to `MAX_CATCH_UP_TICKS`
+   * (5,000 ticks) as a single undo step labelled `"Growth while closed"`.
+   */
+  catchUpCultures(now: number = Date.now()): GrowCulturesResult | null {
+    this.requireIdle('catching up cultures');
+    this.flushCulturePreview();
+    const state = this.getCultures(now);
+    const ticks = state.pendingCatchUpTicks;
+    if (ticks <= 0) return null;
+    const targetIds = flattenLayers(this.doc.layers)
+      .filter(
+        (l): l is PaintPixelLayer =>
+          isPixelLayer(l) &&
+          l.visible &&
+          !isLayerLocked(l, 'pixels') &&
+          !this.doc.liveStrokes?.[l.id] &&
+          !this.doc.effectLayers?.[l.id] &&
+          !this.wet.wetLayerIds().includes(l.id) &&
+          Boolean(this.doc.cultures?.[l.id]?.tips.length)
+      )
+      .map((l) => l.id);
+    if (!targetIds.length) return null;
+    const before = this.doc;
+    const { nextDoc, layerResults, events } = this.stepCulturesInternal(targetIds, ticks);
+    let doc: PaintDocumentState = { ...nextDoc, lastGrownAt: Math.round(now) };
+    for (const [layerId, data] of events) {
+      doc = this.withPaintEvent(doc, { kind: 'culture-grow', layerId, data: data as unknown as Record<string, unknown> });
+    }
+    if (doc !== before) {
+      this.commit('Growth while closed', doc, before);
+    }
+    let segmentsAdded = 0;
+    let tipsAlive = 0;
+    let bounds: RasterRect | null = null;
+    let status: CultureStatus = 'extinct';
+    for (const r of layerResults) {
+      segmentsAdded += r.segmentsAdded;
+      tipsAlive += r.tipsAlive;
+      bounds = unionRect(bounds, r.bounds);
+      if (r.status === 'capped') status = 'capped';
+      else if (r.status === 'growing' && status !== 'capped') status = 'growing';
+    }
+    return { steps: ticks, segmentsAdded, tipsAlive, bounds, status, layers: layerResults };
+  }
+
+  /**
+   * Drives live mycelial growth in the editor view on `clock` (like `playEffects`). Paused during
+   * strokes and after an undo until the next stroke or Grow is pressed; each uninterrupted run
+   * commits as one undo step when interrupted by a stroke, undo, or save.
+   */
+  playCultures(clock: { now(): number; frame(cb: () => void): () => void } = defaultEffectClock): { stop(): void } {
+    let stopped = false;
+    let cancel = () => {};
+    let last = clock.now();
+    let accumTicks = 0;
+    const tick = () => {
+      if (stopped) return;
+      const now = clock.now();
+      const dt = Math.max(0, Math.min(0.25, (now - last) / 1000));
+      last = now;
+      if (this.culturePaused || this.session || this.grouping || this.previewing || this.wet.busy) {
+        cancel = clock.frame(tick);
+        return;
+      }
+      // A layer still winding a vortex or playing a blast waits: growing would change its pixels and cut the animation short.
+      const animating = this.hasActiveVortexAnimations() ? new Set([...this.vortexAnimations.keys(), ...this.blastLayers.keys()]) : new Set(this.blastLayers.keys());
+      const targetIds = flattenLayers(this.doc.layers)
+        .filter(
+          (l): l is PaintPixelLayer =>
+            isPixelLayer(l) &&
+            l.visible &&
+            !isLayerLocked(l, 'pixels') &&
+            !this.doc.liveStrokes?.[l.id] &&
+            !this.doc.effectLayers?.[l.id] &&
+            !this.wet.wetLayerIds().includes(l.id) &&
+            Boolean(this.doc.cultures?.[l.id]?.tips.length) &&
+            this.doc.cultures?.[l.id]?.status === 'growing' &&
+            !animating.has(l.id)
+        )
+        .map((l) => l.id);
+      if (!targetIds.length) {
+        if (this.culturePreview) {
+          this.flushCulturePreview();
+          this.emit([]);
+        }
+        cancel = clock.frame(tick);
+        return;
+      }
+      accumTicks += dt * CULTURE_TICKS_PER_SECOND * this.cultureSpeed;
+      const steps = Math.min(8, Math.floor(accumTicks));
+      if (steps >= 1) {
+        accumTicks -= steps;
+        const base = (this.culturePreview?.shown === this.doc ? this.culturePreview.base : null) ?? this.doc;
+        const prevEvents = (this.culturePreview?.shown === this.doc ? this.culturePreview.events : null) ?? new Map<string, CultureGrowEventData>();
+        const { nextDoc, events, dirty } = this.stepCulturesInternal(targetIds, steps);
+        if (nextDoc !== this.doc) {
+          for (const [lid, ev] of events) {
+            const cur = prevEvents.get(lid);
+            if (cur) {
+              cur.steps += ev.steps;
+              cur.fades.push(...ev.fades);
+              cur.segments.push(...ev.segments);
+            } else {
+              prevEvents.set(lid, { steps: ev.steps, fades: [...ev.fades], segments: [...ev.segments] });
+            }
+          }
+          this.doc = nextDoc;
+          this.culturePreview = { base, shown: this.doc, events: prevEvents };
+          this.emit(dirty.length ? dirty : 'all');
+        }
+      }
+      cancel = clock.frame(tick);
+    };
+    cancel = clock.frame(tick);
+    return {
+      stop: () => {
+        stopped = true;
+        cancel();
+        this.flushCulturePreview();
+      },
+    };
+  }
+
+  /** Replays a recorded `'culture-grow'` event scaled by `scale` without re-simulating. */
+  replayCultureGrow(layerId: string, rawData: unknown, scale = 1): void {
+    const l = findLayer(this.doc.layers, layerId)?.layer;
+    if (!isPixelLayer(l) || !rawData || typeof rawData !== 'object') return;
+    const data = rawData as CultureGrowEventData;
+    const fades = Array.isArray(data.fades) ? data.fades : [];
+    const segments = Array.isArray(data.segments) ? data.segments : [];
+    if (!fades.length && !segments.length) return;
+    const { width, height } = this.doc.canvas;
+    const maskSel = this.stencilSelection();
+    const stencilSurface = maskSel ? surfaceFromPixels({ width: maskSel.width, height: maskSel.height, data: new Uint8ClampedArray(maskSel.data) }, 1) : null;
+    const ox = l.offset.x;
+    const oy = l.offset.y;
+    const layerStencil = stencilSurface && (ox || oy) ? translateSurface(stencilSurface, -ox, -oy) : stencilSurface;
+    const culture = this.doc.cultures?.[layerId];
+    const replayed = applyCultureGrowReplay(
+      l.surface,
+      this.doc.light?.[layerId],
+      layerStencil,
+      isLayerLocked(l, 'transparency'),
+      { steps: data.steps ?? 0, fades, segments },
+      scale,
+      width,
+      height,
+      // The replay's own colony (seeded by the replayed strokes): fades spare its threads, as they did live.
+      culture && !ox && !oy ? culture.occupancy : null
+    );
+    const nextLight = replayed.lightSurface ? withLayerLight(this.doc.light, layerId, replayed.lightSurface) : this.doc.light;
+    this.commit('Grow culture', {
+      ...this.doc,
+      layers: mapLayer(this.doc.layers, layerId, () => ({ ...l, surface: replayed.surface })),
+      ...(nextLight ? { light: nextLight } : {}),
+      ...(culture && replayed.occupancy ? { cultures: { ...(this.doc.cultures ?? {}), [layerId]: { ...culture, occupancy: replayed.occupancy } } } : {}),
+    });
+  }
+
   // --- Replay: time-lapse and high-resolution export ------------------------------
 
   /**
@@ -4649,6 +5633,7 @@ export class PaintEditorController {
     target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
     target.uvLight = { ...this.uvLight };
+    target.age = { ...this.age };
     // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
     target.effects.set(this.effects.provider);
     if (w === width && h === height) for (const [key, img] of this.effectPaintPixels) target.effectPaintPixels.set(key, img);
@@ -4663,7 +5648,7 @@ export class PaintEditorController {
   async timeLapse(options: TimeLapseOptions = {}): Promise<TimeLapse> {
     const target = this.createReplayTarget(1);
     try {
-      return await buildTimeLapse(this.doc, target, options);
+      return await buildTimeLapse(this.withCulturePreviewEvents(), target, options);
     } finally {
       target.dispose();
     }
@@ -4683,7 +5668,7 @@ export class PaintEditorController {
   async renderHighRes(options: { scale: number; paper?: boolean }): Promise<PixelImage> {
     const target = this.createReplayTarget(options.scale);
     try {
-      await replayPainting(this.doc, target, { scale: options.scale });
+      await replayPainting(this.withCulturePreviewEvents(), target, { scale: options.scale });
       await target.wetIdle();
       return target.compositePixels({ paper: options.paper, wet: 'dried' });
     } finally {
@@ -5097,18 +6082,19 @@ export class PaintEditorController {
   }
 
   /** The layers with the live stroke's surface in place. */
-  private currentLayers(): PaintLayer[] {
+  private currentLayers(view = false): PaintLayer[] {
     const override = this.frameOverride;
     if (override) return Array.from(override).reduce((ls, [id, surface]) => mapLayer(ls, id, (l) => ({ ...(l as PaintPixelLayer), surface })), this.doc.layers);
-    if (this.liveMulti) {
+    const liveMulti = this.liveScraper ?? this.liveMulti;
+    if (liveMulti) {
       let layers = this.doc.layers;
-      for (const [id, surface] of this.liveMulti) {
+      for (const [id, surface] of liveMulti) {
         layers = mapLayer(layers, id, (l) => ({ ...(l as PaintPixelLayer), surface }));
       }
       return layers;
     }
     const live = this.live;
-    if (!live) return this.schemeLayers(this.animatedView());
+    if (!live) return this.schemeLayers(this.animatedView(view));
     if (this.liveLayers?.key === live.surface) return this.liveLayers.layers;
     const layers = mapLayer(this.schemeLayers(this.doc.layers), live.layerId, (l) => ({ ...(l as PaintPixelLayer), surface: live.surface }));
     this.liveLayers = { key: live.surface, layers };
@@ -5207,15 +6193,16 @@ export class PaintEditorController {
     return visit(layers);
   }
 
-  /** The layers with thick paint and ferrofluid spikes lit (each thick or ferrofluid layer's pixels replaced by its lit tiles). */
-  private litLayers(layers: PaintLayer[]): PaintLayer[] {
+  /** The layers with thick paint, ferrofluid spikes and craquelure crack relief lit. */
+  private litLayers(layers: PaintLayer[], useAge = false, paintedLayerCount = 1): PaintLayer[] {
     const thick = this.doc.thick;
     const live = this.liveThick;
     const liveMulti = this.liveThickMulti;
     const animThick = this.animatedThick;
     const ferro = this.doc.ferro;
     const liveFerro = this.liveFerro;
-    if (!thick && !live && !liveMulti && !animThick.size && !ferro && !liveFerro) return layers;
+    const ageCracks = useAge && isAgeActive(this.age) && this.age.cracks > 0 && this.lighting.relief > 0 ? this.age : null;
+    if (!thick && !live && !liveMulti && !animThick.size && !ferro && !liveFerro && !ageCracks) return layers;
     let out = layers;
     const ids = new Set([
       ...Object.keys(thick ?? {}),
@@ -5224,6 +6211,7 @@ export class PaintEditorController {
       ...animThick.keys(),
       ...Object.keys(ferro ?? {}),
       ...(liveFerro ? [liveFerro.layerId] : []),
+      ...(ageCracks ? flattenLayers(layers).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).map((l) => l.id) : []),
     ]);
     const magnets = this.doc.magnets ?? [];
     for (const id of ids) {
@@ -5234,13 +6222,43 @@ export class PaintEditorController {
       const fSet = (liveFerro?.layerId === id ? liveFerro.settings : this.doc.ferroSettings?.[id]) ?? DEFAULT_FERRO;
       const hasThick = ch.height.tiles.size > 0 || ch.material.tiles.size > 0 || ch.film.tiles.size > 0;
       const hasFerro = Boolean(fSurf && fSurf.tiles.size > 0);
-      if (!hasThick && !hasFerro) continue;
+      const hasCracks = Boolean(ageCracks && l.surface.tiles.size > 0);
+      if (!hasThick && !hasFerro && !hasCracks) continue;
       let cache = this.litCaches.get(id);
       if (!cache) this.litCaches.set(id, (cache = new LitCache()));
-      const lit = cache.lit(l.surface, ch, this.lighting, this.viewTilt, hasFerro ? { surface: fSurf!, magnets, settings: fSet, offset: l.offset } : null);
+      const lit = cache.lit(
+        l.surface,
+        ch,
+        this.lighting,
+        this.viewTilt,
+        hasFerro ? { surface: fSurf!, magnets, settings: fSet, offset: l.offset } : null,
+        ageCracks,
+        paintedLayerCount,
+        l.offset
+      );
       if (lit !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: lit }));
     }
     return out;
+  }
+
+  /**
+   * Time-machine ageing pass over the layers after `lightLayers`: applies pigment fading by hue,
+   * yellowed varnish absorption, Voronoi / stress craquelure darkening, and surface dust grain.
+   */
+  private ageLayers(layers: PaintLayer[], paintedLayerCount: number): PaintLayer[] {
+    if (!isAgeActive(this.age)) return layers;
+    const visit = (list: PaintLayer[]): PaintLayer[] =>
+      list.map((l) => {
+        if (!l.visible) return l;
+        if (l.type === 'group') return { ...l, children: visit(l.children) };
+        if (!isPixelLayer(l) || !l.surface.tiles.size) return l;
+        let cache = this.ageCaches.get(l.id);
+        if (!cache) this.ageCaches.set(l.id, (cache = new AgeCache()));
+        const ch = this.liveThick?.layerId === l.id ? this.liveThick.channels : this.doc.thick?.[l.id];
+        const aged = cache.render(l.surface, ch?.height, this.age, paintedLayerCount, l.offset);
+        return aged !== l.surface ? { ...l, surface: aged } : l;
+      });
+    return visit(layers);
   }
 
   /**
@@ -5309,8 +6327,11 @@ export class PaintEditorController {
   }
 
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
-    const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers();
-    let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base))));
+    const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers(this.currentLayers(view)) : this.currentLayers(view);
+    const useAge = (options.age ?? view) && isAgeActive(this.age);
+    const paintedCount = useAge ? Math.max(1, flattenLayers(base).filter((l) => isPixelLayer(l) && l.visible && l.surface.tiles.size > 0).length) : 1;
+    let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base), useAge, paintedCount)));
+    if (useAge) layers = this.ageLayers(layers, paintedCount);
     const backlight = options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
     if (backlight) layers = [...layers, backlight];
     if (options.layerIds) {
@@ -5318,9 +6339,10 @@ export class PaintEditorController {
       for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
       layers = picked.map((l) => ({ ...l, visible: true }) as PaintLayer);
     }
-    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting)];
+    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(uvPaper(this.doc.paper, this.uvLight), this.lighting, useAge ? this.age : null)];
     if (options.paper !== false && this.doc.paperEffect) under.push(this.paperEffectNode(this.doc.paperEffect));
     if (view) under.push(...this.underlayLayers());
+    if (view && this.xrayView) return [...under, ...layers, this.xrayNode(base)];
     return [...under, ...layers];
   }
 
@@ -5388,7 +6410,9 @@ export class PaintEditorController {
       }
     }
     const layers = this.driedLayers(state.layers);
-    return layers === state.layers ? state : { ...state, layers };
+    if (layers !== state.layers) state = { ...state, layers };
+    if (state.growWhileClosed) state = { ...state, lastGrownAt: Date.now() };
+    return state;
   }
 
   /** Wet settings saved with the document (`null` when they are all defaults). */
@@ -5438,7 +6462,7 @@ export class PaintEditorController {
   }
 
   /** Thick paint and light as saved (`layerChannels`, `lighting`), merged into the extensions. */
-  private thickExtensions(): PaintDocumentExtensions {
+  private thickExtensions(state: PaintDocumentState = this.doc): PaintDocumentExtensions {
     const ext: PaintDocumentExtensions = { ...this.extensions };
     const channels: Record<string, unknown> = {};
     for (const [id, ch] of Object.entries(this.doc.thick ?? {})) {
@@ -5512,6 +6536,21 @@ export class PaintEditorController {
     else delete ext.heat;
     if (this.uvLight.on !== DEFAULT_UV_LIGHT.on || this.uvLight.strength !== DEFAULT_UV_LIGHT.strength || this.uvLight.ambient !== DEFAULT_UV_LIGHT.ambient) ext.uvLight = { ...this.uvLight };
     else delete ext.uvLight;
+    if (
+      this.age.years !== DEFAULT_AGE.years ||
+      this.age.varnish !== DEFAULT_AGE.varnish ||
+      this.age.cracks !== DEFAULT_AGE.cracks ||
+      this.age.fading !== DEFAULT_AGE.fading ||
+      this.age.dust !== DEFAULT_AGE.dust ||
+      this.age.seed !== DEFAULT_AGE.seed
+    ) {
+      ext.age = { ...this.age };
+    } else {
+      delete ext.age;
+    }
+    const savedCultures = culturesExtensionToJSON(state);
+    if (savedCultures) ext.cultures = savedCultures;
+    else delete ext.cultures;
     return ext;
   }
 
@@ -5520,9 +6559,22 @@ export class PaintEditorController {
     if (Array.isArray(ext.brushSources)) this.brushSources.set(ext.brushSources.map((x, i) => readBrushSource(x, `brushSources[${i}]`, problems)).filter((x) => x !== null));
     this.lighting = normalizeLighting((ext.lighting as Partial<PaintLighting>) ?? {}, DEFAULT_LIGHTING);
     this.uvLight = normalizeUvLight((ext.uvLight as Partial<UvLightSettings>) ?? {}, DEFAULT_UV_LIGHT);
+    this.age = normalizeAge((ext.age as PaintAgeInput) ?? state.age, DEFAULT_AGE);
+    if (
+      this.age.years !== DEFAULT_AGE.years ||
+      this.age.varnish !== DEFAULT_AGE.varnish ||
+      this.age.cracks !== DEFAULT_AGE.cracks ||
+      this.age.fading !== DEFAULT_AGE.fading ||
+      this.age.dust !== DEFAULT_AGE.dust ||
+      this.age.seed !== DEFAULT_AGE.seed
+    ) {
+      state = { ...state, age: { ...this.age } };
+    }
     this.litCaches.clear();
     this.uvCaches.clear();
     this.thermoCaches.clear();
+    this.ageCaches.clear();
+    this.xrayNodeCache = null;
     if (ext.stickers && typeof ext.stickers === 'object') {
       const stickers: Record<string, Sticker[]> = {};
       for (const [id, list] of Object.entries(ext.stickers as Record<string, unknown>)) {
@@ -5642,6 +6694,13 @@ export class PaintEditorController {
       const magnets = magnetsFromJSON(ext.magnets);
       if (magnets.length) state = { ...state, magnets };
     }
+    if (ext.cultures !== undefined) {
+      const validIds = new Set(flattenLayers(state.layers).filter((l) => isPixelLayer(l)).map((l) => l.id));
+      const loadedCultures = culturesExtensionFromJSON(ext.cultures, validIds, problems);
+      if (loadedCultures.cultures || loadedCultures.growWhileClosed !== undefined || loadedCultures.lastGrownAt !== undefined) {
+        state = { ...state, ...loadedCultures };
+      }
+    }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
     const thick: Record<string, ThickChannels> = {};
@@ -5657,15 +6716,21 @@ export class PaintEditorController {
   }
 
   toJSON(options: { strokes?: boolean } = {}): SerializedPaintDocument {
-    return serializePaintDocument(this.savedState(), { strokes: options.strokes, extensions: this.thickExtensions(), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    this.flushCulturePreview();
+    const state = this.savedState();
+    return serializePaintDocument(state, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   /** The document as JSON with each PNG stored in `store`. */
   toJSONExternal(store: PaintAssetStore, options: { strokes?: boolean } = {}): Promise<SerializedPaintDocument> {
-    return serializePaintDocumentExternal(this.savedState(), store, { strokes: options.strokes, extensions: this.thickExtensions(), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    this.flushCulturePreview();
+    const state = this.savedState();
+    return serializePaintDocumentExternal(state, store, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown; mixingPad?: unknown; wet?: unknown }): string[] {
+    this.culturePreview = null;
+    this.culturePaused = false;
     this.extensions = loaded.extensions;
     this.readWet(loaded.wet, loaded.problems);
     this.readMixingPad(loaded.mixingPad, loaded.problems);
@@ -5706,6 +6771,8 @@ export class PaintEditorController {
     delete this.extensions.thermo;
     delete this.extensions.heat;
     delete this.extensions.uvLight;
+    delete this.extensions.age;
+    delete this.extensions.cultures;
     this.viewCompositor.clear();
     this.schemeViews.clear();
     this.emit();
@@ -6638,9 +7705,10 @@ export class PaintEditorController {
 
   // --- Live effect paint ------------------------------------------------------------
 
-  /** The view's layers: stroke layers playing live effects at `effectTime`, the rest as they are. */
-  private animatedView(): PaintLayer[] {
-    if (!this.animatedLayers.size && !this.blastLayers.size) return this.doc.layers;
+  /** The view's layers: stroke layers playing live effects at `effectTime`, antimatter blast frames, and (in the view) vortex winding animations, the rest as they are. */
+  private animatedView(view = false): PaintLayer[] {
+    const useVortex = view && this.hasActiveVortexAnimations();
+    if (!this.animatedLayers.size && !this.blastLayers.size && !useVortex) return this.doc.layers;
     let layers = this.doc.layers;
     for (const frames of [this.animatedLayers, this.blastLayers]) {
       for (const [id, a] of frames) {
@@ -6648,7 +7716,88 @@ export class PaintEditorController {
         if (isPixelLayer(l) && l.surface === a.base) layers = mapLayer(layers, id, () => ({ ...l, surface: a.surface }));
       }
     }
+    if (useVortex) {
+      for (const [id, v] of this.vortexAnimations) {
+        if (!this.playingClock && v.startAt === null) continue;
+        const l = findLayer(layers, id)?.layer;
+        if (isPixelLayer(l) && l.surface === v.base) layers = mapLayer(layers, id, () => ({ ...l, surface: v.surface }));
+      }
+    }
     return layers;
+  }
+
+  private queueVortexAnimation(
+    layerId: string,
+    committedSurface: TiledSurface,
+    offset: { x: number; y: number },
+    lockTransparency: boolean,
+    selection: { width: number; height: number; data: ArrayLike<number> } | null,
+    bounds: RasterRect | null,
+    anim: { preInkSurface: TiledSurface; frames: readonly DisplacementField[]; duration: number },
+  ): void {
+    if (this.previewing || !(anim.duration > 0)) return;
+    const durationMs = Math.round(anim.duration * 1000);
+    if (durationMs <= 0) return;
+    this.vortexAnimations.set(layerId, {
+      base: committedSurface,
+      surface: anim.preInkSurface,
+      preInkSurface: anim.preInkSurface,
+      frames: anim.frames,
+      offset: { ...offset },
+      lockTransparency,
+      selection,
+      bounds: bounds ? { ...bounds } : null,
+      durationMs,
+      startAt: this.playingClock ? this.playingClock.now() : null,
+    });
+  }
+
+  /** Whether any layer has a view-only vortex winding animation in flight. */
+  hasActiveVortexAnimations(): boolean {
+    if (!this.vortexAnimations.size) return false;
+    for (const [id, v] of this.vortexAnimations) {
+      const l = findLayer(this.doc.layers, id)?.layer;
+      if (!isPixelLayer(l) || l.surface !== v.base) this.vortexAnimations.delete(id);
+    }
+    return this.vortexAnimations.size > 0;
+  }
+
+  /** Advances view-only vortex winding animations to `now` (ms). Returns true when any animation stepped. */
+  stepVortexAnimations(now: number): boolean {
+    if (!this.hasActiveVortexAnimations()) return false;
+    const dirty: RasterRect[] = [];
+    let anyChanged = false;
+    for (const [id, v] of [...this.vortexAnimations]) {
+      const l = findLayer(this.doc.layers, id)?.layer;
+      if (!isPixelLayer(l) || l.surface !== v.base) {
+        this.vortexAnimations.delete(id);
+        continue;
+      }
+      if (v.startAt === null) v.startAt = now;
+      const elapsed = Math.max(0, now - v.startAt);
+      if (elapsed >= v.durationMs) {
+        this.vortexAnimations.delete(id);
+        if (v.bounds) dirty.push(v.bounds);
+        anyChanged = true;
+        continue;
+      }
+      const u = Math.max(0, Math.min(1, elapsed / v.durationMs));
+      const t = u * u * (3 - 2 * u);
+      // Between the keyframes around t, so the paint winds along its arcs (scaling the final
+      // field would slide it along chords).
+      const field = vortexWindingField(v.frames, t);
+      v.surface = field
+        ? warpTiledSurfaceRgba(v.preInkSurface, field, {
+            offset: v.offset,
+            lockTransparency: v.lockTransparency,
+            selection: v.selection,
+          }).surface
+        : v.preInkSurface;
+      if (v.bounds) dirty.push(v.bounds);
+      anyChanged = true;
+    }
+    if (anyChanged) this.emit(dirty.length ? dirty : 'all');
+    return anyChanged;
   }
 
   /** Stroke layers with live effect strokes, and the distinct live sources (frame 0). */
@@ -6737,17 +7886,24 @@ export class PaintEditorController {
    */
   playEffects(clock: { now(): number; frame(cb: () => void): () => void } = defaultEffectClock): { stop(): void } {
     this.playingClock = clock;
+    const initNow = clock.now();
+    for (const v of this.vortexAnimations.values()) {
+      if (v.startAt === null) v.startAt = initNow;
+    }
     if (this.activeBlastAnim && !this.activeBlastAnim.ticked) {
-      this.activeBlastAnim.driver.rebaseTime(clock.now());
-      this.stepBlastAnimation(clock.now());
+      this.activeBlastAnim.driver.rebaseTime(initNow);
+      this.stepBlastAnimation(initNow);
     }
     let stopped = false;
     let cancel = () => {};
     let last = -Infinity;
-    let started = clock.now() - this.effectTime;
+    let started = initNow - this.effectTime;
     const tick = () => {
       if (stopped) return;
       const now = clock.now();
+      if (!this.session && this.hasActiveVortexAnimations()) {
+        this.stepVortexAnimations(now);
+      }
       const { playing, fps } = this.effectPlaybackState;
       if (this.activeBlastAnim && !this.session) {
         this.stepBlastAnimation(now);
@@ -6771,7 +7927,7 @@ export class PaintEditorController {
     cancel = clock.frame(tick);
     const self = this;
     return {
-      stop() {
+      stop: () => {
         stopped = true;
         if (self.playingClock === clock) self.playingClock = null;
         cancel();
@@ -6827,11 +7983,15 @@ export class PaintEditorController {
     let layers = doc.layers;
     let thick = doc.thick;
     let light = doc.light;
+    let cultures = doc.cultures;
     for (const o of outputs) {
       if (!o.changed) continue;
       const l = findLayer(layers, o.id)?.layer;
       if (!isPixelLayer(l)) continue;
       layers = mapLayer(layers, o.id, () => ({ ...l, surface: o.surface }));
+      // Biopaint threads the blast changed are no longer the culture's own: it can feed on them, as after any stroke.
+      const culture = cultures?.[o.id];
+      if (culture) cultures = { ...cultures, [o.id]: clearOccupancyUnderStroke(culture, l.surface, o.surface) };
       // `null` means the stroke left that channel as it was (not "cleared"): keep the layer's light and relief.
       if (o.thick !== null) thick = withLayerThick(thick, o.id, o.thick);
       if (o.light !== null) light = withLayerLight(light, o.id, o.light);
@@ -6841,6 +8001,7 @@ export class PaintEditorController {
         ...doc,
         layers,
         strokes: [...doc.strokes, stroke],
+        ...(cultures ? { cultures } : {}),
         ...(thick && Object.keys(thick).length ? { thick } : { thick: undefined }),
         ...(light && Object.keys(light).length ? { light } : { light: undefined }),
       },
@@ -7746,9 +8907,9 @@ export class PaintEditorController {
     this.lastMutationTick = null;
   }
 
-  /** A layer's tile surface (live while stroking), for thumbnails. */
+  /** A layer's tile surface (live while stroking, or winding in the view), for thumbnails. */
   layerSurface(id: string): TiledSurface | null {
-    const l = findLayer(this.currentLayers(), id)?.layer;
+    const l = findLayer(this.currentLayers(true), id)?.layer;
     return isPixelLayer(l) ? l.surface : null;
   }
 
@@ -8064,6 +9225,21 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
             ...e.data,
             ...(typeof d.x === 'number' && typeof d.y === 'number' ? { x: d.x + dx, y: d.y + dy } : {}),
             ...(Array.isArray(d.points) ? { points: d.points.map((p) => movePoint(p, dx, dy)) } : {}),
+          },
+        };
+      }
+      if (e.kind === 'culture-grow' && e.data) {
+        const d = e.data as { fades?: CultureRecordedFade[]; segments?: CultureRecordedSegment[] };
+        const dxFp = dx * 256;
+        const dyFp = dy * 256;
+        return {
+          ...e,
+          data: {
+            ...e.data,
+            ...(Array.isArray(d.fades) ? { fades: d.fades.map((f) => ({ ...f, x: f.x + dx, y: f.y + dy })) } : {}),
+            ...(Array.isArray(d.segments)
+              ? { segments: d.segments.map((s) => ({ ...s, x0: s.x0 + dxFp, y0: s.y0 + dyFp, x1: s.x1 + dxFp, y1: s.y1 + dyFp })) }
+              : {}),
           },
         };
       }

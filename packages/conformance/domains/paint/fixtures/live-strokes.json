@@ -537,6 +537,10 @@
                         },
                         "pressureSmoothing": 0.3,
                         "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
                         "smudge": {
                           "length": 0.85,
                           "mixing": "rgb",
@@ -722,6 +726,10 @@
                         },
                         "pressureSmoothing": 0.4,
                         "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
                         "smudge": {
                           "length": 0.85,
                           "mixing": "rgb",
@@ -919,6 +927,10 @@
                         },
                         "pressureSmoothing": 0.3,
                         "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
                         "smudge": {
                           "length": 0.85,
                           "mixing": "rgb",
@@ -1104,6 +1116,10 @@
                         },
                         "pressureSmoothing": 0.4,
                         "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
                         "smudge": {
                           "length": 0.85,
                           "mixing": "rgb",
@@ -1301,6 +1317,10 @@
                         },
                         "pressureSmoothing": 0.4,
                         "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
                         "smudge": {
                           "length": 0.85,
                           "mixing": "rgb",
@@ -1489,6 +1509,10 @@
                         },
                         "pressureSmoothing": 0.3,
                         "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
                         "smudge": {
                           "length": 0.85,
                           "mixing": "rgb",
@@ -1683,6 +1707,10 @@
                         },
                         "pressureSmoothing": 0.3,
                         "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
                         "smudge": {
                           "length": 0.85,
                           "mixing": "rgb",

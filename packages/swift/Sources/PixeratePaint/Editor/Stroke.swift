@@ -58,12 +58,16 @@ struct StrokeSessionInit {
     var wet: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
     /// Impasto brushes: the layer's thick-paint channels before the stroke.
     var thick: ThickChannels? = nil
+    /// Non-impasto brushes (such as vortex) on a layer that already has impasto relief: the layer's thick channels before the stroke.
+    var relief: ThickChannels? = nil
     /// Non-impasto brushes with `iridescence` (or an eraser on a layer with film): the layer's film before the stroke.
     var film: TiledSurface? = nil
     /// The art of image sources, for stamp tips and tip grain.
     var stampArt: StampArtLookup? = nil
     /// Antimatter brushes: every visible layer that supplies fuel (and is edited if editable).
     var antimatter: [AntimatterTarget]? = nil
+    /// Scraper brushes: the driver that cuts down through visible paint layers.
+    var scraper: ScraperStrokeDriver? = nil
 }
 
 public struct PaintStrokeResult {
@@ -77,10 +81,14 @@ public struct PaintStrokeResult {
     public var mixerLoad: MixerLoad?
     /// Wet brushes: the paint is wet (it keeps moving until it dries).
     public var wet: Bool?
+    /// Biopaint brushes: how many spores the stroke seeded onto the layer.
+    public var culture: Int?
     /// Antimatter brushes: blast, spark, fuel and layer summary.
     public var antimatter: AntimatterStats?
     /// Sticker brushes: provider stickers the stroke skipped because their art was not cached yet.
     public var skippedStickers: [String]?
+    /// Vortex brushes: the classified stroke shape and peak displacement in pixels.
+    public var vortex: VortexStrokeSummary?
 }
 
 private func sameTile(_ a: Tile?, _ b: Tile?) -> Bool {
@@ -112,6 +120,8 @@ final class PaintStrokeSession: PaintTileTarget {
     private var wetDriver: WetStrokeDriver?
     private var thickDriver: ThickStrokeDriver?
     private var antimatter: AntimatterStrokeDriver?
+    private var scraperDriver: ScraperStrokeDriver?
+    private var vortexDriver: VortexStrokeDriver?
     private var filmBuffer: FilmBuffer?
     private let apply: StrokeApply
     private(set) var bounds: RasterRect?
@@ -204,6 +214,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.thermo = nil
             t.ferro = nil
             t.thick = nil
+            t.relief = nil
             t.stickerNextId = nil
             t.film = nil
             lightTwin = try PaintStrokeSession(t)
@@ -219,6 +230,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.thermo = nil
             t.ferro = nil
             t.thick = nil
+            t.relief = nil
             t.stickerNextId = nil
             fluorTwin = try PaintStrokeSession(t)
         }
@@ -245,6 +257,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.thermo = nil
             t.ferro = nil
             t.thick = nil
+            t.relief = nil
             t.stickerNextId = nil
             thermoTwin = try PaintStrokeSession(t)
         }
@@ -268,6 +281,8 @@ final class PaintStrokeSession: PaintTileTarget {
             t.ferro = nil
             t.fluor = nil
             t.thermo = nil
+            t.thick = nil
+            t.relief = nil
             t.film = nil
             ferroTwin = try PaintStrokeSession(t)
         }
@@ -280,6 +295,11 @@ final class PaintStrokeSession: PaintTileTarget {
         if let f = i.film {
             filmBuffer = FilmBuffer(f, i.offset, i.selection)
         }
+        if let s = i.scraper {
+            dry = nil
+            scraperDriver = s
+            return
+        }
         if let w = i.wet {
             dry = nil
             wetDriver = w.driver
@@ -288,6 +308,28 @@ final class PaintStrokeSession: PaintTileTarget {
         if let ch = i.thick {
             dry = nil
             thickDriver = ThickStrokeDriver(ThickStrokeInit(brush: brush, target: self, channels: ch, color: i.color.prefix(3).map { Double($0) / 255 }, load: i.mixerLoad, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels))
+            return
+        }
+        if brush.engine == "vortex" {
+            dry = nil
+            vortexDriver = VortexStrokeDriver(VortexStrokeDriverInit(
+                brush: brush,
+                base: i.surface,
+                offset: i.offset,
+                lockTransparency: i.lockTransparency,
+                selection: i.selection,
+                color: i.color,
+                background: i.background,
+                grain: i.grain,
+                paperDepth: i.paperDepth,
+                seed: i.seed,
+                copies: copies,
+                paint: i.paint,
+                effect: i.effect?.pixels,
+                stampArt: i.stampArt,
+                relief: i.relief ?? i.film.map { ThickChannels(height: emptySurface(1, 0), material: emptySurface(4, 0), film: $0) }
+            ))
+            filmBuffer = nil
             return
         }
         if brush.engine == "sticker" {
@@ -377,7 +419,15 @@ final class PaintStrokeSession: PaintTileTarget {
     var open: Bool { !closed }
 
     /// Impasto strokes: the layer's thick-paint channels with the stroke so far.
-    func thickChannels() -> ThickChannels? { thickDriver?.channels() }
+    func thickChannels() -> ThickChannels? { thickDriver?.channels() ?? vortexDriver?.reliefChannels() }
+
+    /// Dry vortex strokes: the driver, to move per-layer masks (biopaint occupancy) with the paint.
+    func vortexWarp() -> VortexStrokeDriver? { vortexDriver?.preWarpSurface() != nil ? vortexDriver : nil }
+
+    /// Vortex strokes: winding animation parameters (`(field, preInkSurface, duration)`).
+    func windingAnimation() -> (field: DisplacementField, preInkSurface: TiledSurface, duration: Double)? {
+        vortexDriver?.windingAnimation()
+    }
 
     /// Non-impasto strokes that write or erase thin film: the layer's film surface so far.
     func filmChannel() -> TiledSurface? { filmBuffer?.surface() }
@@ -388,6 +438,11 @@ final class PaintStrokeSession: PaintTileTarget {
         if closed || pts.isEmpty { return [] }
         let filtered = initValues.inputFilter.map { pts.map($0) } ?? pts
         points += filtered
+        if let s = scraperDriver {
+            let rects = s.push(filtered)
+            for r in rects { bounds = unionRect(bounds, r) }
+            return rects
+        }
         if let w = wetDriver {
             let rects = try w.push(filtered)
             for r in rects { bounds = unionRect(bounds, r) }
@@ -406,7 +461,7 @@ final class PaintStrokeSession: PaintTileTarget {
             for r in fRects { bounds = unionRect(bounds, r) }
             return fRects
         }
-        let rects = dry != nil ? dry!.push(filtered) : thickDriver != nil ? thickDriver!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
+        let rects = dry != nil ? dry!.push(filtered) : thickDriver != nil ? thickDriver!.push(filtered) : vortexDriver != nil ? vortexDriver!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
         update(rects)
         markStale(rects)
         return rects
@@ -474,6 +529,15 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Ends the stroke and returns what changed.
     func end() throws -> PaintStrokeResult {
         if closed { throw PaintEditorError("This stroke has already ended.") }
+        if let s = scraperDriver {
+            for r in s.finish() { bounds = unionRect(bounds, r) }
+            closed = true
+            let changed = s.hasChanges
+            surfaceAfter = changed ? (s.liveSurfaces()[layerId] ?? base) : nil
+            let r = PaintStrokeResult(layerId: layerId, bounds: changed ? bounds : nil, dabs: s.dabCount, strokeId: nil)
+            result = r
+            return r
+        }
         if let w = wetDriver {
             for r in try w.finish() { bounds = unionRect(bounds, r) }
             closed = true
@@ -482,6 +546,35 @@ final class PaintStrokeSession: PaintTileTarget {
             var r = PaintStrokeResult(layerId: layerId, bounds: changed ? w.bounds : nil, dabs: w.dabCount, strokeId: nil)
             r.wet = true
             if let carried = w.load { r.mixerLoad = initValues.brush.behavior.dirty ? carried : cleanMixer(carried) }
+            if let vs = w.vortexSummary { r.vortex = vs }
+            result = r
+            return r
+        }
+        if let v = vortexDriver {
+            let vEnd = v.finish()
+            if let vb = vEnd.bounds { bounds = unionRect(bounds, vb) }
+            closed = true
+            if let twin = lightTwin, twin.open { _ = try twin.end() }
+            if let twin = ferroTwin, twin.open { _ = try twin.end() }
+            let fEnd = try fluorTwin.flatMap { $0.open ? try $0.end() : $0.result }
+            let tEnd = try thermoTwin.flatMap { $0.open ? try $0.end() : $0.result }
+            if let fb = fEnd?.bounds { bounds = unionRect(bounds, fb) }
+            if let tb = tEnd?.bounds { bounds = unionRect(bounds, tb) }
+            let twinChanged =
+                lightTwin?.surfaceAfter != nil ||
+                ferroTwin?.surfaceAfter != nil ||
+                fluorTwin?.surfaceAfter != nil ||
+                thermoTwin?.surfaceAfter != nil
+            let changed = vEnd.surface != nil || twinChanged
+            surfaceAfter = vEnd.surface ?? (twinChanged ? base : nil)
+            let vs = v.vortexResult()
+            let r = PaintStrokeResult(
+                layerId: layerId,
+                bounds: changed ? bounds : nil,
+                dabs: changed ? Swift.max(1, v.dabCount) : 0,
+                strokeId: nil,
+                vortex: VortexStrokeSummary(shape: vs.shape, maxDisplacement: changed ? vs.maxDisplacement : 0)
+            )
             result = r
             return r
         }
@@ -551,7 +644,7 @@ func mixerLoadForStroke(_ brush: PaintBrush, _ current: MixerLoad, _ color: [Dou
 func brushLoadForStroke(_ brush: PaintBrush, _ current: MixerLoad, _ color: [Double]) -> MixerLoad {
     if brush.engine == "mixer" { return mixerLoadForStroke(brush, current, color) }
     if brush.engine == "impasto" { return MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) }
-    if brush.engine == "wet" { return brush.wet.tool == "paint" ? MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) : EMPTY_MIXER_LOAD }
+    if brush.engine == "wet" { return (brush.wet.tool == "paint" || (brush.wet.tool == "vortex" && brushVortex(brush).ink > 0)) ? MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) : EMPTY_MIXER_LOAD }
     if usesPaintExchange(brush) { return MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) }
     return EMPTY_MIXER_LOAD
 }

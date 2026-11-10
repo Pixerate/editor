@@ -71,6 +71,12 @@ public final class PaintDocumentState {
     public var ferroSettings: OrderedMap<String, FerroSettings>?
     /// Magnets placed on the canvas that pull liquid ferrofluid into Rosensweig relief spikes.
     public var magnets: [PaintMagnet]?
+    /// Biopaint (`culture`): each layer's living mycelial colony and thread occupancy channel.
+    public var cultures: OrderedMap<String, LayerCultureState>?
+    /// Whether living cultures catch up elapsed growth when a saved painting is reopened.
+    public var growWhileClosed: Bool?
+    /// Epoch milliseconds when cultures last grew (recorded on save when `growWhileClosed` is true).
+    public var lastGrownAt: Double?
     /// Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
     public var origin: LayerOffset?
     /// Effect layers: the provider effect each is drawn from (layer id → effect).
@@ -83,6 +89,8 @@ public final class PaintDocumentState {
     public var thick: OrderedMap<String, ThickChannels>?
     /// Wet-media events (tilt, settings, drying, wet paper) with the clock they happened at, for replays.
     public var wetEvents: [WetEvent]?
+    /// Time-machine ageing setting persisted with the document.
+    public var age: PaintAgeSettings?
 
     public init(canvas: PaintCanvas, paper: PaperSettings, layers: [PaintLayer], activeLayerId: String?, strokes: [RecordedStroke]) {
         self.canvas = canvas
@@ -104,12 +112,16 @@ public final class PaintDocumentState {
         d.ferro = ferro
         d.ferroSettings = ferroSettings
         d.magnets = magnets
+        d.cultures = cultures
+        d.growWhileClosed = growWhileClosed
+        d.lastGrownAt = lastGrownAt
         d.origin = origin
         d.effectLayers = effectLayers
         d.paperEffect = paperEffect
         d.stickers = stickers
         d.thick = thick
         d.wetEvents = wetEvents
+        d.age = age
         change(d)
         return d
     }

@@ -19,6 +19,7 @@ import {
 } from '../image-editor/layers/serialize';
 import type { ImageLayer } from '../image-editor/layers/model';
 import { findLayer, flattenLayers } from '../raster/layers';
+import { culturesExtensionFromJSON, culturesExtensionToJSON } from '../paint/culture';
 import { parseDataUrl } from '../raster/png';
 import { normalizeBrushStroke, strokeToJSON } from './strokes';
 import { normalizeCanvas, type PaintDocumentState, type PaintEvent, type PaintLayer } from './document';
@@ -102,6 +103,10 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
   if (state.wetEvents?.length) (out as Record<string, unknown>).wetEvents = JSON.parse(JSON.stringify(state.wetEvents));
   if (state.paintEvents?.length) (out as Record<string, unknown>).paintEvents = JSON.parse(JSON.stringify(state.paintEvents));
   if (state.origin && (state.origin.x || state.origin.y)) (out as Record<string, unknown>).origin = { ...state.origin };
+  if ((out as Record<string, unknown>).cultures === undefined) {
+    const cultures = culturesExtensionToJSON(state);
+    if (cultures) (out as Record<string, unknown>).cultures = cultures;
+  }
   return out;
 }
 
@@ -272,8 +277,15 @@ function readDocument(r: Record<string, unknown>, assets: Record<string, string>
   const wetEvents = Array.isArray(r.wetEvents) ? (r.wetEvents as WetEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.clock) && typeof e.kind === 'string') : [];
   const state: PaintDocumentState = { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) };
   if (wetEvents.length) state.wetEvents = wetEvents;
-  const paintEvents = Array.isArray(r.paintEvents) ? (r.paintEvents as PaintEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.at) && typeof e.layerId === 'string' && ['fill', 'fill-region', 'clear', 'flatten', 'stickers', 'live-strokes', 'magnets', 'cure-ferrofluid'].includes(e.kind)) : [];
+  const paintEvents = Array.isArray(r.paintEvents) ? (r.paintEvents as PaintEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.at) && typeof e.layerId === 'string' && ['fill', 'fill-region', 'clear', 'flatten', 'stickers', 'live-strokes', 'magnets', 'cure-ferrofluid', 'culture-grow'].includes(e.kind)) : [];
   if (paintEvents.length) state.paintEvents = paintEvents;
+  if (r.cultures !== undefined) {
+    const pixelIds = new Set(flattenLayers(layers).filter((l) => l.type === 'pixel').map((l) => l.id));
+    const parsedCultures = culturesExtensionFromJSON(r.cultures, pixelIds, problems);
+    if (parsedCultures.cultures) state.cultures = parsedCultures.cultures;
+    if (parsedCultures.growWhileClosed !== undefined) state.growWhileClosed = parsedCultures.growWhileClosed;
+    if (parsedCultures.lastGrownAt !== undefined) state.lastGrownAt = parsedCultures.lastGrownAt;
+  }
   const o = r.origin as { x?: unknown; y?: unknown } | undefined;
   if (o && typeof o === 'object' && Number.isFinite(o.x) && Number.isFinite(o.y) && (o.x || o.y)) state.origin = { x: Math.round(o.x as number), y: Math.round(o.y as number) };
   return { state, extensions: documentExtensions(r), guides: r.guides, swatches: r.swatches, mixingPad: r.mixingPad, wet: r.wet, problems };

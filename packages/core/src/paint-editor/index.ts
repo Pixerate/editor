@@ -35,6 +35,7 @@ export type { PaintAgentTool, PaintOrigin, PaintToolCoordinates } from './hosted
 export * from './ui';
 export { BLEND_MODES, PAINTERLY_BLEND_MODES, isBlendMode, isPainterlyBlendMode, standardBlendMode, type BlendMode, type BlendModeInfo } from '../raster/blend';
 export * from './wet';
+export * from './vortex';
 export * from './wet-tools';
 export * from './thick';
 export * from './heat';
@@ -42,6 +43,11 @@ export { BACKLIGHT_SPILL, DEFAULT_BACKLIGHT_COLOR, backlightOf } from './backlig
 export * from './thick-tools';
 export * from './ferro';
 export * from './ferro-tools';
+export * from './age';
+export * from './scraper';
+export * from './time-machine-tools';
+export * from '../paint/culture';
+export * from './culture-tools';
 export * from './replay';
 export * from './replay-tools';
 export * from './stencils';

@@ -16,6 +16,7 @@ more; this is where each one went.
 | Wet engine (medium, water, pigment, body…) | `behaviour.surface` `wet` and `behaviour.wet` |
 | Impasto (thickness, gloss, metallic, rim, clarity…) | `behaviour.surface` `thick` and `behaviour.thick` |
 | Particle settings | `marks` `{ kind: 'particles', physics, render, count… }`; textured dots are `tip.stamps` on a `stamp` tip |
+| Vortex paint | `marks` `{ kind: 'vortex', reach, turns, pull, direction, ink, duration }` |
 | Sticker spray | `marks` `{ kind: 'objects', density… }` and `tip.stamps` (sticker refs) |
 | Antimatter blasts | `marks` `{ kind: 'antimatter', blastRadius, blastSpacing, threshold, invert, invertMode, scorch, annihilate, sparks, sparkReach, crater, duration }` |
 | Bristles | `tip.shape` `bristle` and `tip.bristle` |
@@ -27,6 +28,7 @@ more; this is where each one went.
 | Thin-film iridescence | `iridescence` (`thickness` 100..1000 nm, `pressureToThickness` 0..1, `ior` 1.2..2.0); `unset: ['iridescence']` drops it |
 | Ghost paint (linger, smear) | `ghost` (`linger`, `smear`); `unset: ['ghost']` drops it |
 | Ferrofluid | `ferro` (`amount` 0..1 or numeric shorthand, `wavelength` 4..64 px, `threshold` 0..1); `unset: ['ferro']` drops it |
+| Biopaint (mycelial ink) | `culture` (`species`: `'mycelium'`, `reach` 1..100, `branching` 0..1, `wander` 0..1, `appetite` 0..1, `digest` 0..1, `fuse` 0..1, `thickness` 0.02..0.5, `glow` 0..1); `culture: null` or `unset: ['culture']` drops it |
 
 ## Examples
 

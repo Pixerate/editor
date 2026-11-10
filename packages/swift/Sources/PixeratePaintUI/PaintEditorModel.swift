@@ -338,6 +338,23 @@ public final class PaintEditorModel {
         attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
     }
 
+    /// The vortex-paint sliders (`PaintUITables.sliders.vortex`): reach, turns, pull, ink and duration.
+    public var vortexSliders: [PaintUISlidersVortexItem] { tables.sliders.vortex }
+
+    /// The value of a vortex slider (`vortex.reach`, `vortex.turns`, `vortex.pull`, `vortex.ink`, `vortex.duration`).
+    public func vortexValue(_ path: String) -> Double {
+        track()
+        let v = brushVortex(controller.brush)
+        switch path {
+        case "vortex.reach": return v.reach
+        case "vortex.turns": return v.turns
+        case "vortex.pull": return v.pull
+        case "vortex.ink": return v.ink
+        case "vortex.duration": return v.duration
+        default: return 0
+        }
+    }
+
     /// The antimatter-paint sliders (`PaintUITables.sliders.antimatter`).
     public var antimatterSliders: [PaintUISlidersAntimatterItem] { tables.sliders.antimatter }
 
@@ -358,6 +375,19 @@ public final class PaintEditorModel {
         case "antimatter.duration": return a.duration
         default: return 0
         }
+    }
+
+    /// Sets a vortex slider (`set_brush` with that facet; editor state, not an undo step).
+    public func setVortexValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// The active vortex brush's spin direction (`"follow"`, `"cw"` or `"ccw"`).
+    public var vortexDirection: String { track(); return brushVortex(controller.brush).direction }
+
+    /// Sets the active vortex brush's spin direction (`set_brush` with `vortex.direction`).
+    public func setVortexDirection(_ direction: String) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], "vortex.direction", .string(direction))) }
     }
 
     /// Sets an antimatter slider (`set_brush` with `marks.<key>`; editor state, not an undo step).
@@ -382,6 +412,75 @@ public final class PaintEditorModel {
 
     /// The count of active mutations waiting for or being answered by an agent.
     public var pendingMutationsCount: Int { track(); return controller.listMutations().count }
+
+    // MARK: - Biopaint (living mycelial ink)
+
+    /// The biopaint culture sliders (`PaintUITables.sliders.culture`).
+    public var cultureSliders: [PaintUISlidersCultureItem] { tables.sliders.culture }
+
+    /// The current biopaint state (`get_cultures`).
+    public var cultures: PaintCulturesStateInfo { track(); return controller.getCultures() }
+
+    /// Whether the active brush carries biopaint spores.
+    public var brushHasCulture: Bool { track(); return controller.brush.culture != nil }
+
+    /// Enables or disables biopaint spores on the active brush.
+    public func setBrushCultureEnabled(_ on: Bool) {
+        if on {
+            let cur = controller.brush.culture ?? DEFAULT_CULTURE
+            attempt { _ = try controller.setBrushFacets(["culture": cur.json]) }
+        } else {
+            attempt { _ = try controller.setBrushFacets(["culture": .null]) }
+        }
+    }
+
+    /// Reads one biopaint slider value from the active brush (`culture.reach`, etc.).
+    public func cultureValue(_ path: String) -> Double {
+        track()
+        let c = controller.brush.culture ?? DEFAULT_CULTURE
+        let key = path.hasPrefix("culture.") ? String(path.dropFirst("culture.".count)) : path
+        switch key {
+        case "reach": return c.reach
+        case "branching": return c.branching
+        case "wander": return c.wander
+        case "appetite": return c.appetite
+        case "digest": return c.digest
+        case "fuse": return c.fuse
+        case "thickness": return c.thickness
+        case "glow": return c.glow
+        default: return 0
+        }
+    }
+
+    /// Sets one biopaint slider value on the active brush.
+    public func setCultureValue(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setBrushFacets(patchPath([:], path, .number(value))) }
+    }
+
+    /// Steps living biopaint colonies forward (`grow_cultures`; one undo step).
+    public func growCultures(steps: Int = 24, layerId: String? = nil) {
+        attempt { _ = try controller.growCultures(layerId: layerId, steps: steps) }
+    }
+
+    /// Kills living biopaint tips on the layer (`remove_cultures`; one undo step).
+    public func removeCultures(layerId: String? = nil) {
+        attempt { _ = try controller.removeCultures(layerId) }
+    }
+
+    /// Runs the growth a `growWhileClosed` document missed while it was closed (one undo step), as React and Svelte do when the canvas mounts.
+    public func catchUpCultures() {
+        attempt { _ = try controller.catchUpCultures() }
+    }
+
+    /// Sets document-level biopaint options (`set_culture_options`).
+    public func setCultureOptions(growWhileClosed: Bool) {
+        _ = controller.setCultureOptions(growWhileClosed: growWhileClosed)
+    }
+
+    /// Pauses or resumes live biopaint growth.
+    public func setCulturePaused(_ paused: Bool) {
+        _ = controller.setCulturePaused(paused)
+    }
 
     /// Steps the brush size by 15 % (`[` and `]`).
     public func stepBrushSize(larger: Bool) {
@@ -500,6 +599,36 @@ public final class PaintEditorModel {
         attempt { _ = try controller.cureFerrofluid() }
     }
 
+    // MARK: - Time machine (ageing & X-ray)
+
+    /// The ageing sliders (`PaintUITables.sliders.age`): years, varnish, cracks, fading and dust.
+    public var ageSliders: [PaintUISlidersAgeItem] { tables.sliders.age }
+    /// The current non-destructive ageing preview settings (`get_age`).
+    public var age: PaintAgeSettings { track(); return controller.age }
+    public func ageValue(_ path: String) -> Double { readPath(age.json.objectValue ?? [:], path) }
+    /// Sets a slider of the ageing preview (saved with the painting, not an undo step).
+    public func setAge(_ path: String, _ value: Double) {
+        attempt { _ = try controller.setAge([path: .number(value)]) }
+    }
+    /// Sets the ageing preview's `years` directly (`set_age`).
+    public func setAgeYears(_ years: Double) {
+        attempt { _ = try controller.setAge(["years": .number(years)]) }
+    }
+    /// Randomizes the craquelure & dust seed (`set_age`).
+    public func newAgeSeed() {
+        attempt { _ = try controller.setAge(["seed": .number(Double(controller.age.seed + 1))]) }
+    }
+    /// Commits the aged look into a new layer at the top of the stack (one undo step).
+    public func bakeAge() {
+        attempt { _ = try controller.bakeAge() }
+    }
+    /// Whether the X-ray radiograph view is switched on in the viewport.
+    public var xrayView: Bool { track(); return controller.xrayView }
+    /// Switches the X-ray radiograph view on or off in the viewport (`set_xray_view`).
+    public func setXrayView(_ on: Bool) {
+        _ = controller.setXrayView(on)
+    }
+
     // MARK: - Wet media
 
     /// The wet-paint sliders (`PaintUITables.sliders`): the layer's settings, the tilt and the speed.
@@ -571,8 +700,9 @@ public final class PaintEditorModel {
 
     /**
      * Lets wet paint flow with the clock (`tickWet`): call it every frame with the time in ms. It
-     * steps at the wet speed unless paused or dry; the canvas then redraws only the tiles whose wet
-     * paint changed. Returns the steps run.
+     * steps at the wet speed unless paused or dry, and plays an antimatter blast animation
+     * (`tickBlastAnimation`); the canvas then redraws only the tiles that changed. Returns the wet
+     * steps run.
      */
     @discardableResult
     public func tick(now: Double, maxSteps: Int = 8) -> Int {
@@ -581,6 +711,8 @@ public final class PaintEditorModel {
         let gpuBefore = controller.wet.world?.gpuActive
         isQuietFrameChange = true
         let ran = controller.tickWet(now, maxSteps: maxSteps)
+        // Antimatter blasts expand on the same clock (view only; the document stays as committed).
+        controller.tickBlastAnimation(now)
         isQuietFrameChange = false
         if controller.wet.isWet() != wasWet || controller.wet.wetLayerIds() != wetIdsBefore || controller.wet.world?.gpuActive != gpuBefore {
             stateRevision &+= 1

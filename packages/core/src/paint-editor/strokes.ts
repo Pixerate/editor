@@ -8,7 +8,8 @@
  * still read, and both replay to the same pixels.
  */
 
-import { normalizePaintBrush, type PaintBrushInput, type PaintBrush } from './brushes';
+import { brushVortex, normalizePaintBrush, type PaintBrushInput, type PaintBrush } from './brushes';
+import { classifyVortexShape } from './vortex';
 import { migrateBrushV1 } from '../brushes/migrate';
 import { normalizeBrushSpec } from '../brushes/normalize';
 import { resolveBrush } from '../brushes/resolve';
@@ -58,6 +59,11 @@ export interface RecordedStroke {
   paint?: PaintGradientSource | PaintEffectPaint;
   /** Antimatter brushes: the visible fuel layer ids at the time of the stroke, so a replay reads fuel from (and changes) exactly the same layers. */
   targets?: string[];
+  /**
+   * Scraper strokes: the layers it cut through, top to bottom, so a replay cuts the same ones
+   * whatever is hidden or locked when it runs (older documents without it derive them again).
+   */
+  scrapeLayerIds?: string[];
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -180,6 +186,7 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   const paint = effect ? null : readPaintSource(r.paint);
   if (effect) out.paint = effect;
   else if (paint && paint.type === 'gradient') out.paint = paint;
+  if (Array.isArray(r.scrapeLayerIds) && r.scrapeLayerIds.every((v) => typeof v === 'string')) out.scrapeLayerIds = [...(r.scrapeLayerIds as string[])];
   if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
   if (Array.isArray(r.targets)) {
     const targets = r.targets.filter((v): v is string => typeof v === 'string' && v.length > 0);
@@ -236,7 +243,8 @@ export function variationAffine(v: StrokeVariation, origin: { x: number; y: numb
 /** A stroke varied by `m` (points mapped; symmetry copies conjugated so they stay symmetric). */
 export function varyStroke(stroke: RecordedStroke, m: Affine, v: StrokeVariation): RecordedStroke {
   // A pure rotation or flip has determinant 1 up to rounding: keep the brush size exact then.
-  const det = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+  const detSigned = m[0] * m[3] - m[1] * m[2];
+  const det = Math.sqrt(Math.abs(detSigned));
   const s = Math.abs(det - 1) < 1e-9 ? 1 : det;
   const ps = v.pressureScale ?? 1;
   const points = stroke.points.map((p) => {
@@ -244,7 +252,28 @@ export function varyStroke(stroke: RecordedStroke, m: Affine, v: StrokeVariation
     if (ps !== 1) q.pressure = Math.min(1, Math.max(0, (p.pressure ?? 1) * ps));
     return q;
   });
-  const brush = s !== 1 ? normalizePaintBrush({ ...stroke.brush, tip: { ...stroke.brush.tip, size: stroke.brush.tip.size * s } }) : stroke.brush;
+  let brush = s !== 1 ? normalizePaintBrush({ ...stroke.brush, tip: { ...stroke.brush.tip, size: stroke.brush.tip.size * s } }) : stroke.brush;
+  if (
+    detSigned < 0 &&
+    (stroke.brush.engine === 'vortex' || (stroke.brush.engine === 'wet' && stroke.brush.wet.tool === 'vortex'))
+  ) {
+    const vx = brushVortex(brush);
+    let nextDir = vx.direction;
+    if (vx.direction === 'cw') nextDir = 'ccw';
+    else if (vx.direction === 'ccw') nextDir = 'cw';
+    else {
+      const cls = classifyVortexShape(
+        stroke.points,
+        stroke.brush.tip.size,
+        stroke.brush.tip.smoothing,
+        stroke.brush.pressureSmoothing
+      );
+      if (cls.shape !== 'closed') nextDir = 'ccw';
+    }
+    if (nextDir !== vx.direction) {
+      brush = normalizePaintBrush({ ...brush, vortex: { ...vx, direction: nextDir } }, brush);
+    }
+  }
   const out: RecordedStroke = { ...stroke, brush, points };
   // Effect paint is fixed to the canvas: a moved stroke reveals another part of it.
   if (stroke.paint?.type === 'gradient' && s !== 1) out.paint = scalePaintGradient(stroke.paint, s);

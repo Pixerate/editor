@@ -43,6 +43,10 @@ public final class PaintLiveStroke {
     /// The brush and colour the stroke paints with.
     public var brush: PaintBrush { session.initValues.brush }
     public var color: String { session.initValues.colorHex }
+    /// The live vortex guide (`vortexGuideSegments`) for the samples so far, with every symmetry copy.
+    public var vortexGuides: [(from: Point2, to: Point2, kind: String)] {
+        vortexGuideSegments(session.points, session.initValues.brush, session.initValues.copies)
+    }
 
     /// Adds pen samples and redraws the layer with them.
     public func push(_ points: [PenPoint]) {
@@ -167,6 +171,7 @@ public final class PaintLiveStroke {
         if let load = run.result.mixerLoad { c.keepLoad(run.brush, load) }
         if run.doc !== current || c.wetOp != nil {
             c.commit("\(run.brush.name) stroke", c.withWetEvents(run.doc), before: before)
+            c.startPendingBlastAnimation(run.result.bounds)
             if let sid = run.result.strokeId, let stroke = c.doc.strokes.last(where: { $0.id == sid }) {
                 c.recordMutationStroke(stroke, run.result.bounds)
             }
@@ -255,6 +260,7 @@ extension PaintEditorController {
         var i = initIn
         if i.snapToPerspective == nil { i.snapToPerspective = true }
         let before = doc
+        clearBlastAnimation()
         let session: PaintStrokeSession
         do { session = try sessionFor(doc, i) } catch {
             wetOp = nil
@@ -281,7 +287,7 @@ extension PaintEditorController {
         // Changed tiles recomposite only where the canvas changed since this compositor's last call.
         let dirty = compositedVersions[id].flatMap(dirtySince)
         compositedVersions[id] = version
-        c.compositeTiles(renderLayers(), rect, sources(), onTile, CompositeCallOptions(checkpointLayerId: liveStroke?.layerId ?? doc.activeLayerId, dirty: dirty.map { $0.map(DirtyRect.init) }))
+        c.compositeTiles(renderLayers(view: true), rect, sources(), onTile, CompositeCallOptions(checkpointLayerId: hasActiveBlastAnimation ? nil : (liveStroke?.layerId ?? doc.activeLayerId), dirty: dirty.map { $0.map(DirtyRect.init) }))
     }
 
     /// Where a stroke of a stroke layer painted (document pixels), for drawing its pick box; nil when unknown.
@@ -297,11 +303,11 @@ extension PaintEditorController {
 
     /**
      * Whether this port paints with `brush`: every engine (dab, eraser, Mixer Brush, blender,
-     * smudge, wet, impasto, particle, bristle, sticker), stamp tips included, unless it lays a
-     * sticker from a host's sticker library, which has no art here. A brush picker leaves those out.
+     * smudge, wet, impasto, particle, bristle, sticker, antimatter, scraper, vortex), stamp tips and a
+     * host's library stickers included (their art loads through `setStickersProvider` / `prepareStickers`).
      */
     public func canPaint(_ brush: PaintBrush) -> Bool {
-        ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter"].contains(brush.engine)
+        ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"].contains(brush.engine)
     }
 
     // MARK: - Colour

@@ -33,14 +33,16 @@ public struct BrushHostProfile: Sendable {
     public var iridescence: String? = nil
     /// Liquid ferrofluid (`ferro`); nil: `none`.
     public var ferro: String? = nil
+    /// Biopaint mycelial ink (`culture`); nil: `none`.
+    public var culture: String? = nil
 }
 
 private let ALL_COLOURS = ["solid", "dual", "gradient", "effect"]
 private let ELLIPSES = ["round", "flat", "chisel"]
 public let BRUSH_TIP_SHAPES = ["round", "flat", "chisel", "bristle", "stamp"]
-public let BRUSH_MARKS_KINDS = ["continuous", "scatter", "particles", "objects", "antimatter"]
+public let BRUSH_MARKS_KINDS = ["continuous", "scatter", "particles", "objects", "antimatter", "scraper", "vortex"]
 
-public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full", tipGrain: "full", dabCount: "full", livePatterns: "full", iridescence: "full", ferro: "full")
+public let PAINT_PROFILE = BrushHostProfile(id: "paint", name: "Paint editor", kinds: ["mark", "tool"], tools: BRUSH_TOOLS, tipShapes: BRUSH_TIP_SHAPES, marks: BRUSH_MARKS_KINDS, surfaces: ["dry", "wet", "thick"], exchange: "full", reservoir: "full", grain: "full", light: "full", motion: "full", colours: ALL_COLOURS, velocity: "full", tilt: "full", tipGrain: "full", dabCount: "full", livePatterns: "full", iridescence: "full", ferro: "full", culture: "full")
 public let IMAGE_PROFILE = BrushHostProfile(id: "image", name: "Image editor", kinds: ["mark", "tool"], tools: ["eraser"], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "full", grain: "ignored", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "ignored", tipGrain: "ignored", dabCount: "ignored", iridescence: "none")
 public let CANVAS_PROFILE = BrushHostProfile(id: "canvas", name: "Canvas", kinds: ["mark"], tools: [], tipShapes: ELLIPSES, marks: ["continuous"], surfaces: ["dry"], exchange: "ignored", reservoir: "none", grain: "full", light: "none", motion: "none", colours: ["solid", "dual", "gradient"], velocity: "ignored", tilt: "full", tipGrain: "ignored", dabCount: "ignored", iridescence: "none")
 /// Vector brushstrokes: as canvas, plus wet paint, the Mixer Brush, smudge and blender (#519); light paints as plain colour.
@@ -118,6 +120,7 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
     feature(profile.surfaces.contains("wet") && profile.light == "full" ? "full" : "none", brush["ghost"] != nil, "ghost", "ghost paint (fading wet colour)", "Remove ghost.")
     feature(profile.id == "paint" ? "full" : "none", brush["mutation"] != nil, "mutation", "mutation paint (agent-answered strokes)", "Remove mutation.")
     feature(profile.ferro ?? "none", nonZero(brush.path("ferro.amount")), "ferro", "ferrofluid spikes and magnets", "Remove ferro (or set ferro.amount to 0).")
+    feature(profile.culture ?? "none", brush["culture"] != nil, "culture", "biopaint (mycelial ink)", "Remove culture.")
     if let m = brush["motion"]?.objectValue {
         feature(profile.motion, m["live"] == .bool(true) || nonZero(m["waveSpeed"]) || m["fps"] != nil, "motion", "animation", "Remove motion.")
     }
@@ -183,6 +186,7 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "thermochromic": b["thermochromic"] = nil
         case "iridescence": b["iridescence"] = nil
         case "ferro": b["ferro"] = nil
+        case "culture": b["culture"] = nil
         case "motion": b["motion"] = nil
         case "dynamics.velocity": edit("dynamics") { o in o["velocitySize"] = nil; o["velocityOpacity"] = nil }
         case "dynamics.tilt": edit("dynamics") { o in o["tiltSize"] = nil; o["tiltRoundness"] = nil; o["tiltOpacity"] = nil }

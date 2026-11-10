@@ -1,5 +1,56 @@
 # @pixerate/editor-svelte
 
+## 0.213.1
+
+### Patch Changes
+
+- Updated dependencies [6352bfa]
+  - @pixerate/editor@0.285.1
+
+## 0.213.0
+
+### Minor Changes
+
+- d2098bd: feat(paint): add biopaint mycelial ink (`culture` brush facet, `mycelial-ink`, `rot`, and `foxfire` presets, deterministic integer colony simulation, `get_cultures`, `grow_cultures`, `remove_cultures`, and `set_culture_options` tools, high-res replay events, and React, Svelte, and Swift `CulturePanel` / `PaintCulturePanel` controls) (#684)
+
+### Patch Changes
+
+- Updated dependencies [d2098bd]
+  - @pixerate/editor@0.285.0
+
+## 0.212.0
+
+### Minor Changes
+
+- 88a0172: feat(paint): add vortex paint brush engine (`marks.kind: 'vortex'`), Euclidean distance + Lamb-Oseen displacement field (`paint/displacement.ts`), wet fluid swirl (`WetWorld.swirl`), and `vortex` / `ink-vortex` / `whirlpool` / `wet-vortex` presets (#683)
+
+### Patch Changes
+
+- Updated dependencies [88a0172]
+  - @pixerate/editor@0.284.0
+
+## 0.211.0
+
+### Minor Changes
+
+- fed3058: feat(paint): add painting time machine with non-destructive ageing preview, X-ray radiograph view, and multi-layer paint scraper brush (`set_age`, `get_age`, `bake_age`, `render_xray`, `set_xray_view`, `paint-scraper`)
+
+### Patch Changes
+
+- Updated dependencies [fed3058]
+  - @pixerate/editor@0.283.0
+
+## 0.210.0
+
+### Minor Changes
+
+- c45467b: feat(paint): add antimatter paint engine (`marks.kind: 'antimatter'`) with multi-layer fuel sensing, noise-edged radial blast fields, RGB and OKLab colour inversion, alpha annihilation, scorch rings, relief craters, ballistic sparks, view-only blast expansion animation, and presets (`antimatter`, `antimatter-flare`, `antimatter-charge`) (#682)
+
+### Patch Changes
+
+- Updated dependencies [c45467b]
+  - @pixerate/editor@0.282.0
+
 ## 0.209.0
 
 ### Minor Changes

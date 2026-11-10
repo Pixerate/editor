@@ -26,8 +26,10 @@ import { createPaintEffectsToolProvider } from './effect-tools';
 import { PAINT_FORMAT, PAINT_SCHEMA_VERSION } from './serialize';
 import { createPaintEditorToolProvider } from './tools';
 import {
+  AGE_SLIDERS,
   ANTIMATTER_SLIDERS,
   BLEND_MENU_GROUPS,
+  CULTURE_SLIDERS,
   DOT_ROTATION_LABELS,
   DOT_TEXTURE_ORDER_LABELS,
   GHOST_SLIDERS,
@@ -50,6 +52,8 @@ import {
   STROKE_SLIDERS,
   UV_LIGHT_SLIDERS,
   VIEW_TILT_SLIDERS,
+  VORTEX_DIRECTION_LABELS,
+  VORTEX_SLIDERS,
   MAGNET_SLIDERS,
   WET_GPU_OPTIONS,
   WET_MEDIUM_LABELS,
@@ -180,6 +184,31 @@ export const PAINT_DOCUMENT_JSON_SCHEMA: JsonSchema = {
             ambient: { type: 'number', minimum: 0, maximum: 1, description: 'Remaining daylight ambient level (0..1).' },
           },
         },
+        age: {
+          type: 'object',
+          description: 'Painting time-machine ageing preview settings when non-default.',
+          properties: {
+            years: { type: 'number', minimum: 0, maximum: 500, description: 'Simulated age in years (0..500; 0 = fresh paint).' },
+            varnish: { type: 'number', minimum: 0, maximum: 1, description: 'Yellowed varnish absorption strength (0..1).' },
+            cracks: { type: 'number', minimum: 0, maximum: 1, description: 'Voronoi / stress craquelure crack network strength (0..1).' },
+            fading: { type: 'number', minimum: 0, maximum: 1, description: 'Pigment lightfastness fading strength by hue (0..1).' },
+            dust: { type: 'number', minimum: 0, maximum: 1, description: 'Low-frequency surface dust grain strength (0..1).' },
+            seed: { type: 'integer', minimum: 0, description: 'Deterministic seed for craquelure and dust.' },
+          },
+        },
+        cultures: {
+          type: 'object',
+          description: 'Living and extinct biopaint (`culture`) colonies per layer, plus offline growth options.',
+          properties: {
+            layers: {
+              type: 'object',
+              description: 'Layer id → serialized `LayerCultureJSON` (tick, nextId, tips, segmentsTotal, status, occupancy).',
+              additionalProperties: { type: 'object' },
+            },
+            growWhileClosed: { type: 'boolean', description: 'Whether living colonies catch up elapsed growth when reopened.' },
+            lastGrownAt: { type: 'number', description: 'Timestamp in milliseconds when the document was saved with living colonies.' },
+          },
+        },
       },
       required: ['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId'],
     },
@@ -205,13 +234,14 @@ function uiTables() {
     brushOptions: BRUSH_OPTION_CONTROLS,
     blendMenu: BLEND_MENU_GROUPS,
     layerEffects: LAYER_EFFECT_MENU.map(({ kind, label }) => ({ kind, label, controls: layerEffectControls(defaultLayerEffect(kind, kind)) })),
-    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS, magnet: MAGNET_SLIDERS, antimatter: ANTIMATTER_SLIDERS },
+    sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, uvLight: UV_LIGHT_SLIDERS, age: AGE_SLIDERS, viewTilt: VIEW_TILT_SLIDERS, ghost: GHOST_SLIDERS, mutation: MUTATION_SLIDERS, vortex: VORTEX_SLIDERS, culture: CULTURE_SLIDERS, livePatterns: LIVE_PATTERN_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS, magnet: MAGNET_SLIDERS, antimatter: ANTIMATTER_SLIDERS },
     pathStrokeTapers: PATH_STROKE_TAPERS,
     padSampleSizes: PAD_SAMPLE_SIZES,
     wetGpu: WET_GPU_OPTIONS,
     labels: {
       wetTools: WET_TOOL_LABELS,
       wetMedia: WET_MEDIUM_LABELS,
+      vortexDirections: VORTEX_DIRECTION_LABELS,
       livePatterns: LIVE_PATTERN_LABELS,
       impastoTools: IMPASTO_TOOL_LABELS,
       particleKinds: PARTICLE_KIND_LABELS,

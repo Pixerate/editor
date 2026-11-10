@@ -56,20 +56,45 @@ export interface BrushEngineControls {
   particleMenus?: boolean;
   /** The sticker picker for the brush's stickers (`sticker.stamps`, refs from the sticker library; `toggleStickerRef`). */
   stickerStamps?: boolean;
+  /** The vortex direction menu (`vortex.direction`, `VORTEX_DIRECTIONS`). */
+  vortexDirection?: boolean;
   /** Light paint: the "light follows pressure" toggle (`light.pressure`); the Light slider is in `sliders`. */
   light?: boolean;
   /** Thin-film iridescence: whether the brush can lay a thin-film iridescent coat (`iridescence`; `IRIDESCENCE_SLIDERS` are in `sliders` when enabled). */
   iridescence?: boolean;
+  /** Biopaint (`culture`): whether the brush can seed living mycelial ink (`culture`; `CULTURE_SLIDERS` are in `sliders` when enabled). */
+  culture?: boolean;
 }
 
 /** The light paint slider (every engine that lays colour but sticker brushes; wet brushes when they paint). */
 const LIGHT_SLIDER: SliderControl = { path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 };
+
+/** The vortex sliders (`vortex` engine and `wet` engine with `wet.tool === 'vortex'`). */
+export const VORTEX_SLIDERS: readonly SliderControl[] = [
+  { path: 'vortex.reach', label: 'Reach', min: 1, max: 8, step: 0.1 },
+  { path: 'vortex.turns', label: 'Turns', min: 0.25, max: 6, step: 0.05 },
+  { path: 'vortex.pull', label: 'Pull', min: 0, max: 1, step: 0.01 },
+  { path: 'vortex.ink', label: 'Ink', min: 0, max: 1, step: 0.01 },
+  { path: 'vortex.duration', label: 'Duration', min: 0, max: 3, step: 0.1 },
+];
 
 /** The thin-film iridescence sliders (appended when `brush.iridescence` is set). */
 export const IRIDESCENCE_SLIDERS: readonly SliderControl[] = [
   { path: 'iridescence.thickness', label: 'Film thickness (nm)', min: 100, max: 1000, step: 5 },
   { path: 'iridescence.pressureToThickness', label: 'Pressure → thickness', min: 0, max: 1, step: 0.01 },
   { path: 'iridescence.ior', label: 'Refractive index', min: 1.2, max: 2, step: 0.01 },
+];
+
+/** The biopaint (`culture`) sliders (appended when `brush.culture` is set). */
+export const CULTURE_SLIDERS: readonly SliderControl[] = [
+  { path: 'culture.reach', label: 'Reach', min: 1, max: 100, step: 1 },
+  { path: 'culture.branching', label: 'Branching', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.wander', label: 'Wander', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.appetite', label: 'Appetite', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.digest', label: 'Digest', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.fuse', label: 'Fuse', min: 0, max: 1, step: 0.01 },
+  { path: 'culture.thickness', label: 'Thread width', min: 0.02, max: 0.5, step: 0.01 },
+  { path: 'culture.glow', label: 'Bioluminescence', min: 0, max: 1, step: 0.01 },
 ];
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
@@ -108,19 +133,22 @@ export const ANTIMATTER_SLIDERS: readonly SliderControl[] = [
  * pigment choice; dab and mixer brushes also have the dirty and multi-colour controls. Pick-up
  * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
  */
-export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; iridescence?: PaintBrush['iridescence']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
+export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; iridescence?: PaintBrush['iridescence']; culture?: PaintBrush['culture']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
   const c = engineControls(brush);
   if (!c) return null;
   const mut = brush.mutation ? MUTATION_SLIDERS : [];
-  const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint' && !brush.ghost && !brush.mutation;
-  if (!(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto', 'antimatter'].includes(brush.engine))) {
+  const wetPaint = brush.engine === 'wet' && (brush.wet?.tool === 'paint' || brush.wet?.tool === 'vortex') && !brush.ghost && !brush.mutation;
+  if (!(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto', 'antimatter', 'vortex'].includes(brush.engine))) {
     return mut.length ? { ...c, sliders: [...c.sliders, ...mut] } : c;
   }
   // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
   const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
+  // Antimatter detonates paint: it lays no film and carries no spores. A vortex warps paint and carries none either.
   const canFilm = brush.engine !== 'antimatter';
+  const canCulture = canFilm && brush.engine !== 'vortex';
   const film: readonly SliderControl[] = canFilm && brush.iridescence ? IRIDESCENCE_SLIDERS : [];
-  return { ...c, sliders: [...c.sliders, ...mut, LIGHT_SLIDER, ...extra, ...film], light: true, iridescence: canFilm };
+  const cult: readonly SliderControl[] = canCulture && brush.culture ? CULTURE_SLIDERS : [];
+  return { ...c, sliders: [...c.sliders, ...mut, LIGHT_SLIDER, ...extra, ...film, ...cult], light: true, iridescence: canFilm, culture: canCulture };
 }
 
 function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet']; ghost?: PaintBrush['ghost']; mutation?: PaintBrush['mutation'] }): BrushEngineControls | null {
@@ -191,6 +219,18 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
         multicolor: false,
         load: false,
       };
+    case 'scraper':
+      return {
+        title: 'Scraper',
+        sliders: [
+          { path: 'scraper.depth', label: 'Scrape depth', min: 0, max: 1, step: 0.01 },
+          { path: 'scraper.sharpness', label: 'Blade sharpness', min: 0, max: 1, step: 0.01 },
+        ],
+        mixingPath: null,
+        dirty: false,
+        multicolor: false,
+        load: false,
+      };
     case 'impasto':
       return {
         title: 'Thick paint',
@@ -228,9 +268,34 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
                 { path: 'wet.water', label: 'Water', min: 0, max: 1, step: 0.01 },
                 { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
               ]
-            : [{ path: 'wet.strength', label: 'Strength', min: 0, max: 1, step: 0.01 }];
-      return { title: 'Wet brush', sliders, mixingPath: tool === 'paint' ? 'behavior.mixing' : null, dirty: tool === 'paint' && !ghost, multicolor: false, load: tool === 'paint' && !ghost, wetTool: true };
+            : tool === 'vortex'
+              ? [
+                  { path: 'wet.water', label: 'Water', min: 0, max: 1, step: 0.01 },
+                  { path: 'wet.rewet', label: 'Re-wet', min: 0, max: 1, step: 0.01 },
+                  ...VORTEX_SLIDERS,
+                ]
+              : [{ path: 'wet.strength', label: 'Strength', min: 0, max: 1, step: 0.01 }];
+      return {
+        title: 'Wet brush',
+        sliders,
+        mixingPath: tool === 'paint' ? 'behavior.mixing' : null,
+        dirty: tool === 'paint' && !ghost,
+        multicolor: false,
+        load: tool === 'paint' && !ghost,
+        wetTool: true,
+        ...(tool === 'vortex' ? { vortexDirection: true } : {}),
+      };
     }
+    case 'vortex':
+      return {
+        title: 'Vortex',
+        sliders: [...VORTEX_SLIDERS],
+        mixingPath: null,
+        dirty: false,
+        multicolor: false,
+        load: false,
+        vortexDirection: true,
+      };
     case 'blender':
       return {
         title: 'Blender',

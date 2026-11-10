@@ -397,15 +397,23 @@ final class PaintEditorModelTests: XCTestCase {
             XCTAssertEqual(controls.map(\.key), row.controls.map(\.key), row.kind)
             XCTAssertEqual(controls.map { $0.json["label"]?.stringValue }, row.controls.map(\.label), row.kind)
         }
-        // Every built-in brush is in the picker, stamp tips included (they lay the editor's stamps); wet, impasto, particle, bristle and sticker brushes too.
+        // Every built-in brush is in the picker, stamp tips included (they lay the editor's stamps); wet, impasto, particle, bristle, sticker and scraper brushes too.
         XCTAssertFalse(model.brushes.isEmpty)
-        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter"].contains($0.engine) })
+        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"].contains($0.engine) })
         XCTAssertEqual(model.brushes.count, model.controller.brushes.count)
         XCTAssertTrue(model.brushes.contains { $0.engine == "wet" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "impasto" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "particle" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "bristle" })
+        XCTAssertTrue(model.brushes.contains { $0.engine == "scraper" })
         XCTAssertLessThanOrEqual(model.brushes.count, model.controller.brushes.count)
+        XCTAssertEqual(model.ageSliders.map(\.path), ["years", "varnish", "cracks", "fading", "dust"])
+        model.setAge("years", 300)
+        XCTAssertEqual(model.ageValue("years"), 300)
+        model.setXrayView(true)
+        XCTAssertEqual(model.xrayView, true)
+        model.setXrayView(false)
+        XCTAssertEqual(model.xrayView, false)
     }
 
     func testReadPathAndPatchPath() {
@@ -476,6 +484,27 @@ final class PaintEditorModelTests: XCTestCase {
         model.dryNow()
         XCTAssertFalse(model.wet.isWet())
         XCTAssertEqual(model.tick(now: 3000), 0)
+    }
+
+    func testTickingPlaysTheAntimatterBlastAnimationOnTheCanvas() async throws {
+        let model = try makeModel(width: 128, height: 128)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        _ = try await call(model.registry, "fill_layer", ["color": "#ff0000"])
+        _ = try await call(model.registry, "paint_stroke", ["points": [["x": 64, "y": 64, "pressure": 1, "t": 0]], "brushId": "antimatter", "seed": 5])
+        let committed = model.controller.compositePixels().data
+        _ = presenter.render()
+        XCTAssertTrue(model.controller.hasActiveBlastAnimation)
+        // The view's clock plays the blast frames over the canvas; the document stays as committed.
+        let doc = model.controller.doc
+        model.tick(now: 1000)
+        XCTAssertGreaterThan(presenter.render(), 0)
+        XCTAssertNotEqual(model.controller.compositePixels().data, committed)
+        model.tick(now: 1400)
+        XCTAssertTrue(model.controller.doc === doc)
+        model.tick(now: 2100)
+        XCTAssertFalse(model.controller.hasActiveBlastAnimation)
+        XCTAssertGreaterThan(presenter.render(), 0)
+        XCTAssertEqual(model.controller.compositePixels().data, committed)
     }
 
     func testBrushesFollowAnEditThatKeepsTheId() throws {

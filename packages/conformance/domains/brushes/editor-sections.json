@@ -376,7 +376,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -389,6 +389,14 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -563,6 +571,13 @@
             "path": "behaviour.exchange.dirty",
             "label": "Dirty brush",
             "ariaLabel": "Dirty brush",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
             "value": false
           }
         ]
@@ -2322,7 +2337,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -2335,6 +2350,14 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -2509,6 +2532,13 @@
             "path": "behaviour.exchange.dirty",
             "label": "Dirty brush",
             "ariaLabel": "Dirty brush",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
             "value": false
           }
         ]
@@ -4088,7 +4118,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -4101,6 +4131,14 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -4390,6 +4428,13 @@
               }
             ],
             "value": ""
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
           }
         ]
       },
@@ -5635,7 +5680,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -5648,6 +5693,14 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "particles"
@@ -5967,6 +6020,13 @@
             "max": 1,
             "step": 0.01,
             "value": 0
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
           }
         ]
       },
@@ -7189,7 +7249,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -7202,6 +7262,14 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "continuous"
@@ -7394,6 +7462,13 @@
             "label": "Load each stroke",
             "ariaLabel": "Brush load each stroke",
             "value": true
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
           }
         ]
       },
@@ -9896,7 +9971,7 @@
               },
               {
                 "value": "scatter",
-                "label": "Scatter"
+                "label": "Spray"
               },
               {
                 "value": "particles",
@@ -9909,6 +9984,14 @@
               {
                 "value": "antimatter",
                 "label": "Antimatter"
+              },
+              {
+                "value": "scraper",
+                "label": "Scraper"
+              },
+              {
+                "value": "vortex",
+                "label": "Vortex"
               }
             ],
             "value": "scatter"
@@ -10083,6 +10166,13 @@
             "path": "behaviour.exchange.dirty",
             "label": "Dirty brush",
             "ariaLabel": "Dirty brush",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
             "value": false
           }
         ]
