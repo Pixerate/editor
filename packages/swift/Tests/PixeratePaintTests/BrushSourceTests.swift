@@ -134,5 +134,18 @@ final class BrushSourceTests: XCTestCase {
         XCTAssertTrue(c.canPaint(brush))
         brush.stamp = "editor:star"
         XCTAssertTrue(c.canPaint(brush))
+        // A host library's sticker paints once that library is set, unless its art failed to load.
+        let f = try PaintEditorController(width: 32, height: 32, stickers: try combineStickerProviders([editorStickers(), createFakeStickerProvider(FakeStickerProviderOptions(failIds: ["badge-sale"]))]))
+        var b = f.brush
+        b.stamp = "fake:weather-wind"
+        XCTAssertTrue(f.canPaint(b))
+        b.stamp = "fake:no-such-sticker"
+        XCTAssertFalse(f.canPaint(b))
+        b.stamp = "openmoji:1f600"
+        XCTAssertFalse(f.canPaint(b))
+        b.stamp = "fake:badge-sale"
+        XCTAssertTrue(f.canPaint(b))
+        XCTAssertThrowsError(try f.prepareStickers(["fake:badge-sale"]))
+        XCTAssertFalse(f.canPaint(b))
     }
 }
