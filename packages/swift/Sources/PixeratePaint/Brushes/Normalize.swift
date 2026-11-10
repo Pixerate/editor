@@ -275,7 +275,7 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             brush["ferro"] = nil
         }
         if brush["iridescence"] != nil {
-            drop("iridescence", "tools lay no thin film")
+            drop("iridescence", "tools lay no film")
             brush["iridescence"] = nil
         }
         if brush["culture"] != nil {
@@ -283,8 +283,8 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             brush["culture"] = nil
         }
     }
-    if brush.path("marks.kind")?.stringValue == "objects" && brush["iridescence"] != nil {
-        drop("iridescence", "object marks are stickers")
+    if brush["iridescence"] != nil, let marksKind = brush.path("marks.kind")?.stringValue, marksKind == "objects" || marksKind == "antimatter" {
+        drop("iridescence", marksKind == "antimatter" ? "antimatter marks detonate paint, not film" : "object marks are stickers, not film")
         brush["iridescence"] = nil
     }
     if brush.path("marks.kind")?.stringValue == "objects" && brush["culture"] != nil {

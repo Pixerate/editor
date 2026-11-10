@@ -137,6 +137,10 @@ public final class PaintEditorModel {
         subscriptions.append(c.subscribe { [weak self] in
             MainActor.assumeIsolated { self?.changed() }
         })
+        // Another document in the same controller: catch its biopaint up, as the view does on mount.
+        subscriptions.append(c.onDocumentReplaced { [weak self] in
+            MainActor.assumeIsolated { self?.catchUpCulturesQuietly() }
+        })
     }
 
     private func changed() {
@@ -481,6 +485,11 @@ public final class PaintEditorModel {
     /// Runs the growth a `growWhileClosed` document missed while it was closed (one undo step), as React and Svelte do when the canvas mounts.
     public func catchUpCultures() {
         attempt { _ = try controller.catchUpCultures() }
+    }
+
+    /// `catchUpCultures` after the document is replaced: a refusal (the editor is busy) is skipped, not shown, like `startCultureCatchUp` in TS.
+    private func catchUpCulturesQuietly() {
+        _ = try? controller.catchUpCultures()
     }
 
     /// Sets document-level biopaint options (`set_culture_options`).

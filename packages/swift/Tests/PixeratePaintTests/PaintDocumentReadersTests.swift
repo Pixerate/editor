@@ -131,4 +131,25 @@ final class PaintDocumentReadersTests: XCTestCase {
         XCTAssertNil(PaintEvent(json: ["at": 0.5, "kind": "fill", "layerId": "l"]))
         XCTAssertNil(PaintEvent(json: ["at": 0, "kind": "fill"]))
     }
+
+    /// Opening a saved painting replaces the document: listeners hear it, the history is cleared and the layers come back.
+    func testLoadJSONReplacesTheDocument() throws {
+        let c = try PaintEditorController(width: 32, height: 32)
+        _ = try c.addLayer(name: "Second")
+        let saved = JSONValue.object(c.toJSON())
+        let other = try PaintEditorController(width: 16, height: 16)
+        var replaced = 0
+        let handle = other.onDocumentReplaced { replaced += 1 }
+        defer { handle.cancel() }
+        let problems = try other.loadJSON(saved)
+        XCTAssertEqual(problems, [])
+        XCTAssertEqual(replaced, 1)
+        XCTAssertNil(other.undoLabel)
+        XCTAssertEqual(other.doc.layers.map(\.name), c.doc.layers.map(\.name))
+        XCTAssertEqual(other.toJSON(), c.toJSON())
+        XCTAssertThrowsError(try other.loadJSON(["format": "pixerate-image"])) { e in
+            XCTAssertEqual("\(e)", "Not a paint document: format is \"pixerate-image\", expected \"pixerate-paint\".")
+        }
+        XCTAssertEqual(replaced, 1)
+    }
 }

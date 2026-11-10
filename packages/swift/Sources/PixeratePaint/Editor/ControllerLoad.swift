@@ -55,6 +55,7 @@ extension PaintEditorController {
         // Provider stickers keep their saved pixels; their art loads now so they can be edited.
         let refs = (state.stickers ?? OrderedMap()).values.flatMap { $0.map(\.ref) }
         if refs.contains(where: { editorStampOf($0) == nil }) { try? prepareStickers(refs) }
+        notifyDocumentReplaced()
         return problems
     }
 

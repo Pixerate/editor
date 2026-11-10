@@ -314,7 +314,7 @@
                 "x": 20,
                 "y": 20
               },
-              "brushId": "pencil-6b",
+              "brushId": "antimatter",
               "brushName": "Antimatter",
               "color": "#ff3864",
               "copies": 0,
@@ -578,7 +578,7 @@
                     "minSize": 0.4,
                     "smoothing": 0.25
                   },
-                  "id": "pencil-6b",
+                  "id": "antimatter",
                   "kind": "mark",
                   "marks": {
                     "kind": "antimatter"

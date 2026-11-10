@@ -42,7 +42,8 @@ fade what they eat (`digest`), and carry the digested colour out into new territ
   `get_cultures` for the current ticks rather than assuming growth stopped. Undo pauses live
   growth until the next biopaint stroke or `grow_cultures`. `remove_cultures` kills living tips while
   leaving threads already drawn as paint. `set_culture_options({ growWhileClosed: true })` records a
-  timestamp on save so reopening catches up elapsed growth as one `"Growth while closed"` undo step.
+  timestamp on save so reopening catches up elapsed growth as one `"Growth while closed"` undo step (a mounted
+  canvas catches up on mount and whenever another document is opened into it).
 - **Presets.**
   - `mycelial-ink`: fine dark ink (`reach` 12, `branching` 0.4, `appetite` 0.5, `digest` 0.25, `fuse` 0.7).
   - `rot`: high-appetite, high-digest decomposer (`appetite` 0.8, `digest` 0.75, `reach` 16).

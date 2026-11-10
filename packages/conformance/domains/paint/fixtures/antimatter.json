@@ -420,6 +420,58 @@
       }
     },
     {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "film-antimatter",
+        "name": "Film antimatter",
+        "basedOn": "antimatter",
+        "iridescence": {
+          "thickness": 480,
+          "ior": 1.65
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": "#38bdf8",
+              "palette": [
+                "#38bdf8",
+                "#f472b6",
+                "#a855f7",
+                "#fb923c",
+                "#4ade80"
+              ]
+            },
+            "dynamics": {
+              "minSize": 0.4,
+              "smoothing": 0.25
+            },
+            "id": "film-antimatter",
+            "kind": "mark",
+            "marks": {
+              "kind": "antimatter"
+            },
+            "medium": "paint",
+            "name": "Film antimatter",
+            "tip": {
+              "hardness": 0.75,
+              "shape": "round",
+              "size": 24,
+              "spacing": 0.12
+            },
+            "variety": "antimatter"
+          },
+          "engine": "antimatter",
+          "id": "film-antimatter",
+          "problems": [
+            "iridescence dropped: antimatter marks detonate paint, not film."
+          ],
+          "warnings": []
+        }
+      }
+    },
+    {
       "tool": "list_layers",
       "reload": true,
       "document": true,
@@ -689,7 +741,7 @@
           "kind": "paint"
         },
         "pixels": {
-          "file": "png/antimatter.8.png",
+          "file": "png/antimatter.9.png",
           "width": 64,
           "height": 64,
           "sha256": "f7adac3fb8c4978b90b972e9327d6568c76afe34d853e470c265375d1807e6a4",
