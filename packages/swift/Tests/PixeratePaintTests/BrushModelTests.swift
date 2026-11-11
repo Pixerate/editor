@@ -61,4 +61,33 @@ final class BrushModelTests: XCTestCase {
             XCTAssertEqual(JSONValue.object(migrateBrushV1(normalizePaintBrush(v1))), expected, v1["id"]?.stringValue ?? "")
         }
     }
+
+    func testFamiliesGroupingsAndThePaletteKnife() throws {
+        for spec in BRUSH_PRESETS {
+            let id = spec["id"]?.stringValue ?? ""
+            let brush = resolveBrush(spec)
+            XCTAssertEqual(paintBrushGroup(PAINT_GROUPINGS.byMedium, brush), brush.category, id)
+            XCTAssertEqual(paintBrushGroup(PAINT_GROUPINGS.byFamily, brush), brush.family ?? "tools", id)
+            if spec["kind"]?.stringValue == "tool" { XCTAssertNil(brush.family, id) }
+        }
+        XCTAssertEqual(PAINT_GROUPINGS.byFamily.map(\.id), PAINT_FAMILIES + ["tools"])
+        XCTAssertEqual(Set(PAINT_GROUPINGS.byMedium.map(\.id)), Set(PAINT_BRUSH_CATEGORIES))
+
+        let knife = try XCTUnwrap(BRUSH_PRESETS.first { $0["id"]?.stringValue == "palette-knife" })
+        let r = resolveBrush(knife)
+        XCTAssertEqual(r.engine, "impasto")
+        XCTAssertEqual(r.impasto.tool, "knife")
+        XCTAssertFalse(r.loadsColor)
+        XCTAssertFalse(brushTakesPaint(r))
+        XCTAssertEqual(resolveCategory(knife), "smudge")
+
+        let base: Brush = ["id": "b", "name": "B", "kind": "mark", "medium": "paint", "tip": ["shape": "round"]]
+        XCTAssertEqual(resolveFamily(base), "wet")
+        var antimatter = base
+        antimatter["marks"] = ["kind": "antimatter"]
+        XCTAssertEqual(resolveFamily(antimatter), "volatile")
+        var declared = base
+        declared["family"] = "glow"
+        XCTAssertEqual(resolveBrush(declared).family, "glow")
+    }
 }

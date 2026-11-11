@@ -60,6 +60,75 @@
             "ariaLabel": "Brush variety",
             "value": "highlighter",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "ink"
           }
         ]
       },
@@ -763,6 +832,75 @@
             "ariaLabel": "Brush variety",
             "value": "highlighter",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "ink"
           }
         ]
       },
@@ -1148,6 +1286,75 @@
             "ariaLabel": "Brush variety",
             "value": "highlighter",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "ink"
           }
         ]
       },
@@ -1576,6 +1783,75 @@
             "ariaLabel": "Brush variety",
             "value": "highlighter",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "ink"
           }
         ]
       },
@@ -2021,6 +2297,75 @@
             "ariaLabel": "Brush variety",
             "value": "chalk",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "dry"
           }
         ]
       },
@@ -2727,6 +3072,75 @@
             "ariaLabel": "Brush variety",
             "value": "chalk",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "dry"
           }
         ]
       },
@@ -3115,6 +3529,75 @@
             "ariaLabel": "Brush variety",
             "value": "chalk",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "dry"
           }
         ]
       },
@@ -3546,6 +4029,75 @@
             "ariaLabel": "Brush variety",
             "value": "chalk",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "dry"
           }
         ]
       },
@@ -3994,6 +4546,75 @@
             "ariaLabel": "Brush variety",
             "value": "watercolor",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -4614,6 +5235,75 @@
             "ariaLabel": "Brush variety",
             "value": "watercolor",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -4861,6 +5551,75 @@
             "ariaLabel": "Brush variety",
             "value": "watercolor",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -5151,6 +5910,75 @@
             "ariaLabel": "Brush variety",
             "value": "watercolor",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -5556,6 +6384,75 @@
             "ariaLabel": "Brush variety",
             "value": "hair",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "strands"
           }
         ]
       },
@@ -6222,6 +7119,75 @@
             "ariaLabel": "Brush variety",
             "value": "hair",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "strands"
           }
         ]
       },
@@ -6469,6 +7435,75 @@
             "ariaLabel": "Brush variety",
             "value": "hair",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "strands"
           }
         ]
       },
@@ -6759,6 +7794,75 @@
             "ariaLabel": "Brush variety",
             "value": "hair",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "strands"
           }
         ]
       },
@@ -7066,6 +8170,75 @@
             "ariaLabel": "Brush variety",
             "value": "mixer",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -7648,6 +8821,75 @@
             "ariaLabel": "Brush variety",
             "value": "mixer",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -7962,6 +9204,75 @@
             "ariaLabel": "Brush variety",
             "value": "mixer",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -8252,6 +9563,75 @@
             "ariaLabel": "Brush variety",
             "value": "mixer",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "wet"
           }
         ]
       },
@@ -8625,6 +10005,10 @@
               {
                 "value": "wet-drag",
                 "label": "Wet smudge"
+              },
+              {
+                "value": "knife",
+                "label": "Palette knife"
               }
             ],
             "value": "blender"
@@ -9655,6 +11039,75 @@
             "ariaLabel": "Brush variety",
             "value": "spraycan",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "spray"
           }
         ]
       },
@@ -10362,6 +11815,75 @@
             "ariaLabel": "Brush variety",
             "value": "spraycan",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "spray"
           }
         ]
       },
@@ -10751,6 +12273,75 @@
             "ariaLabel": "Brush variety",
             "value": "spraycan",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "spray"
           }
         ]
       },
@@ -11183,6 +12774,75 @@
             "ariaLabel": "Brush variety",
             "value": "spraycan",
             "placeholder": "pencil, oil, highlighter…"
+          },
+          {
+            "kind": "choice",
+            "path": "family",
+            "label": "Family",
+            "ariaLabel": "Brush family",
+            "options": [
+              {
+                "value": "",
+                "label": "Automatic"
+              },
+              {
+                "value": "dry",
+                "label": "Dry"
+              },
+              {
+                "value": "ink",
+                "label": "Ink"
+              },
+              {
+                "value": "wet",
+                "label": "Wet"
+              },
+              {
+                "value": "thick",
+                "label": "Thick"
+              },
+              {
+                "value": "metallic",
+                "label": "Metallic"
+              },
+              {
+                "value": "spray",
+                "label": "Spray"
+              },
+              {
+                "value": "glow",
+                "label": "Glow"
+              },
+              {
+                "value": "iridescent",
+                "label": "Iridescent"
+              },
+              {
+                "value": "strands",
+                "label": "Strands"
+              },
+              {
+                "value": "stickers",
+                "label": "Stickers"
+              },
+              {
+                "value": "living",
+                "label": "Living"
+              },
+              {
+                "value": "ethereal",
+                "label": "Ethereal"
+              },
+              {
+                "value": "volatile",
+                "label": "Volatile"
+              },
+              {
+                "value": "reactive",
+                "label": "Reactive"
+              }
+            ],
+            "value": "spray"
           }
         ]
       },

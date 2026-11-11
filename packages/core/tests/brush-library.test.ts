@@ -222,7 +222,9 @@ describe('BrushLibrary', () => {
     expect(r.added).toEqual(['old-pencil']);
     expect(r.skipped).toEqual(['pencil-6b']);
     expect(r.problems).toEqual([expect.stringMatching(/"pencil-6b" is a built-in brush id/)]);
-    expect((await other.get('old-pencil'))?.brush).toEqual({ ...preset('pencil-hb'), id: 'old-pencil', name: 'Old pencil' });
+    // v1 brushes carry no family; the preset's is the one its facets give anyway.
+    const { family: _f, ...pencil } = preset('pencil-hb');
+    expect((await other.get('old-pencil'))?.brush).toEqual({ ...pencil, id: 'old-pencil', name: 'Old pencil' });
     expect((await other.importFile(file)).skipped).toEqual(['my-ink']);
     expect((await other.importFile(file, { overwrite: true })).replaced).toEqual(['my-ink']);
   });
@@ -253,9 +255,9 @@ describe('brush library tools', () => {
     const { result } = await call('list_brush_presets');
     expect(result.host).toBe('canvas');
     expect(result.brushes.map((b: { id: string }) => b.id)).toEqual(ids(listCanvasBrushes()));
-    expect(result.brushes[0]).toEqual({ id: 'pencil-hb', name: 'HB pencil', builtin: true, kind: 'mark', medium: 'dry', variety: 'pencil', category: 'pencil', engine: 'dab', tip: 'round', size: 4, marks: 'continuous', surface: 'dry' });
+    expect(result.brushes[0]).toEqual({ id: 'pencil-hb', name: 'HB pencil', builtin: true, kind: 'mark', medium: 'dry', variety: 'pencil', category: 'pencil', family: 'dry', engine: 'dab', tip: 'round', size: 4, marks: 'continuous', surface: 'dry' });
     const all = await call('list_brush_presets', { all: true, kind: 'tool', limit: 3 });
-    expect(all.result.total).toBe(11);
+    expect(all.result.total).toBe(12);
     expect(all.result.brushes).toHaveLength(3);
     expect(all.result.brushes.every((b: { renderable: boolean }) => b.renderable === false)).toBe(true);
     expect((await call('list_brush_presets', { medium: 'clay' })).error).toMatch(/medium/);

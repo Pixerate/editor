@@ -8,6 +8,7 @@
       "name": "HB pencil",
       "category": "pencil",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 4,
         "hardness": 0.7,
@@ -179,6 +180,7 @@
       "name": "6B pencil",
       "category": "pencil",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 7,
         "hardness": 0.55,
@@ -350,6 +352,7 @@
       "name": "Soft pastel",
       "category": "pastel",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 32,
         "hardness": 0.55,
@@ -521,6 +524,7 @@
       "name": "Oil pastel",
       "category": "pastel",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 26,
         "hardness": 0.8,
@@ -692,6 +696,7 @@
       "name": "Charcoal stick",
       "category": "charcoal",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 26,
         "hardness": 0.4,
@@ -863,6 +868,7 @@
       "name": "Vine charcoal",
       "category": "charcoal",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 10,
         "hardness": 0.3,
@@ -1034,6 +1040,7 @@
       "name": "Airbrush",
       "category": "airbrush",
       "engine": "dab",
+      "family": "spray",
       "tip": {
         "size": 90,
         "hardness": 0,
@@ -1205,6 +1212,7 @@
       "name": "Chisel marker",
       "category": "marker",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 24,
         "hardness": 0.85,
@@ -1376,6 +1384,7 @@
       "name": "Ink pen",
       "category": "ink",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 4,
         "hardness": 1,
@@ -1547,6 +1556,7 @@
       "name": "Brush pen",
       "category": "ink",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 14,
         "hardness": 0.9,
@@ -2565,6 +2575,177 @@
     }
   },
   {
+    "id": "palette-knife",
+    "engine": "impasto",
+    "category": "smudge",
+    "brush": {
+      "id": "palette-knife",
+      "name": "Palette knife",
+      "category": "smudge",
+      "engine": "impasto",
+      "tip": {
+        "size": 48,
+        "hardness": 1,
+        "spacing": 0.05,
+        "angle": 90,
+        "roundness": 0.18,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.3,
+        "pressureSize": false,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": false,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "knife",
+        "thickness": 0.6,
+        "gloss": 0.55,
+        "metallic": 0,
+        "load": 0,
+        "thinner": 0,
+        "drag": 0.85,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "antimatter": {
+        "blastRadius": 2.5,
+        "blastSpacing": 2,
+        "threshold": 0.1,
+        "invert": 1,
+        "invertMode": "rgb",
+        "scorch": 0.6,
+        "annihilate": 0.25,
+        "sparks": 0.5,
+        "sparkReach": 3,
+        "crater": 0.5,
+        "duration": 0.7
+      },
+      "scraper": {
+        "depth": 0.5,
+        "sharpness": 0.7
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "fluorescence": {
+        "amount": 0,
+        "invisible": false
+      },
+      "thermochromic": {
+        "hotColor": null,
+        "threshold": 0.5
+      },
+      "ferro": {
+        "amount": 0,
+        "wavelength": 16,
+        "threshold": 0.12
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    }
+  },
+  {
     "id": "dirty-round",
     "engine": "dab",
     "category": "paint",
@@ -2573,6 +2754,7 @@
       "name": "Dirty round",
       "category": "paint",
       "engine": "dab",
+      "family": "wet",
       "tip": {
         "size": 22,
         "hardness": 0.65,
@@ -2744,6 +2926,7 @@
       "name": "Multi-colour flat",
       "category": "paint",
       "engine": "dab",
+      "family": "wet",
       "tip": {
         "size": 30,
         "hardness": 0.75,
@@ -2932,6 +3115,7 @@
       "name": "Palette dabber",
       "category": "paint",
       "engine": "dab",
+      "family": "wet",
       "tip": {
         "size": 18,
         "hardness": 0.7,
@@ -3127,6 +3311,7 @@
       "name": "Gradient round",
       "category": "paint",
       "engine": "dab",
+      "family": "wet",
       "tip": {
         "size": 24,
         "hardness": 0.8,
@@ -3317,6 +3502,7 @@
       "name": "Pressure ombré",
       "category": "paint",
       "engine": "dab",
+      "family": "wet",
       "tip": {
         "size": 26,
         "hardness": 0.6,
@@ -3504,6 +3690,7 @@
       "name": "Rainbow marker",
       "category": "marker",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 18,
         "hardness": 0.9,
@@ -3710,6 +3897,7 @@
       "name": "Mixer Brush",
       "category": "mixer",
       "engine": "mixer",
+      "family": "wet",
       "tip": {
         "size": 30,
         "hardness": 0.7,
@@ -3881,6 +4069,7 @@
       "name": "Watercolour round",
       "category": "watercolor",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 28,
         "hardness": 0.6,
@@ -4052,6 +4241,7 @@
       "name": "Wash brush",
       "category": "watercolor",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 90,
         "hardness": 0.35,
@@ -4223,6 +4413,7 @@
       "name": "Gradient wash",
       "category": "watercolor",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 80,
         "hardness": 0.35,
@@ -4413,6 +4604,7 @@
       "name": "Turing wash",
       "category": "watercolor",
       "engine": "wet",
+      "family": "living",
       "tip": {
         "size": 36,
         "hardness": 0.5,
@@ -4593,6 +4785,7 @@
       "name": "Coral ink",
       "category": "watercolor",
       "engine": "wet",
+      "family": "living",
       "tip": {
         "size": 22,
         "hardness": 0.65,
@@ -4773,6 +4966,7 @@
       "name": "Watercolour rigger",
       "category": "watercolor",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 7,
         "hardness": 0.75,
@@ -4944,6 +5138,7 @@
       "name": "Gouache",
       "category": "watercolor",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 26,
         "hardness": 0.7,
@@ -5115,6 +5310,7 @@
       "name": "Wet oil round",
       "category": "oil",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 24,
         "hardness": 0.75,
@@ -5286,6 +5482,7 @@
       "name": "Wet oil flat",
       "category": "oil",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 40,
         "hardness": 0.85,
@@ -5457,6 +5654,7 @@
       "name": "Impasto brush",
       "category": "impasto",
       "engine": "impasto",
+      "family": "thick",
       "tip": {
         "size": 36,
         "hardness": 0.8,
@@ -5628,6 +5826,7 @@
       "name": "Paint tube",
       "category": "impasto",
       "engine": "impasto",
+      "family": "thick",
       "tip": {
         "size": 22,
         "hardness": 0.9,
@@ -5791,177 +5990,6 @@
     }
   },
   {
-    "id": "palette-knife",
-    "engine": "impasto",
-    "category": "impasto",
-    "brush": {
-      "id": "palette-knife",
-      "name": "Palette knife",
-      "category": "impasto",
-      "engine": "impasto",
-      "tip": {
-        "size": 48,
-        "hardness": 1,
-        "spacing": 0.05,
-        "angle": 90,
-        "roundness": 0.18,
-        "opacity": 1,
-        "flow": 1,
-        "smoothing": 0.3,
-        "pressureSize": false,
-        "pressureOpacity": false,
-        "blend": "normal"
-      },
-      "grain": 0,
-      "pressureSmoothing": 0,
-      "rotation": "stroke",
-      "dynamics": {
-        "minSize": 0,
-        "pressureFlow": 0,
-        "tiltSize": 0,
-        "tiltRoundness": 0,
-        "tiltOpacity": 0,
-        "velocitySize": 0,
-        "velocityOpacity": 0,
-        "sizeJitter": 0,
-        "angleJitter": 0,
-        "opacityJitter": 0,
-        "scatter": 0
-      },
-      "mixer": {
-        "wet": 0.5,
-        "load": 0.5,
-        "mix": 0.5,
-        "loadEachStroke": true,
-        "cleanEachStroke": true,
-        "mixing": "rgb"
-      },
-      "loadsColor": true,
-      "behavior": {
-        "pickup": 0,
-        "mix": 0.5,
-        "dirty": false,
-        "mixing": "pigment",
-        "multicolor": {
-          "mode": "off",
-          "colors": [],
-          "order": "sequence",
-          "length": 12,
-          "softness": 1
-        }
-      },
-      "blender": {
-        "strength": 0.5,
-        "distance": 0.35,
-        "mixing": "pigment"
-      },
-      "smudge": {
-        "strength": 0.7,
-        "length": 0.85,
-        "mixing": "rgb"
-      },
-      "wet": {
-        "tool": "paint",
-        "water": 0.5,
-        "pigment": 0.5,
-        "body": 0,
-        "strength": 0.5,
-        "rewet": 0,
-        "medium": "watercolor",
-        "load": 1,
-        "thinner": 0
-      },
-      "impasto": {
-        "tool": "knife",
-        "thickness": 0.3,
-        "gloss": 0.55,
-        "metallic": 0,
-        "load": 1,
-        "thinner": 0,
-        "drag": 0.85,
-        "rim": 0,
-        "clarity": 0
-      },
-      "particle": {
-        "kind": "spring",
-        "render": "line",
-        "count": 12,
-        "size": 0.08,
-        "spread": 0.5,
-        "stiffness": 0.4,
-        "damping": 0.25,
-        "speed": 0.5,
-        "gravity": 0,
-        "life": 0.5,
-        "interval": 0.3,
-        "ribbonFill": 0.5,
-        "ribbonPairs": "adjacent",
-        "waveAmplitude": 0,
-        "waveLength": 60,
-        "waveSpeed": 0,
-        "wavePhaseJitter": 0,
-        "dotTextures": [],
-        "dotTextureOrder": "sequence",
-        "dotRotation": "random"
-      },
-      "bristle": {
-        "count": 32,
-        "stiffness": 0.5,
-        "splay": 0.5,
-        "thickness": 0.06,
-        "load": 0.6,
-        "jitter": 0.4
-      },
-      "sticker": {
-        "stamps": [
-          "editor:star"
-        ],
-        "density": 0.4,
-        "sizeJitter": 0.4,
-        "rotationJitter": 1,
-        "scatter": 0.5,
-        "colorJitter": 0.2
-      },
-      "antimatter": {
-        "blastRadius": 2.5,
-        "blastSpacing": 2,
-        "threshold": 0.1,
-        "invert": 1,
-        "invertMode": "rgb",
-        "scorch": 0.6,
-        "annihilate": 0.25,
-        "sparks": 0.5,
-        "sparkReach": 3,
-        "crater": 0.5,
-        "duration": 0.7
-      },
-      "scraper": {
-        "depth": 0.5,
-        "sharpness": 0.7
-      },
-      "light": {
-        "amount": 0,
-        "pressure": false
-      },
-      "fluorescence": {
-        "amount": 0,
-        "invisible": false
-      },
-      "thermochromic": {
-        "hotColor": null,
-        "threshold": 0.5
-      },
-      "ferro": {
-        "amount": 0,
-        "wavelength": 16,
-        "threshold": 0.12
-      },
-      "stamp": null,
-      "spray": null,
-      "paint": null
-    }
-  },
-  {
     "id": "paint-roller",
     "engine": "impasto",
     "category": "impasto",
@@ -5970,6 +5998,7 @@
       "name": "Roller",
       "category": "impasto",
       "engine": "impasto",
+      "family": "thick",
       "tip": {
         "size": 70,
         "hardness": 0.95,
@@ -6141,6 +6170,7 @@
       "name": "Gloop pen",
       "category": "impasto",
       "engine": "impasto",
+      "family": "thick",
       "tip": {
         "size": 14,
         "hardness": 0.9,
@@ -6312,6 +6342,7 @@
       "name": "Metallic paint",
       "category": "impasto",
       "engine": "impasto",
+      "family": "metallic",
       "tip": {
         "size": 30,
         "hardness": 0.8,
@@ -6483,6 +6514,7 @@
       "name": "Hair strands",
       "category": "procedural",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 40,
         "hardness": 0.8,
@@ -6654,6 +6686,7 @@
       "name": "Spring ink",
       "category": "procedural",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 30,
         "hardness": 0.9,
@@ -6825,6 +6858,7 @@
       "name": "Orbit curls",
       "category": "procedural",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 36,
         "hardness": 0.85,
@@ -6996,6 +7030,7 @@
       "name": "Flow fur",
       "category": "procedural",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 50,
         "hardness": 0.7,
@@ -7167,6 +7202,7 @@
       "name": "Bead trail",
       "category": "procedural",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 34,
         "hardness": 0.9,
@@ -7338,6 +7374,7 @@
       "name": "Sparkle dust",
       "category": "procedural",
       "engine": "particle",
+      "family": "glow",
       "tip": {
         "size": 60,
         "hardness": 0.6,
@@ -7509,6 +7546,7 @@
       "name": "Bristle round",
       "category": "bristle",
       "engine": "bristle",
+      "family": "wet",
       "tip": {
         "size": 30,
         "hardness": 0.85,
@@ -7680,6 +7718,7 @@
       "name": "Bristle flat",
       "category": "bristle",
       "engine": "bristle",
+      "family": "wet",
       "tip": {
         "size": 46,
         "hardness": 0.85,
@@ -7851,6 +7890,7 @@
       "name": "Dry brush",
       "category": "bristle",
       "engine": "bristle",
+      "family": "wet",
       "tip": {
         "size": 44,
         "hardness": 0.9,
@@ -8022,6 +8062,7 @@
       "name": "Glow gel",
       "category": "light",
       "engine": "impasto",
+      "family": "glow",
       "tip": {
         "size": 16,
         "hardness": 0.9,
@@ -8193,6 +8234,7 @@
       "name": "Neon marker",
       "category": "light",
       "engine": "dab",
+      "family": "glow",
       "tip": {
         "size": 10,
         "hardness": 0.9,
@@ -8364,6 +8406,7 @@
       "name": "Light airbrush",
       "category": "light",
       "engine": "dab",
+      "family": "spray",
       "tip": {
         "size": 90,
         "hardness": 0,
@@ -8535,6 +8578,7 @@
       "name": "Spark trail",
       "category": "light",
       "engine": "particle",
+      "family": "glow",
       "tip": {
         "size": 50,
         "hardness": 0.7,
@@ -8706,6 +8750,7 @@
       "name": "Light ribbon",
       "category": "light",
       "engine": "particle",
+      "family": "glow",
       "tip": {
         "size": 80,
         "hardness": 0.8,
@@ -8877,6 +8922,7 @@
       "name": "Flame ribbon",
       "category": "light",
       "engine": "particle",
+      "family": "glow",
       "tip": {
         "size": 50,
         "hardness": 0.6,
@@ -9048,6 +9094,7 @@
       "name": "Neon strand",
       "category": "light",
       "engine": "particle",
+      "family": "glow",
       "tip": {
         "size": 40,
         "hardness": 0.9,
@@ -9219,6 +9266,7 @@
       "name": "Smoke ribbon",
       "category": "light",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 70,
         "hardness": 0.3,
@@ -9390,6 +9438,7 @@
       "name": "Bokeh dots",
       "category": "light",
       "engine": "particle",
+      "family": "glow",
       "tip": {
         "size": 80,
         "hardness": 0.7,
@@ -9565,6 +9614,7 @@
       "name": "Twinkle sparks",
       "category": "light",
       "engine": "particle",
+      "family": "glow",
       "tip": {
         "size": 50,
         "hardness": 0.8,
@@ -9740,6 +9790,7 @@
       "name": "Glow wash",
       "category": "light",
       "engine": "wet",
+      "family": "glow",
       "tip": {
         "size": 40,
         "hardness": 0.55,
@@ -9911,6 +9962,7 @@
       "name": "Highlighter",
       "category": "light",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 30,
         "hardness": 0.85,
@@ -10082,6 +10134,7 @@
       "name": "Star stickers",
       "category": "sticker",
       "engine": "sticker",
+      "family": "stickers",
       "tip": {
         "size": 36,
         "hardness": 1,
@@ -10254,6 +10307,7 @@
       "name": "Leaf stickers",
       "category": "sticker",
       "engine": "sticker",
+      "family": "stickers",
       "tip": {
         "size": 40,
         "hardness": 1,
@@ -10425,6 +10479,7 @@
       "name": "Confetti",
       "category": "sticker",
       "engine": "sticker",
+      "family": "stickers",
       "tip": {
         "size": 22,
         "hardness": 1,
@@ -10598,6 +10653,7 @@
       "name": "Flower stickers",
       "category": "sticker",
       "engine": "sticker",
+      "family": "stickers",
       "tip": {
         "size": 44,
         "hardness": 1,
@@ -10770,6 +10826,7 @@
       "name": "Paint splats",
       "category": "sticker",
       "engine": "sticker",
+      "family": "stickers",
       "tip": {
         "size": 50,
         "hardness": 1,
@@ -11967,6 +12024,7 @@
       "name": "Ballpoint",
       "category": "ink",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 3,
         "hardness": 0.95,
@@ -12138,6 +12196,7 @@
       "name": "Gel pen",
       "category": "ink",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 4,
         "hardness": 1,
@@ -12309,6 +12368,7 @@
       "name": "Fineliner",
       "category": "ink",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 2,
         "hardness": 1,
@@ -12480,6 +12540,7 @@
       "name": "Crayon",
       "category": "pastel",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 14,
         "hardness": 0.7,
@@ -12651,6 +12712,7 @@
       "name": "Chalk",
       "category": "pastel",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 18,
         "hardness": 0.6,
@@ -12822,6 +12884,7 @@
       "name": "Spray can",
       "category": "airbrush",
       "engine": "dab",
+      "family": "spray",
       "tip": {
         "size": 60,
         "hardness": 0.9,
@@ -12996,6 +13059,7 @@
       "name": "UV marker",
       "category": "ink",
       "engine": "dab",
+      "family": "ethereal",
       "tip": {
         "size": 18,
         "hardness": 0.75,
@@ -13167,6 +13231,7 @@
       "name": "Thermochromic ink",
       "category": "ink",
       "engine": "dab",
+      "family": "reactive",
       "tip": {
         "size": 12,
         "hardness": 0.85,
@@ -13338,6 +13403,7 @@
       "name": "Scarab lacquer",
       "category": "impasto",
       "engine": "impasto",
+      "family": "iridescent",
       "tip": {
         "size": 22,
         "hardness": 0.75,
@@ -13514,6 +13580,7 @@
       "name": "Soap film",
       "category": "paint",
       "engine": "dab",
+      "family": "iridescent",
       "tip": {
         "size": 32,
         "hardness": 0.4,
@@ -13690,6 +13757,7 @@
       "name": "Pearl glaze",
       "category": "paint",
       "engine": "dab",
+      "family": "iridescent",
       "tip": {
         "size": 28,
         "hardness": 0.5,
@@ -13866,6 +13934,7 @@
       "name": "Ghost wash",
       "category": "watercolor",
       "engine": "wet",
+      "family": "ethereal",
       "tip": {
         "size": 32,
         "hardness": 0.55,
@@ -14041,6 +14110,7 @@
       "name": "Ghost gouache",
       "category": "watercolor",
       "engine": "wet",
+      "family": "ethereal",
       "tip": {
         "size": 26,
         "hardness": 0.7,
@@ -14216,6 +14286,7 @@
       "name": "Ghost oil",
       "category": "oil",
       "engine": "wet",
+      "family": "ethereal",
       "tip": {
         "size": 24,
         "hardness": 0.75,
@@ -14391,6 +14462,7 @@
       "name": "Invisible ink",
       "category": "watercolor",
       "engine": "wet",
+      "family": "ethereal",
       "tip": {
         "size": 24,
         "hardness": 0.65,
@@ -14566,6 +14638,7 @@
       "name": "Mutation wash",
       "category": "watercolor",
       "engine": "wet",
+      "family": "living",
       "tip": {
         "size": 28,
         "hardness": 0.6,
@@ -14747,6 +14820,7 @@
       "name": "Mutation ink",
       "category": "ink",
       "engine": "dab",
+      "family": "living",
       "tip": {
         "size": 6,
         "hardness": 0.9,
@@ -14923,6 +14997,7 @@
       "name": "Ferrofluid",
       "category": "paint",
       "engine": "dab",
+      "family": "reactive",
       "tip": {
         "size": 28,
         "hardness": 0.75,
@@ -15094,6 +15169,7 @@
       "name": "Ferro ink",
       "category": "ink",
       "engine": "dab",
+      "family": "reactive",
       "tip": {
         "size": 12,
         "hardness": 1,
@@ -15265,6 +15341,7 @@
       "name": "Mycelial ink",
       "category": "ink",
       "engine": "dab",
+      "family": "living",
       "tip": {
         "size": 8,
         "hardness": 0.9,
@@ -15447,6 +15524,7 @@
       "name": "Rot",
       "category": "ink",
       "engine": "dab",
+      "family": "living",
       "tip": {
         "size": 12,
         "hardness": 0.75,
@@ -15629,6 +15707,7 @@
       "name": "Foxfire",
       "category": "ink",
       "engine": "dab",
+      "family": "living",
       "tip": {
         "size": 10,
         "hardness": 0.8,
@@ -15811,6 +15890,7 @@
       "name": "Antimatter",
       "category": "paint",
       "engine": "antimatter",
+      "family": "volatile",
       "tip": {
         "size": 24,
         "hardness": 0.75,
@@ -15982,6 +16062,7 @@
       "name": "Antimatter flare",
       "category": "light",
       "engine": "antimatter",
+      "family": "volatile",
       "tip": {
         "size": 18,
         "hardness": 0.7,
@@ -16153,6 +16234,7 @@
       "name": "Antimatter charge",
       "category": "paint",
       "engine": "antimatter",
+      "family": "volatile",
       "tip": {
         "size": 32,
         "hardness": 0.85,
@@ -16495,6 +16577,7 @@
       "name": "Vortex",
       "category": "paint",
       "engine": "vortex",
+      "family": "volatile",
       "tip": {
         "size": 24,
         "hardness": 0.7,
@@ -16674,6 +16757,7 @@
       "name": "Ink vortex",
       "category": "paint",
       "engine": "vortex",
+      "family": "volatile",
       "tip": {
         "size": 20,
         "hardness": 0.75,
@@ -16853,6 +16937,7 @@
       "name": "Whirlpool",
       "category": "paint",
       "engine": "vortex",
+      "family": "volatile",
       "tip": {
         "size": 28,
         "hardness": 0.65,
@@ -17032,6 +17117,7 @@
       "name": "Wet vortex",
       "category": "watercolor",
       "engine": "wet",
+      "family": "volatile",
       "tip": {
         "size": 28,
         "hardness": 0.6,

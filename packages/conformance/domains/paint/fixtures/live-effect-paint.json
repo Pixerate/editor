@@ -83,6 +83,7 @@
               "minSize": 0.5,
               "smoothing": 0.2
             },
+            "family": "stickers",
             "id": "sticker-stars",
             "kind": "mark",
             "marks": {
@@ -135,11 +136,11 @@
         "result": {
           "bounds": {
             "height": 12,
-            "width": 49,
+            "width": 52,
             "x": -2,
             "y": 2
           },
-          "dabs": 11,
+          "dabs": 12,
           "layerId": "@1",
           "strokeId": "s1"
         },
@@ -147,7 +148,7 @@
           "file": "png/live-effect-paint.4.png",
           "width": 48,
           "height": 32,
-          "sha256": "c41a8ee2ce93a084c19983d755da9ff229f24134874029cd0387a0446de47b54",
+          "sha256": "f6598f9ab6e40fd3fcc22c825a31f3efcadea8df068a5e2dba8d83b5198a7c42",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -291,6 +292,18 @@
               "stamp": "star",
               "x": 41.5,
               "y": 8
+            },
+            {
+              "color": "#1300ec",
+              "id": "st12",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 213595239,
+              "size": 9,
+              "stamp": "star",
+              "x": 44,
+              "y": 8
             }
           ]
         }
@@ -334,6 +347,7 @@
               "smoothing": 0.5,
               "velocitySize": -0.45
             },
+            "family": "ink",
             "id": "ink-pen",
             "kind": "mark",
             "medium": "ink",
@@ -420,7 +434,7 @@
           "file": "png/live-effect-paint.9.png",
           "width": 48,
           "height": 32,
-          "sha256": "10604ec56131d073a254d7afc585a08c1d8a28e4ddcb9ab1c393a0dacde8fa78",
+          "sha256": "d6c1e3e55dbe2f7c81c2a167fc7d0b49b97040baf638df895e9863f722ed914e",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -454,7 +468,7 @@
       },
       "expect": {
         "result": {
-          "bytes": 1432,
+          "bytes": 1463,
           "data": "<binary>",
           "mimeType": "image/png"
         }
@@ -468,7 +482,7 @@
       },
       "expect": {
         "result": {
-          "bytes": 1458,
+          "bytes": 1497,
           "data": "<binary>",
           "mimeType": "image/png"
         }
@@ -482,7 +496,7 @@
       },
       "expect": {
         "result": {
-          "bytes": 1370,
+          "bytes": 1409,
           "data": "<binary>",
           "mimeType": "image/png"
         }
@@ -495,7 +509,7 @@
       },
       "expect": {
         "result": {
-          "bytes": 12364,
+          "bytes": 12397,
           "data": "<binary>",
           "psb": false,
           "warnings": []
@@ -557,7 +571,7 @@
               "blend": "normal",
               "bounds": {
                 "height": 9,
-                "width": 46,
+                "width": 48,
                 "x": 0,
                 "y": 3
               },
@@ -592,7 +606,7 @@
           "document": {
             "activeLayerId": "@2",
             "assets": {
-              "@1": "pixerate-asset:11e-3fgl948kzb",
+              "@1": "pixerate-asset:136-20n4m3n4pcu",
               "@2": "pixerate-asset:he-1ru3mecc6i5"
             },
             "dpi": 300,
@@ -876,6 +890,18 @@
                   "stamp": "star",
                   "x": 41.5,
                   "y": 8
+                },
+                {
+                  "color": "#1300ec",
+                  "id": "st12",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 213595239,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 44,
+                  "y": 8
                 }
               ]
             },
@@ -1045,7 +1071,7 @@
           "file": "png/live-effect-paint.16.png",
           "width": 48,
           "height": 32,
-          "sha256": "10604ec56131d073a254d7afc585a08c1d8a28e4ddcb9ab1c393a0dacde8fa78",
+          "sha256": "d6c1e3e55dbe2f7c81c2a167fc7d0b49b97040baf638df895e9863f722ed914e",
           "maxDelta": 2,
           "meanDelta": 0.1
         }

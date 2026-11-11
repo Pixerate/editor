@@ -194,7 +194,7 @@ extension JSONObject {
 public func resolveEngine(_ brush: Brush) -> String {
     if brush["kind"]?.stringValue == "tool" {
         let tool = brush["tool"]?.stringValue
-        return tool == "eraser" || tool == "blender" || tool == "smudge" ? tool! : "wet"
+        return tool == "eraser" || tool == "blender" || tool == "smudge" ? tool! : tool == "knife" ? "impasto" : "wet"
     }
     let marks = brush.path("marks.kind")?.stringValue
     let surface = brush.path("behaviour.surface")?.stringValue
@@ -225,7 +225,7 @@ public func resolveCategory(_ brush: Brush, _ engineIn: String? = nil) -> String
     let engine = engineIn ?? resolveEngine(brush)
     if brush["kind"]?.stringValue == "tool" {
         let tool = brush["tool"]?.stringValue
-        return tool == "eraser" || tool == "blender" || tool == "smudge" ? tool! : "wet-tool"
+        return tool == "eraser" || tool == "blender" || tool == "smudge" ? tool! : tool == "knife" ? "smudge" : "wet-tool"
     }
     if (brush.path("light.amount")?.numberValue ?? 0) > 0 { return "light" }
     switch engine {
@@ -244,12 +244,38 @@ public func resolveCategory(_ brush: Brush, _ engineIn: String? = nil) -> String
 }
 
 /**
+ * What a paint does (`PAINT_FAMILIES`): the brush's own `family` when it names one, else derived
+ * from its facets (see `resolveFamily` in the TypeScript core). Tools and scrapers have none.
+ */
+public func resolveFamily(_ brush: Brush, _ engineIn: String? = nil) -> String? {
+    let engine = engineIn ?? resolveEngine(brush)
+    if brush["kind"]?.stringValue == "tool" || engine == "scraper" { return nil }
+    if let f = brush["family"]?.stringValue, PAINT_FAMILIES.contains(f) { return f }
+    let marks = brush.path("marks.kind")?.stringValue
+    if marks == "antimatter" || marks == "vortex" { return "volatile" }
+    if brush["ghost"] != nil || (brush.path("fluorescence.amount")?.numberValue ?? 0) > 0 { return "ethereal" }
+    if brush["thermochromic"] != nil || brush["ferro"] != nil { return "reactive" }
+    if brush["culture"] != nil || brush["mutation"] != nil || brush["livePatterns"] != nil { return "living" }
+    if brush["iridescence"] != nil { return "iridescent" }
+    if (brush.path("light.amount")?.numberValue ?? 0) > 0 { return "glow" }
+    if engine == "sticker" { return "stickers" }
+    if engine == "particle" { return "strands" }
+    if engine == "impasto" { return (brush.path("behaviour.thick.metallic")?.numberValue ?? 0) > 0 ? "metallic" : "thick" }
+    let medium = brush["medium"]?.stringValue
+    if marks == "scatter" || medium == "spray" { return "spray" }
+    if medium == "dry" { return "dry" }
+    if medium == "ink" { return "ink" }
+    return "wet"
+}
+
+/**
  * The flat engine form of a brush. Missing fields take the engine's defaults, and every value is
  * clamped into range, so any brush resolves.
  */
 public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     let engine = resolveEngine(brush)
     var input: JSONObject = ["id": brush["id"] ?? .null, "name": brush["name"] ?? .null, "category": .string(resolveCategory(brush, engine)), "engine": .string(engine)]
+    if let family = resolveFamily(brush, engine) { input["family"] = .string(family) }
     let shape = brush.path("tip.shape")?.stringValue ?? ""
     let marksKind = brush.path("marks.kind")?.stringValue ?? "continuous"
     for field in BRUSH_FIELDS {
@@ -272,8 +298,14 @@ public func resolveBrush(_ brush: Brush, builtin: Bool = false) -> PaintBrush {
     if brush["culture"] != nil && brush["kind"]?.stringValue != "tool" && CULTURE_ENGINES.contains(engine) {
         input["culture"] = .object(brush["culture"]?.objectValue ?? [:])
     }
-    // Blenders, smudges and scrapers only work on paint already down.
-    if engine == "blender" || engine == "smudge" || engine == "scraper" { input["loadsColor"] = false }
+    // The palette knife tool: an impasto knife that carries no paint, so it only moves what is down.
+    let knife = brush["kind"]?.stringValue == "tool" && brush["tool"]?.stringValue == "knife"
+    if knife {
+        setPath(&input, "impasto.tool", "knife")
+        setPath(&input, "impasto.load", 0)
+    }
+    // Blenders, smudges, scrapers and the knife only work on paint already down.
+    if engine == "blender" || engine == "smudge" || engine == "scraper" || knife { input["loadsColor"] = false }
     if let paint = brush.path("colour.default"), paint.objectValue?["type"] == "gradient" { input["paint"] = paint }
     if builtin { input["builtin"] = true }
     return normalizePaintBrush(input)

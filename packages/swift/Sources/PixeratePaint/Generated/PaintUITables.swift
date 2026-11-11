@@ -487,6 +487,47 @@ public struct PaintUIWetGpuItem: Equatable, Sendable {
     }
 }
 
+public struct PaintUIPaintGroupingsByMediumItem: Equatable, Sendable {
+    public var id: String
+    public var label: String
+    public var facet: String
+    public var values: [String]
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUIPaintGroupingsByMediumItem")
+        id = try ContractTable.field(o["id"]?.stringValue, "id", "PaintUIPaintGroupingsByMediumItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUIPaintGroupingsByMediumItem")
+        facet = try ContractTable.field(o["facet"]?.stringValue, "facet", "PaintUIPaintGroupingsByMediumItem")
+        values = try ContractTable.field(try o["values"]?.arrayValue?.map { try ContractTable.value($0, "String") { v in v?.stringValue } }, "values", "PaintUIPaintGroupingsByMediumItem")
+    }
+}
+
+public struct PaintUIPaintGroupingsByFamilyItem: Equatable, Sendable {
+    public var id: String
+    public var label: String
+    public var facet: String
+    public var values: [String]
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUIPaintGroupingsByFamilyItem")
+        id = try ContractTable.field(o["id"]?.stringValue, "id", "PaintUIPaintGroupingsByFamilyItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUIPaintGroupingsByFamilyItem")
+        facet = try ContractTable.field(o["facet"]?.stringValue, "facet", "PaintUIPaintGroupingsByFamilyItem")
+        values = try ContractTable.field(try o["values"]?.arrayValue?.map { try ContractTable.value($0, "String") { v in v?.stringValue } }, "values", "PaintUIPaintGroupingsByFamilyItem")
+    }
+}
+
+public struct PaintUIPaintGroupings: Equatable, Sendable {
+    public var byMedium: [PaintUIPaintGroupingsByMediumItem]
+    public var byFamily: [PaintUIPaintGroupingsByFamilyItem]
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUIPaintGroupings")
+        byMedium = try ContractTable.field(try o["byMedium"]?.arrayValue?.map { try ContractTable.value($0, "PaintUIPaintGroupingsByMediumItem") { v in try v.map(PaintUIPaintGroupingsByMediumItem.init(json:)) } }, "byMedium", "PaintUIPaintGroupings")
+        byFamily = try ContractTable.field(try o["byFamily"]?.arrayValue?.map { try ContractTable.value($0, "PaintUIPaintGroupingsByFamilyItem") { v in try v.map(PaintUIPaintGroupingsByFamilyItem.init(json:)) } }, "byFamily", "PaintUIPaintGroupings")
+    }
+}
+
 public struct PaintUILabelsWetTools: Equatable, Sendable {
     public var paint: String
     public var water: String
@@ -705,6 +746,7 @@ public struct PaintUITables: Equatable, Sendable {
     public var pathStrokeTapers: [PaintUIPathStrokeTapersItem]
     public var padSampleSizes: [Double]
     public var wetGpu: [PaintUIWetGpuItem]
+    public var paintGroupings: PaintUIPaintGroupings
     public var labels: PaintUILabels
 
     public init(json: JSONValue) throws {
@@ -717,6 +759,7 @@ public struct PaintUITables: Equatable, Sendable {
         pathStrokeTapers = try ContractTable.field(try o["pathStrokeTapers"]?.arrayValue?.map { try ContractTable.value($0, "PaintUIPathStrokeTapersItem") { v in try v.map(PaintUIPathStrokeTapersItem.init(json:)) } }, "pathStrokeTapers", "PaintUITables")
         padSampleSizes = try ContractTable.field(try o["padSampleSizes"]?.arrayValue?.map { try ContractTable.value($0, "Double") { v in v?.numberValue } }, "padSampleSizes", "PaintUITables")
         wetGpu = try ContractTable.field(try o["wetGpu"]?.arrayValue?.map { try ContractTable.value($0, "PaintUIWetGpuItem") { v in try v.map(PaintUIWetGpuItem.init(json:)) } }, "wetGpu", "PaintUITables")
+        paintGroupings = try ContractTable.field(try o["paintGroupings"].map(PaintUIPaintGroupings.init(json:)), "paintGroupings", "PaintUITables")
         labels = try ContractTable.field(try o["labels"].map(PaintUILabels.init(json:)), "labels", "PaintUITables")
     }
 }

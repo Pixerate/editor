@@ -803,7 +803,8 @@ export function mixerLoadForStroke(brush: PaintBrush, current: MixerLoad, color:
  */
 export function brushLoadForStroke(brush: PaintBrush, current: MixerLoad, color: readonly [number, number, number]): MixerLoad {
   if (brush.engine === 'mixer') return mixerLoadForStroke(brush, current, color);
-  if (brush.engine === 'impasto') return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
+  // The palette knife carries no paint.
+  if (brush.engine === 'impasto') return brush.loadsColor ? { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null } : EMPTY_MIXER_LOAD;
   if (brush.engine === 'wet') {
     const laysColor = brush.wet.tool === 'paint' || (brush.wet.tool === 'vortex' && brushVortex(brush).ink > 0);
     return laysColor ? { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null } : EMPTY_MIXER_LOAD;

@@ -9,7 +9,7 @@
  */
 
 import { normalizePaintBrush, type PaintBrushInput } from '../paint-editor/brushes';
-import { BRUSH_FIELDS, getPath, resolveBrush, setPath, WET_TOOL_OF } from './resolve';
+import { BRUSH_FIELDS, getPath, resolveBrush, resolveFamily, setPath, WET_TOOL_OF } from './resolve';
 import type { Brush, BrushMedium, BrushTipShape, BrushTool, ResolvedBrush } from './types';
 
 const equal = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
@@ -39,6 +39,8 @@ function skeleton(b: ResolvedBrush): Brush {
   const cult = b.culture ? { culture: {} } : {};
   const brush: Brush = { id: b.id, name: b.name, kind: 'mark', tip: { shape: tipShape(b) }, ...irid, ...cult };
   if (b.engine === 'eraser' || b.engine === 'blender' || b.engine === 'smudge') return { id: b.id, name: b.name, kind: 'tool', tool: b.engine, tip: { shape: tipShape(b) } };
+  // The palette knife tool: an impasto knife that carries no paint.
+  if (b.engine === 'impasto' && b.impasto.tool === 'knife' && !b.loadsColor) return { id: b.id, name: b.name, kind: 'tool', tool: 'knife', tip: { shape: tipShape(b) } };
   const mut = b.mutation ? { mutation: {} } : {};
   if (b.engine === 'wet' && b.wet.tool === 'vortex') {
     return { ...brush, medium: 'paint', variety: b.wet.medium, marks: { kind: 'vortex' }, behaviour: { surface: 'wet' }, ...mut };
@@ -76,7 +78,7 @@ function skeleton(b: ResolvedBrush): Brush {
 }
 
 /** Key order of a hand-written brush. */
-const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'ferro', 'motion', 'livePatterns', 'culture', 'colour'];
+const ORDER = ['id', 'name', 'description', 'tags', 'kind', 'medium', 'variety', 'family', 'tool', 'tip', 'marks', 'dynamics', 'behaviour', 'light', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'ferro', 'motion', 'livePatterns', 'culture', 'colour'];
 
 /**
  * The facet brush a v1 brush (any `PaintBrush`, or the JSON of one) amounts to: its engine's
@@ -93,5 +95,8 @@ export function migrateBrushV1(raw: PaintBrushInput): Brush {
     if (!equal(v, getPath(defaults, field.engine))) setPath(brush, field.facet, field.map ? field.map.toFacet(v) : copy(v));
   }
   if (b.paint) setPath(brush, 'colour.default', copy(b.paint));
+  // A family the facets would not give is kept.
+  const derived = resolveFamily(brush as unknown as Brush);
+  if (b.family && derived && derived !== b.family) brush.family = b.family;
   return Object.fromEntries(ORDER.filter((k) => brush[k] !== undefined).map((k) => [k, brush[k]])) as unknown as Brush;
 }

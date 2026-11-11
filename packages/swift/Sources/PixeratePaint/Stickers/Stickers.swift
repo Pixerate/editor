@@ -1569,6 +1569,12 @@ func stickerWithFrame(_ s: Sticker, _ art: StickerArt?) throws -> Sticker {
 
 // MARK: - Sticker spray
 
+/**
+ * The sticker size, in pixels, up to which a sticker brush's spacing and scatter scale with the
+ * sticker; beyond it they stay at this many pixels, so stickers keep tracing the path.
+ */
+public let STICKER_REACH = 64.0
+
 /// The stickers a sticker brush sprays along a stroke (`StickerSpray`).
 final class StickerSpray {
     var dabCount = 0
@@ -1615,9 +1621,10 @@ final class StickerSpray {
         frameMode = st["frameMode"]?.stringValue == "random" ? "random" : "perform"
         smoother = PenSmoother(brush.tip.smoothing, brush.pressureSmoothing)
         self.copies = copies.isEmpty ? [IDENTITY_COPY] : copies
-        // One walked dab per sticker: spacing from the density.
+        // One walked dab per sticker: spacing from the density, in diameters up to STICKER_REACH
+        // pixels and in STICKER_REACH-pixel steps beyond, so large stickers still trace the path.
         var walk = brush
-        walk.tip.spacing = Swift.max(0.05, 1 / Swift.max(0.05, density * 4))
+        walk.tip.spacing = Swift.max(0.05, 1 / Swift.max(0.05, density * 4)) * Swift.min(1, STICKER_REACH / Swift.max(1, brush.tip.size))
         walk.dynamics.scatter = 0
         walk.dynamics.sizeJitter = 0
         walk.dynamics.angleJitter = 0
@@ -1651,6 +1658,8 @@ final class StickerSpray {
                 walkers[i].push(c.map(q), &dabs)
             }
             walkers[i].finish(&dabs)
+            // A sticker at the end of the stroke too, unless the last one is already close to it.
+            walkers[i].layEnd(&dabs)
             for d in dabs { drop(d, &rects) }
         }
         return rects
@@ -1660,7 +1669,8 @@ final class StickerSpray {
         let i = nextNumber
         let r = d.dab.radius
         let size = r * 2 * (1 - sizeJitter * 0.7 * PixerateRandom.rand01(seed, i, 51))
-        let off = scatter * r * 2
+        // Scatter in diameters up to STICKER_REACH pixels: large stickers stay on the path.
+        let off = scatter * Swift.min(r * 2, STICKER_REACH)
         let a = PixerateRandom.rand01(seed, i, 53) * Double.pi * 2
         let dist = PixerateRandom.rand01(seed, i, 55) * off
         let base = colorAt(d, JS.cos(a) * dist, JS.sin(a) * dist)

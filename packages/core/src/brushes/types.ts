@@ -16,7 +16,7 @@ import type { CultureSpecies } from '../paint/culture';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
-import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
+import type { BrushRotation, ImpastoTool, LivePatternKind, PaintBrush, PaintFamily, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
 import type { DotRotation, DotTextureOrder, InvertMode, ParticleKind, ParticleRender, RibbonPairs, StickerFrameMode, VortexDirection } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';
@@ -30,8 +30,8 @@ export type BrushMedium = 'paint' | 'ink' | 'dry' | 'spray';
 export const BRUSH_MEDIA: readonly BrushMedium[] = ['paint', 'ink', 'dry', 'spray'];
 
 /** What a tool does to paint already down. */
-export type BrushTool = 'eraser' | 'blender' | 'smudge' | 'water' | 'dryer' | 'blow' | 'blot' | 'wet-blend' | 'wet-drag';
-export const BRUSH_TOOLS: readonly BrushTool[] = ['eraser', 'blender', 'smudge', 'water', 'dryer', 'blow', 'blot', 'wet-blend', 'wet-drag'];
+export type BrushTool = 'eraser' | 'blender' | 'smudge' | 'water' | 'dryer' | 'blow' | 'blot' | 'wet-blend' | 'wet-drag' | 'knife';
+export const BRUSH_TOOLS: readonly BrushTool[] = ['eraser', 'blender', 'smudge', 'water', 'dryer', 'blow', 'blot', 'wet-blend', 'wet-drag', 'knife'];
 
 /**
  * The tip's shape. `round`, `flat` and `chisel` are ellipses (their `roundness` and `angle` set
@@ -543,6 +543,8 @@ export interface Brush {
   medium?: BrushMedium;
   /** What kind of that medium (`oil`, `watercolor`, `pencil`, `highlighter`…): lowercase letters, digits and dashes. */
   variety?: string;
+  /** Marks only: what the paint does, for grouping by family (default: derived, `resolveFamily`). */
+  family?: PaintFamily;
   /** Tools only: what it does. */
   tool?: BrushTool;
   tip: BrushTip;

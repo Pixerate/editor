@@ -310,6 +310,12 @@ export interface StickerSprayInit {
 }
 
 /** A sticker-spray stroke: drops stickers along the path and draws them as it goes. */
+/**
+ * The sticker size, in pixels, up to which a sticker brush's spacing and scatter scale with the
+ * sticker; beyond it they stay at this many pixels, so stickers keep tracing the path.
+ */
+export const STICKER_REACH = 64;
+
 export class StickerSpray {
   dabCount = 0;
   readonly stickers: Sticker[] = [];
@@ -327,8 +333,9 @@ export class StickerSpray {
     const b = init.brush;
     this.smoother = new PenSmoother(b.tip.smoothing, b.pressureSmoothing);
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
-    // One walked dab per sticker: spacing from the density.
-    const spacing = Math.max(0.05, 1 / Math.max(0.05, b.sticker.density * 4));
+    // One walked dab per sticker: spacing from the density, in diameters up to STICKER_REACH
+    // pixels and in STICKER_REACH-pixel steps beyond, so large stickers still trace the path.
+    const spacing = Math.max(0.05, 1 / Math.max(0.05, b.sticker.density * 4)) * Math.min(1, STICKER_REACH / Math.max(1, b.tip.size));
     const walk: PaintBrush = { ...b, tip: { ...b.tip, spacing }, dynamics: { ...b.dynamics, scatter: 0, sizeJitter: 0, angleJitter: 0 } };
     this.walkers = this.copies.map((c, i) => new PenDabWalker(walk, (init.seed + i * 7919) | 0, c.linear));
     this.medium = new TileMedium(init.target, {});
@@ -358,6 +365,8 @@ export class StickerSpray {
       const dabs: PenDab[] = [];
       if (raw && fed && (raw.x !== fed.x || raw.y !== fed.y)) this.walkers[i].push(c.map({ ...raw, pressure: fed.pressure }), dabs);
       this.walkers[i].finish(dabs);
+      // A sticker at the end of the stroke too, unless the last one is already close to it.
+      this.walkers[i].layEnd(dabs);
       for (const d of dabs) this.drop(d, rects);
     });
     return rects;
@@ -368,7 +377,8 @@ export class StickerSpray {
     const i = this.next;
     const seed = this.init.seed;
     const size = d.radius * 2 * (1 - st.sizeJitter * 0.7 * rand01(seed, i, 51));
-    const off = st.scatter * d.radius * 2;
+    // Scatter in diameters up to STICKER_REACH pixels: large stickers stay on the path.
+    const off = st.scatter * Math.min(d.radius * 2, STICKER_REACH);
     const a = rand01(seed, i, 53) * Math.PI * 2;
     const dist = rand01(seed, i, 55) * off;
     const base = this.colorAt(d, Math.cos(a) * dist, Math.sin(a) * dist);

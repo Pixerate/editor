@@ -4,7 +4,7 @@
 	"checks": [
 		{ "why": "the stroke's colour is a green", "tool": "list_strokes", "expect": { "strokes": { "$some": { "color": { "$expr": "(([r, g, b]) => g > r && g > b)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } } } },
 		{ "why": "the canvas shows green paint", "tool": "pick_color", "args": { "x": 32, "y": 32 }, "expect": { "color": { "$expr": "(([r, g, b]) => g > r && g > b)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } },
-		{ "why": "an oil brush", "tool": "list_strokes", "expect": { "strokes": { "$some": { "brushId": { "$in": ["oil-round", "oil-flat", "bristle-round", "bristle-flat", "impasto-brush", "palette-knife"] } } } } }
+		{ "why": "an oil brush", "tool": "list_strokes", "expect": { "strokes": { "$some": { "brushId": { "$in": ["oil-round", "oil-flat", "bristle-round", "bristle-flat", "impasto-brush"] } } } } }
 	],
 	"solution": [
 		{ "tool": "mix_colors", "args": { "colors": [{ "color": "#1f3a93", "weight": 1 }, { "color": "#f2c500", "weight": 1 }] } },

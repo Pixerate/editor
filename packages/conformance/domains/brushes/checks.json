@@ -456,6 +456,42 @@
     }
   },
   {
+    "id": "palette-knife",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
     "id": "dirty-round",
     "hosts": {
       "paint": {
@@ -1107,42 +1143,6 @@
   },
   {
     "id": "paint-tube",
-    "hosts": {
-      "paint": {
-        "ok": true,
-        "issues": []
-      },
-      "image": {
-        "ok": false,
-        "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          }
-        ]
-      },
-      "canvas": {
-        "ok": false,
-        "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          }
-        ]
-      },
-      "vector": {
-        "ok": false,
-        "issues": [
-          {
-            "facet": "behaviour.surface",
-            "severity": "error"
-          }
-        ]
-      }
-    }
-  },
-  {
-    "id": "palette-knife",
     "hosts": {
       "paint": {
         "ok": true,

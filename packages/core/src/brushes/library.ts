@@ -11,11 +11,12 @@
 // Type-only: the library works with any adapter from `@pixerate/editor/persistence` without
 // bundling the persistence module into this entry.
 import type { StorageAdapter } from '../persistence/storage.js';
-import type { PaintBrushInput } from '../paint-editor/brushes';
+import type { PaintBrushInput, PaintFamily } from '../paint-editor/brushes';
 import { BRUSH_ID } from '../paint-editor/brushes';
 import { migrateBrushV1 } from './migrate';
 import { normalizeBrushSpec } from './normalize';
 import { checkBrush, type BrushHostProfile } from './profiles';
+import { resolveFamily } from './resolve';
 import { BRUSH_PRESETS } from './presets';
 import { brushSourceIdFromName, brushSourceIds, BrushSourceError, makeBrushSource, MAX_BRUSH_SOURCES, readBrushSource, type BrushSource, type BrushSourceInput } from './sources';
 import type { Brush, BrushKind, BrushMedium, BrushTool } from './types';
@@ -53,6 +54,8 @@ export interface BrushFilter {
   medium?: BrushMedium;
   variety?: string;
   tool?: BrushTool;
+  /** Marks of this family (`resolveFamily`). */
+  family?: PaintFamily;
   /** Has this tag. */
   tag?: string;
   /** Words in the id, name, description, variety or tags (case-insensitive; every word must match). */
@@ -200,6 +203,7 @@ function matches(entry: BrushLibraryEntry, f: BrushFilter): boolean {
   if (f.medium && b.medium !== f.medium) return false;
   if (f.variety && b.variety !== f.variety) return false;
   if (f.tool && b.tool !== f.tool) return false;
+  if (f.family && resolveFamily(b) !== f.family) return false;
   if (f.tag && !(b.tags ?? []).includes(f.tag)) return false;
   if (f.text) {
     const text = words([b.id, b.name, b.description ?? '', b.variety ?? '', b.medium ?? '', b.tool ?? '', ...(b.tags ?? [])].join(' '));

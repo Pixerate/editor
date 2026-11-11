@@ -139,8 +139,8 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   const brush: Brush = { id: raw.id, name, ...out, kind, ...(tool ? { tool } : {}), tip: out.tip ?? { shape: 'round' } } as Brush;
   // Keep the key order of a hand-written brush: identity, what it is, then the facets.
   const ordered = (): Brush => {
-    const { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, culture, colour } = brush;
-    const all = { id, name: n, description, tags, kind: k, medium, variety, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, culture, colour };
+    const { id, name: n, description, tags, kind: k, medium, variety, family, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, culture, colour } = brush;
+    const all = { id, name: n, description, tags, kind: k, medium, variety, family, tool: t, tip, marks, dynamics, behaviour, light, fluorescence, thermochromic, iridescence, ghost, mutation, ferro, motion, livePatterns, culture, colour };
     return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as unknown as Brush;
   };
 
@@ -198,6 +198,10 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
     if (brush.marks) {
       drop('marks', 'tools lay no marks');
       delete brush.marks;
+    }
+    if (brush.family) {
+      drop('family', 'tools lay no paint, so they have no family');
+      delete brush.family;
     }
     if (brush.ferro) {
       drop('ferro', 'tools lay no ferrofluid');
@@ -287,11 +291,11 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       drop('behaviour.wet', 'it needs surface wet or a wet tool');
       delete b.wet;
     }
-    if (b.thick && b.surface !== 'thick') {
-      drop('behaviour.thick', 'it needs surface thick');
+    if (b.thick && b.surface !== 'thick' && !(kind === 'tool' && brush.tool === 'knife')) {
+      drop('behaviour.thick', 'it needs surface thick (or the knife tool)');
       delete b.thick;
     }
-    if (b.strength !== undefined && !(kind === 'tool' && brush.tool !== 'eraser')) {
+    if (b.strength !== undefined && !(kind === 'tool' && brush.tool !== 'eraser' && brush.tool !== 'knife')) {
       drop('behaviour.strength', 'only the blender, smudge and wet tools have a strength');
       delete b.strength;
     }

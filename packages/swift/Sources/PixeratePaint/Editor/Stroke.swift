@@ -643,7 +643,8 @@ func mixerLoadForStroke(_ brush: PaintBrush, _ current: MixerLoad, _ color: [Dou
  */
 func brushLoadForStroke(_ brush: PaintBrush, _ current: MixerLoad, _ color: [Double]) -> MixerLoad {
     if brush.engine == "mixer" { return mixerLoadForStroke(brush, current, color) }
-    if brush.engine == "impasto" { return MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) }
+    // The palette knife carries no paint.
+    if brush.engine == "impasto" { return brush.loadsColor ? MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) : EMPTY_MIXER_LOAD }
     if brush.engine == "wet" { return (brush.wet.tool == "paint" || (brush.wet.tool == "vortex" && brushVortex(brush).ink > 0)) ? MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) : EMPTY_MIXER_LOAD }
     if usesPaintExchange(brush) { return MixerLoad(reservoir: color, amount: 1, pickup: brush.behavior.dirty ? current.pickup : nil) }
     return EMPTY_MIXER_LOAD

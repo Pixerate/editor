@@ -1,0 +1,692 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "sticker-large-sizes",
+  "description": "Large sticker brushes trace the path: spacing and scatter stop growing past the sticker reach, and the stroke always ends with a sticker at its end.",
+  "setup": {
+    "width": 480,
+    "height": 320
+  },
+  "steps": [
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Big stickers"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Big stickers",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "sticker-stars",
+        "tip": {
+          "size": 200,
+          "stamps": [
+            "editor:star"
+          ]
+        },
+        "marks": {
+          "kind": "objects",
+          "density": 0.35,
+          "scatter": 0.6,
+          "sizeJitter": 0,
+          "rotationJitter": 0,
+          "colourJitter": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.5,
+              "smoothing": 0.2
+            },
+            "family": "stickers",
+            "id": "sticker-stars",
+            "kind": "mark",
+            "marks": {
+              "colourJitter": 0,
+              "density": 0.35,
+              "kind": "objects",
+              "rotationJitter": 0,
+              "scatter": 0.6,
+              "sizeJitter": 0
+            },
+            "name": "Star stickers",
+            "tip": {
+              "shape": "stamp",
+              "size": 200,
+              "stamps": [
+                "editor:star"
+              ]
+            },
+            "variety": "stars"
+          },
+          "engine": "sticker",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 40,
+            "y": 170,
+            "pressure": 1,
+            "t": 0
+          },
+          {
+            "x": 56.7,
+            "y": 148.5,
+            "pressure": 1,
+            "t": 30
+          },
+          {
+            "x": 73.3,
+            "y": 127.9,
+            "pressure": 1,
+            "t": 60
+          },
+          {
+            "x": 90,
+            "y": 108.9,
+            "pressure": 1,
+            "t": 90
+          },
+          {
+            "x": 106.7,
+            "y": 92.2,
+            "pressure": 1,
+            "t": 120
+          },
+          {
+            "x": 123.3,
+            "y": 78.5,
+            "pressure": 1,
+            "t": 150
+          },
+          {
+            "x": 140,
+            "y": 68.4,
+            "pressure": 1,
+            "t": 180
+          },
+          {
+            "x": 156.7,
+            "y": 62.1,
+            "pressure": 1,
+            "t": 210
+          },
+          {
+            "x": 173.3,
+            "y": 60,
+            "pressure": 1,
+            "t": 240
+          },
+          {
+            "x": 190,
+            "y": 62.1,
+            "pressure": 1,
+            "t": 270
+          },
+          {
+            "x": 206.7,
+            "y": 68.4,
+            "pressure": 1,
+            "t": 300
+          },
+          {
+            "x": 223.3,
+            "y": 78.5,
+            "pressure": 1,
+            "t": 330
+          },
+          {
+            "x": 240,
+            "y": 92.2,
+            "pressure": 1,
+            "t": 360
+          },
+          {
+            "x": 256.7,
+            "y": 108.9,
+            "pressure": 1,
+            "t": 390
+          },
+          {
+            "x": 273.3,
+            "y": 127.9,
+            "pressure": 1,
+            "t": 420
+          },
+          {
+            "x": 290,
+            "y": 148.5,
+            "pressure": 1,
+            "t": 450
+          },
+          {
+            "x": 306.7,
+            "y": 170,
+            "pressure": 1,
+            "t": 480
+          },
+          {
+            "x": 323.3,
+            "y": 191.5,
+            "pressure": 1,
+            "t": 510
+          },
+          {
+            "x": 340,
+            "y": 212.1,
+            "pressure": 1,
+            "t": 540
+          },
+          {
+            "x": 356.7,
+            "y": 231.1,
+            "pressure": 1,
+            "t": 570
+          },
+          {
+            "x": 373.3,
+            "y": 247.8,
+            "pressure": 1,
+            "t": 600
+          },
+          {
+            "x": 390,
+            "y": 261.5,
+            "pressure": 1,
+            "t": 630
+          },
+          {
+            "x": 406.7,
+            "y": 271.6,
+            "pressure": 1,
+            "t": 660
+          },
+          {
+            "x": 423.3,
+            "y": 277.9,
+            "pressure": 1,
+            "t": 690
+          },
+          {
+            "x": 440,
+            "y": 280,
+            "pressure": 1,
+            "t": 720
+          }
+        ],
+        "color": "#e11d48",
+        "seed": 21
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 448,
+            "width": 610,
+            "x": -71,
+            "y": -48
+          },
+          "dabs": 13,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "list_stickers",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "stickers": [
+            {
+              "color": "#e11d48",
+              "id": "st1",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 147437511,
+              "size": 200,
+              "stamp": "star",
+              "x": 30.15,
+              "y": 171.09
+            },
+            {
+              "color": "#e11d48",
+              "id": "st2",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 852791122,
+              "size": 200,
+              "stamp": "star",
+              "x": 60.52,
+              "y": 155.96
+            },
+            {
+              "color": "#e11d48",
+              "id": "st3",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 86207222,
+              "size": 200,
+              "stamp": "star",
+              "x": 65.6,
+              "y": 96.9
+            },
+            {
+              "color": "#e11d48",
+              "id": "st4",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 400336551,
+              "size": 200,
+              "stamp": "star",
+              "x": 139.07,
+              "y": 74.72
+            },
+            {
+              "color": "#e11d48",
+              "id": "st5",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 134646897,
+              "size": 200,
+              "stamp": "star",
+              "x": 174.82,
+              "y": 53.78
+            },
+            {
+              "color": "#e11d48",
+              "id": "st6",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 885918047,
+              "size": 200,
+              "stamp": "star",
+              "x": 217.42,
+              "y": 79.11
+            },
+            {
+              "color": "#e11d48",
+              "id": "st7",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 965602861,
+              "size": 200,
+              "stamp": "star",
+              "x": 256.65,
+              "y": 109.16
+            },
+            {
+              "color": "#e11d48",
+              "id": "st8",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 473612837,
+              "size": 200,
+              "stamp": "star",
+              "x": 273.86,
+              "y": 121.45
+            },
+            {
+              "color": "#e11d48",
+              "id": "st9",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 697932831,
+              "size": 200,
+              "stamp": "star",
+              "x": 285.2,
+              "y": 188.33
+            },
+            {
+              "color": "#e11d48",
+              "id": "st10",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 823952358,
+              "size": 200,
+              "stamp": "star",
+              "x": 362.05,
+              "y": 201.81
+            },
+            {
+              "color": "#e11d48",
+              "id": "st11",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 403309777,
+              "size": 200,
+              "stamp": "star",
+              "x": 368.39,
+              "y": 246.48
+            },
+            {
+              "color": "#e11d48",
+              "id": "st12",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 148020297,
+              "size": 200,
+              "stamp": "star",
+              "x": 419.72,
+              "y": 298.9
+            },
+            {
+              "color": "#e11d48",
+              "id": "st13",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 626927558,
+              "size": 200,
+              "stamp": "star",
+              "x": 437.99,
+              "y": 258.78
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Small stickers"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Small stickers",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "tip": {
+          "size": 24
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.5,
+              "smoothing": 0.2
+            },
+            "family": "stickers",
+            "id": "sticker-stars",
+            "kind": "mark",
+            "marks": {
+              "colourJitter": 0,
+              "density": 0.35,
+              "kind": "objects",
+              "rotationJitter": 0,
+              "scatter": 0.6,
+              "sizeJitter": 0
+            },
+            "name": "Star stickers",
+            "tip": {
+              "shape": "stamp",
+              "size": 24,
+              "stamps": [
+                "editor:star"
+              ]
+            },
+            "variety": "stars"
+          },
+          "engine": "sticker",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 40,
+            "y": 290,
+            "pressure": 1
+          },
+          {
+            "x": 150,
+            "y": 296,
+            "pressure": 1
+          },
+          {
+            "x": 243,
+            "y": 288,
+            "pressure": 1
+          }
+        ],
+        "color": "#2563eb",
+        "seed": 22
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 39,
+            "width": 234,
+            "x": 27,
+            "y": 271
+          },
+          "dabs": 13,
+          "layerId": "@2",
+          "strokeId": "s2"
+        }
+      }
+    },
+    {
+      "tool": "list_stickers",
+      "arguments": {},
+      "reload": true,
+      "expect": {
+        "result": {
+          "layerId": "@2",
+          "stickers": [
+            {
+              "color": "#2563eb",
+              "id": "st14",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 430578031,
+              "size": 24,
+              "stamp": "star",
+              "x": 40.86,
+              "y": 289.28
+            },
+            {
+              "color": "#2563eb",
+              "id": "st15",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 905057422,
+              "size": 24,
+              "stamp": "star",
+              "x": 62.87,
+              "y": 291.46
+            },
+            {
+              "color": "#2563eb",
+              "id": "st16",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 676420701,
+              "size": 24,
+              "stamp": "star",
+              "x": 73.39,
+              "y": 295.92
+            },
+            {
+              "color": "#2563eb",
+              "id": "st17",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 941856389,
+              "size": 24,
+              "stamp": "star",
+              "x": 93.13,
+              "y": 290.45
+            },
+            {
+              "color": "#2563eb",
+              "id": "st18",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 734398174,
+              "size": 24,
+              "stamp": "star",
+              "x": 110.32,
+              "y": 294.3
+            },
+            {
+              "color": "#2563eb",
+              "id": "st19",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 181394041,
+              "size": 24,
+              "stamp": "star",
+              "x": 125.4,
+              "y": 295.07
+            },
+            {
+              "color": "#2563eb",
+              "id": "st20",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 308684180,
+              "size": 24,
+              "stamp": "star",
+              "x": 133.28,
+              "y": 290.77
+            },
+            {
+              "color": "#2563eb",
+              "id": "st21",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 168772244,
+              "size": 24,
+              "stamp": "star",
+              "x": 166.78,
+              "y": 284.15
+            },
+            {
+              "color": "#2563eb",
+              "id": "st22",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 832668073,
+              "size": 24,
+              "stamp": "star",
+              "x": 163.48,
+              "y": 296.12
+            },
+            {
+              "color": "#2563eb",
+              "id": "st23",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 231750299,
+              "size": 24,
+              "stamp": "star",
+              "x": 198.75,
+              "y": 292.46
+            },
+            {
+              "color": "#2563eb",
+              "id": "st24",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 357757978,
+              "size": 24,
+              "stamp": "star",
+              "x": 201.28,
+              "y": 292.93
+            },
+            {
+              "color": "#2563eb",
+              "id": "st25",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 467316616,
+              "size": 24,
+              "stamp": "star",
+              "x": 217.13,
+              "y": 290.14
+            },
+            {
+              "color": "#2563eb",
+              "id": "st26",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 732213813,
+              "size": 24,
+              "stamp": "star",
+              "x": 247.98,
+              "y": 288.22
+            }
+          ]
+        },
+        "loaded": []
+      }
+    }
+  ]
+}

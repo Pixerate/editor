@@ -9,6 +9,7 @@ import {
   resolveBrush,
   resolveCategory,
   resolveEngine,
+  resolveFamily,
   type Brush,
 } from '../src/brushes';
 import { BUILTIN_BRUSHES, normalizePaintBrush, type PaintBrush, type PaintBrushInput } from '../src/paint-editor/brushes';
@@ -84,7 +85,7 @@ describe('resolveEngine', () => {
 describe('resolveBrush', () => {
   it('fills a bare brush with the plain round dab brush', () => {
     const r = resolveBrush({ id: 'bare', name: 'Bare', kind: 'mark', tip: { shape: 'round' } });
-    expect(r).toEqual({ ...normalizePaintBrush({ id: 'bare', name: 'Bare' }), category: 'custom' });
+    expect(r).toEqual({ ...normalizePaintBrush({ id: 'bare', name: 'Bare' }), category: 'custom', family: 'wet' });
   });
 
   it('maps each wet tool to its wet engine tool and keeps blenders from loading colour', () => {
@@ -145,13 +146,15 @@ describe('migrateBrushV1', () => {
       const m = migrateBrushV1(old);
       const preset = BRUSH_PRESETS.find((b) => b.id === old.id)!;
       const strip = (b: Brush) => {
-        const { medium: _m, variety: _v, light, colour, ...rest } = json(b);
+        // The family is left out where the migrated facets already give it (checked below).
+        const { medium: _m, variety: _v, family: _f, light, colour, ...rest } = json(b);
         const l = light ? (({ spill: _s, ...x }) => x)(light) : undefined;
         // Only a gradient default is paint; solid and light / dark defaults are hints the engine form doesn't carry.
         const c = colour?.default && typeof colour.default === 'object' && 'type' in colour.default && colour.default.type === 'gradient' ? { default: colour.default } : undefined;
         return { ...rest, ...(l && Object.keys(l).length ? { light: l } : {}), ...(c ? { colour: c } : {}) };
       };
       expect(strip(m), old.id).toEqual(strip(preset));
+      expect(resolveFamily(m), old.id).toBe(resolveFamily(preset));
     }
   });
 
@@ -178,14 +181,15 @@ describe('migrateBrushV1', () => {
     const v1 = normalizePaintBrush(raw);
     const migrated = migrateBrushV1(raw);
     expect(validateJsonSchema(migrated, BRUSH_JSON_SCHEMA)).toEqual([]);
-    expect(json(resolveBrush(migrated))).toEqual(json(v1));
+    // A v1 brush has no family; resolving the migrated brush derives one.
+    expect(json(resolveBrush(migrated))).toEqual(json({ ...v1, family: resolveFamily(migrated) }));
   });
 
   it('drops settings of engine blocks the engine never reads, and derives the category again', () => {
     const raw: PaintBrushInput = { id: 'odd', name: 'Odd', category: 'watercolor', engine: 'dab', mixer: { wet: 0.9 }, impasto: { thickness: 0.1 }, wet: { water: 1 }, particle: { count: 3 } };
     const v1: PaintBrush = normalizePaintBrush(raw);
     const r = resolveBrush(migrateBrushV1(raw));
-    const { mixer: _m, impasto: _i, wet: _w, particle: _p, category, ...engineRead } = json(r);
+    const { mixer: _m, impasto: _i, wet: _w, particle: _p, category, family: _f, ...engineRead } = json(r);
     const { mixer: _m1, impasto: _i1, wet: _w1, particle: _p1, category: _c, ...v1Read } = json(v1);
     expect(engineRead).toEqual(v1Read);
     expect(category).toBe('custom');

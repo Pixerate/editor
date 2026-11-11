@@ -95,6 +95,7 @@
               "minSize": 0.5,
               "smoothing": 0.2
             },
+            "family": "stickers",
             "id": "sticker-stars",
             "kind": "mark",
             "marks": {
@@ -169,11 +170,11 @@
         "result": {
           "bounds": {
             "height": 20,
-            "width": 94,
+            "width": 100,
             "x": -2,
             "y": 6
           },
-          "dabs": 12,
+          "dabs": 13,
           "layerId": "@1",
           "strokeId": "s1"
         },
@@ -181,7 +182,7 @@
           "file": "png/animated-stickers.4.png",
           "width": 96,
           "height": 48,
-          "sha256": "59585a0b7891cfd88ab14b19dfd72025e0a4cafbc63f0b1bcdee10784943278d",
+          "sha256": "c0f0de78ad7fb5a4da0211aa3efd0fbd9dfc28ec55232918d3fd5723f54e5dcc",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -334,6 +335,17 @@
               "size": 16.2,
               "x": 82.25,
               "y": 16
+            },
+            {
+              "color": "#14b8a6",
+              "id": "st13",
+              "opacity": 1,
+              "ref": "fake:weather-wind",
+              "rotation": 0,
+              "seed": 213399654,
+              "size": 16.2,
+              "x": 88,
+              "y": 16
             }
           ]
         }
@@ -376,6 +388,7 @@
               "minSize": 0.5,
               "smoothing": 0.2
             },
+            "family": "stickers",
             "id": "sticker-stars",
             "kind": "mark",
             "marks": {
@@ -445,11 +458,11 @@
         "result": {
           "bounds": {
             "height": 20,
-            "width": 94,
+            "width": 100,
             "x": -2,
             "y": 14
           },
-          "dabs": 12,
+          "dabs": 13,
           "layerId": "@2",
           "strokeId": "s2"
         },
@@ -457,7 +470,7 @@
           "file": "png/animated-stickers.8.png",
           "width": 96,
           "height": 48,
-          "sha256": "d4d117fe0fb8cd1b22536fd4c7b441f1ad4a24f1d79ec83a82f5e2a4c1958cc6",
+          "sha256": "68e9410522c3117550badb6cbf9e4a74c9e3fda04aeaad75ae25f6d79fe59c87",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -472,18 +485,6 @@
           "stickers": [
             {
               "color": "#f59e0b",
-              "frame": 2,
-              "id": "st13",
-              "opacity": 1,
-              "ref": "fake:weather-wind",
-              "rotation": 0,
-              "seed": 986643711,
-              "size": 16.2,
-              "x": 8,
-              "y": 24
-            },
-            {
-              "color": "#f59e0b",
               "frame": 3,
               "id": "st14",
               "opacity": 1,
@@ -491,7 +492,7 @@
               "rotation": 0,
               "seed": 658656963,
               "size": 16.2,
-              "x": 14.75,
+              "x": 8,
               "y": 24
             },
             {
@@ -503,7 +504,7 @@
               "rotation": 0,
               "seed": 924624607,
               "size": 16.2,
-              "x": 21.5,
+              "x": 14.75,
               "y": 24
             },
             {
@@ -515,7 +516,7 @@
               "rotation": 0,
               "seed": 852305351,
               "size": 16.2,
-              "x": 28.25,
+              "x": 21.5,
               "y": 24
             },
             {
@@ -526,7 +527,7 @@
               "rotation": 0,
               "seed": 325190391,
               "size": 16.2,
-              "x": 35,
+              "x": 28.25,
               "y": 24
             },
             {
@@ -538,7 +539,7 @@
               "rotation": 0,
               "seed": 955405485,
               "size": 16.2,
-              "x": 41.75,
+              "x": 35,
               "y": 24
             },
             {
@@ -550,7 +551,7 @@
               "rotation": 0,
               "seed": 644678257,
               "size": 16.2,
-              "x": 48.5,
+              "x": 41.75,
               "y": 24
             },
             {
@@ -562,7 +563,7 @@
               "rotation": 0,
               "seed": 928611033,
               "size": 16.2,
-              "x": 55.25,
+              "x": 48.5,
               "y": 24
             },
             {
@@ -574,7 +575,7 @@
               "rotation": 0,
               "seed": 797462315,
               "size": 16.2,
-              "x": 62,
+              "x": 55.25,
               "y": 24
             },
             {
@@ -585,7 +586,7 @@
               "rotation": 0,
               "seed": 594874537,
               "size": 16.2,
-              "x": 68.75,
+              "x": 62,
               "y": 24
             },
             {
@@ -597,7 +598,7 @@
               "rotation": 0,
               "seed": 539820030,
               "size": 16.2,
-              "x": 75.5,
+              "x": 68.75,
               "y": 24
             },
             {
@@ -609,7 +610,30 @@
               "rotation": 0,
               "seed": 486771967,
               "size": 16.2,
+              "x": 75.5,
+              "y": 24
+            },
+            {
+              "color": "#f59e0b",
+              "id": "st25",
+              "opacity": 1,
+              "ref": "fake:weather-wind",
+              "rotation": 0,
+              "seed": 955324430,
+              "size": 16.2,
               "x": 82.25,
+              "y": 24
+            },
+            {
+              "color": "#f59e0b",
+              "frame": 2,
+              "id": "st26",
+              "opacity": 1,
+              "ref": "fake:weather-wind",
+              "rotation": 0,
+              "seed": 679145579,
+              "size": 16.2,
+              "x": 88,
               "y": 24
             }
           ]
@@ -668,22 +692,22 @@
             {
               "color": "#0ea5e9",
               "frame": 2,
-              "id": "st25",
+              "id": "st27",
               "opacity": 1,
               "ref": "fake:weather-wind",
               "rotation": 0,
-              "seed": 1956676679,
+              "seed": 635750599,
               "size": 40,
               "x": 30,
               "y": 24
             },
             {
               "color": "#0ea5e9",
-              "id": "st26",
+              "id": "st28",
               "opacity": 1,
               "ref": "fake:weather-wind",
               "rotation": 0,
-              "seed": 2098028833,
+              "seed": 1668979795,
               "size": 30,
               "x": 70,
               "y": 24
@@ -694,7 +718,7 @@
           "file": "png/animated-stickers.11.png",
           "width": 96,
           "height": 48,
-          "sha256": "4b7a1377c99d3d56061de4f446e1b0ed1a65e496b0c406cda537043f76c2f722",
+          "sha256": "fd4016b584f8f3c7b58709a55dfe5ead8c1f929964850b293b29e7f6fe514d0c",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -710,24 +734,19 @@
       "document": true,
       "expect": {
         "result": {
-          "color": "#0ea5e9",
-          "frame": 3,
-          "id": "st25",
-          "opacity": 1,
-          "ref": "fake:weather-wind",
-          "rotation": 0,
-          "seed": 1956676679,
-          "size": 40,
-          "x": 30,
-          "y": 24
+          "error": {
+            "code": "tool_failed",
+            "message": "Layer \"Placed\" has no sticker \"st25\". Call list_stickers for the ids."
+          }
         },
+        "isError": true,
         "document": {
           "document": {
             "activeLayerId": "@3",
             "assets": {
               "@1": "<binary>",
               "@2": "<binary>",
-              "@3": "pixerate-asset:iu-2et38nszddq"
+              "@3": "pixerate-asset:ju-tf518z0uec"
             },
             "dpi": 300,
             "format": "pixerate-paint",
@@ -819,54 +838,22 @@
                     {
                       "color": "#0ea5e9",
                       "frame": 2,
-                      "id": "st25",
+                      "id": "st27",
                       "opacity": 1,
                       "ref": "fake:weather-wind",
                       "rotation": 0,
-                      "seed": 1956676679,
+                      "seed": 635750599,
                       "size": 40,
                       "x": 30,
                       "y": 24
                     },
                     {
                       "color": "#0ea5e9",
-                      "id": "st26",
+                      "id": "st28",
                       "opacity": 1,
                       "ref": "fake:weather-wind",
                       "rotation": 0,
-                      "seed": 2098028833,
-                      "size": 30,
-                      "x": 70,
-                      "y": 24
-                    }
-                  ]
-                },
-                "kind": "stickers",
-                "layerId": "@3"
-              },
-              {
-                "at": 2,
-                "data": {
-                  "stickers": [
-                    {
-                      "color": "#0ea5e9",
-                      "frame": 3,
-                      "id": "st25",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 1956676679,
-                      "size": 40,
-                      "x": 30,
-                      "y": 24
-                    },
-                    {
-                      "color": "#0ea5e9",
-                      "id": "st26",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 2098028833,
+                      "seed": 1668979795,
                       "size": 30,
                       "x": 70,
                       "y": 24
@@ -1042,21 +1029,20 @@
                   "size": 16.2,
                   "x": 82.25,
                   "y": 16
-                }
-              ],
-              "@2": [
+                },
                 {
-                  "color": "#f59e0b",
-                  "frame": 2,
+                  "color": "#14b8a6",
                   "id": "st13",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 986643711,
+                  "seed": 213399654,
                   "size": 16.2,
-                  "x": 8,
-                  "y": 24
-                },
+                  "x": 88,
+                  "y": 16
+                }
+              ],
+              "@2": [
                 {
                   "color": "#f59e0b",
                   "frame": 3,
@@ -1066,7 +1052,7 @@
                   "rotation": 0,
                   "seed": 658656963,
                   "size": 16.2,
-                  "x": 14.75,
+                  "x": 8,
                   "y": 24
                 },
                 {
@@ -1078,7 +1064,7 @@
                   "rotation": 0,
                   "seed": 924624607,
                   "size": 16.2,
-                  "x": 21.5,
+                  "x": 14.75,
                   "y": 24
                 },
                 {
@@ -1090,7 +1076,7 @@
                   "rotation": 0,
                   "seed": 852305351,
                   "size": 16.2,
-                  "x": 28.25,
+                  "x": 21.5,
                   "y": 24
                 },
                 {
@@ -1101,7 +1087,7 @@
                   "rotation": 0,
                   "seed": 325190391,
                   "size": 16.2,
-                  "x": 35,
+                  "x": 28.25,
                   "y": 24
                 },
                 {
@@ -1113,7 +1099,7 @@
                   "rotation": 0,
                   "seed": 955405485,
                   "size": 16.2,
-                  "x": 41.75,
+                  "x": 35,
                   "y": 24
                 },
                 {
@@ -1125,7 +1111,7 @@
                   "rotation": 0,
                   "seed": 644678257,
                   "size": 16.2,
-                  "x": 48.5,
+                  "x": 41.75,
                   "y": 24
                 },
                 {
@@ -1137,7 +1123,7 @@
                   "rotation": 0,
                   "seed": 928611033,
                   "size": 16.2,
-                  "x": 55.25,
+                  "x": 48.5,
                   "y": 24
                 },
                 {
@@ -1149,7 +1135,7 @@
                   "rotation": 0,
                   "seed": 797462315,
                   "size": 16.2,
-                  "x": 62,
+                  "x": 55.25,
                   "y": 24
                 },
                 {
@@ -1160,7 +1146,7 @@
                   "rotation": 0,
                   "seed": 594874537,
                   "size": 16.2,
-                  "x": 68.75,
+                  "x": 62,
                   "y": 24
                 },
                 {
@@ -1172,7 +1158,7 @@
                   "rotation": 0,
                   "seed": 539820030,
                   "size": 16.2,
-                  "x": 75.5,
+                  "x": 68.75,
                   "y": 24
                 },
                 {
@@ -1184,30 +1170,53 @@
                   "rotation": 0,
                   "seed": 486771967,
                   "size": 16.2,
+                  "x": 75.5,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "id": "st25",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 955324430,
+                  "size": 16.2,
                   "x": 82.25,
+                  "y": 24
+                },
+                {
+                  "color": "#f59e0b",
+                  "frame": 2,
+                  "id": "st26",
+                  "opacity": 1,
+                  "ref": "fake:weather-wind",
+                  "rotation": 0,
+                  "seed": 679145579,
+                  "size": 16.2,
+                  "x": 88,
                   "y": 24
                 }
               ],
               "@3": [
                 {
                   "color": "#0ea5e9",
-                  "frame": 3,
-                  "id": "st25",
+                  "frame": 2,
+                  "id": "st27",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 1956676679,
+                  "seed": 635750599,
                   "size": 40,
                   "x": 30,
                   "y": 24
                 },
                 {
                   "color": "#0ea5e9",
-                  "id": "st26",
+                  "id": "st28",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 2098028833,
+                  "seed": 1668979795,
                   "size": 30,
                   "x": 70,
                   "y": 24
@@ -1400,7 +1409,7 @@
           "file": "png/animated-stickers.12.png",
           "width": 96,
           "height": 48,
-          "sha256": "91a3b3ec90bf7ae94ddd994e073acffaf4c453e872325f60c5306e760a83689c",
+          "sha256": "fd4016b584f8f3c7b58709a55dfe5ead8c1f929964850b293b29e7f6fe514d0c",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -1416,7 +1425,7 @@
         "result": {
           "error": {
             "code": "tool_failed",
-            "message": "\"fake:weather-wind\" has 4 frames, so frame is 0..3; got 4."
+            "message": "Layer \"Placed\" has no sticker \"st25\". Call list_stickers for the ids."
           }
         },
         "isError": true
@@ -1452,17 +1461,12 @@
       },
       "expect": {
         "result": {
-          "color": "#0ea5e9",
-          "id": "st25",
-          "opacity": 1,
-          "ref": "editor:heart",
-          "rotation": 0,
-          "seed": 1956676679,
-          "size": 40,
-          "stamp": "heart",
-          "x": 30,
-          "y": 24
-        }
+          "error": {
+            "code": "tool_failed",
+            "message": "Layer \"Placed\" has no sticker \"st25\". Call list_stickers for the ids."
+          }
+        },
+        "isError": true
       }
     },
     {
@@ -1470,9 +1474,9 @@
       "arguments": {},
       "expect": {
         "result": {
-          "nextRedo": "Edit sticker",
-          "nextUndo": "Edit sticker",
-          "undone": "Edit sticker"
+          "nextRedo": "Add stickers",
+          "nextUndo": "Add layer",
+          "undone": "Add stickers"
         }
       }
     },
@@ -1482,17 +1486,16 @@
       "document": true,
       "expect": {
         "result": {
-          "nextRedo": "Edit sticker",
-          "nextUndo": "Add stickers",
-          "undone": "Edit sticker"
+          "nextRedo": "Add layer",
+          "nextUndo": "Star stickers stroke",
+          "undone": "Add layer"
         },
         "document": {
           "document": {
-            "activeLayerId": "@3",
+            "activeLayerId": "@2",
             "assets": {
               "@1": "<binary>",
-              "@2": "<binary>",
-              "@3": "pixerate-asset:ju-tf518z0uec"
+              "@2": "<binary>"
             },
             "dpi": 300,
             "format": "pixerate-paint",
@@ -1559,55 +1562,6 @@
                 "visible": true,
                 "x": 1,
                 "y": 17
-              },
-              {
-                "asset": "@3",
-                "blend": "normal",
-                "id": "@3",
-                "name": "Placed",
-                "offset": {
-                  "x": 0,
-                  "y": 0
-                },
-                "opacity": 1,
-                "type": "pixel",
-                "visible": true,
-                "x": 12,
-                "y": 6
-              }
-            ],
-            "paintEvents": [
-              {
-                "at": 2,
-                "data": {
-                  "stickers": [
-                    {
-                      "color": "#0ea5e9",
-                      "frame": 2,
-                      "id": "st25",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 1956676679,
-                      "size": 40,
-                      "x": 30,
-                      "y": 24
-                    },
-                    {
-                      "color": "#0ea5e9",
-                      "id": "st26",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 2098028833,
-                      "size": 30,
-                      "x": 70,
-                      "y": 24
-                    }
-                  ]
-                },
-                "kind": "stickers",
-                "layerId": "@3"
               }
             ],
             "paper": {
@@ -1775,21 +1729,20 @@
                   "size": 16.2,
                   "x": 82.25,
                   "y": 16
-                }
-              ],
-              "@2": [
+                },
                 {
-                  "color": "#f59e0b",
-                  "frame": 2,
+                  "color": "#14b8a6",
                   "id": "st13",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 986643711,
+                  "seed": 213399654,
                   "size": 16.2,
-                  "x": 8,
-                  "y": 24
-                },
+                  "x": 88,
+                  "y": 16
+                }
+              ],
+              "@2": [
                 {
                   "color": "#f59e0b",
                   "frame": 3,
@@ -1799,7 +1752,7 @@
                   "rotation": 0,
                   "seed": 658656963,
                   "size": 16.2,
-                  "x": 14.75,
+                  "x": 8,
                   "y": 24
                 },
                 {
@@ -1811,7 +1764,7 @@
                   "rotation": 0,
                   "seed": 924624607,
                   "size": 16.2,
-                  "x": 21.5,
+                  "x": 14.75,
                   "y": 24
                 },
                 {
@@ -1823,7 +1776,7 @@
                   "rotation": 0,
                   "seed": 852305351,
                   "size": 16.2,
-                  "x": 28.25,
+                  "x": 21.5,
                   "y": 24
                 },
                 {
@@ -1834,7 +1787,7 @@
                   "rotation": 0,
                   "seed": 325190391,
                   "size": 16.2,
-                  "x": 35,
+                  "x": 28.25,
                   "y": 24
                 },
                 {
@@ -1846,7 +1799,7 @@
                   "rotation": 0,
                   "seed": 955405485,
                   "size": 16.2,
-                  "x": 41.75,
+                  "x": 35,
                   "y": 24
                 },
                 {
@@ -1858,7 +1811,7 @@
                   "rotation": 0,
                   "seed": 644678257,
                   "size": 16.2,
-                  "x": 48.5,
+                  "x": 41.75,
                   "y": 24
                 },
                 {
@@ -1870,7 +1823,7 @@
                   "rotation": 0,
                   "seed": 928611033,
                   "size": 16.2,
-                  "x": 55.25,
+                  "x": 48.5,
                   "y": 24
                 },
                 {
@@ -1882,7 +1835,7 @@
                   "rotation": 0,
                   "seed": 797462315,
                   "size": 16.2,
-                  "x": 62,
+                  "x": 55.25,
                   "y": 24
                 },
                 {
@@ -1893,7 +1846,7 @@
                   "rotation": 0,
                   "seed": 594874537,
                   "size": 16.2,
-                  "x": 68.75,
+                  "x": 62,
                   "y": 24
                 },
                 {
@@ -1905,7 +1858,7 @@
                   "rotation": 0,
                   "seed": 539820030,
                   "size": 16.2,
-                  "x": 75.5,
+                  "x": 68.75,
                   "y": 24
                 },
                 {
@@ -1917,32 +1870,30 @@
                   "rotation": 0,
                   "seed": 486771967,
                   "size": 16.2,
-                  "x": 82.25,
+                  "x": 75.5,
                   "y": 24
-                }
-              ],
-              "@3": [
+                },
                 {
-                  "color": "#0ea5e9",
-                  "frame": 2,
+                  "color": "#f59e0b",
                   "id": "st25",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 1956676679,
-                  "size": 40,
-                  "x": 30,
+                  "seed": 955324430,
+                  "size": 16.2,
+                  "x": 82.25,
                   "y": 24
                 },
                 {
-                  "color": "#0ea5e9",
+                  "color": "#f59e0b",
+                  "frame": 2,
                   "id": "st26",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 2098028833,
-                  "size": 30,
-                  "x": 70,
+                  "seed": 679145579,
+                  "size": 16.2,
+                  "x": 88,
                   "y": 24
                 }
               ]
@@ -2137,15 +2088,15 @@
       "pixels": true,
       "expect": {
         "result": {
-          "nextRedo": "Edit sticker",
-          "nextUndo": "Edit sticker",
-          "redone": "Edit sticker"
+          "nextRedo": "Add stickers",
+          "nextUndo": "Add layer",
+          "redone": "Add layer"
         },
         "pixels": {
           "file": "png/animated-stickers.18.png",
           "width": 96,
           "height": 48,
-          "sha256": "91a3b3ec90bf7ae94ddd994e073acffaf4c453e872325f60c5306e760a83689c",
+          "sha256": "68e9410522c3117550badb6cbf9e4a74c9e3fda04aeaad75ae25f6d79fe59c87",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -2160,18 +2111,7 @@
       "expect": {
         "result": {
           "layerId": "@3",
-          "sticker": {
-            "color": "#0ea5e9",
-            "frame": 3,
-            "id": "st25",
-            "opacity": 1,
-            "ref": "fake:weather-wind",
-            "rotation": 0,
-            "seed": 1956676679,
-            "size": 40,
-            "x": 30,
-            "y": 24
-          }
+          "sticker": null
         }
       }
     },
@@ -2200,12 +2140,7 @@
             {
               "active": true,
               "blend": "normal",
-              "bounds": {
-                "height": 36,
-                "width": 72,
-                "x": 12,
-                "y": 6
-              },
+              "bounds": null,
               "clipped": false,
               "depth": 0,
               "id": "@3",
@@ -2221,7 +2156,7 @@
               "blend": "normal",
               "bounds": {
                 "height": 14,
-                "width": 89,
+                "width": 94,
                 "x": 1,
                 "y": 17
               },
@@ -2240,7 +2175,7 @@
               "blend": "normal",
               "bounds": {
                 "height": 14,
-                "width": 89,
+                "width": 94,
                 "x": 1,
                 "y": 9
               },
@@ -2276,8 +2211,7 @@
             "activeLayerId": "@3",
             "assets": {
               "@1": "<binary>",
-              "@2": "<binary>",
-              "@3": "pixerate-asset:iu-2et38nszddq"
+              "@2": "<binary>"
             },
             "dpi": 300,
             "format": "pixerate-paint",
@@ -2346,7 +2280,6 @@
                 "y": 17
               },
               {
-                "asset": "@3",
                 "blend": "normal",
                 "id": "@3",
                 "name": "Placed",
@@ -2356,75 +2289,7 @@
                 },
                 "opacity": 1,
                 "type": "pixel",
-                "visible": true,
-                "x": 12,
-                "y": 6
-              }
-            ],
-            "paintEvents": [
-              {
-                "at": 2,
-                "data": {
-                  "stickers": [
-                    {
-                      "color": "#0ea5e9",
-                      "frame": 2,
-                      "id": "st25",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 1956676679,
-                      "size": 40,
-                      "x": 30,
-                      "y": 24
-                    },
-                    {
-                      "color": "#0ea5e9",
-                      "id": "st26",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 2098028833,
-                      "size": 30,
-                      "x": 70,
-                      "y": 24
-                    }
-                  ]
-                },
-                "kind": "stickers",
-                "layerId": "@3"
-              },
-              {
-                "at": 2,
-                "data": {
-                  "stickers": [
-                    {
-                      "color": "#0ea5e9",
-                      "frame": 3,
-                      "id": "st25",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 1956676679,
-                      "size": 40,
-                      "x": 30,
-                      "y": 24
-                    },
-                    {
-                      "color": "#0ea5e9",
-                      "id": "st26",
-                      "opacity": 1,
-                      "ref": "fake:weather-wind",
-                      "rotation": 0,
-                      "seed": 2098028833,
-                      "size": 30,
-                      "x": 70,
-                      "y": 24
-                    }
-                  ]
-                },
-                "kind": "stickers",
-                "layerId": "@3"
+                "visible": true
               }
             ],
             "paper": {
@@ -2592,21 +2457,20 @@
                   "size": 16.2,
                   "x": 82.25,
                   "y": 16
-                }
-              ],
-              "@2": [
+                },
                 {
-                  "color": "#f59e0b",
-                  "frame": 2,
+                  "color": "#14b8a6",
                   "id": "st13",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 986643711,
+                  "seed": 213399654,
                   "size": 16.2,
-                  "x": 8,
-                  "y": 24
-                },
+                  "x": 88,
+                  "y": 16
+                }
+              ],
+              "@2": [
                 {
                   "color": "#f59e0b",
                   "frame": 3,
@@ -2616,7 +2480,7 @@
                   "rotation": 0,
                   "seed": 658656963,
                   "size": 16.2,
-                  "x": 14.75,
+                  "x": 8,
                   "y": 24
                 },
                 {
@@ -2628,7 +2492,7 @@
                   "rotation": 0,
                   "seed": 924624607,
                   "size": 16.2,
-                  "x": 21.5,
+                  "x": 14.75,
                   "y": 24
                 },
                 {
@@ -2640,7 +2504,7 @@
                   "rotation": 0,
                   "seed": 852305351,
                   "size": 16.2,
-                  "x": 28.25,
+                  "x": 21.5,
                   "y": 24
                 },
                 {
@@ -2651,7 +2515,7 @@
                   "rotation": 0,
                   "seed": 325190391,
                   "size": 16.2,
-                  "x": 35,
+                  "x": 28.25,
                   "y": 24
                 },
                 {
@@ -2663,7 +2527,7 @@
                   "rotation": 0,
                   "seed": 955405485,
                   "size": 16.2,
-                  "x": 41.75,
+                  "x": 35,
                   "y": 24
                 },
                 {
@@ -2675,7 +2539,7 @@
                   "rotation": 0,
                   "seed": 644678257,
                   "size": 16.2,
-                  "x": 48.5,
+                  "x": 41.75,
                   "y": 24
                 },
                 {
@@ -2687,7 +2551,7 @@
                   "rotation": 0,
                   "seed": 928611033,
                   "size": 16.2,
-                  "x": 55.25,
+                  "x": 48.5,
                   "y": 24
                 },
                 {
@@ -2699,7 +2563,7 @@
                   "rotation": 0,
                   "seed": 797462315,
                   "size": 16.2,
-                  "x": 62,
+                  "x": 55.25,
                   "y": 24
                 },
                 {
@@ -2710,7 +2574,7 @@
                   "rotation": 0,
                   "seed": 594874537,
                   "size": 16.2,
-                  "x": 68.75,
+                  "x": 62,
                   "y": 24
                 },
                 {
@@ -2722,7 +2586,7 @@
                   "rotation": 0,
                   "seed": 539820030,
                   "size": 16.2,
-                  "x": 75.5,
+                  "x": 68.75,
                   "y": 24
                 },
                 {
@@ -2734,32 +2598,30 @@
                   "rotation": 0,
                   "seed": 486771967,
                   "size": 16.2,
-                  "x": 82.25,
+                  "x": 75.5,
                   "y": 24
-                }
-              ],
-              "@3": [
+                },
                 {
-                  "color": "#0ea5e9",
-                  "frame": 3,
+                  "color": "#f59e0b",
                   "id": "st25",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 1956676679,
-                  "size": 40,
-                  "x": 30,
+                  "seed": 955324430,
+                  "size": 16.2,
+                  "x": 82.25,
                   "y": 24
                 },
                 {
-                  "color": "#0ea5e9",
+                  "color": "#f59e0b",
+                  "frame": 2,
                   "id": "st26",
                   "opacity": 1,
                   "ref": "fake:weather-wind",
                   "rotation": 0,
-                  "seed": 2098028833,
-                  "size": 30,
-                  "x": 70,
+                  "seed": 679145579,
+                  "size": 16.2,
+                  "x": 88,
                   "y": 24
                 }
               ]
@@ -2950,7 +2812,7 @@
           "file": "png/animated-stickers.21.png",
           "width": 96,
           "height": 48,
-          "sha256": "91a3b3ec90bf7ae94ddd994e073acffaf4c453e872325f60c5306e760a83689c",
+          "sha256": "68e9410522c3117550badb6cbf9e4a74c9e3fda04aeaad75ae25f6d79fe59c87",
           "maxDelta": 2,
           "meanDelta": 0.1
         }

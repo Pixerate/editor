@@ -14,7 +14,8 @@ import { BrushLibraryError, closest, type BrushLibrary, type BrushLibraryEntry }
 import { normalizeBrushSpec } from './normalize';
 import { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, changedBrushPaths, mergeBrushPatch } from './patch';
 import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, withKeptIssues, type BrushCheck, type BrushHostProfile } from './profiles';
-import { resolveCategory, resolveEngine } from './resolve';
+import { PAINT_FAMILIES, type PaintBrushEngine, type PaintFamily } from '../paint-editor/brush-model';
+import { resolveCategory, resolveEngine, resolveFamily } from './resolve';
 import { BRUSH_JSON_SCHEMA } from './schema';
 import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_TOOLS, type Brush } from './types';
 import { BRUSH_PACK_FORMATS, importBrushPack, MAX_BRUSH_PACK_BYTES, type BrushPackFormat } from './import/pack';
@@ -67,6 +68,12 @@ const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const merge = mergeBrushPatch;
 const changedPaths = changedBrushPaths;
 
+/** `{ family }` for a brush that has one (marks that lay paint), else nothing. */
+function withFamily(b: Brush, engine: PaintBrushEngine): { family?: PaintFamily } {
+  const family = resolveFamily(b, engine);
+  return family ? { family } : {};
+}
+
 function summary(entry: BrushLibraryEntry, profile: BrushHostProfile, withCheck: boolean) {
   const b = entry.brush;
   const engine = resolveEngine(b);
@@ -80,6 +87,7 @@ function summary(entry: BrushLibraryEntry, profile: BrushHostProfile, withCheck:
     ...(b.variety ? { variety: b.variety } : {}),
     ...(b.tool ? { tool: b.tool } : {}),
     category: resolveCategory(b, engine),
+    ...withFamily(b, engine),
     engine,
     tip: b.tip.shape,
     ...(b.tip.size !== undefined ? { size: b.tip.size } : {}),
@@ -159,12 +167,13 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
   const list: AgentTool = {
     name: 'list_brush_presets',
     title: 'List brushes',
-    description: `Lists the brush library (built-in presets and saved brushes) that this host (${profile.name}) can render, filtered by kind, medium, variety, tool, tag or words. Returns each brush's id (for describe_brush, create_brush basedOn, duplicate_brush and the editor's set_brush), name, builtin, kind, medium, variety or tool, category, engine, tip shape and size, marks, surface and light, plus total. Call it first to find the nearest brush to start from. Changes nothing.`,
+    description: `Lists the brush library (built-in presets and saved brushes) that this host (${profile.name}) can render, filtered by kind, medium, family, variety, tool, tag or words. Returns each brush's id (for describe_brush, create_brush basedOn, duplicate_brush and the editor's set_brush), name, builtin, kind, medium, variety or tool, category (by medium), family (what the paint does; tools have none), engine, tip shape and size, marks, surface and light, plus total. Call it first to find the nearest brush to start from. Changes nothing.`,
     inputSchema: {
       type: 'object',
       properties: {
         kind: { type: 'string', enum: [...BRUSH_KINDS], description: 'mark (lays a material) or tool (works on paint already down).' },
         medium: { type: 'string', enum: [...BRUSH_MEDIA], description: 'Marks laying this medium.' },
+        family: { type: 'string', enum: [...PAINT_FAMILIES], description: 'Marks of this family: what the paint does (dry, ink, wet, thick, metallic, spray, glow, iridescent, strands, stickers, living, ethereal, volatile, reactive).' },
         variety: { type: 'string', maxLength: 40, description: 'This variety (oil, watercolor, pencil, highlighter…).' },
         tool: { type: 'string', enum: [...BRUSH_TOOLS], description: 'Tools that do this.' },
         tag: { type: 'string', maxLength: 40, description: 'Brushes with this tag.' },
@@ -179,7 +188,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     annotations: { title: 'List brushes', ...READ },
     handler: async (a) => {
       const source = a.source === 'all' ? undefined : (a.source as 'builtin' | 'user' | undefined);
-      const found = await library.list({ kind: a.kind, medium: a.medium, variety: a.variety, tool: a.tool, tag: a.tag, text: a.text, source, ...(a.all ? {} : { profile }) });
+      const found = await library.list({ kind: a.kind, medium: a.medium, family: a.family, variety: a.variety, tool: a.tool, tag: a.tag, text: a.text, source, ...(a.all ? {} : { profile }) });
       const offset = (a.offset as number | undefined) ?? 0;
       const page = found.slice(offset, offset + ((a.limit as number | undefined) ?? 100));
       return { host: profile.id, total: found.length, brushes: page.map((e) => summary(e, profile, !!a.all)) };
@@ -189,13 +198,13 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
   const describe: AgentTool = {
     name: 'describe_brush',
     title: 'Describe a brush',
-    description: `Reads one brush by id: its full facet spec (kind, medium, variety or tool, tip, marks, dynamics, behaviour, light, motion, colour), whether it is built in, the engine and category it resolves to, and check: what this host (${profile.name}) refuses or paints without, each with a fix. Unknown ids are refused with the closest ones. Changes nothing.`,
+    description: `Reads one brush by id: its full facet spec (kind, medium, variety or tool, tip, marks, dynamics, behaviour, light, motion, colour), whether it is built in, the engine, category and family (marks only) it resolves to, and check: what this host (${profile.name}) refuses or paints without, each with a fix. Unknown ids are refused with the closest ones. Changes nothing.`,
     inputSchema: { type: 'object', properties: { id: ID }, required: ['id'], additionalProperties: false },
     annotations: { title: 'Describe a brush', ...READ },
     handler: async ({ id }) => {
       const e = await entry(id as string);
       const engine = resolveEngine(e.brush);
-      return { brush: e.brush, builtin: e.builtin, engine, category: resolveCategory(e.brush, engine), check: await checkFor(e.brush, profile) };
+      return { brush: e.brush, builtin: e.builtin, engine, category: resolveCategory(e.brush, engine), ...withFamily(e.brush, engine), check: await checkFor(e.brush, profile) };
     },
   };
 

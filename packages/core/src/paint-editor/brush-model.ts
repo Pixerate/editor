@@ -89,6 +89,85 @@ export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' |
 export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'oil', 'impasto', 'procedural', 'bristle', 'sticker', 'light', 'custom'];
 
 /**
+ * What a paint does, as a second facet beside its medium `category`: `dry`, `ink`, `wet` and
+ * `thick` media, `metallic`, `spray`, `glow` (light paint), `iridescent` (thin films), `strands`
+ * (particle trails: hair, fur, curls, ribbons), `stickers`, `living` (paint that grows or
+ * mutates), `ethereal` (ghost and invisible paint), `volatile` (antimatter and vortices) and
+ * `reactive` (paint that answers heat or magnets). Tools have none.
+ */
+export type PaintFamily = 'dry' | 'ink' | 'wet' | 'thick' | 'metallic' | 'spray' | 'glow' | 'iridescent' | 'strands' | 'stickers' | 'living' | 'ethereal' | 'volatile' | 'reactive';
+
+export const PAINT_FAMILIES: readonly PaintFamily[] = ['dry', 'ink', 'wet', 'thick', 'metallic', 'spray', 'glow', 'iridescent', 'strands', 'stickers', 'living', 'ethereal', 'volatile', 'reactive'];
+
+/**
+ * One group of a brush grouping: its `id`, display `label`, and which brushes it holds: those
+ * whose `facet` (`category` or `family`) is one of `values`.
+ */
+export interface PaintBrushGroup {
+  id: string;
+  label: string;
+  facet: 'category' | 'family';
+  values: readonly string[];
+}
+
+/**
+ * The ways a host can group its brush library, in display order. `byMedium` groups by the
+ * medium `category` (pencils, inks, watercolour…); `byFamily` by what the paint does (`family`),
+ * with the tools (which have no family) last. A brush goes in the first group that holds it
+ * (`paintBrushGroup`).
+ */
+export const PAINT_GROUPINGS: { readonly byMedium: readonly PaintBrushGroup[]; readonly byFamily: readonly PaintBrushGroup[] } = {
+  byMedium: [
+    { id: 'pencil', label: 'Pencil', facet: 'category', values: ['pencil'] },
+    { id: 'pastel', label: 'Pastel', facet: 'category', values: ['pastel'] },
+    { id: 'charcoal', label: 'Charcoal', facet: 'category', values: ['charcoal'] },
+    { id: 'ink', label: 'Ink', facet: 'category', values: ['ink'] },
+    { id: 'marker', label: 'Marker', facet: 'category', values: ['marker'] },
+    { id: 'airbrush', label: 'Airbrush', facet: 'category', values: ['airbrush'] },
+    { id: 'paint', label: 'Paint', facet: 'category', values: ['paint'] },
+    { id: 'mixer', label: 'Mixer', facet: 'category', values: ['mixer'] },
+    { id: 'bristle', label: 'Bristle', facet: 'category', values: ['bristle'] },
+    { id: 'watercolor', label: 'Watercolour', facet: 'category', values: ['watercolor'] },
+    { id: 'oil', label: 'Oil', facet: 'category', values: ['oil'] },
+    { id: 'impasto', label: 'Impasto', facet: 'category', values: ['impasto'] },
+    { id: 'procedural', label: 'Procedural', facet: 'category', values: ['procedural'] },
+    { id: 'light', label: 'Light', facet: 'category', values: ['light'] },
+    { id: 'sticker', label: 'Stickers', facet: 'category', values: ['sticker'] },
+    { id: 'custom', label: 'Custom', facet: 'category', values: ['custom'] },
+    { id: 'eraser', label: 'Erasers', facet: 'category', values: ['eraser'] },
+    { id: 'blender', label: 'Blenders', facet: 'category', values: ['blender'] },
+    { id: 'smudge', label: 'Smudge', facet: 'category', values: ['smudge'] },
+    { id: 'wet-tool', label: 'Wet tools', facet: 'category', values: ['wet-tool'] },
+  ],
+  byFamily: [
+    { id: 'dry', label: 'Dry', facet: 'family', values: ['dry'] },
+    { id: 'ink', label: 'Ink', facet: 'family', values: ['ink'] },
+    { id: 'wet', label: 'Wet', facet: 'family', values: ['wet'] },
+    { id: 'thick', label: 'Thick', facet: 'family', values: ['thick'] },
+    { id: 'metallic', label: 'Metallic', facet: 'family', values: ['metallic'] },
+    { id: 'spray', label: 'Spray', facet: 'family', values: ['spray'] },
+    { id: 'glow', label: 'Glow', facet: 'family', values: ['glow'] },
+    { id: 'iridescent', label: 'Iridescent', facet: 'family', values: ['iridescent'] },
+    { id: 'strands', label: 'Strands', facet: 'family', values: ['strands'] },
+    { id: 'stickers', label: 'Stickers', facet: 'family', values: ['stickers'] },
+    { id: 'living', label: 'Living', facet: 'family', values: ['living'] },
+    { id: 'ethereal', label: 'Ethereal', facet: 'family', values: ['ethereal'] },
+    { id: 'volatile', label: 'Volatile', facet: 'family', values: ['volatile'] },
+    { id: 'reactive', label: 'Reactive', facet: 'family', values: ['reactive'] },
+    { id: 'tools', label: 'Tools', facet: 'category', values: ['eraser', 'blender', 'smudge', 'wet-tool'] },
+  ],
+};
+
+/** The id of the first group of `grouping` that holds `brush`, or `null` when none does. */
+export function paintBrushGroup(grouping: readonly PaintBrushGroup[], brush: Pick<PaintBrush, 'category' | 'family'>): string | null {
+  for (const g of grouping) {
+    const v = g.facet === 'family' ? brush.family : brush.category;
+    if (v !== undefined && g.values.includes(v)) return g.id;
+  }
+  return null;
+}
+
+/**
  * What a wet brush does to the wet layer: `paint` (water and pigment), `water` (clear water;
  * with `rewet` it lifts dried paint), `dry` (a hair dryer: takes water, the pigment settles),
  * `blow` (pushes the water along the stroke), `blend` (evens out the wet pigment under the tip),
@@ -474,6 +553,8 @@ export interface PaintBrush {
   id: string;
   name: string;
   category: PaintBrushCategory;
+  /** What the paint does (`PAINT_FAMILIES`); tools and scrapers have none. */
+  family?: PaintFamily;
   engine: PaintBrushEngine;
   /** The shared engine's tip: size, hardness, spacing, angle, roundness, opacity, flow, position smoothing, pressure to size / opacity, blend. */
   tip: BrushSettings;
@@ -663,7 +744,9 @@ function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | nu
   return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
 }
 
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'vortex' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns' | 'culture'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'family' | 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'antimatter' | 'scraper' | 'vortex' | 'paint' | 'light' | 'fluorescence' | 'thermochromic' | 'iridescence' | 'ghost' | 'mutation' | 'ferro' | 'spray' | 'tipGrain' | 'livePatterns' | 'culture'>> & {
+  /** What the paint does (`null` removes it). */
+  family?: PaintFamily | null;
   spray?: Partial<SpraySettings> | null;
   /** Tip grain (`null` removes it). */
   tipGrain?: Partial<TipGrainSettings> | null;
@@ -722,9 +805,10 @@ export function usesPaintExchange(brush: PaintBrush, gradient = brush.paint !== 
   return brush.engine === 'dab' && (brush.behavior.pickup > 0 || gradient);
 }
 
-/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, scrapers, blenders, smudges, colourless vortices or the wet tools other than paint). */
+/** Whether strokes of a brush paint colour, so gradient paint applies (not erasers, scrapers, blenders, smudges, the palette knife, colourless vortices or the wet tools other than paint). */
 export function brushTakesPaint(brush: Pick<PaintBrush, 'engine' | 'loadsColor' | 'wet' | 'vortex'>): boolean {
   if (brush.engine === 'eraser' || brush.engine === 'scraper' || brush.engine === 'blender' || brush.engine === 'smudge') return false;
+  if (brush.engine === 'impasto') return brush.loadsColor;
   if (brush.engine === 'vortex') return (brush.vortex?.ink ?? 0) > 0;
   if (brush.engine === 'wet') return brush.wet.tool === 'paint' || (brush.wet.tool === 'vortex' && (brush.vortex?.ink ?? 0) > 0);
   if (brush.engine === 'mixer') return brush.loadsColor;
@@ -835,11 +919,13 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
       ? normalizeGhost(raw.ghost ?? {}, ghostBase)
       : undefined;
   if (ghost || mutation) behavior = { ...behavior, pickup: 0, dirty: false };
+  const family = raw.family === null ? undefined : PAINT_FAMILIES.includes(raw.family as PaintFamily) ? (raw.family as PaintFamily) : b.family;
   return {
     id,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : b.name,
     category: PAINT_BRUSH_CATEGORIES.includes(raw.category as PaintBrushCategory) ? (raw.category as PaintBrushCategory) : b.category,
     engine,
+    ...(family ? { family } : {}),
     tip: normalizeBrush({ ...b.tip, ...(raw.tip ?? {}) }),
     grain: unit(raw.grain, b.grain),
     pressureSmoothing: range(raw.pressureSmoothing, 0, 0.95, b.pressureSmoothing),

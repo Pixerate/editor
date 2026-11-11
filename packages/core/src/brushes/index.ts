@@ -35,7 +35,7 @@ export {
   type DecodedBrushSource,
 } from './sources';
 export { normalizeBrushSpec, WET_BRUSH_TOOLS } from './normalize';
-export { resolveBrush, resolveCategory, resolveEngine, resolveWetMedium, type ResolveBrushOptions } from './resolve';
+export { resolveBrush, resolveCategory, resolveEngine, resolveFamily, resolveWetMedium, type ResolveBrushOptions } from './resolve';
 export { migrateBrushV1 } from './migrate';
 export { BRUSH_PRESETS } from './presets';
 export { brushColourHex } from './colour';

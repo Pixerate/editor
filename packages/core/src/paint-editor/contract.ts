@@ -18,6 +18,7 @@ import type { ConformanceHost } from '../tools/conformance';
 import { ToolRegistry, type AgentToolProvider } from '../tools/registry';
 import type { JsonSchema } from '../tools/schema';
 import { createPaintBrushLibraryToolProvider } from './brush-library-tools';
+import { PAINT_GROUPINGS } from './brush-model';
 import { createPaintProposalToolProvider } from './collaboration-tools';
 import { createPaintProposals } from './collaboration';
 import { PaintEditorController, type PaintEditorOptions } from './controller';
@@ -243,6 +244,7 @@ function uiTables() {
     pathStrokeTapers: PATH_STROKE_TAPERS,
     padSampleSizes: PAD_SAMPLE_SIZES,
     wetGpu: WET_GPU_OPTIONS,
+    paintGroupings: PAINT_GROUPINGS,
     labels: {
       wetTools: WET_TOOL_LABELS,
       wetMedia: WET_MEDIUM_LABELS,

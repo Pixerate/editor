@@ -3147,6 +3147,295 @@
       "label": "CPU only"
     }
   ],
+  "paintGroupings": {
+    "byMedium": [
+      {
+        "id": "pencil",
+        "label": "Pencil",
+        "facet": "category",
+        "values": [
+          "pencil"
+        ]
+      },
+      {
+        "id": "pastel",
+        "label": "Pastel",
+        "facet": "category",
+        "values": [
+          "pastel"
+        ]
+      },
+      {
+        "id": "charcoal",
+        "label": "Charcoal",
+        "facet": "category",
+        "values": [
+          "charcoal"
+        ]
+      },
+      {
+        "id": "ink",
+        "label": "Ink",
+        "facet": "category",
+        "values": [
+          "ink"
+        ]
+      },
+      {
+        "id": "marker",
+        "label": "Marker",
+        "facet": "category",
+        "values": [
+          "marker"
+        ]
+      },
+      {
+        "id": "airbrush",
+        "label": "Airbrush",
+        "facet": "category",
+        "values": [
+          "airbrush"
+        ]
+      },
+      {
+        "id": "paint",
+        "label": "Paint",
+        "facet": "category",
+        "values": [
+          "paint"
+        ]
+      },
+      {
+        "id": "mixer",
+        "label": "Mixer",
+        "facet": "category",
+        "values": [
+          "mixer"
+        ]
+      },
+      {
+        "id": "bristle",
+        "label": "Bristle",
+        "facet": "category",
+        "values": [
+          "bristle"
+        ]
+      },
+      {
+        "id": "watercolor",
+        "label": "Watercolour",
+        "facet": "category",
+        "values": [
+          "watercolor"
+        ]
+      },
+      {
+        "id": "oil",
+        "label": "Oil",
+        "facet": "category",
+        "values": [
+          "oil"
+        ]
+      },
+      {
+        "id": "impasto",
+        "label": "Impasto",
+        "facet": "category",
+        "values": [
+          "impasto"
+        ]
+      },
+      {
+        "id": "procedural",
+        "label": "Procedural",
+        "facet": "category",
+        "values": [
+          "procedural"
+        ]
+      },
+      {
+        "id": "light",
+        "label": "Light",
+        "facet": "category",
+        "values": [
+          "light"
+        ]
+      },
+      {
+        "id": "sticker",
+        "label": "Stickers",
+        "facet": "category",
+        "values": [
+          "sticker"
+        ]
+      },
+      {
+        "id": "custom",
+        "label": "Custom",
+        "facet": "category",
+        "values": [
+          "custom"
+        ]
+      },
+      {
+        "id": "eraser",
+        "label": "Erasers",
+        "facet": "category",
+        "values": [
+          "eraser"
+        ]
+      },
+      {
+        "id": "blender",
+        "label": "Blenders",
+        "facet": "category",
+        "values": [
+          "blender"
+        ]
+      },
+      {
+        "id": "smudge",
+        "label": "Smudge",
+        "facet": "category",
+        "values": [
+          "smudge"
+        ]
+      },
+      {
+        "id": "wet-tool",
+        "label": "Wet tools",
+        "facet": "category",
+        "values": [
+          "wet-tool"
+        ]
+      }
+    ],
+    "byFamily": [
+      {
+        "id": "dry",
+        "label": "Dry",
+        "facet": "family",
+        "values": [
+          "dry"
+        ]
+      },
+      {
+        "id": "ink",
+        "label": "Ink",
+        "facet": "family",
+        "values": [
+          "ink"
+        ]
+      },
+      {
+        "id": "wet",
+        "label": "Wet",
+        "facet": "family",
+        "values": [
+          "wet"
+        ]
+      },
+      {
+        "id": "thick",
+        "label": "Thick",
+        "facet": "family",
+        "values": [
+          "thick"
+        ]
+      },
+      {
+        "id": "metallic",
+        "label": "Metallic",
+        "facet": "family",
+        "values": [
+          "metallic"
+        ]
+      },
+      {
+        "id": "spray",
+        "label": "Spray",
+        "facet": "family",
+        "values": [
+          "spray"
+        ]
+      },
+      {
+        "id": "glow",
+        "label": "Glow",
+        "facet": "family",
+        "values": [
+          "glow"
+        ]
+      },
+      {
+        "id": "iridescent",
+        "label": "Iridescent",
+        "facet": "family",
+        "values": [
+          "iridescent"
+        ]
+      },
+      {
+        "id": "strands",
+        "label": "Strands",
+        "facet": "family",
+        "values": [
+          "strands"
+        ]
+      },
+      {
+        "id": "stickers",
+        "label": "Stickers",
+        "facet": "family",
+        "values": [
+          "stickers"
+        ]
+      },
+      {
+        "id": "living",
+        "label": "Living",
+        "facet": "family",
+        "values": [
+          "living"
+        ]
+      },
+      {
+        "id": "ethereal",
+        "label": "Ethereal",
+        "facet": "family",
+        "values": [
+          "ethereal"
+        ]
+      },
+      {
+        "id": "volatile",
+        "label": "Volatile",
+        "facet": "family",
+        "values": [
+          "volatile"
+        ]
+      },
+      {
+        "id": "reactive",
+        "label": "Reactive",
+        "facet": "family",
+        "values": [
+          "reactive"
+        ]
+      },
+      {
+        "id": "tools",
+        "label": "Tools",
+        "facet": "category",
+        "values": [
+          "eraser",
+          "blender",
+          "smudge",
+          "wet-tool"
+        ]
+      }
+    ]
+  },
   "labels": {
     "wetTools": {
       "paint": "Paint",

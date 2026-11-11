@@ -7,7 +7,7 @@
 import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
-import { BRUSH_ID, BRUSH_ROTATIONS, CULTURE_SPECIES, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
+import { BRUSH_ID, BRUSH_ROTATIONS, CULTURE_SPECIES, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, PAINT_FAMILIES, WET_MEDIA } from '../paint-editor/brushes';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, STICKER_FRAME_MODES, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
 import { GRAIN_PATTERNS } from '../paint/grain';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS, GHOST_TRIGGERS } from './types';
@@ -391,9 +391,13 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
     kind: oneOf(BRUSH_KINDS, 'mark: lays a material (see medium); tool: works on paint already down (see tool).'),
     medium: oneOf(BRUSH_MEDIA, 'Marks: what it lays. paint (dry, wet or thick), ink, dry (pencil, pastel, charcoal) or spray (airbrush). Descriptive: the tip, marks and behaviour decide how it renders.'),
     variety: { type: 'string', pattern: BRUSH_WORD.source, description: 'What kind of the medium: oil, watercolor, gouache, pencil, pastel, charcoal, airbrush, marker, highlighter… A wet brush whose variety is watercolor, gouache or oil paints that medium.' },
+    family: oneOf(
+      PAINT_FAMILIES,
+      'Marks: what the paint does, for grouping a library by family instead of medium: dry, ink, wet, thick, metallic, spray, glow (light paint), iridescent, strands (hair, fur, curls, ribbons), stickers, living (grows or mutates), ethereal (ghost, invisible), volatile (antimatter, vortices) or reactive (heat, magnets). Default: derived from the other facets. Tools have none.',
+    ),
     tool: oneOf(
       BRUSH_TOOLS,
-      'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.',
+      'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint; knife scrapes and spreads thick paint already down without adding any (behaviour.thick.drag sets how far it carries).',
     ),
     tip: TIP,
     marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, objects (editable stickers), antimatter (detonations that invert, scorch and destroy paint across every visible layer), a scraper blade that cuts down through layers, or vortex (winds surrounding paint into a vortex of the drawn shape).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS, ANTIMATTER, SCRAPER, VORTEX] },

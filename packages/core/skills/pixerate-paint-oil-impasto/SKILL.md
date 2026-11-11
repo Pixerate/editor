@@ -48,7 +48,8 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference an
    pick up and blend wet paint (`behavior.pickup` 0.3-0.6) for soft turns of form; `blender`
    for transitions.
 5. **Thick paint last.** `add_layer` "Impasto"; `impasto-brush` for ridged strokes,
-   `palette-knife` to scrape and smear, `paint-tube` for blobs, in the lights and focal areas.
+   `paint-tube` for blobs, in the lights and focal areas; then the `palette-knife` tool (it
+   carries no paint) over them to scrape the ridges flat and smear the colours together.
    **Check:** `get_relief` on that layer has `maxHeight` well above 0.
 6. **Light the relief.** `set_lighting` `azimuth` (degrees clockwise from the top: 315 top-left,
    45 top-right), `elevation` 15-30 to show brushwork, 40-60 for a calmer surface.
@@ -63,7 +64,7 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference an
 | Large, thin block-in | `oil-flat`, `bristle-flat` |
 | Soft blended form | `oil-round` with pick-up; `blender` |
 | Visible bristle ridges | `impasto-brush`, `bristle-round` |
-| Scraped, smeared texture | `palette-knife` |
+| Scraped, smeared texture | `palette-knife` (a tool: lay thick paint first, then knife it) |
 | Blobs of paint straight from the tube | `paint-tube` |
 | A glossy bead or line | `gloop-pen` |
 | A glowing, glassy bead (a neon or glass tube) | `glow-gel` (light paint with rim and clarity, on dark paper; one loop per layer where they cross) |

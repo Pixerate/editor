@@ -146,8 +146,8 @@ describe('sticker provider contract', () => {
 });
 
 describe('stickers in the paint editor', () => {
-  /** sticker-stars on cold-pressed paper, sprayed along a wave, with a heart placed on top: the pixels before stickers had refs. */
-  const BEFORE_REFS = 'f2144fb045ea';
+  /** sticker-stars on cold-pressed paper, sprayed along a wave, with a heart placed on top: the pixels before stickers had refs (since sticker strokes end with a sticker at their end). */
+  const BEFORE_REFS = '6bb73d4b5cca';
   const wave = Array.from({ length: 81 }, (_, i) => ({ x: 30 + i * 4, y: 100 + Math.sin(i / 8) * 40, pressure: 0.5 + 0.5 * Math.sin(i / 20), t: i * 10 }));
 
   it('a saved brush with bare stamps reads as editor refs and paints exactly as before', () => {

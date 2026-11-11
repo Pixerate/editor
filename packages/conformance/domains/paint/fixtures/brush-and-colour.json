@@ -24,6 +24,7 @@
               "tiltRoundness": 0.75,
               "tiltSize": 1
             },
+            "family": "dry",
             "id": "pencil-6b",
             "kind": "mark",
             "medium": "dry",
@@ -75,6 +76,7 @@
               "smoothing": 0.5,
               "velocitySize": -0.45
             },
+            "family": "ink",
             "id": "ink-pen",
             "kind": "mark",
             "medium": "ink",
@@ -102,6 +104,7 @@
               "smoothing": 0.5,
               "velocitySize": -0.45
             },
+            "family": "ink",
             "id": "ink-pen",
             "kind": "mark",
             "medium": "ink",

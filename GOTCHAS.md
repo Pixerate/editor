@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [monorepo] Vitest Says "Cannot find native binding" When an Intel Tool Launches It on Apple Silicon
+
+- **Issue / Symptom**: `vitest run` fails at startup with `Cannot find native binding … Cannot find module '@rolldown/binding-wasm32-wasi'`, although `@rolldown/binding-darwin-arm64` is installed and loads in plain `node`.
+- **Root Cause**: A process started by an x86_64 binary (for example an Intel Homebrew `/usr/local/bin/timeout` wrapped around the command) runs a universal `node` under Rosetta, so `process.arch` is `x64` and rolldown looks only for the x64 and WASI bindings.
+- **Solution / Workaround**: Run vitest directly (or under `arch -arm64`), not through an Intel wrapper. Check with `<wrapper> node -p process.arch`.
+
+### [core|swift/paint] Sticker Spacing and Scatter Stop Growing at `STICKER_REACH`
+
+- **Issue / Symptom**: Large sticker brushes (200 px) landed stickers ~140 px apart and up to ~120 px off the stroke, so they no longer traced the path.
+- **Root Cause**: The spray's spacing and scatter were fractions of the sticker's diameter, so both grew without limit with the size.
+- **Solution / Workaround**: Both scale with `min(diameter, STICKER_REACH)` (64 px), and `PenDabWalker.layEnd` lays a last sticker at the stroke's end. Keep any change to these in step in `paint-editor/stickers.ts` and `Stickers/Stickers.swift`: the conformance scenario `sticker-large-sizes` records the positions.
+
 ### [swift] A `nil` in a Ternary Becomes `JSONValue.null`
 
 - **Issue / Symptom**: After a source edit dropped an authored effect's paint hint, the exported Swift document had `"paint": null`, and reopening it was refused (`/paint: must be an object`); TS left the field out.

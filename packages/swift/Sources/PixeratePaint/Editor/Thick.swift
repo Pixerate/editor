@@ -637,9 +637,6 @@ final class ThickStrokeDriver {
         }
         let off = initValues.target.offset
         let k = Swift.min(1, d.dab.alpha * d.dab.opacity * b.tip.opacity) * st.amount
-        let thick = im.thickness * (1 - 0.8 * im.thinner)
-        // The paint runs out along the stroke.
-        st.amount *= 1 - 0.06 * (1 - im.load)
         let nxs = JS.sin(d.direction)
         let nys = JS.cos(d.direction)
         let r = Swift.max(0.5, d.dab.radius)
@@ -651,6 +648,9 @@ final class ThickStrokeDriver {
             if let ir = b.iridescence { film?.deposit(rect, tip, k * 0.6, d.pressure, ir) }
             return
         }
+        let thick = im.thickness * (1 - 0.8 * im.thinner)
+        // The paint runs out along the stroke (a knife carries none, so it never runs out).
+        st.amount *= 1 - 0.06 * (1 - im.load)
         let ex = st.exchange
         var flow = 1.0
         let effect = initValues.effect
