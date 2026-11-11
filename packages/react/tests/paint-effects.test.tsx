@@ -65,6 +65,24 @@ describe('paint effects (React)', () => {
     expect(c.getPaperEffect()).toBeNull();
   });
 
+  it('with provider paint hints, Paint… lists only hinted effects and picks from the hint; Layer… lists every effect', async () => {
+    const c = new PaintEditorController({ width: 16, height: 8 });
+    c.setEffectsProvider(createFakeEffectProvider({ paintHints: true }));
+    c.setColor('#ff0000');
+    c.setSecondaryColor('#0000ff');
+    act(() => root.render(<PaintEffectsPanel controller={c} />));
+    const listed = () => [...container.querySelectorAll('[data-effect-id]')].map((b) => b.getAttribute('data-effect-id'));
+    await click(button('Layer…'));
+    expect(listed()).toContain('fake.bar');
+    await click(button('Paint…'));
+    expect(listed()).toEqual(['fake.gradient', 'fake.trail']);
+    await pickEffect('fake.gradient');
+    expect(c.getEffectPaint()).toMatchObject({ map: { by: 'stroke', repeat: 'mirror' }, live: true, values: { from: '#ff0000', to: '#0000ff' } });
+    // Unticking "Along the stroke" fixes it to the canvas and keeps it there through a later change.
+    await click(container.querySelector('[data-testid="effect-paint-placement"] input[type="checkbox"]')!);
+    expect(c.getEffectPaint()!.map).toBeUndefined();
+  });
+
   it('shows why nothing can be added without a provider, and errors from the controller', async () => {
     const c = new PaintEditorController({ width: 16, height: 8 });
     act(() => root.render(<PaintEffectsPanel controller={c} />));

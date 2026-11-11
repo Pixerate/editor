@@ -95,6 +95,46 @@ export interface EffectSummary {
 	 * run time (`pathControlsOf` names them). Present exactly when it takes one.
 	 */
 	accepts?: readonly EffectAccept[];
+	/**
+	 * How the effect works as paint (brushes take their colour from it), when it suits paint. A
+	 * provider whose capabilities set `paintHints` gives one to every effect that makes good paint,
+	 * and editors offer only those as paint; without that capability it is a starting point only.
+	 */
+	paint?: EffectPaintHint;
+}
+
+/** How an effect follows a stroke when painted with: along its own path control, bent along the stroke as a strip, or fixed to the canvas. */
+export type EffectPaintMap = 'path' | 'stroke' | 'canvas';
+export const EFFECT_PAINT_MAPS: readonly EffectPaintMap[] = ['path', 'stroke', 'canvas'];
+
+/** What a `stroke` strip does past its end: start again, run back, or hold the last colour. */
+export type EffectPaintRepeat = 'repeat' | 'mirror' | 'clamp';
+export const EFFECT_PAINT_REPEATS: readonly EffectPaintRepeat[] = ['repeat', 'mirror', 'clamp'];
+
+/** Most colour controls a paint hint names (the brush's main and second colours). */
+export const EFFECT_PAINT_MAX_COLORS = 2;
+
+/**
+ * How an effect is best painted with (`EffectSummary.paint`), as the provider suggests it. Editors
+ * start from it when the effect is picked as paint; anything the caller gives wins.
+ */
+export interface EffectPaintHint {
+	/**
+	 * `path`: the effect draws itself along the stroke through its path control (it must have one,
+	 * `pathControlsOf`); `stroke`: rendered as a strip bent along the stroke; `canvas`: fixed to the
+	 * canvas, so painting reveals it.
+	 */
+	map: EffectPaintMap;
+	/** Up to two colour controls (`#rrggbb` strings) that take the brush's main and second colours, main first. */
+	colors?: readonly string[];
+	/** Control values applied over the defaults when painting (a background made transparent, a demo path switched on). */
+	values?: EffectValues;
+	/** Whether a stroke keeps playing the effect (live effect paint) rather than baking one frame. */
+	live?: boolean;
+	/** For `map: 'stroke'`: what the strip does past its end (default `mirror`). */
+	repeat?: EffectPaintRepeat;
+	/** A suggested brush width (px). */
+	size?: number;
 }
 
 /** What an effect can take besides pictures: `path`, a control that draws along a path given at run time. */
@@ -644,6 +684,12 @@ export interface EffectProviderCapabilities {
 	supportsTiming?: boolean;
 	/** Implements `listTemplates`, `describeTemplate` and `instantiateTemplate`. */
 	supportsTemplates?: boolean;
+	/**
+	 * Every effect that suits paint carries a `paint` hint, and those without one do not suit it:
+	 * editors then offer only hinted effects as paint (effect layers, fills and the paper still
+	 * take any). Without it every pixel effect may be painted with, as before.
+	 */
+	paintHints?: boolean;
 }
 
 export type MaybePromise<T> = T | Promise<T>;

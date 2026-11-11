@@ -200,6 +200,9 @@ private func authoredAsUsed(_ d: EffectDescription, _ entry: PaintAuthoredEffect
     o["controls"] = .object(controls)
     o["defaults"] = .object(defaults)
     o["presets"] = .array(presets)
+    // The document's paint hint, while the controls left here still fit it.
+    o["paint"] = Optional<JSONValue>.none
+    if let paint = doc["paint"], effectPaintHintProblems(EffectDescription(o), paint: paint).isEmpty { o["paint"] = paint }
     return EffectDescription(o)
 }
 

@@ -15,7 +15,9 @@
 
 import { EffectUnsupportedError } from '../effects/errors.js';
 import { EffectRendererPool } from '../effects/pool.js';
-import type { EffectDescription, EffectPixels, EffectProvider, EffectRenderRequest, EffectUse, EffectValue } from '../effects/types.js';
+import { effectOffered, effectSuitsPaint } from '../effects/helpers.js';
+import type { EffectDescription, EffectPaintHint, EffectPixels, EffectProvider, EffectProviderCapabilities, EffectRenderRequest, EffectSummary, EffectUse, EffectValue } from '../effects/types.js';
+import { isAuthoredEffectId } from './authored-effects';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 
 /** Which uses each place in the paint editor takes. */
@@ -42,16 +44,68 @@ const PLACE_WORDS: Record<PaintEffectPlace, string> = {
   paint: 'effect paint takes generator, overlay or title effects',
 };
 
-/** Refuses an effect that cannot go in `place`, saying what to use instead. */
-export function checkPaintEffectPlace(d: EffectDescription, place: PaintEffectPlace): void {
+/** The places in order (the `place` argument of `search_effects`). */
+export const PAINT_EFFECT_PLACE_NAMES = Object.keys(PAINT_EFFECT_PLACES) as PaintEffectPlace[];
+
+/**
+ * Whether a provider's effect suits paint here: authored effects always do (someone wrote them for
+ * this painting); a provider's do unless it declares `paintHints` and gave the effect no `paint` hint.
+ */
+export function suitsEffectPaint(e: Pick<EffectSummary, 'id' | 'paint'>, capabilities?: Pick<EffectProviderCapabilities, 'paintHints'> | null): boolean {
+  return isAuthoredEffectId(e.id) || effectSuitsPaint(e, capabilities);
+}
+
+/**
+ * Whether `place` takes the effect: its uses fit, it draws pixels, and for `paint` it suits paint
+ * (`suitsEffectPaint`). The effects browser and `search_effects` with a place list these.
+ */
+export function paintEffectOffered(e: Pick<EffectSummary, 'id' | 'kind' | 'uses' | 'paint'>, place: PaintEffectPlace, capabilities?: Pick<EffectProviderCapabilities, 'paintHints'> | null): boolean {
+  if (e.kind === 'motion' || e.kind === 'vector' || !effectOffered(e, PAINT_EFFECT_PLACES[place])) return false;
+  return place !== 'paint' || suitsEffectPaint(e, capabilities);
+}
+
+/**
+ * Refuses an effect that cannot go in `place`, saying what to use instead. With the provider's
+ * `capabilities`, paint also refuses an effect the provider says does not suit paint (`paintHints`).
+ */
+export function checkPaintEffectPlace(d: EffectDescription, place: PaintEffectPlace, capabilities?: Pick<EffectProviderCapabilities, 'paintHints'> | null): void {
   const allowed: readonly EffectUse[] = PAINT_EFFECT_PLACES[place];
-  if (d.kind !== 'motion' && d.kind !== 'vector' && d.uses.some((u) => allowed.includes(u))) return;
+  if (d.kind !== 'motion' && d.kind !== 'vector' && d.uses.some((u) => allowed.includes(u))) {
+    if (place === 'paint' && !suitsEffectPaint(d, capabilities)) {
+      throw new EffectUnsupportedError(
+        `"${d.id}" (${d.name}) doesn't work as paint: its provider marks the effects that do with a paint hint, and this one has none, so painting with it would only reveal a still frame of something meant to be seen whole. Add it as an effect layer (add_effect_layer) or fill a layer with it (fill_layer_with_effect) instead, or paint with an effect from search_effects with place "paint".`,
+        d.id,
+      );
+    }
+    return;
+  }
   let instead = '';
   if (d.uses.includes('filter') && place === 'paint') instead = '; paint with a generator, overlay or title effect, or run the filter on the painted layer with apply_effect';
   else if (d.uses.includes('filter') && place !== 'light') instead = '; run it on a layer\'s dried paint with apply_effect instead';
   else if (place === 'light' && d.uses.some((u) => (PAINT_EFFECT_PLACES.layer as readonly string[]).includes(u))) instead = '; add it as an effect layer (add_effect_layer) or fill a layer with it (fill_layer_with_effect) instead';
   else if (place === 'paper' && d.uses.some((u) => u === 'overlay' || u === 'title')) instead = '; add it as an effect layer with add_effect_layer instead';
   throw new EffectUnsupportedError(`"${d.id}" (${d.name}) is a ${d.uses.join(' / ') || d.kind} effect, and ${PLACE_WORDS[place]}${instead}.`, d.id);
+}
+
+/** The brush's two colours, for a paint hint's `colors` controls. */
+export interface PaintHintColors {
+  color: string;
+  secondaryColor: string;
+}
+
+/**
+ * Where effect paint starts from a paint hint: its `map` (a `stroke` strip mirrored unless it says
+ * otherwise), its `values` over the defaults with the brush's colours in its `colors` controls, and
+ * `live`. The editor lays the caller's own map, values and live over this.
+ */
+export function effectPaintFromHint(hint: EffectPaintHint, colors: PaintHintColors): { map: { by: 'canvas' } | { by: 'path' } | { by: 'stroke'; repeat: 'repeat' | 'mirror' | 'clamp' }; values: Record<string, EffectValue>; live: boolean } {
+  const values: Record<string, EffectValue> = { ...(hint.values ?? {}) };
+  const brush = [colors.color, colors.secondaryColor];
+  (hint.colors ?? []).forEach((key, i) => {
+    if (i < brush.length) values[key] = brush[i];
+  });
+  const map = hint.map === 'stroke' ? { by: 'stroke' as const, repeat: hint.repeat ?? 'mirror' } : { by: hint.map };
+  return { map, values, live: hint.live === true };
 }
 
 /** The provider effect a layer or the paper is drawn from. */

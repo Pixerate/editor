@@ -52,7 +52,7 @@ describe('effect authoring agent tools', () => {
 	it('lists tools according to session and host capabilities', async () => {
 		const full = await setup({ withSource: true, withCapture: true });
 		const fullTools = full.registry.listTools().tools.map((t) => baseToolName(t.name));
-		expect(fullTools).toHaveLength(15);
+		expect(fullTools).toHaveLength(16);
 		expect(fullTools).toContain('effect_authoring_set_source');
 		expect(fullTools).toContain('effect_authoring_view');
 
@@ -60,13 +60,13 @@ describe('effect authoring agent tools', () => {
 		const noSourceTools = noSource.registry.listTools().tools.map((t) => baseToolName(t.name));
 		expect(noSourceTools).not.toContain('effect_authoring_set_source');
 		expect(noSourceTools).toContain('effect_authoring_view');
-		expect(noSourceTools).toHaveLength(14);
+		expect(noSourceTools).toHaveLength(15);
 
 		const noCapture = await setup({ withSource: true, withCapture: false });
 		const noCaptureTools = noCapture.registry.listTools().tools.map((t) => baseToolName(t.name));
 		expect(noCaptureTools).toContain('effect_authoring_set_source');
 		expect(noCaptureTools).not.toContain('effect_authoring_view');
-		expect(noCaptureTools).toHaveLength(14);
+		expect(noCaptureTools).toHaveLength(15);
 	});
 
 	it('refuses all tools when no session is open', async () => {

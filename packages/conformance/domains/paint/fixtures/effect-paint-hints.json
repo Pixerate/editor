@@ -1,0 +1,1288 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "effect-paint-hints",
+  "description": "A provider with paint hints (capabilities.paintHints): search_effects with place paint lists only hinted effects, set_effect_paint refuses an unhinted one and starts a hinted one from its hint (map, repeat, values, the two colours, live), explicit arguments win, and an authored effect keeps a paint hint set while authoring.",
+  "setup": {
+    "width": 48,
+    "height": 32,
+    "effectPaintHints": true,
+    "authoredEffects": "author"
+  },
+  "steps": [
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "place": "paint"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [
+            {
+              "category": "gradient",
+              "description": "A linear gradient between two colours that can turn over time.",
+              "duration": 4000,
+              "id": "fake.gradient",
+              "kind": "shader",
+              "loop": true,
+              "name": "Gradient",
+              "paint": {
+                "colors": [
+                  "from",
+                  "to"
+                ],
+                "live": true,
+                "map": "stroke",
+                "repeat": "mirror",
+                "size": 24,
+                "values": {
+                  "angle": 0
+                }
+              },
+              "tags": [
+                "background"
+              ],
+              "transparent": false,
+              "uses": [
+                "generator"
+              ]
+            },
+            {
+              "accepts": [
+                "path"
+              ],
+              "category": "path",
+              "description": "A line drawn along its path control over transparency; with no path, a line across the middle.",
+              "id": "fake.trail",
+              "kind": "shader",
+              "loop": false,
+              "name": "Trail",
+              "paint": {
+                "colors": [
+                  "color"
+                ],
+                "map": "path",
+                "values": {
+                  "width": 4
+                }
+              },
+              "tags": [
+                "path",
+                "line"
+              ],
+              "transparent": true,
+              "uses": [
+                "overlay"
+              ]
+            }
+          ],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "paintHints": true,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [
+            {
+              "count": 1,
+              "tag": "background"
+            },
+            {
+              "count": 1,
+              "tag": "line"
+            },
+            {
+              "count": 1,
+              "tag": "path"
+            }
+          ],
+          "total": 2
+        }
+      }
+    },
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "place": "layer"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [
+            {
+              "category": "gradient",
+              "description": "A linear gradient between two colours that can turn over time.",
+              "duration": 4000,
+              "id": "fake.gradient",
+              "kind": "shader",
+              "loop": true,
+              "name": "Gradient",
+              "paint": {
+                "colors": [
+                  "from",
+                  "to"
+                ],
+                "live": true,
+                "map": "stroke",
+                "repeat": "mirror",
+                "size": 24,
+                "values": {
+                  "angle": 0
+                }
+              },
+              "tags": [
+                "background"
+              ],
+              "transparent": false,
+              "uses": [
+                "generator"
+              ]
+            },
+            {
+              "category": "broadcast",
+              "description": "A coloured bar that slides in from the left in the lower third. Transparent elsewhere.",
+              "duration": 2000,
+              "id": "fake.bar",
+              "kind": "shader",
+              "loop": false,
+              "name": "Lower-third bar",
+              "tags": [
+                "lower third",
+                "title"
+              ],
+              "transparent": true,
+              "uses": [
+                "title",
+                "overlay"
+              ]
+            },
+            {
+              "accepts": [
+                "path"
+              ],
+              "category": "path",
+              "description": "A line drawn along its path control over transparency; with no path, a line across the middle.",
+              "id": "fake.trail",
+              "kind": "shader",
+              "loop": false,
+              "name": "Trail",
+              "paint": {
+                "colors": [
+                  "color"
+                ],
+                "map": "path",
+                "values": {
+                  "width": 4
+                }
+              },
+              "tags": [
+                "path",
+                "line"
+              ],
+              "transparent": true,
+              "uses": [
+                "overlay"
+              ]
+            }
+          ],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "paintHints": true,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [
+            {
+              "count": 1,
+              "tag": "background"
+            },
+            {
+              "count": 1,
+              "tag": "line"
+            },
+            {
+              "count": 1,
+              "tag": "lower-third"
+            },
+            {
+              "count": 1,
+              "tag": "path"
+            },
+            {
+              "count": 1,
+              "tag": "title"
+            }
+          ],
+          "total": 3
+        }
+      }
+    },
+    {
+      "tool": "describe_effect",
+      "arguments": {
+        "effect": "fake.trail"
+      },
+      "expect": {
+        "result": {
+          "accepts": [
+            "path"
+          ],
+          "appliesHere": false,
+          "available": true,
+          "category": "path",
+          "controls": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "description": "Line colour as #rrggbb. Default #22d3ee.",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              },
+              "path": {
+                "anyOf": [
+                  {
+                    "description": "SVG path data, or \"\" for no path.",
+                    "format": "svg-path",
+                    "type": "string"
+                  },
+                  {
+                    "description": "Points x0, y0, x1, y1, … in frame pixels.",
+                    "items": {
+                      "description": "x or y, frame pixels.",
+                      "type": "number"
+                    },
+                    "type": "array"
+                  }
+                ],
+                "description": "Where the line runs: SVG path data (fitted into the frame, contain, 8% margin), or points [x0, y0, x1, y1, …] in frame pixels from the top left (used as given), or \"\" for none."
+              },
+              "width": {
+                "description": "Line width in pixels. Default 6.",
+                "maximum": 64,
+                "minimum": 1,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "defaults": {
+            "color": "#22d3ee",
+            "path": "",
+            "width": 6
+          },
+          "description": "A line drawn along its path control over transparency; with no path, a line across the middle.",
+          "id": "fake.trail",
+          "inputs": [],
+          "kind": "shader",
+          "loop": false,
+          "name": "Trail",
+          "paint": {
+            "colors": [
+              "color"
+            ],
+            "map": "path",
+            "values": {
+              "width": 4
+            }
+          },
+          "pathControls": [
+            "path"
+          ],
+          "presets": [],
+          "tags": [
+            "path",
+            "line"
+          ],
+          "transparent": true,
+          "uses": [
+            "overlay"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.bar"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "\"fake.bar\" (Lower-third bar) doesn't work as paint: its provider marks the effects that do with a paint hint, and this one has none, so painting with it would only reveal a still frame of something meant to be seen whole. Add it as an effect layer (add_effect_layer) or fill a layer with it (fill_layer_with_effect) instead, or paint with an effect from search_effects with place \"paint\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "set_color",
+      "arguments": {
+        "color": "#ff0000",
+        "secondaryColor": "#0000ff"
+      },
+      "expect": {
+        "result": {
+          "color": "#ff0000",
+          "locked": false,
+          "secondaryColor": "#0000ff"
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.gradient"
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "fake.gradient",
+            "live": true,
+            "map": {
+              "by": "stroke",
+              "length": 300,
+              "repeat": "mirror"
+            },
+            "provider": "fake",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "angle": 0,
+              "from": "#ff0000",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#0000ff"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Live",
+        "type": "strokes"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "liveStrokes": 0,
+          "locks": {},
+          "name": "Live",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 8,
+            "pressure": 0.8
+          },
+          {
+            "x": 24,
+            "y": 6,
+            "pressure": 0.8
+          },
+          {
+            "x": 44,
+            "y": 8,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "ink-pen",
+        "seed": 3
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 11,
+            "width": 49,
+            "x": -1,
+            "y": 2
+          },
+          "dabs": 81,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/effect-paint-hints.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "c8f2299d659640bc1e6b15c5dde849fcbc4d196013703ee12a461279fb19f2de",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.trail"
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "fake.trail",
+            "map": {
+              "by": "path"
+            },
+            "provider": "fake",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "color": "#ff0000",
+              "path": "",
+              "width": 4
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Trail"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Trail",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 20,
+            "pressure": 0.8
+          },
+          {
+            "x": 24,
+            "y": 26,
+            "pressure": 0.8
+          },
+          {
+            "x": 44,
+            "y": 20,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "ink-pen",
+        "seed": 4
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 13,
+            "width": 49,
+            "x": -1,
+            "y": 15
+          },
+          "dabs": 82,
+          "layerId": "@2",
+          "strokeId": "s2"
+        },
+        "pixels": {
+          "file": "png/effect-paint-hints.11.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "b110756c17d8957331a14bdf7bdbe74aae64dc32eb021bc8cbd9a075822abacb",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.gradient",
+        "map": {
+          "by": "canvas"
+        },
+        "values": {
+          "to": "#00ff00",
+          "angle": 45
+        },
+        "live": false
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "fake.gradient",
+            "provider": "fake",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "angle": 45,
+              "from": "#ff0000",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#00ff00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "update_effect",
+      "arguments": {
+        "target": "paint",
+        "effect": "paint",
+        "values": {
+          "angle": 30
+        }
+      },
+      "expect": {
+        "result": {
+          "effect": {
+            "effect": "fake.gradient",
+            "enabled": true,
+            "id": "paint",
+            "provider": "fake",
+            "role": "effect paint",
+            "values": {
+              "angle": 30,
+              "from": "#ff0000",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#00ff00"
+            }
+          },
+          "effects": [
+            {
+              "effect": "fake.gradient",
+              "enabled": true,
+              "id": "paint",
+              "provider": "fake",
+              "role": "effect paint",
+              "values": {
+                "angle": 30,
+                "from": "#ff0000",
+                "opacity": 1,
+                "spin": 0,
+                "to": "#00ff00"
+              }
+            }
+          ],
+          "target": "paint"
+        }
+      }
+    },
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "pixel.rings"
+      },
+      "expect": {
+        "result": {
+          "compiled": true,
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1d2b53",
+              "description": "Colour of the rings. (#rrggbb)",
+              "id": "ink",
+              "type": "color"
+            },
+            {
+              "default": 12,
+              "description": "How many rings across the picture.",
+              "id": "count",
+              "max": 64,
+              "min": 1,
+              "type": "number"
+            },
+            {
+              "default": [
+                0.5,
+                0.5
+              ],
+              "description": "Where they spread from (0..1). ([x, y])",
+              "id": "center",
+              "max": 1,
+              "min": 0,
+              "size": 2,
+              "type": "vector"
+            }
+          ],
+          "duration": 2000,
+          "from": "pixel.rings",
+          "issues": [],
+          "loop": true,
+          "name": "Rings",
+          "source": "control ink: color = #1d2b53 // Colour of the rings.\ncontrol count: number = 12 range 1 64 // How many rings across the picture.\ncontrol center: vec2 = vec2(0.5, 0.5) range 0 1 // Where they spread from (0..1).\nlet d = distance(uv, center)\nlet wave = 0.5 + 0.5 * sin((d * count - time / 2) * TAU)\nout = vec4(ink, smoothstep(0.4, 0.6, wave))\n",
+          "sourceLanguage": "pixel",
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 12,
+            "ink": "#1d2b53"
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_paint_hint",
+      "arguments": {
+        "paint": {
+          "map": "stroke",
+          "colors": [
+            "paper"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "paint.colors names \"paper\", which is not a control"
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "effect_authoring_set_paint_hint",
+      "arguments": {
+        "paint": {
+          "map": "stroke",
+          "colors": [
+            "ink"
+          ],
+          "repeat": "clamp",
+          "values": {
+            "count": 4
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "paint": {
+            "colors": [
+              "ink"
+            ],
+            "map": "stroke",
+            "repeat": "clamp",
+            "values": {
+              "count": 4
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_describe",
+      "expect": {
+        "result": {
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1d2b53",
+              "description": "Colour of the rings. (#rrggbb)",
+              "id": "ink",
+              "type": "color"
+            },
+            {
+              "default": 12,
+              "description": "How many rings across the picture.",
+              "id": "count",
+              "max": 64,
+              "min": 1,
+              "type": "number"
+            },
+            {
+              "default": [
+                0.5,
+                0.5
+              ],
+              "description": "Where they spread from (0..1). ([x, y])",
+              "id": "center",
+              "max": 1,
+              "min": 0,
+              "size": 2,
+              "type": "vector"
+            }
+          ],
+          "duration": 2000,
+          "issues": [],
+          "kind": "shader",
+          "loop": true,
+          "name": "Rings",
+          "paint": {
+            "colors": [
+              "ink"
+            ],
+            "map": "stroke",
+            "repeat": "clamp",
+            "values": {
+              "count": 4
+            }
+          },
+          "presets": [],
+          "previewError": null,
+          "sourceLanguage": "pixel",
+          "time": 1000,
+          "tracks": [],
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 12,
+            "ink": "#1d2b53"
+          }
+        }
+      }
+    },
+    {
+      "tool": "save_authored_effect",
+      "arguments": {
+        "name": "Rings"
+      },
+      "expect": {
+        "result": {
+          "animated": [],
+          "controls": [
+            "ink",
+            "count",
+            "center"
+          ],
+          "duration": 2000,
+          "id": "authored.rings",
+          "loop": true,
+          "name": "Rings"
+        }
+      }
+    },
+    {
+      "tool": "close_effect_authoring",
+      "expect": {
+        "result": {
+          "closed": "Rings"
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "authored.rings"
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "authored.rings",
+            "map": {
+              "by": "stroke",
+              "length": 300,
+              "repeat": "clamp"
+            },
+            "provider": "authored",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "center": [
+                0.5,
+                0.5
+              ],
+              "count": 4,
+              "ink": "#ff0000"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 8,
+                "width": 44,
+                "x": 2,
+                "y": 18
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Trail",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 7,
+                "width": 46,
+                "x": 1,
+                "y": 4
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "liveStrokes": 1,
+              "locks": {},
+              "name": "Live",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@3",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@1": "pixerate-asset:ey-1tk8negx1bq",
+              "@2": "<binary>"
+            },
+            "authoredEffects": {
+              "authored.rings": {
+                "document": {
+                  "duration": 2000,
+                  "effectId": "pixel.rings",
+                  "loop": true,
+                  "name": "Rings",
+                  "paint": {
+                    "colors": [
+                      "ink"
+                    ],
+                    "map": "stroke",
+                    "repeat": "clamp",
+                    "values": {
+                      "count": 4
+                    }
+                  },
+                  "presets": [],
+                  "providerId": "pixel",
+                  "source": "control ink: color = #1d2b53 // Colour of the rings.\ncontrol count: number = 12 range 1 64 // How many rings across the picture.\ncontrol center: vec2 = vec2(0.5, 0.5) range 0 1 // Where they spread from (0..1).\nlet d = distance(uv, center)\nlet wave = 0.5 + 0.5 * sin((d * count - time / 2) * TAU)\nout = vec4(ink, smoothstep(0.4, 0.6, wave))\n",
+                  "sourceLanguage": "pixel",
+                  "tracks": {},
+                  "values": {
+                    "center": [
+                      0.5,
+                      0.5
+                    ],
+                    "count": 12,
+                    "ink": "#1d2b53"
+                  },
+                  "version": 1
+                },
+                "name": "Rings"
+              }
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@3",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Live",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 4
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Trail",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 2,
+                "y": 18
+              }
+            ],
+            "liveStrokes": {
+              "@1": [
+                {
+                  "brush": {
+                    "dynamics": {
+                      "minSize": 0.25,
+                      "pressureSmoothing": 0.4,
+                      "smoothing": 0.5,
+                      "velocitySize": -0.45
+                    },
+                    "id": "ink-pen",
+                    "kind": "mark",
+                    "medium": "ink",
+                    "name": "Ink pen",
+                    "tip": {
+                      "shape": "round",
+                      "size": 4,
+                      "spacing": 0.05
+                    }
+                  },
+                  "color": "#ff0000",
+                  "id": "s1",
+                  "layerId": "@1",
+                  "paint": {
+                    "effect": "fake.gradient",
+                    "live": true,
+                    "map": {
+                      "by": "stroke",
+                      "length": 300,
+                      "repeat": "mirror"
+                    },
+                    "provider": "fake",
+                    "time": 0,
+                    "type": "effect",
+                    "values": {
+                      "angle": 0,
+                      "from": "#ff0000",
+                      "opacity": 1,
+                      "spin": 0,
+                      "to": "#0000ff"
+                    }
+                  },
+                  "points": [
+                    {
+                      "pressure": 0.8,
+                      "x": 4,
+                      "y": 8
+                    },
+                    {
+                      "pressure": 0.8,
+                      "x": 24,
+                      "y": 6
+                    },
+                    {
+                      "pressure": 0.8,
+                      "x": 44,
+                      "y": 8
+                    }
+                  ],
+                  "seed": 3
+                }
+              ]
+            },
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#ff0000",
+                "id": "s1",
+                "layerId": "@1",
+                "paint": {
+                  "effect": "fake.gradient",
+                  "live": true,
+                  "map": {
+                    "by": "stroke",
+                    "length": 300,
+                    "repeat": "mirror"
+                  },
+                  "provider": "fake",
+                  "time": 0,
+                  "type": "effect",
+                  "values": {
+                    "angle": 0,
+                    "from": "#ff0000",
+                    "opacity": 1,
+                    "spin": 0,
+                    "to": "#0000ff"
+                  }
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 8
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 6
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#ff0000",
+                "id": "s2",
+                "layerId": "@2",
+                "paint": {
+                  "effect": "fake.trail",
+                  "map": {
+                    "by": "path"
+                  },
+                  "provider": "fake",
+                  "time": 0,
+                  "type": "effect",
+                  "values": {
+                    "color": "#ff0000",
+                    "path": [
+                      4,
+                      20,
+                      24,
+                      26,
+                      44,
+                      20
+                    ],
+                    "width": 4
+                  }
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 26
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 20
+                  }
+                ],
+                "seed": 4
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/effect-paint-hints.21.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "b110756c17d8957331a14bdf7bdbe74aae64dc32eb021bc8cbd9a075822abacb",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

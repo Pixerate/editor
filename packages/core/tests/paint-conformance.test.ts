@@ -36,7 +36,7 @@ describe('the paint conformance scenarios', () => {
   });
 
   it.each(scenarios.map((s) => [s.id, s] as const))('%s replays as recorded', async (_id, scenario) => {
-    const outputs = await runConformanceScenario(scenario, createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() }));
+    const outputs = await runConformanceScenario(scenario, createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider({ paintHints: !!scenario.setup?.effectPaintHints }) }));
     scenario.steps.forEach((step, i) => {
       const label = `step ${i + 1} (${step.tool})`;
       const out = outputs[i]!;
@@ -59,7 +59,7 @@ describe('the paint conformance scenarios', () => {
   // only proves a feature survives saving if this core's own save → load → save loses nothing.
   const reloading = scenarios.filter((s) => s.steps.some((step) => step.reload));
   it.each(reloading.map((s) => [s.id, s] as const))('%s reopens what it saved unchanged', async (_id, scenario) => {
-    const host = createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() });
+    const host = createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider({ paintHints: !!scenario.setup?.effectPaintHints }) });
     const save = host.save!.bind(host);
     const load = host.load!.bind(host);
     // `lastGrownAt` is the clock at save time (growWhileClosed); everything else must come back as saved.

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPaintEffectAuthoringToolProvider, createPaintEffectsToolProvider, PAPER_EFFECT_BLENDS, type PaintEditorController, type PaintEffectsToolProviderOptions, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
-import { pathControlsOf, type EffectProvider } from '@pixerate/editor/effects';
+import { createPaintEffectAuthoringToolProvider, createPaintEffectsToolProvider, paintEffectOffered, PAPER_EFFECT_BLENDS, type PaintEditorController, type PaintEffectsToolProviderOptions, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
+import { pathControlsOf, type EffectProvider, type EffectSummary } from '@pixerate/editor/effects';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 import { EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
 import { usePaintEditorState } from './usePaintEditor';
@@ -106,7 +106,7 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
   /** Paints with the effect paint again with some of it changed (the other settings kept). */
   const repaint = (patch: { values?: Record<string, unknown>; map?: unknown; live?: boolean }) => {
     if (!effectPaint) return;
-    run(() => controller.setEffectPaint({ effect: effectPaint.effect, values: effectPaint.values as never, time: effectPaint.time, map: effectPaint.map, live: effectPaint.live, ...(patch as object) }));
+    run(() => controller.setEffectPaint({ effect: effectPaint.effect, values: effectPaint.values as never, time: effectPaint.time, map: effectPaint.map ?? { by: 'canvas' }, live: effectPaint.live ?? false, ...(patch as object) }));
   };
   const thumbnail = useMemo(() => (effectPaint && !state.effectPaintRendering ? controller.effectPaintThumbnail(48) : null), [controller, effectPaint, state.effectPaintRendering]);
   const run = (work: () => Promise<unknown>) =>
@@ -124,6 +124,8 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
     else if (kind === 'paint') run(() => controller.setEffectPaint({ effect: id }));
   };
   const toggle = (b: Exclude<Browse, null>) => setBrowse(browse === b ? null : b);
+  // Paint lists only effects that suit paint when the provider says which do (paint hints).
+  const offered = useMemo(() => (browse ? (e: EffectSummary) => paintEffectOffered(e, browse, provider?.capabilities) : undefined), [browse, provider]);
   const pixel = active?.type === 'pixel';
   return (
     <div className={`${panel} ${className ?? ''}`} data-testid="paint-effects-panel" aria-busy={busy}>
@@ -146,7 +148,7 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
         </button>
       </div>
       {!provider && <p className="text-[11px] text-slate-400">No effects provider is registered. Effects in the painting are kept.</p>}
-      {browse && <EffectsBrowser provider={provider} uses={BROWSERS[browse].uses} title={BROWSERS[browse].title} onPick={(e) => pick(e.id)} />}
+      {browse && <EffectsBrowser provider={provider} uses={BROWSERS[browse].uses} filter={offered} title={BROWSERS[browse].title} onPick={(e) => pick(e.id)} />}
       {paper && (
         <div className="flex flex-col gap-1 rounded border border-slate-700 p-1" data-effect-part="paper">
           <div className="flex items-center gap-1">

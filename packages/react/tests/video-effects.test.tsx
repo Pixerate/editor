@@ -4,7 +4,8 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { createFakeEffectProvider, type EffectProvider } from "@pixerate/editor/effects";
+import { createFakeEffectProvider, type EffectProvider, type EffectSummary } from "@pixerate/editor/effects";
+import { paintEffectOffered } from "@pixerate/editor/paint-editor";
 import { VideoEditorController, type VideoProject } from "@pixerate/editor/video-editor";
 import { EffectParameters, EffectsBrowser, useEffects } from "../src/effects";
 import { VideoEditor, VideoEffectsPanel, useVideoEffectsTools } from "../src/video-editor";
@@ -90,6 +91,14 @@ describe("effects (React)", () => {
     expect(c.effectsProvider).toBe(a);
     act(() => root.render(<Probe p={null} />));
     expect(c.effectsProvider).toBeNull();
+  });
+
+  it("EffectsBrowser keeps only what filter keeps: the paint place with provider paint hints", async () => {
+    const provider = createFakeEffectProvider({ paintHints: true });
+    const filter = (e: EffectSummary) => paintEffectOffered(e, "paint", provider.capabilities);
+    act(() => root.render(<EffectsBrowser provider={provider} uses={["generator", "overlay", "title"]} filter={filter} onPick={() => {}} thumbnails={false} />));
+    await flush();
+    expect([...container.querySelectorAll("[data-effect-id]")].map((b) => b.getAttribute("data-effect-id"))).toEqual(["fake.gradient", "fake.trail"]);
   });
 
   it("EffectsBrowser lists, filters and picks effects, and says when there is no provider", async () => {

@@ -2835,6 +2835,15 @@ public struct SearchEffectsArguments: Sendable {
         case path
     }
 
+    /// Only effects this place in the painting takes: paper (generators, set_paper_effect), layer and fill (generators, overlays and titles: add_effect_layer, fill_layer_with_effect), light (filters, apply_effect) or paint (set_effect_paint: generators, overlays and titles, and when the provider marks the effects that suit paint with a paint hint, only those).
+    public enum Place: String, CaseIterable, Sendable {
+        case paper
+        case layer
+        case fill
+        case light
+        case paint
+    }
+
     /// Words to match (default: every effect).
     public var query: String?
     /// shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels) or timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own).
@@ -2849,6 +2858,8 @@ public struct SearchEffectsArguments: Sendable {
     public var limit: Int?
     /// Only effects that take every one of these (path: effects that draw along a path you give; describe_effect names the controls in pathControls).
     public var accepts: [Accepts]?
+    /// Only effects this place in the painting takes: paper (generators, set_paper_effect), layer and fill (generators, overlays and titles: add_effect_layer, fill_layer_with_effect), light (filters, apply_effect) or paint (set_effect_paint: generators, overlays and titles, and when the provider marks the effects that suit paint with a paint hint, only those).
+    public var place: Place?
 
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
     public init(_ args: JSONObject) throws {
@@ -2859,6 +2870,7 @@ public struct SearchEffectsArguments: Sendable {
         tags = try args.strings("tags")
         limit = try args.integer("limit")
         accepts = try args.enumerations("accepts", as: Accepts.self)
+        place = try args.enumeration("place", as: Place.self)
     }
 }
 
@@ -2987,13 +2999,13 @@ public struct SetPaperEffectArguments: Sendable {
 public struct SetEffectPaintArguments: Sendable {
     /// An effect id from search_effects (use "generator" or "overlay" or "title").
     public var effect: String
-    /// Control values over the effect's defaults: control name → value, as listed by describe_effect (its "controls" schema: types, ranges, units and defaults).
+    /// Control values over the effect's defaults (and over its paint hint's values and colours): control name → value, as listed by describe_effect (its "controls" schema: types, ranges, units and defaults).
     public var values: JSONValue?
     /// Which moment of an animated effect to paint with, in ms (default 0).
     public var time: Double?
-    /// How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g.
+    /// How the effect lies on the paint (default: its paint hint's map, else by canvas): by canvas (fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g.
     public var map: JSONValue?
-    /// Live effect paint (default false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time.
+    /// Live effect paint (default: its paint hint's live, else false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time.
     public var live: Bool?
 
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
@@ -3282,6 +3294,17 @@ public struct EffectAuthoringSetTimingArguments: Sendable {
     public init(_ args: JSONObject) throws {
         duration = try args.number("duration")
         loop = try args.bool("loop")
+    }
+}
+
+/// Arguments of `effect_authoring_set_paint_hint`.
+public struct EffectAuthoringSetPaintHintArguments: Sendable {
+    /// The paint hint, or null to remove it.
+    public var paint: JSONValue?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        paint = args.argument("paint")
     }
 }
 
@@ -4116,6 +4139,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .effectAuthoringRemoveKeyframe: try EffectAuthoringRemoveKeyframeArguments(args)
     case .effectAuthoringClearTrack: try EffectAuthoringClearTrackArguments(args)
     case .effectAuthoringSetTiming: try EffectAuthoringSetTimingArguments(args)
+    case .effectAuthoringSetPaintHint: try EffectAuthoringSetPaintHintArguments(args)
     case .effectAuthoringSeek: try EffectAuthoringSeekArguments(args)
     case .effectAuthoringUndo: try EffectAuthoringUndoArguments(args)
     case .effectAuthoringRedo: try EffectAuthoringRedoArguments(args)

@@ -39,7 +39,7 @@ const { createFakeEffectProvider } = await core("effects/index.js");
 
 /** How each domain builds a fresh host for a scenario. */
 const DOMAINS = {
-  paint: (scenario) => createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() }),
+  paint: (scenario) => createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider({ paintHints: !!scenario.setup?.effectPaintHints }) }),
   vector: (scenario) => createVectorConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() }),
   chart: (scenario) => createChartConformanceHost(scenario.setup ?? {}),
 };

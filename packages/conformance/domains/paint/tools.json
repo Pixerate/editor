@@ -17490,7 +17490,7 @@
         {
           "name": "search_effects",
           "title": "Search effects",
-          "description": "Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera, timing), category, use (filter, transition, generator, overlay, title, motion, interactive, camera, timing) or tags (effects carrying every one), and accepts [\"path\"] for effects that draw along a path you give. For this editor, apply_effect takes uses filter. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts }] (timing effects, kind timing, retime video footage and have no duration: their length depends on the footage), total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.",
+          "description": "Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera, timing), category, use (filter, transition, generator, overlay, title, motion, interactive, camera, timing) or tags (effects carrying every one), and accepts [\"path\"] for effects that draw along a path you give, and place for the effects one place in this editor takes. For this editor, apply_effect takes uses filter. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts, paint: { map, colors, values, live, repeat, size } when the provider suggests how to paint with it }] (timing effects, kind timing, retime video footage and have no duration: their length depends on the footage), total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -17553,6 +17553,17 @@
                   "description": "path: the effect has a control that draws along a path given at run time."
                 },
                 "description": "Only effects that take every one of these (path: effects that draw along a path you give; describe_effect names the controls in pathControls)."
+              },
+              "place": {
+                "type": "string",
+                "enum": [
+                  "paper",
+                  "layer",
+                  "fill",
+                  "light",
+                  "paint"
+                ],
+                "description": "Only effects this place in the painting takes: paper (generators, set_paper_effect), layer and fill (generators, overlays and titles: add_effect_layer, fill_layer_with_effect), light (filters, apply_effect) or paint (set_effect_paint: generators, overlays and titles, and when the provider marks the effects that suit paint with a paint hint, only those)."
               }
             },
             "additionalProperties": false
@@ -17812,7 +17823,7 @@
         {
           "name": "set_effect_paint",
           "title": "Paint with an effect",
-          "description": "Makes brushes paint with a provider generator, overlay or title effect (search_effects with use generator, overlay or title): it is rendered once at the canvas size, and each stroke then takes every pixel's colour from it, fixed to the canvas, as if painting a hidden picture into view (the effect's transparency paints nothing). Dab, particle and bristle brushes take the colour per pixel; mixer brushes and dab brushes that pick up paint take it per dab, at its centre. Watercolour, gouache, oil and impasto brushes take it per pixel too, shifted by paint they pick up (in wet paint the pattern then flows with the water; impasto keeps its relief), and sprayed stickers take the colour at their centre. Erasers, blenders and smudges ignore it. It replaces the paint colour or gradient until set_color or set_paint; a brush with its own gradient paints that instead. Strokes record it and replay exactly. Editor state, not an undo step. Returns the effect paint: { effect, provider, values (every control), time } (list_applied_effects target \"paint\" shows it; update_effect / remove_effect with target and effect \"paint\" change or clear it).",
+          "description": "Makes brushes paint with a provider generator, overlay or title effect (search_effects with use generator, overlay or title): it is rendered once at the canvas size, and each stroke then takes every pixel's colour from it, fixed to the canvas, as if painting a hidden picture into view (the effect's transparency paints nothing). Dab, particle and bristle brushes take the colour per pixel; mixer brushes and dab brushes that pick up paint take it per dab, at its centre. Watercolour, gouache, oil and impasto brushes take it per pixel too, shifted by paint they pick up (in wet paint the pattern then flows with the water; impasto keeps its relief), and sprayed stickers take the colour at their centre. Erasers, blenders and smudges ignore it. It replaces the paint colour or gradient until set_color or set_paint; a brush with its own gradient paints that instead. An effect with a paint hint (search_effects / describe_effect paint) starts from it: its map and repeat unless map is given, its values with the paint and secondary colours (set_color) in its colour controls under any values given, and its live unless live is given. When the provider marks the effects that suit paint (provider capabilities paintHints), an effect without a hint is refused: find paints with search_effects place \"paint\", and put other effects on an effect layer or fill instead. Strokes record it and replay exactly. Editor state, not an undo step. Returns the effect paint: { effect, provider, values (every control), time, map, live } (list_applied_effects target \"paint\" shows it; update_effect / remove_effect with target and effect \"paint\" change or clear it).",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -17823,7 +17834,7 @@
               },
               "values": {
                 "type": "object",
-                "description": "Control values over the effect's defaults: control name → value, as listed by describe_effect (its \"controls\" schema: types, ranges, units and defaults). Only the given controls change; colours are \"#rrggbb\". Unknown controls and out-of-range values are refused with the valid ones."
+                "description": "Control values over the effect's defaults (and over its paint hint's values and colours): control name → value, as listed by describe_effect (its \"controls\" schema: types, ranges, units and defaults). Only the given controls change; colours are \"#rrggbb\". Unknown controls and out-of-range values are refused with the valid ones."
               },
               "time": {
                 "type": "number",
@@ -17832,7 +17843,7 @@
               },
               "map": {
                 "type": "object",
-                "description": "How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g. search_effects accepts [\"path\"]: passes each stroke's centreline [x0, y0, x1, y1, …] in canvas pixels to that control so the effect draws itself along the stroke; strokes longer than 256 points are simplified rather than refused).",
+                "description": "How the effect lies on the paint (default: its paint hint's map, else by canvas): by canvas (fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g. search_effects accepts [\"path\"]: passes each stroke's centreline [x0, y0, x1, y1, …] in canvas pixels to that control so the effect draws itself along the stroke; strokes longer than 256 points are simplified rather than refused).",
                 "properties": {
                   "by": {
                     "type": "string",
@@ -17866,7 +17877,7 @@
               },
               "live": {
                 "type": "boolean",
-                "description": "Live effect paint (default false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time."
+                "description": "Live effect paint (default: its paint hint's live, else false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time."
               }
             },
             "required": [
@@ -18168,7 +18179,7 @@
         {
           "name": "effect_authoring_describe",
           "title": "Describe open effect",
-          "description": "Describes the effect currently open for authoring: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead time, duration, loop, compile issues, and previewError: why there is no pixel preview (e.g. a vector effect the provider only draws as SVG), or null.",
+          "description": "Describes the effect currently open for authoring: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead time, duration, loop, paint (how it is best painted with, saved with it; null for none), compile issues, and previewError: why there is no pixel preview (e.g. a vector effect the provider only draws as SVG), or null.",
           "inputSchema": {
             "type": "object",
             "properties": {},
@@ -18534,6 +18545,85 @@
           },
           "annotations": {
             "title": "Set effect timing",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_set_paint_hint",
+          "title": "Set the paint hint",
+          "description": "Sets how the open effect is best painted with, saved in its document (an authored effect saved from it keeps it), or removes it with paint null. When the effect is picked as paint (set_effect_paint) it starts from the hint: its map, its values over the defaults, the brush's main and second colours in its colors controls, and live. Refused when colors or values name controls the effect does not have (effect_authoring_describe lists them), when a colors control does not take #rrggbb, or for map \"path\" without a path control. One undo step. Returns the paint hint now (null for none).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "paint": {
+                "description": "The paint hint, or null to remove it.",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "map": {
+                        "type": "string",
+                        "enum": [
+                          "path",
+                          "stroke",
+                          "canvas"
+                        ],
+                        "description": "How it follows a stroke: path (draws itself along the stroke through its path control), stroke (a strip bent along the stroke) or canvas (fixed to the canvas, painting reveals it)."
+                      },
+                      "colors": {
+                        "type": "array",
+                        "maxItems": 2,
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A colour control name."
+                        },
+                        "description": "Up to two colour controls that take the brush's main and second colours, main first (default none)."
+                      },
+                      "values": {
+                        "type": "object",
+                        "description": "Control values applied over the defaults when painting (default none)."
+                      },
+                      "live": {
+                        "type": "boolean",
+                        "description": "Whether a stroke keeps playing the effect (default false)."
+                      },
+                      "repeat": {
+                        "type": "string",
+                        "enum": [
+                          "repeat",
+                          "mirror",
+                          "clamp"
+                        ],
+                        "description": "map stroke: past the strip end start again, run back (default mirror), or hold the last colour."
+                      },
+                      "size": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "description": "A suggested brush width in px (default none)."
+                      }
+                    },
+                    "required": [
+                      "map"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "paint"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Set the paint hint",
             "readOnlyHint": false,
             "destructiveHint": false,
             "idempotentHint": true,

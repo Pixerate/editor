@@ -307,9 +307,12 @@ const GENERATED_ID = /^(pl[0-9a-z]{9,}|[a-z]+_[0-9a-z]{8,}_[0-9a-z]+)$/;
  * `pixerate.editor-document` envelope) and the composited pixels. `setup` is the scenario's
  * editor options, such as `{ width, height }`, where `stickers: "fake"` is the editor's stickers with
  * the fake sticker library (`createFakeStickerProvider`, which has an animated sticker); `effects` is
- * the effect provider the effect tools use.
+ * the effect provider the effect tools use. `effectPaintHints: true` in a scenario's setup means the
+ * caller passes the fake provider with paint hints (`createFakeEffectProvider({ paintHints: true })`).
  */
-export function createPaintConformanceHost(setup: Omit<PaintEditorOptions, 'stickers'> & { stickers?: StickerProvider | 'fake' }, options: { effects: EffectProvider }): ConformanceHost {
+export function createPaintConformanceHost(raw: Omit<PaintEditorOptions, 'stickers'> & { stickers?: StickerProvider | 'fake'; effectPaintHints?: boolean }, options: { effects: EffectProvider }): ConformanceHost {
+  // effectPaintHints asks the caller for the fake provider with paint hints; the editor doesn't take it.
+  const { effectPaintHints: _hints, ...setup } = raw;
   const stickers = setup.stickers === 'fake' ? combineStickerProviders([editorStickers(), createFakeStickerProvider()]) : setup.stickers;
   // The TypeScript wet kernel on one thread is the reference; WebAssembly and the GPU load late.
   const controller = new PaintEditorController({ ...setup, stickers, wet: { kernel: 'typescript', threads: 0, gpu: 'off', ...setup.wet } });
