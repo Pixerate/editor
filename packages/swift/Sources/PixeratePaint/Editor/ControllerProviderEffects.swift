@@ -138,8 +138,11 @@ public let MAX_LIVE_EFFECT_SOURCES = 8
 extension PaintEditorController {
     // MARK: - Provider
 
-    /// Registers (or with nil removes) the effects provider. Not an edit: no undo step.
-    public func setEffectsProvider(_ provider: EffectProvider?) { effectsProvider = provider }
+    /// Registers (or with nil removes) the effects provider; listeners hear it (the editor shows its effects panel only with one). Not an edit: no undo step.
+    public func setEffectsProvider(_ provider: EffectProvider?) {
+        effectsProvider = provider
+        emit([])
+    }
 
     func requireEffectsProvider() throws -> EffectProvider {
         guard let p = effectsProvider else { throw EffectError("no_provider", "No effects provider is registered with this editor. The host must call setEffectsProvider(provider) first.") }

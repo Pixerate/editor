@@ -6,7 +6,9 @@ import SwiftUI
  * The paint editor (`PaintEditor`): the toolbar, the brush panel on the left, the canvas, and
  * colour, paper (with the light for thick paint), layers (with light spill and the stroke layer's
  * strokes), layer styles and wet paint on the right. Wet paint keeps flowing: the view ticks the
- * simulation every frame (`runWetClock`), and living biopaint grows live (`runCultureClock`).
+ * simulation every frame (`runWetClock`), living biopaint grows live (`runCultureClock`), and
+ * live effect paint plays (`runEffectClock`). With an effects provider registered, an Effects tab
+ * puts provider effects on the paper, layers and brush (`PaintProviderEffectsPanel`).
  * Agents drive the same editor through `model.registry`.
  */
 public struct PaintEditorView: View {
@@ -47,7 +49,7 @@ public struct PaintEditorView: View {
                 Divider()
                 VStack(spacing: 0) {
                     Picker("Panels", selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
-                        ForEach(PaintPanelTab.allCases) { Text($0.label).tag($0) }
+                        ForEach(model.tabs) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -62,6 +64,7 @@ public struct PaintEditorView: View {
                                 PaintLightSpillPanel(model: model)
                                 PaintStrokePanel(model: model)
                             case .effects: PaintEffectsPanel(model: model)
+                            case .providerEffects: PaintProviderEffectsPanel(model: model)
                             case .wet: PaintWetPanel(model: model)
                             }
                         }
@@ -77,5 +80,6 @@ public struct PaintEditorView: View {
             await model.runWetClock()
         }
         .task { await model.runCultureClock() }
+        .task { await model.runEffectClock() }
     }
 }

@@ -145,13 +145,15 @@ func paintExportHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
             if format != "image/jpeg" && format != "image/webp" { throw PaintEditorError("format \(JSONValue.string(format).stringified()) is not supported; use image/png, image/jpeg or image/webp.") }
             throw PaintEditorError("\(format) needs a canvas to encode and there is none here; pass encodeImage to the controller, or export PNG.")
         }
-        if a["time"] != nil { throw UnportedBrushError(message: "Exporting live effect paint at a moment is not ported to Swift yet.") }
-        let bytes = try c.exportPng(scale: a["scale"]?.numberValue, paper: a["paper"]?.boolValue)
+        let run = { try c.exportPng(scale: a["scale"]?.numberValue, paper: a["paper"]?.boolValue) }
+        // With time, live effect paint is drawn at that moment (nothing in the document changes).
+        let bytes: [UInt8]
+        if let t = a["time"]?.numberValue { bytes = try await c.withEffectTime(t, run) } else { bytes = try run() }
         return ["mimeType": .string(format), "bytes": .number(Double(bytes.count)), "data": .string(bytesToBase64(bytes))]
     }
     h["export_psd"] = { a in
-        if a["time"] != nil { throw UnportedBrushError(message: "Exporting live effect paint at a moment is not ported to Swift yet.") }
-        let r = try c.exportPsd()
+        let r: PsdExportResult
+        if let t = a["time"]?.numberValue { r = try await c.withEffectTime(t) { try c.exportPsd() } } else { r = try c.exportPsd() }
         return ["data": .string(bytesToBase64(r.bytes)), "bytes": .number(Double(r.bytes.count)), "psb": .bool(r.psb), "warnings": .array(r.warnings.map { .string($0) })]
     }
     return h

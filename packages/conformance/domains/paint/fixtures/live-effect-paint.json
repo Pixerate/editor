@@ -1,0 +1,1055 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "live-effect-paint",
+  "description": "Effect paint on sprayed stickers (each takes the effect's colour at its centre), live effect paint on a stroke layer, its playback settings, and exports of the painting at a moment of its live effects.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Stickers"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Stickers",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.gradient",
+        "values": {
+          "from": "#ff0000",
+          "to": "#0000ff",
+          "angle": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "fake.gradient",
+            "provider": "fake",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "angle": 0,
+              "from": "#ff0000",
+              "opacity": 1,
+              "spin": 0,
+              "to": "#0000ff"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "sticker-stars",
+        "tip": {
+          "size": 10,
+          "stamps": [
+            "editor:star"
+          ]
+        },
+        "marks": {
+          "kind": "objects",
+          "density": 0.6,
+          "scatter": 0,
+          "sizeJitter": 0,
+          "rotationJitter": 0,
+          "colourJitter": 0
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.5,
+              "smoothing": 0.2
+            },
+            "id": "sticker-stars",
+            "kind": "mark",
+            "marks": {
+              "colourJitter": 0,
+              "density": 0.6,
+              "kind": "objects",
+              "rotationJitter": 0,
+              "scatter": 0,
+              "sizeJitter": 0
+            },
+            "name": "Star stickers",
+            "tip": {
+              "shape": "stamp",
+              "size": 10,
+              "stamps": [
+                "editor:star"
+              ]
+            },
+            "variety": "stars"
+          },
+          "engine": "sticker",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 8,
+            "pressure": 0.8
+          },
+          {
+            "x": 24,
+            "y": 8,
+            "pressure": 0.8
+          },
+          {
+            "x": 44,
+            "y": 8,
+            "pressure": 0.8
+          }
+        ],
+        "seed": 7
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 49,
+            "x": -2,
+            "y": 2
+          },
+          "dabs": 11,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/live-effect-paint.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "c41a8ee2ce93a084c19983d755da9ff229f24134874029cd0387a0446de47b54",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_stickers",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "stickers": [
+            {
+              "color": "#e70018",
+              "id": "st1",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 422126072,
+              "size": 9,
+              "stamp": "star",
+              "x": 4,
+              "y": 8
+            },
+            {
+              "color": "#d70028",
+              "id": "st2",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 883604095,
+              "size": 9,
+              "stamp": "star",
+              "x": 7.75,
+              "y": 8
+            },
+            {
+              "color": "#c2003d",
+              "id": "st3",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 762773260,
+              "size": 9,
+              "stamp": "star",
+              "x": 11.5,
+              "y": 8
+            },
+            {
+              "color": "#ad0052",
+              "id": "st4",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 557925151,
+              "size": 9,
+              "stamp": "star",
+              "x": 15.25,
+              "y": 8
+            },
+            {
+              "color": "#970068",
+              "id": "st5",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 261542806,
+              "size": 9,
+              "stamp": "star",
+              "x": 19,
+              "y": 8
+            },
+            {
+              "color": "#870078",
+              "id": "st6",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 669468225,
+              "size": 9,
+              "stamp": "star",
+              "x": 22.75,
+              "y": 8
+            },
+            {
+              "color": "#72008d",
+              "id": "st7",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 257353533,
+              "size": 9,
+              "stamp": "star",
+              "x": 26.5,
+              "y": 8
+            },
+            {
+              "color": "#5d00a2",
+              "id": "st8",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 638881936,
+              "size": 9,
+              "stamp": "star",
+              "x": 30.25,
+              "y": 8
+            },
+            {
+              "color": "#4800b7",
+              "id": "st9",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 167510435,
+              "size": 9,
+              "stamp": "star",
+              "x": 34,
+              "y": 8
+            },
+            {
+              "color": "#3800c7",
+              "id": "st10",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 499896535,
+              "size": 9,
+              "stamp": "star",
+              "x": 37.75,
+              "y": 8
+            },
+            {
+              "color": "#2300dc",
+              "id": "st11",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 487161566,
+              "size": 9,
+              "stamp": "star",
+              "x": 41.5,
+              "y": 8
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Live",
+        "type": "strokes"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "liveStrokes": 0,
+          "locks": {},
+          "name": "Live",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "ink-pen"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "id": "ink-pen",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "Ink pen",
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "engine": "dab",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "fake.gradient",
+        "values": {
+          "from": "#ffcc00",
+          "to": "#00ccff",
+          "angle": 0,
+          "spin": 180
+        },
+        "live": true
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "fake.gradient",
+            "live": true,
+            "provider": "fake",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "angle": 0,
+              "from": "#ffcc00",
+              "opacity": 1,
+              "spin": 180,
+              "to": "#00ccff"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 22,
+            "pressure": 0.9
+          },
+          {
+            "x": 24,
+            "y": 26,
+            "pressure": 0.9
+          },
+          {
+            "x": 44,
+            "y": 22,
+            "pressure": 0.9
+          }
+        ],
+        "seed": 8
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 49,
+            "x": -1,
+            "y": 17
+          },
+          "dabs": 81,
+          "layerId": "@2",
+          "strokeId": "s2"
+        },
+        "pixels": {
+          "file": "png/live-effect-paint.9.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "10604ec56131d073a254d7afc585a08c1d8a28e4ddcb9ab1c393a0dacde8fa78",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_effect_playback",
+      "arguments": {
+        "playing": false,
+        "fps": 24
+      },
+      "expect": {
+        "result": {
+          "animation": {
+            "layerIds": [
+              "@2"
+            ],
+            "sources": 1,
+            "strokes": 1
+          },
+          "fps": 24,
+          "playing": false,
+          "time": 0
+        }
+      }
+    },
+    {
+      "tool": "export_image",
+      "arguments": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 1432,
+          "data": "<binary>",
+          "mimeType": "image/png"
+        }
+      }
+    },
+    {
+      "tool": "export_image",
+      "arguments": {
+        "paper": false,
+        "time": 1000
+      },
+      "expect": {
+        "result": {
+          "bytes": 1458,
+          "data": "<binary>",
+          "mimeType": "image/png"
+        }
+      }
+    },
+    {
+      "tool": "export_image",
+      "arguments": {
+        "paper": false,
+        "time": 2000
+      },
+      "expect": {
+        "result": {
+          "bytes": 1370,
+          "data": "<binary>",
+          "mimeType": "image/png"
+        }
+      }
+    },
+    {
+      "tool": "export_psd",
+      "arguments": {
+        "time": 1000
+      },
+      "expect": {
+        "result": {
+          "bytes": 12364,
+          "data": "<binary>",
+          "psb": false,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "export_image",
+      "arguments": {
+        "time": -5
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Must be >= 0.",
+                "path": "/time"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__export_image\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 8,
+                "width": 46,
+                "x": 1,
+                "y": 19
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "liveStrokes": 1,
+              "locks": {},
+              "name": "Live",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 9,
+                "width": 46,
+                "x": 0,
+                "y": 3
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Stickers",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@3",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@1": "pixerate-asset:11e-3fgl948kzb",
+              "@2": "pixerate-asset:he-1ru3mecc6i5"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@3",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Stickers",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 3
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Live",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 19
+              }
+            ],
+            "liveStrokes": {
+              "@2": [
+                {
+                  "brush": {
+                    "dynamics": {
+                      "minSize": 0.25,
+                      "pressureSmoothing": 0.4,
+                      "smoothing": 0.5,
+                      "velocitySize": -0.45
+                    },
+                    "id": "ink-pen",
+                    "kind": "mark",
+                    "medium": "ink",
+                    "name": "Ink pen",
+                    "tip": {
+                      "shape": "round",
+                      "size": 4,
+                      "spacing": 0.05
+                    }
+                  },
+                  "color": "#1f2937",
+                  "id": "s2",
+                  "layerId": "@2",
+                  "paint": {
+                    "effect": "fake.gradient",
+                    "live": true,
+                    "provider": "fake",
+                    "time": 0,
+                    "type": "effect",
+                    "values": {
+                      "angle": 0,
+                      "from": "#ffcc00",
+                      "opacity": 1,
+                      "spin": 180,
+                      "to": "#00ccff"
+                    }
+                  },
+                  "points": [
+                    {
+                      "pressure": 0.9,
+                      "x": 4,
+                      "y": 22
+                    },
+                    {
+                      "pressure": 0.9,
+                      "x": 24,
+                      "y": 26
+                    },
+                    {
+                      "pressure": 0.9,
+                      "x": 44,
+                      "y": 22
+                    }
+                  ],
+                  "seed": 8
+                }
+              ]
+            },
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "stickers": {
+              "@1": [
+                {
+                  "color": "#e70018",
+                  "id": "st1",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 422126072,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 4,
+                  "y": 8
+                },
+                {
+                  "color": "#d70028",
+                  "id": "st2",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 883604095,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 7.75,
+                  "y": 8
+                },
+                {
+                  "color": "#c2003d",
+                  "id": "st3",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 762773260,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 11.5,
+                  "y": 8
+                },
+                {
+                  "color": "#ad0052",
+                  "id": "st4",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 557925151,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 15.25,
+                  "y": 8
+                },
+                {
+                  "color": "#970068",
+                  "id": "st5",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 261542806,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 19,
+                  "y": 8
+                },
+                {
+                  "color": "#870078",
+                  "id": "st6",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 669468225,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 22.75,
+                  "y": 8
+                },
+                {
+                  "color": "#72008d",
+                  "id": "st7",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 257353533,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 26.5,
+                  "y": 8
+                },
+                {
+                  "color": "#5d00a2",
+                  "id": "st8",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 638881936,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 30.25,
+                  "y": 8
+                },
+                {
+                  "color": "#4800b7",
+                  "id": "st9",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 167510435,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 34,
+                  "y": 8
+                },
+                {
+                  "color": "#3800c7",
+                  "id": "st10",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 499896535,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 37.75,
+                  "y": 8
+                },
+                {
+                  "color": "#2300dc",
+                  "id": "st11",
+                  "opacity": 1,
+                  "ref": "editor:star",
+                  "rotation": 0,
+                  "seed": 487161566,
+                  "size": 9,
+                  "stamp": "star",
+                  "x": 41.5,
+                  "y": 8
+                }
+              ]
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "smoothing": 0.2
+                  },
+                  "id": "sticker-stars",
+                  "kind": "mark",
+                  "marks": {
+                    "colourJitter": 0,
+                    "density": 0.6,
+                    "kind": "objects",
+                    "rotationJitter": 0,
+                    "scatter": 0,
+                    "sizeJitter": 0
+                  },
+                  "name": "Star stickers",
+                  "tip": {
+                    "shape": "stamp",
+                    "size": 10
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s1",
+                "layerId": "@1",
+                "paint": {
+                  "effect": "fake.gradient",
+                  "provider": "fake",
+                  "time": 0,
+                  "type": "effect",
+                  "values": {
+                    "angle": 0,
+                    "from": "#ff0000",
+                    "opacity": 1,
+                    "spin": 0,
+                    "to": "#0000ff"
+                  }
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 8
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 8
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 8
+                  }
+                ],
+                "seed": 7
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#1f2937",
+                "id": "s2",
+                "layerId": "@2",
+                "paint": {
+                  "effect": "fake.gradient",
+                  "live": true,
+                  "provider": "fake",
+                  "time": 0,
+                  "type": "effect",
+                  "values": {
+                    "angle": 0,
+                    "from": "#ffcc00",
+                    "opacity": 1,
+                    "spin": 180,
+                    "to": "#00ccff"
+                  }
+                },
+                "points": [
+                  {
+                    "pressure": 0.9,
+                    "x": 4,
+                    "y": 22
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 24,
+                    "y": 26
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 44,
+                    "y": 22
+                  }
+                ],
+                "seed": 8
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/live-effect-paint.16.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "10604ec56131d073a254d7afc585a08c1d8a28e4ddcb9ab1c393a0dacde8fa78",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

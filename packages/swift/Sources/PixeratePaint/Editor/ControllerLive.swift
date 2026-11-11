@@ -302,7 +302,8 @@ extension PaintEditorController {
     private func drawLiveStroke(_ d: PaintDocumentState, _ plain: PaintLayer, _ surface: TiledSurface, _ st: RecordedStroke, _ film: TiledSurface = emptySurface(4, 0)) throws -> (surface: TiledSurface, film: TiledSurface, bounds: RasterRect?) {
         var i = PaintStrokeInit(layerId: plain.id, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
         i.fixedBrush = st.brush
-        i.paint = st.effect?.json ?? st.paint?.json
+        // At a moment of live effects (`liveEffectAt`), a live stroke paints that frame of its effect.
+        if let at = liveEffectAt, let e = st.effect, e.live { i.paint = liveEffectFrame(e, at).json } else { i.paint = st.effect?.json ?? st.paint?.json }
         i.snapToPerspective = false
         i.stencils = false
         i.maskStencils = st.stencils ?? []
@@ -325,7 +326,7 @@ extension PaintEditorController {
     }
 
     /// A stroke layer's pixels drawn from its strokes, bottom first (every stroke drawn again).
-    private func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke]) throws -> (surface: TiledSurface, film: TiledSurface) {
+    func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke]) throws -> (surface: TiledSurface, film: TiledSurface) {
         let plain = layer.copy(visible: true, locks: .some(nil)).withSurface(layer.pixelSurface, offset: LayerOffset(x: 0, y: 0))
         let base = doc.with { $0.liveStrokes = nil }
         var surface = emptySurface(4)

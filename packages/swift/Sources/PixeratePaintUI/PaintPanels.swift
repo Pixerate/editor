@@ -204,6 +204,9 @@ public struct PaintToolbarView: View {
                     Button("PNG image…") { Task { exportFile = await model.exportFile(.png) } }
                     Button("PNG at 2× (repainted)…") { Task { exportFile = await model.exportFile(.png, scale: 2) } }
                     Button("Photoshop (PSD)…") { Task { exportFile = await model.exportFile(.psd) } }
+                    if model.liveAnimation != nil {
+                        Button("PNG at the moment shown…") { Task { exportFile = await model.exportFile(.png, time: model.effectPlayback.time) } }
+                    }
                 }
                 .fixedSize()
             }

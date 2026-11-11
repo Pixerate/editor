@@ -290,6 +290,14 @@ public final class PaintEditorController {
     /// Live effect paint playback (`setEffectPlayback`) and the time the view shows.
     var effectPlayback: (playing: Bool, fps: Int) = (true, 30)
     var effectTime = 0.0
+    /// The live effect frames the view shows (`animatedLayers`): each stroke layer's committed surface and the frame drawn from it.
+    var effectFrames: [String: (base: TiledSurface, surface: TiledSurface)] = [:]
+    /// Set while live strokes are drawn at a moment of their effects (`liveEffectAt`).
+    var liveEffectAt: Double?
+    /// `withEffectTime`: stroke layer surfaces at another moment, for one export (`frameOverride`).
+    var frameOverride: [String: TiledSurface]?
+    /// True while listeners hear a view-only frame (live effect paint): the canvas redraws, panels need not.
+    public internal(set) var emittingViewFrame = false
     /// Wet media: the simulation, its settings and time.
     public private(set) var wet: PaintWetLayers!
     /// Set while an operation that changes wet paint runs: the simulation before it (for undo).
@@ -2121,7 +2129,10 @@ public final class PaintEditorController {
 
     /// The layers with the live stroke's surface in place (a wet stroke's layer already shows the simulation).
     func currentLayers() -> [PaintLayer] {
-        guard let live = liveStroke, live.open, !live.isWet else { return blastFrameLayers(doc.layers) }
+        if let override = frameOverride {
+            return override.keys.sorted().reduce(doc.layers) { ls, id in mapLayer(ls, id) { $0.withSurface(override[id]!) } }
+        }
+        guard let live = liveStroke, live.open, !live.isWet else { return blastFrameLayers(effectFrameLayers(doc.layers)) }
         if let scraper = live.shown.initValues.scraper {
             var layers = doc.layers
             for (id, surface) in scraper.liveSurfaces() {
