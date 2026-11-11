@@ -147,6 +147,24 @@ import { wetSupport } from '../paint/wet/wasm';
 import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
 import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } from '../effects/types.js';
+import {
+  AUTHORED_DEFAULT_LIMITS,
+  AUTHORED_EFFECTS_POLICIES,
+  AUTHORED_PROVIDER_ID,
+  authoredEffectId,
+  authoredEffectsToJSON,
+  createAuthoredEffectsProvider,
+  isAuthoredEffectId,
+  readAuthoredEffects,
+  trialRender,
+  withAuthoredEffects,
+  type AuthoredEffectLimits,
+  type AuthoredEffectsPolicy,
+  type PaintAuthoredEffect,
+} from './authored-effects';
+import type { EffectAuthoringSession } from '../effects/authoring.js';
+import { createPixelEffectProvider, isPixelDocument } from '../effects/pixel-provider.js';
+import { PIXEL_TEMPLATES } from '../effects/pixel-provider.js';
 import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, withStrokePath, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, DEFAULT_VIEW_TILT, emptyThickChannels, FilmBuffer, hasThickChannels, LitCache, normalizeLighting, normalizeViewTilt, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type PaintViewTilt, type ThickChannels } from './thick';
@@ -305,6 +323,18 @@ export interface PaintEditorOptions extends Partial<PaintCanvas> {
   encodeImage?: ImageEncoder;
   /** Undo steps kept (default 200). */
   historyLimit?: number;
+  /**
+   * What authored effects (effects written at run time, kept in the painting) may do: `off` (not
+   * drawn, nothing authored), `replay` (default: drawn, nothing new authored) or `author`.
+   */
+  authoredEffects?: AuthoredEffectsPolicy;
+  /**
+   * Draw authored effects written in a provider's raw shader source (e.g. GLSL) through that
+   * provider. Off by default: pixel expression effects need no such permission.
+   */
+  rawShaders?: boolean;
+  /** Budgets for authored effects (source length, cost per pixel, trial render, live frames). */
+  authoredEffectLimits?: AuthoredEffectLimits;
   /** Wet media: kernel, threads, speed (steps per second) and the memory kept for undoing wet strokes. */
   wet?: PaintWetOptions;
   /** The sticker library (default the editor's own stamps, `editorStickers()`); see `setStickersProvider`. */
@@ -971,6 +1001,22 @@ export class PaintEditorController {
   readonly stampArt: StickerArtLookup = (ref, variant) => (isBrushSourceRef(ref) ? this.brushSources.get(ref) : this.stickerArt.get(ref, variant));
   private readonly rasterizeSticker: StickerRasterizer;
   private readonly effectsRenderer = new PaintEffectsRenderer();
+  /** Renders the painting's authored effects (their own pool, so it never evicts the provider's). */
+  private readonly authoredRenderer = new PaintEffectsRenderer();
+  /** What authored effects may do here (`authoredEffects` option). */
+  readonly authoredPolicy: AuthoredEffectsPolicy;
+  private readonly rawShaders: boolean;
+  private readonly authoredLimits: Required<AuthoredEffectLimits>;
+  /** The authored effects provider for the current `doc.authoredEffects` (made anew when they change). */
+  private authoredCache: { of: PaintDocumentState['authoredEffects']; provider: ReturnType<typeof createAuthoredEffectsProvider> } | null = null;
+  /** The open effect authoring session, and what it was opened from. */
+  private authoring: { session: EffectAuthoringSession; from: string } | null = null;
+  private readonly authoringListeners = new Set<() => void>();
+  /** Authored effects whose live playback stopped (too slow), with the reason. */
+  private readonly frozenAuthored = new Map<string, string>();
+  private readonly slowAuthoredFrames = new Map<string, number>();
+  /** Set while live frames render, so authored effect renders are timed. */
+  private timingLiveFrames = false;
   private paperEffectNodeCache: ImageNode | null = null;
   private mutations: MutationEntry[] = [];
   private nextMutationId = 1;
@@ -984,6 +1030,11 @@ export class PaintEditorController {
 
   constructor(options: PaintEditorOptions = {}) {
     this.historyLimit = Math.max(1, options.historyLimit ?? 200);
+    const policy = options.authoredEffects ?? 'replay';
+    if (!AUTHORED_EFFECTS_POLICIES.includes(policy)) throw new PaintEditorError(`authoredEffects "${policy}" is not a policy; use ${AUTHORED_EFFECTS_POLICIES.join(', ')}.`);
+    this.authoredPolicy = policy;
+    this.rawShaders = options.rawShaders === true;
+    this.authoredLimits = { ...AUTHORED_DEFAULT_LIMITS, ...options.authoredEffectLimits };
     this.rasterizeSticker = options.rasterizeSticker ?? defaultStickerRasterizer;
     if (options.stickers) this.stickers.set(options.stickers);
     this.doc = createPaintDocument({ width: options.width, height: options.height, dpi: options.dpi, paper: this.resolvePaper(options.paper) });
@@ -2576,9 +2627,236 @@ export class PaintEditorController {
     return this.effects.use(provider);
   }
 
+  // --- Authored effects ------------------------------------------------------------
+
+  /** The painting's authored effects as a provider (`authored.*` ids). */
+  private authoredProvider(): ReturnType<typeof createAuthoredEffectsProvider> {
+    const of = this.doc.authoredEffects;
+    if (!this.authoredCache || this.authoredCache.of !== of) {
+      this.authoredCache?.provider.dispose();
+      this.authoredCache = { of, provider: createAuthoredEffectsProvider(of ?? {}, { policy: this.authoredPolicy, rawShaders: this.rawShaders, host: () => this.effects.provider, limits: this.authoredLimits }) };
+    }
+    return this.authoredCache.provider;
+  }
+
+  /** The provider that draws `effect`: the painting's authored effects, or the registered provider. */
+  private providerFor(effect: string): EffectProvider {
+    return isAuthoredEffectId(effect) ? this.authoredProvider() : this.effects.require();
+  }
+
+  private rendererFor(effect: string): PaintEffectsRenderer {
+    return isAuthoredEffectId(effect) ? this.authoredRenderer : this.effectsRenderer;
+  }
+
+  /**
+   * What the effect tools search and describe with: the registered provider (its id, name and
+   * capabilities) with the painting's authored effects added. `null` with neither.
+   */
+  get effectsCatalog(): EffectProvider | null {
+    const host = this.effects.provider;
+    const authored = this.authoredProvider();
+    const has = Object.keys(this.doc.authoredEffects ?? {}).length > 0;
+    const c = this.catalogCache;
+    if (c && c.host === host && c.authored === authored && c.has === has) return c.catalog;
+    const catalog = withAuthoredEffects(host, authored, () => has);
+    this.catalogCache = { host, authored, has, catalog };
+    return catalog;
+  }
+  private catalogCache: { host: EffectProvider | null; authored: EffectProvider; has: boolean; catalog: EffectProvider | null } | null = null;
+
+  /** A live frame of `p` at `t` ms on: authored effects whose live playback was stopped stay at their own time. */
+  private framePaint(p: PaintEffectPaint, t: number): PaintEffectPaint {
+    return this.frozenAuthored.has(p.effect) ? p : framePaint(p, t);
+  }
+
+  private timed<T>(effect: string, fn: () => T): T {
+    const t0 = authoredNow();
+    const out = fn();
+    this.noteLiveFrame(effect, authoredNow() - t0);
+    return out;
+  }
+
+  /** Two live frames of an authored effect over budget in a row stop its live playback. */
+  private noteLiveFrame(effect: string, ms: number): void {
+    if (!this.timingLiveFrames || !isAuthoredEffectId(effect) || this.frozenAuthored.has(effect)) return;
+    if (ms < this.authoredLimits.liveFrameMs) {
+      this.slowAuthoredFrames.delete(effect);
+      return;
+    }
+    const n = (this.slowAuthoredFrames.get(effect) ?? 0) + 1;
+    this.slowAuthoredFrames.set(effect, n);
+    if (n >= 2) this.frozenAuthored.set(effect, `live playback stopped: frames took ${Math.round(ms)} ms, over the ${this.authoredLimits.liveFrameMs} ms budget; strokes keep the frame they were painted with`);
+  }
+
+  private requireAuthoring(what: string): void {
+    if (this.authoredPolicy !== 'author') {
+      throw new PaintEditorError(`This editor doesn't allow authoring effects (authoredEffects: "${this.authoredPolicy}"), so it can't ${what}. Authored effects already in the painting ${this.authoredPolicy === 'off' ? 'are not drawn either' : 'still draw'}; use the provider's effects (search_effects) instead.`);
+    }
+  }
+
+  /** The open effect authoring session, or `null`. */
+  get authoringSession(): EffectAuthoringSession | null {
+    return this.authoring?.session ?? null;
+  }
+
+  /** What the open authoring session was opened from (a template, an authored effect or a provider effect id), or `null`. */
+  get authoringFrom(): string | null {
+    return this.authoring?.from ?? null;
+  }
+
+  /** Calls `listener` when an authoring session opens or closes. */
+  subscribeAuthoring(listener: () => void): () => void {
+    this.authoringListeners.add(listener);
+    return () => this.authoringListeners.delete(listener);
+  }
+
+  private setAuthoring(next: { session: EffectAuthoringSession; from: string } | null): void {
+    this.authoring = next;
+    for (const l of [...this.authoringListeners]) l();
+    this.emit([]);
+  }
+
+  /**
+   * Opens an effect for authoring: a pixel expression template (`pixel.blank`, `pixel.rings`,
+   * `pixel.clouds`; source editing), one of the painting's authored effects (a copy: saving makes
+   * a new id), or a registered provider's effect when it supports authoring (values, keyframes and
+   * presets; source only if the provider has it). One session at a time. Not an undo step.
+   */
+  async openEffectAuthoring(effect: string): Promise<EffectAuthoringSession> {
+    this.requireAuthoring('open an effect for authoring');
+    if (typeof effect !== 'string' || !effect) throw new PaintEditorError('effect is missing; pass a template (pixel.blank, pixel.rings, pixel.clouds), an authored effect id (list_authored_effects) or a provider effect id.');
+    if (this.authoring) throw new PaintEditorError(`An effect is already open for authoring (${this.authoring.session.getState().name}, from "${this.authoring.from}"); save it (save_authored_effect) or close it (close_effect_authoring) first.`);
+    const pixel = createPixelEffectProvider({ limits: this.authoredLimits });
+    let session: EffectAuthoringSession;
+    if (effect.startsWith('pixel.')) {
+      if (!PIXEL_TEMPLATES.some((t) => t.id === effect)) throw new PaintEditorError(`There is no template "${effect}"; the templates are ${PIXEL_TEMPLATES.map((t) => t.id).join(', ')}.`);
+      session = await pixel.openAuthoring!({ effectId: effect });
+    } else if (isAuthoredEffectId(effect)) {
+      const e = this.doc.authoredEffects?.[effect];
+      if (!e) throw new PaintEditorError(`The painting has no authored effect "${effect}"; it has ${Object.keys(this.doc.authoredEffects ?? {}).join(', ') || 'none'} (list_authored_effects).`);
+      if (isPixelDocument(e.document)) session = await pixel.openAuthoring!({ document: e.document });
+      else {
+        const host = this.effects.provider;
+        if (!this.rawShaders || !host?.openAuthoring || host.id !== e.document.providerId) throw new PaintEditorError(`"${effect}" is written in ${e.document.sourceLanguage ?? 'a provider format'} for "${e.document.providerId}"; it opens only with that provider registered and rawShaders allowed.`);
+        session = await host.openAuthoring({ document: e.document });
+      }
+    } else {
+      const host = this.effects.require();
+      if (!host.openAuthoring || !host.capabilities.supportsAuthoring) throw new PaintEditorError(`The provider "${host.id}" can't open effects for authoring; start from a template instead (pixel.blank, pixel.rings, pixel.clouds).`);
+      session = await host.openAuthoring({ effectId: effect });
+    }
+    this.setAuthoring({ session, from: effect });
+    return session;
+  }
+
+  /** Closes the authoring session without saving (nothing in the painting changes). Returns its name, or `null` when none was open. */
+  closeEffectAuthoring(): string | null {
+    const a = this.authoring;
+    if (!a) return null;
+    const name = a.session.getState().name;
+    a.session.dispose();
+    this.setAuthoring(null);
+    return name;
+  }
+
+  /**
+   * Saves the open session's effect into the painting under a new `authored.<name>` id, after a
+   * trial render within budget: the source must compile now. One undo step. The session stays
+   * open, so it can be changed and saved again (as another id).
+   */
+  async saveAuthoredEffect(options: { name?: string } = {}): Promise<PaintAuthoredEffect & { trialMs: number }> {
+    this.requireAuthoring('save an authored effect');
+    const a = this.authoring;
+    if (!a) throw new PaintEditorError('No effect is open for authoring; open one with open_effect_authoring (e.g. pixel.blank), write it, then save it.');
+    if (options.name !== undefined && (typeof options.name !== 'string' || !options.name.trim())) throw new PaintEditorError('name must be a non-empty string.');
+    const state = a.session.getState();
+    if (state.compiled === false) {
+      const errors = state.issues.filter((i) => i.severity === 'error').map((i) => (i.line ? `line ${i.line}: ${i.message}` : i.message));
+      throw new PaintEditorError(`The effect doesn't compile, so it can't be saved: ${errors.join('; ')}. Fix the source (effect_authoring_set_source) and save again.`);
+    }
+    const document = a.session.exportDocument();
+    if (!isPixelDocument(document) && !this.rawShaders) throw new PaintEditorError(`"${state.name}" isn't written in pixel expressions; only pixel expression effects can be saved here (raw shader source needs rawShaders: true). Start from a template (pixel.blank).`);
+    const name = (options.name ?? state.name).trim();
+    const existing = this.doc.authoredEffects ?? {};
+    const id = authoredEffectId(name, (x) => x in existing);
+    const entry: PaintAuthoredEffect = { id, name, document: { ...document, name } };
+    const next = { ...existing, [id]: entry };
+    const provider = createAuthoredEffectsProvider(next, { policy: this.authoredPolicy, rawShaders: this.rawShaders, host: () => this.effects.provider, limits: this.authoredLimits });
+    let trial: { ms: number; problem: string | null };
+    try {
+      trial = await trialRender(provider, id, this.authoredLimits, authoredNow);
+    } catch (e) {
+      throw new PaintEditorError(`"${name}" failed its trial render (${e instanceof Error ? e.message : String(e)}), so it was not saved.`);
+    } finally {
+      provider.dispose();
+    }
+    if (trial.problem) throw new PaintEditorError(`"${name}" was not saved: ${trial.problem}.`);
+    this.commit('Save authored effect', { ...this.doc, authoredEffects: next });
+    return { ...entry, trialMs: trial.ms };
+  }
+
+  /** Where an authored effect is used: by strokes, the effect paint, the paper and effect layers. */
+  authoredEffectUses(id: string): { strokes: number; paint: boolean; paper: boolean; layers: string[] } {
+    let strokes = 0;
+    const count = (list: readonly { paint?: unknown }[] | undefined) => {
+      for (const st of list ?? []) if ((st.paint as PaintEffectPaint | undefined)?.effect === id) strokes++;
+    };
+    count(this.doc.strokes);
+    for (const list of Object.values(this.doc.liveStrokes ?? {})) count(list);
+    const paint = (this.effectPaintPending ?? this.effectPaint)?.effect === id;
+    const paper = this.doc.paperEffect?.effect === id;
+    const layers = Object.entries(this.doc.effectLayers ?? {})
+      .filter(([, s]) => s.effect === id)
+      .map(([l]) => l);
+    return { strokes, paint, paper, layers };
+  }
+
+  /** The painting's authored effects, with where each is used and anything stopping it from drawing. */
+  async listAuthoredEffects(): Promise<{ id: string; name: string; language: string | null; controls: string[]; animated: string[]; duration: number; loop: boolean; uses: ReturnType<PaintEditorController['authoredEffectUses']>; problem?: string }[]> {
+    const out = [];
+    for (const e of Object.values(this.doc.authoredEffects ?? {})) {
+      let controls: string[] = [];
+      let problem: string | undefined = this.frozenAuthored.get(e.id);
+      try {
+        const d = await this.authoredRenderer.describe(this.authoredProvider(), e.id);
+        controls = Object.keys(d.controls.properties);
+      } catch (err) {
+        problem = err instanceof Error ? err.message : String(err);
+      }
+      out.push({
+        id: e.id,
+        name: e.name,
+        language: e.document.sourceLanguage ?? null,
+        controls,
+        animated: Object.entries(e.document.tracks ?? {})
+          .filter(([, k]) => k.length)
+          .map(([n]) => n),
+        duration: e.document.duration,
+        loop: e.document.loop,
+        uses: this.authoredEffectUses(e.id),
+        ...(problem ? { problem } : {}),
+      });
+    }
+    return out;
+  }
+
+  /** Removes an authored effect the painting no longer uses (refused, saying where, while it is). One undo step. */
+  removeAuthoredEffect(id: string): { removed: string; name: string } {
+    this.requireAuthoring('remove an authored effect');
+    const e = this.doc.authoredEffects?.[id];
+    if (!e) throw new PaintEditorError(`The painting has no authored effect "${id}"; it has ${Object.keys(this.doc.authoredEffects ?? {}).join(', ') || 'none'} (list_authored_effects).`);
+    const u = this.authoredEffectUses(id);
+    const where = [u.strokes ? `${u.strokes} stroke${u.strokes === 1 ? '' : 's'}` : '', u.paint ? 'the effect paint' : '', u.paper ? 'the effect paper' : '', ...u.layers.map((l) => `effect layer "${l}"`)].filter(Boolean);
+    if (where.length) throw new PaintEditorError(`"${id}" (${e.name}) is still used by ${where.join(', ')}; remove those first (or rasterize the layers), then remove it.`);
+    const { [id]: _gone, ...rest } = this.doc.authoredEffects!;
+    const { authoredEffects: _a, ...doc } = this.doc;
+    this.commit('Remove authored effect', Object.keys(rest).length ? { ...doc, authoredEffects: rest } : doc);
+    return { removed: id, name: e.name };
+  }
+
   /** The provider's description of an effect, checked for `place` (rejects without a provider or for an unknown id). */
   async describeEffect(effect: string, place?: PaintEffectPlace): Promise<EffectDescription> {
-    const d = await this.effectsRenderer.describe(this.effects.require(), effect);
+    const d = await this.rendererFor(effect).describe(this.providerFor(effect), effect);
     const pcs = pathControlsOf(d);
     if (pcs.length) this.effectPathControls.set(d.id, pcs[0]);
     if (place) checkPaintEffectPlace(d, place);
@@ -2621,11 +2899,11 @@ export class PaintEditorController {
   /** Renders a generator, overlay or title effect at the canvas size. */
   private renderEffectCanvas(d: EffectDescription, values: Record<string, EffectValue>, time = 0): Promise<EffectPixels> {
     const { width, height } = this.doc.canvas;
-    return this.effectsRenderer.render(this.effects.require(), d.id, { width, height }, { time, values });
+    return this.rendererFor(d.id).render(this.providerFor(d.id), d.id, { width, height }, { time, values });
   }
 
   private sourceOf(d: EffectDescription, values: Record<string, EffectValue>, time?: number): PaintEffectSource {
-    return { effect: d.id, provider: this.effects.require().id, name: d.name, values, ...(time ? { time } : {}) };
+    return { effect: d.id, provider: this.providerFor(d.id).id, name: d.name, values, ...(time ? { time } : {}) };
   }
 
   private checkTime(time: number | undefined): void {
@@ -2843,7 +3121,7 @@ export class PaintEditorController {
     }
     const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, source.values);
     if (epoch !== this.paintEpoch) throw changed(d.name);
-    const paint: PaintEffectPaint = { type: 'effect', effect: d.id, provider: this.effects.require().id, values, time: source.time ?? 0, ...(map ? { map } : {}), ...(source.live ? { live: true } : {}) };
+    const paint: PaintEffectPaint = { type: 'effect', effect: d.id, provider: this.providerFor(d.id).id, values, time: source.time ?? 0, ...(map ? { map } : {}), ...(source.live ? { live: true } : {}) };
     this.effectPaintPending = paint;
     this.emit([]);
     try {
@@ -2896,10 +3174,15 @@ export class PaintEditorController {
   private renderEffectPaintSync(p: PaintEffectPaint): EffectPaintPixels | null {
     const have = this.effectPaintImage(p);
     if (have) return have;
-    const provider = this.effects.provider;
+    const provider = isAuthoredEffectId(p.effect) ? this.authoredProvider() : this.effects.provider;
     if (!provider || (p.provider && provider.id !== p.provider)) return null;
     const size = effectPaintSize(p, this.doc.canvas);
-    const pixels = this.effectsRenderer.renderSync(provider, p.effect, size, { time: p.time, values: p.values });
+    let pixels: EffectPixels | null;
+    try {
+      pixels = this.timed(p.effect, () => this.rendererFor(p.effect).renderSync(provider, p.effect, size, { time: p.time, values: p.values }));
+    } catch {
+      return null;
+    }
     return pixels ? this.cacheEffectPaintPixels(p, pixels) : null;
   }
 
@@ -2912,14 +3195,16 @@ export class PaintEditorController {
 
   /** Renders an effect paint at the canvas size without keeping it. */
   private async renderEffectPaintPixels(p: PaintEffectPaint): Promise<EffectPaintPixels> {
-    const provider = this.effects.provider;
+    const provider = isAuthoredEffectId(p.effect) ? this.authoredProvider() : this.effects.provider;
     const what = `the effect "${p.effect}"${p.provider ? ` from provider "${p.provider}"` : ''}`;
     if (!provider) throw new PaintEditorError(`Effect paint needs ${what}, but no effects provider is registered; register it (setEffectsProvider) and try again.`);
     if (p.provider && provider.id !== p.provider) throw new PaintEditorError(`Effect paint needs ${what}, but the registered provider is "${provider.id}"; register "${p.provider}" (setEffectsProvider) and try again.`);
     const { width, height } = effectPaintSize(p, this.doc.canvas);
     let pixels: EffectPixels;
     try {
-      pixels = await this.effectsRenderer.render(provider, p.effect, { width, height }, { time: p.time, values: p.values });
+      const t0 = authoredNow();
+      pixels = await this.rendererFor(p.effect).render(provider, p.effect, { width, height }, { time: p.time, values: p.values });
+      this.noteLiveFrame(p.effect, authoredNow() - t0);
     } catch (e) {
       throw new PaintEditorError(`Effect paint could not render ${what}: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -3110,7 +3395,7 @@ export class PaintEditorController {
       inputs[sourceInput] = inputs.source;
       delete inputs.source;
     }
-    const out = await this.effectsRenderer.render(this.effects.require(), d.id, { width: rect.width, height: rect.height }, { time: options.time ?? 0, values, inputs });
+    const out = await this.rendererFor(d.id).render(this.providerFor(d.id), d.id, { width: rect.width, height: rect.height }, { time: options.time ?? 0, values, inputs });
     const now = this.sameLayerAfterRender(l);
     const surface = writeRegion(now.surface, rect, mixPixels(before, out.data, amount));
     this.commit('Light effect', { ...this.doc, layers: mapLayer(this.doc.layers, now.id, () => ({ ...now, surface })) });
@@ -5675,11 +5960,11 @@ export class PaintEditorController {
     const w = Math.round(width * scale);
     const h = Math.round(height * scale);
     if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
-    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions });
+    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions, authoredEffects: this.authoredPolicy, rawShaders: this.rawShaders, authoredEffectLimits: this.authoredLimits });
     target.brushEntries = this.brushEntries;
     target.brushSources.set(this.brushSources.all());
     const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
-    target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
+    target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [], ...(this.doc.authoredEffects ? { authoredEffects: this.doc.authoredEffects } : {}) }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
     target.uvLight = { ...this.uvLight };
     target.age = { ...this.age };
@@ -5746,6 +6031,10 @@ export class PaintEditorController {
     this.unsubscribeLibrary();
     this.wet.destroy();
     this.effectsRenderer.dispose();
+    this.authoredRenderer.dispose();
+    this.authoredCache?.provider.dispose();
+    this.authoring?.session.dispose();
+    this.authoring = null;
     this.effectPaintPixels.clear();
   }
 
@@ -6562,6 +6851,9 @@ export class PaintEditorController {
     else delete ext.effectLayers;
     if (this.doc.paperEffect) ext.paperEffect = paperEffectToJSON(this.doc.paperEffect);
     else delete ext.paperEffect;
+    const authored = authoredEffectsToJSON(this.doc.authoredEffects ?? {});
+    if (authored) ext.authoredEffects = authored;
+    else delete ext.authoredEffects;
     if (this.lighting.azimuth !== DEFAULT_LIGHTING.azimuth || this.lighting.elevation !== DEFAULT_LIGHTING.elevation || this.lighting.relief !== DEFAULT_LIGHTING.relief) ext.lighting = { ...this.lighting };
     else delete ext.lighting;
     const fluor: Record<string, unknown> = {};
@@ -6655,6 +6947,11 @@ export class PaintEditorController {
         liveStrokes[id] = ok;
       }
       if (Object.keys(liveStrokes).length) state = { ...state, liveStrokes };
+    }
+    if (ext.authoredEffects !== undefined) {
+      const read = readAuthoredEffects(ext.authoredEffects);
+      problems.push(...read.problems);
+      if (Object.keys(read.effects).length) state = { ...state, authoredEffects: read.effects };
     }
     if (ext.effectLayers && typeof ext.effectLayers === 'object') {
       const effectLayers: Record<string, PaintEffectSource> = {};
@@ -7722,7 +8019,7 @@ export class PaintEditorController {
         }
       },
     };
-    const paint = st.paint && this.liveEffectAt !== null && isLiveEffect(st) ? framePaint(st.paint as PaintEffectPaint, this.liveEffectAt) : st.paint;
+    const paint = st.paint && this.liveEffectAt !== null && isLiveEffect(st) ? this.framePaint(st.paint as PaintEffectPaint, this.liveEffectAt) : st.paint;
     const init: PaintStrokeInit = { layerId: plain.id, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(paint ? { paint } : {}), snapToPerspective: false, stencils: false, maskStencils: st.stencils ?? [] };
     const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })), ...(outThick ? { thick: { ...(doc.thick ?? {}), [plain.id]: outThick } } : {}) }, init, host);
     session.push(st.points);
@@ -7902,7 +8199,7 @@ export class PaintEditorController {
   /** The surfaces of every stroke layer with live effects at `time` ms, drawn in full (frames rendered first). */
   private async liveSurfacesAt(time: number): Promise<Map<string, TiledSurface>> {
     const { layers, sources } = this.liveEffects();
-    await this.prepareEffectPaints(sources.map((p) => framePaint(p, time)));
+    await this.prepareEffectPaints(sources.map((p) => this.framePaint(p, time)));
     const out = new Map<string, TiledSurface>();
     this.liveEffectAt = time;
     try {
@@ -7923,7 +8220,12 @@ export class PaintEditorController {
     this.checkTime(time);
     const { layers, sources } = this.liveEffects();
     const revision = this.docRevision;
-    await this.prepareEffectPaints(sources.map((p) => framePaint(p, time)));
+    this.timingLiveFrames = true;
+    try {
+      await this.prepareEffectPaints(sources.map((p) => this.framePaint(p, time)));
+    } finally {
+      this.timingLiveFrames = false;
+    }
     if (revision !== this.docRevision || this.session) return false;
     const next = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
     const dirty: RasterRect[] = [];
@@ -9213,6 +9515,8 @@ function isLiveEffect(s: RecordedStroke): boolean {
 }
 
 /** An effect paint's frame `t` ms on from its own time. */
+const authoredNow = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
 function framePaint(p: PaintEffectPaint, t: number): PaintEffectPaint {
   return { ...p, time: p.time + t };
 }

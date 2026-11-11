@@ -17,6 +17,7 @@ import type { ThickChannels } from './thick';
 import type { FerroSettings, PaintMagnet } from './ferro';
 import type { Sticker } from './stickers';
 import type { PaintEffectSource, PaintPaperEffect } from './effects';
+import type { PaintAuthoredEffect } from './authored-effects';
 import type { HeatField } from './heat';
 import type { LayerCulture } from '../paint/culture';
 import type { PaintAgeSettings } from './age';
@@ -87,6 +88,8 @@ export interface PaintDocumentState {
   effectLayers?: Readonly<Record<string, PaintEffectSource>>;
   /** Effect paper: a provider generator drawn over the paper, under the paint. */
   paperEffect?: PaintPaperEffect;
+  /** Authored effects: effects written at run time, kept with their source (`authored.<name>` ids). */
+  authoredEffects?: Readonly<Record<string, PaintAuthoredEffect>>;
   /**
    * Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
    * `extendCanvas({ left: 100 })` moves it to x −100; a host maps its own coordinates with it.

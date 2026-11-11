@@ -1,6 +1,6 @@
 ---
 name: pixerate-effect-authoring
-description: How to author and edit procedural effects, shaders, and filters through the effect authoring agent tools - inspecting effect schemas and current control values, reading and compiling shader source code, adjusting parameters with all-or-nothing validation, applying and saving presets, keyframing animation tracks with easing, configuring timeline playback duration and looping, scrubbing the playhead, and capturing visual previews. Use when asked to author, modify, or debug shaders or procedural effects, animate effect parameters over time, or when effect_authoring tools are available.
+description: How to author and edit procedural effects, shaders, and filters through the effect authoring agent tools - writing new effects in pixel expressions and keeping them in a painting as paint, paper, effect layers and fills, inspecting effect schemas and current control values, reading and compiling shader source code, adjusting parameters with all-or-nothing validation, applying and saving presets, keyframing animation tracks with easing, configuring timeline playback duration and looping, scrubbing the playhead, and capturing visual previews. Use when asked to author, modify, or debug shaders or procedural effects, animate effect parameters over time, or when effect_authoring tools are available.
 ---
 
 # Pixerate effect authoring
@@ -24,10 +24,62 @@ the pitfalls, and uses the tools below.
 
 - `pixerate-effect-look-development`: tune a look, save presets, eased keyframes, seamless loops.
 
+## Writing a new effect (pixel expressions)
+
+New effects are written in **pixel expressions** (`sourceLanguage: "pixel"`), a small language
+with no loops: each line is `control`, `let` or `out`, and the program runs once per pixel.
+
+```
+// Rings that spread from a point.
+control ink: color = #1d2b53            // Colour of the rings.
+control count: number = 12 range 1 64   // Rings across the picture.
+control center: vec2 = vec2(0.5, 0.5) range 0 1
+let d = distance(uv, center)
+let wave = 0.5 + 0.5 * sin((d * count - time / 2) * TAU)
+out = vec4(ink, smoothstep(0.4, 0.6, wave))
+```
+
+- **Controls** come first: `control <name>: number|color|bool|vec2 = <default> [range <lo> <hi>]`,
+  and the comment at the end of the line is the control's description. They become the effect's
+  controls (colours are `#rrggbb` values, used as a vec3 0..1; bools are 0 or 1).
+- **Values:** numbers, `vec2`/`vec3`/`vec4`, parts with `.x .y .z .w` or `.r .g .b .a` (`.xy`,
+  `.rgb`), `#rrggbb` colour literals. `+ - * / %` work part by part (a number spreads over a
+  vector). `< <= > >= == !=` compare two numbers and give 0 or 1.
+- **Built in:** `uv` (0..1 from the top left, pixel centres), `pos` (pixels), `size`, `time`
+  (seconds), `PI`, `TAU`.
+- **Functions:** `sin cos tan asin acos atan(x)` / `atan(y, x)`, `sqrt exp log abs sign floor ceil
+  fract pow mod min max clamp mix step smoothstep`, `select(c, a, b)` (a where c > 0.5),
+  `length distance dot normalize`, `hash(p)` and `noise(p)` (value noise 0..1 over a vec2),
+  `vec2() vec3() vec4()`.
+- **`out`** is the last line: a number (grey), a vec3 (opaque colour) or a vec4 (straight alpha).
+- **Budgets:** at most 64 KB of source and 1024 steps per pixel (`noise` counts 4); a save needs a
+  64×64 trial render within 100 ms. Share work with `let` rather than repeating expressions.
+
+Errors come back from `effect_authoring_set_source` as `issues` with a line and a message that
+says what to change; warnings (an unused control or let) don't stop it compiling. While the source
+doesn't compile, the session keeps the last controls that did, and `compiled` is false.
+
+## In the paint editor
+
+1. `open_effect_authoring` with `pixel.blank` (or `pixel.rings`, `pixel.clouds` to start from an
+   example). It returns the source, controls and issues.
+2. `effect_authoring_set_source` until `issues` has no errors; tune with
+   `effect_authoring_set_values`, animate with `effect_authoring_set_keyframe`.
+3. `save_authored_effect` with a name: it trial-renders the effect and returns its id,
+   `authored.<name>`.
+4. Use the id like any effect id: `set_effect_paint` (strokes), `set_paper_effect`,
+   `add_effect_layer`, `fill_layer_with_effect`. `search_effects` and `describe_effect` find it too.
+5. `list_authored_effects` shows where each is used and anything stopping it drawing;
+   `remove_authored_effect` removes one nothing uses; `close_effect_authoring` closes the session.
+
+The painting keeps each effect's source, values, keyframes and presets, so it replays on any
+machine with no session or provider. Authoring needs the editor's `authoredEffects` policy to be
+`author` (the default `replay` draws authored effects but refuses writing them; `off` draws none).
+
 ## Working method
 
 1. **Inspect first.** Run `effect_authoring_describe` to inspect the effect name, kind, source
-   language (`glsl`, `svg`, or null when the effect has no source to edit), control parameter schemas, current
+   language (`pixel`, `glsl`, `svg`, or null when the effect has no source to edit), control parameter schemas, current
    values, existing tracks, playhead `time`, compile issues and `previewError`.
    A session opens with its playhead at half the effect's length (where entrance-style effects and
    transitions show), so values set on an animated control key that time unless you seek first.
@@ -73,6 +125,11 @@ the pitfalls, and uses the tools below.
 
 | Tool | Description and usage |
 | --- | --- |
+| `open_effect_authoring` | Paint editor: opens a pixel expression template (`pixel.blank`, `pixel.rings`, `pixel.clouds`), an authored effect (`authored.<name>`) or a provider effect for authoring; returns source, controls, values and issues. One at a time: save or close first. Call before the `effect_authoring_*` tools. |
+| `save_authored_effect` | Paint editor: trial-renders the open effect and saves it into the painting; returns its `authored.<name>` id, controls, keyframed controls and the trial ms. Then use the id with `set_effect_paint`, `set_paper_effect`, `add_effect_layer` or `fill_layer_with_effect`. Saving again makes a new id. |
+| `list_authored_effects` | Paint editor: the painting's authored effects with language, controls, animated controls, where each is used and any problem drawing it, plus the policy and the open session. |
+| `remove_authored_effect` | Paint editor: removes an authored effect nothing uses (refused, saying where, while one is used). One undo step. |
+| `close_effect_authoring` | Paint editor: closes the session without saving; returns the closed effect's name or null. |
 | `effect_authoring_describe` | Reads the currently open effect session: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead `time`, duration, loop, compile issues, and `previewError` (why there is no pixel preview, or null). Call it first. |
 | `effect_authoring_get_source` | Retrieves shader or script source code and language for code-backed effects. Refused if `sourceLanguage` is null. |
 | `effect_authoring_set_source` | Recompiles the effect with new shader or script source code. Returns compiler issues with line numbers and messages. Available only when supported by the session. |
@@ -90,6 +147,15 @@ the pitfalls, and uses the tools below.
 | `effect_authoring_view` | Captures a preview image of the effect at the current playhead or a specified timestamp. Available when preview capture is supported. Refused, with the reason, when `effect_authoring_describe` shows a `previewError`. |
 
 ## Pitfalls
+
+- An authored effect id never changes what it draws: after changing the effect, save it again and
+  use the new id (strokes painted with the old id keep their look).
+- Keyframed controls of a saved effect animate with the effect's time and are not settable where
+  the effect is used (`describe_effect` leaves them out); unkeyframe a control to make it settable.
+- Live effect paint with an authored effect stops playing (each stroke keeps its own frame) after
+  two frames over the 50 ms budget; `list_authored_effects` reports it. Make the effect cheaper.
+- `save_authored_effect` refuses a source that doesn't compile now, even when an earlier version
+  did; fix the errors first.
 
 - Calling authoring tools when no authoring session is open returns an error explaining that a session must be opened first.
 - Animated controls calculate their values dynamically from keyframes; clearing a track reverts the parameter to static behavior.

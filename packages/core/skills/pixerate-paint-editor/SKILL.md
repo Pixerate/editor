@@ -177,6 +177,8 @@ for the controls and presets.
 
 `set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image); transparency paints nothing. Call `search_effects` (`use` generator, overlay or title) and `describe_effect`, then `set_effect_paint` with `effect`, `values`, `time` (ms, default 0) and wait for it to return before painting. `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour; `update_effect` (target and effect `paint`, `values`) renders new values. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
 
+**An effect no provider has:** write it. When `open_effect_authoring` is available (the editor's `authoredEffects` is `author`), open `pixel.blank`, write it in pixel expressions with `effect_authoring_set_source`, then `save_authored_effect`. The returned `authored.<name>` id works with `set_effect_paint`, `set_paper_effect`, `add_effect_layer` and `fill_layer_with_effect`, and the painting keeps its source. The method is in `pixerate-effect-authoring`.
+
 | Want | Use |
 | --- | --- |
 | The effect inside brushed marks, hand-painted edges | `set_effect_paint` and a dry brush |

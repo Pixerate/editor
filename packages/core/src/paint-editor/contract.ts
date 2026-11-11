@@ -23,6 +23,7 @@ import { createPaintProposals } from './collaboration';
 import { PaintEditorController, type PaintEditorOptions } from './controller';
 import { createPaintEditorDocument } from './editorDocument';
 import { createPaintEffectsToolProvider } from './effect-tools';
+import { createPaintEffectAuthoringToolProvider } from './effect-authoring-tools';
 import { PAINT_FORMAT, PAINT_SCHEMA_VERSION } from './serialize';
 import { createPaintEditorToolProvider } from './tools';
 import { combineStickerProviders } from '../stickers/combine';
@@ -270,6 +271,7 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
   const providers = [
     createPaintEditorToolProvider(controller),
     createPaintEffectsToolProvider(controller),
+    createPaintEffectAuthoringToolProvider(controller),
     createPaintBrushLibraryToolProvider(controller),
     createPaintProposalToolProvider(createPaintProposals({ controller })),
   ].map(toolList);
@@ -313,6 +315,7 @@ export function createPaintConformanceHost(setup: Omit<PaintEditorOptions, 'stic
   const registry = new ToolRegistry({ validateArguments: true });
   registry.register(createPaintEditorToolProvider(controller));
   registry.register(createPaintEffectsToolProvider(controller));
+  registry.register(createPaintEffectAuthoringToolProvider(controller));
   registry.register(createPaintBrushLibraryToolProvider(controller));
   registry.register(createPaintProposalToolProvider(createPaintProposals({ controller })));
   return {

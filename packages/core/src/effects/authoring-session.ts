@@ -165,6 +165,15 @@ function interpolateValue(v1: EffectValue, v2: EffectValue, progress: number): E
 	return progress >= 1 ? v2 : v1;
 }
 
+/**
+ * A saved document's control values at `time` ms: keyframed controls follow their tracks (wrapping
+ * at `duration` when the document loops), the others keep their value.
+ */
+export function authoringValuesAt(doc: Pick<EffectAuthoringDocument, 'values' | 'tracks' | 'duration' | 'loop'>, time: number): EffectValues {
+	const t = doc.loop && doc.duration > 0 ? ((time % doc.duration) + doc.duration) % doc.duration : time;
+	return valuesAtTime(t, doc.values ?? {}, doc.tracks ?? {});
+}
+
 function valuesAtTime(
 	time: number,
 	baseValues: EffectValues,
