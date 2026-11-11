@@ -17,7 +17,8 @@ import type {
 	EffectAuthoringSession,
 	EffectAuthoringSource,
 	EffectAuthoringState,
-	EffectKeyframe
+	EffectKeyframe,
+	EffectSourceLanguage
 } from './authoring.js';
 import type {
 	EffectDescription,
@@ -26,7 +27,8 @@ import type {
 	EffectRenderer,
 	EffectRendererOptions,
 	EffectValue,
-	EffectValues
+	EffectValues,
+	MaybePromise
 } from './types.js';
 
 export interface GenericAuthoringOptions {
@@ -46,6 +48,24 @@ export interface GenericAuthoringOptions {
 	 * catalog thumbnails do, so entrance-style effects and transitions open on a frame that shows them.
 	 */
 	startTime?: number;
+	/**
+	 * Source editing: the effect is written in a language this backend compiles, so the session
+	 * gets `setSource`, `source`, `issues` and `compiled`, and its controls follow the source.
+	 */
+	source?: AuthoringSourceBackend;
+}
+
+/** What a session needs to edit an effect's source (see `createPixelEffectProvider`). */
+export interface AuthoringSourceBackend {
+	language: Exclude<EffectSourceLanguage, null>;
+	/** The source of a catalog effect, to start from when opened by id. */
+	sourceOf(effectId: string): string;
+	/** Compiles a source: its description (null when it doesn't compile) and its issues. */
+	compile(source: string, effectId: string): { description: EffectDescription | null; issues: readonly EffectAuthoringIssue[] };
+	/** Refuses a source before compiling it (e.g. too long): a message, or null. */
+	refuse?(source: string): string | null;
+	/** A renderer for a source that compiles. */
+	createRenderer(source: string, effectId: string, options: EffectRendererOptions): MaybePromise<EffectRenderer>;
 }
 
 const HEX_RE = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -249,8 +269,29 @@ export async function createEffectAuthoringSession(
 		throw new EffectUnsupportedError('Invalid effect authoring source');
 	}
 
-	// The provider's own errors (UnknownEffectError for a bad id, anything else as it is) pass through.
-	const description: EffectDescription = await provider.describe(effectId);
+	const backend = options.source;
+	let sourceText: string | null = null;
+	let compiledSource: string | null = null;
+	let sourceIssues: readonly EffectAuthoringIssue[] = [];
+	let description: EffectDescription;
+	if (backend) {
+		const docSource = initialDoc && typeof initialDoc.source === 'string' ? initialDoc.source : null;
+		// Unknown ids throw from sourceOf (UnknownEffectError).
+		sourceText = docSource ?? backend.sourceOf(effectId);
+		const refused = backend.refuse?.(sourceText);
+		if (refused) throw new EffectUnsupportedError(`The effect's source can't be opened: ${refused}`, effectId);
+		const first = backend.compile(sourceText, effectId);
+		if (!first.description) {
+			const errs = first.issues.filter((i) => i.severity === 'error').map((i) => (i.line ? `line ${i.line}: ${i.message}` : i.message));
+			throw new EffectUnsupportedError(`The effect's source doesn't compile (${errs.join('; ')}); fix it in the document, or open a catalog effect instead.`, effectId);
+		}
+		description = first.description;
+		compiledSource = sourceText;
+		sourceIssues = first.issues;
+	} else {
+		// The provider's own errors (UnknownEffectError for a bad id, anything else as it is) pass through.
+		description = await provider.describe(effectId);
+	}
 	if (initialDoc) {
 		const problems = documentErrors(initialDoc, description);
 		if (problems.length) throw new EffectControlError(effectId, problems);
@@ -271,7 +312,7 @@ export async function createEffectAuthoringSession(
 	let playheadTime = typeof start === 'number' && Number.isFinite(start) ? Math.max(0, Math.min(duration, start)) : duration / 2;
 	let previewError: string | null = null;
 	let loop = initialDoc?.loop ?? description.loop ?? false;
-	let compiled: boolean | null = null;
+	let compiled: boolean | null = backend ? true : null;
 
 	// Saved presets: only user-saved presets
 	let savedPresets: EffectPreset[] = initialDoc ? [...(initialDoc.presets ?? [])] : [];
@@ -341,11 +382,11 @@ export async function createEffectAuthoringSession(
 			name: initialDoc?.name ?? description.name,
 			kind: description.kind,
 			description: desc,
-			source: null,
-			sourceLanguage: null,
+			source: sourceText,
+			sourceLanguage: backend ? backend.language : null,
 			values: currentValues,
 			tracks: { ...tracks },
-			issues: [],
+			issues: sourceIssues,
 			compiled,
 			previewError,
 			time: playheadTime,
@@ -400,8 +441,76 @@ export async function createEffectAuthoringSession(
 		}
 	}
 
+	/**
+	 * A renderer that always draws the latest source that compiled: it makes a new inner renderer
+	 * when the source has changed since the last render.
+	 */
+	async function sourceRenderer(opts: EffectRendererOptions): Promise<EffectRenderer> {
+		let drawn = compiledSource!;
+		let inner = await backend!.createRenderer(drawn, effectId, opts);
+		const current = async () => {
+			if (compiledSource !== null && compiledSource !== drawn) {
+				const next = await backend!.createRenderer(compiledSource, effectId, opts);
+				inner.dispose();
+				inner = next;
+				drawn = compiledSource;
+			}
+			return inner;
+		};
+		return {
+			effectId,
+			width: inner.width,
+			height: inner.height,
+			depth: inner.depth,
+			render: async (req) => (await current()).render(req),
+			dispose: () => inner.dispose()
+		};
+	}
+
+	/** Values and tracks carried over to new controls: kept where the control is still there and the value still fits. */
+	function carryOver(next: EffectDescription): { base: Record<string, EffectValue>; tracks: Record<string, EffectKeyframe[]> } {
+		const base: Record<string, EffectValue> = { ...next.defaults };
+		for (const name of Object.keys(next.controls.properties)) {
+			if (name in baseValues && effectValueErrors(next, { [name]: baseValues[name] }).length === 0) base[name] = baseValues[name];
+		}
+		const kept: Record<string, EffectKeyframe[]> = {};
+		for (const [name, kfs] of Object.entries(tracks)) {
+			if (name in next.controls.properties && kfs.every((k) => effectValueErrors(next, { [name]: k.value }).length === 0)) kept[name] = kfs;
+		}
+		return { base, tracks: kept };
+	}
+
+	async function setSource(src: string): Promise<EffectAuthoringResult<{ issues: readonly EffectAuthoringIssue[] }>> {
+		if (disposed) return { ok: false, message: 'the session is closed' };
+		if (typeof src !== 'string') return { ok: false, message: 'the source must be a string' };
+		const refused = backend!.refuse?.(src);
+		if (refused) return { ok: false, message: refused };
+		const result = backend!.compile(src, effectId);
+		const before = { sourceText, compiledSource, sourceIssues, compiled, description, baseValues: { ...baseValues }, tracks: { ...tracks } };
+		let after: typeof before;
+		if (result.description) {
+			const carried = carryOver(result.description);
+			after = { sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: result.description, baseValues: carried.base, tracks: carried.tracks };
+		} else {
+			after = { ...before, sourceText: src, sourceIssues: result.issues, compiled: false };
+		}
+		const apply = (s: typeof before) => {
+			sourceText = s.sourceText;
+			compiledSource = s.compiledSource;
+			sourceIssues = s.sourceIssues;
+			compiled = s.compiled;
+			description = s.description;
+			baseValues = { ...s.baseValues };
+			tracks = { ...s.tracks };
+		};
+		history.execute({ name: 'Edit source', execute: () => apply(after), undo: () => apply(before) });
+		invalidateState();
+		return { ok: true, issues: result.issues };
+	}
+
 	const session: EffectAuthoringSession = {
 		getState,
+		...(backend ? { setSource } : {}),
 
 		subscribe(listener: (state: EffectAuthoringState) => void): () => void {
 			listeners.add(listener);
@@ -874,7 +983,7 @@ export async function createEffectAuthoringSession(
 
 			let renderer: EffectRenderer;
 			try {
-				renderer = await provider.createRenderer(effectId, opts);
+				renderer = backend ? await sourceRenderer(opts) : await provider.createRenderer(effectId, opts);
 			} catch (e) {
 				// Kept in the state so editors and agents can say why there is no picture.
 				const message = e instanceof Error ? e.message : String(e);
@@ -920,7 +1029,9 @@ export async function createEffectAuthoringSession(
 
 		exportDocument(): EffectAuthoringDocument {
 			const currentValues = valuesAtTime(playheadTime, baseValues, tracks);
+			const withSource = backend && sourceText !== null ? { source: sourceText, sourceLanguage: backend.language } : {};
 			return {
+				...withSource,
 				version: 1,
 				providerId: provider.id,
 				effectId,
@@ -930,7 +1041,7 @@ export async function createEffectAuthoringSession(
 				presets: JSON.parse(JSON.stringify(savedPresets)),
 				duration,
 				loop
-			};
+			} as EffectAuthoringDocument;
 		},
 
 		dispose(): void {

@@ -17,3 +17,5 @@ export * from './pool.js';
 export * from './authoring.js';
 export * from './authoring-session.js';
 export * from './authoring-tools.js';
+export * from './pixel-language.js';
+export * from './pixel-provider.js';
