@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPaintEffectsToolProvider, PAPER_EFFECT_BLENDS, type PaintEditorController, type PaintEffectsToolProviderOptions, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
+import { createPaintEffectAuthoringToolProvider, createPaintEffectsToolProvider, PAPER_EFFECT_BLENDS, type PaintEditorController, type PaintEffectsToolProviderOptions, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
 import { pathControlsOf, type EffectProvider } from '@pixerate/editor/effects';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 import { EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
@@ -11,22 +11,40 @@ export interface PaintEffectsPanelProps {
   className?: string;
 }
 
-/** The controller's effects provider, following `setEffectsProvider`. */
+/**
+ * The effects the panel offers: the controller's provider with the painting's authored effects
+ * (`controller.effectsCatalog`), following `setEffectsProvider` and saved or removed authored effects.
+ */
 export function usePaintEffectsProvider(controller: PaintEditorController): EffectProvider | null {
-  const [provider, setProvider] = useState(controller.effectsProvider);
+  const [provider, setProvider] = useState(controller.effectsCatalog);
   useEffect(() => {
-    setProvider(controller.effectsProvider);
-    return controller.effects.subscribe(setProvider);
+    const sync = () => setProvider(controller.effectsCatalog);
+    sync();
+    const a = controller.effects.subscribe(sync);
+    const b = controller.subscribe(sync);
+    return () => {
+      a();
+      b();
+    };
   }, [controller]);
   return provider;
 }
 
-/** Registers the paint effect tools (`set_paper_effect`, `add_effect_layer`, `apply_effect`, …) while mounted. */
+/**
+ * Registers the paint effect tools (`set_paper_effect`, `add_effect_layer`, `apply_effect`, …) and
+ * the effect authoring tools (`open_effect_authoring`, `save_authored_effect`, the
+ * `effect_authoring_*` tools, …) while mounted.
+ */
 export function usePaintEffectsTools(registry: ToolRegistry | null | undefined, controller: PaintEditorController, options: PaintEffectsToolProviderOptions = {}): void {
   const { id, namespace, readOnly, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createPaintEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+    const a = registry.register(createPaintEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+    const b = registry.register(createPaintEffectAuthoringToolProvider(controller, { id: id ? `${id}-authoring` : undefined, namespace: namespace === undefined ? undefined : namespace && `${namespace}-authoring`, readOnly, playbackSurface }));
+    return () => {
+      a();
+      b();
+    };
   }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }
 

@@ -19,7 +19,8 @@ function PaintView() {
   // The sticker library: the editor's own stamps plus a stand-in host library (the fake provider),
   // so the sticker brush, the sticker panel and find_stickers show both.
   // Brushes come from the demo's shared brush library: saved here, they show in every tab that paints.
-  const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed', stickers: demoStickers, brushLibrary: demoBrushLibrary });
+  // The demo lets agents write effects (pixel expressions) and paint with them.
+  const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed', stickers: demoStickers, brushLibrary: demoBrushLibrary, authoredEffects: 'author' });
   // The agent paints on the canvas itself: its cursor draws each stroke live, rubs fills across the sheet and starts replays.
   const { presence, director } = usePaintDirector(editor.controller, { speed: demoAgentSpeed() });
   // Agents get the paint__* tools (paper, brushes, strokes, guides, colour, layers, export).
