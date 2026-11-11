@@ -59,7 +59,7 @@ public let WET_LIVE_PATTERN_LABELS: [(kind: String, label: String)] = [("none", 
 
 /// The side panels of `PaintEditorView`.
 public enum PaintPanelTab: String, CaseIterable, Identifiable, Sendable {
-    case color, paper, layers, effects, wet
+    case color, paper, layers, effects, providerEffects, wet
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -67,6 +67,7 @@ public enum PaintPanelTab: String, CaseIterable, Identifiable, Sendable {
         case .paper: return "Paper"
         case .layers: return "Layers"
         case .effects: return "Styles"
+        case .providerEffects: return "Effects"
         case .wet: return "Wet"
         }
     }
@@ -105,6 +106,8 @@ public final class PaintEditorModel {
     /// The layer style being edited in the Styles panel.
     public var selectedEffect: String?
     public var tab: PaintPanelTab = .color
+    /// Set while a provider effect renders from the effects panel (`aria-busy`).
+    public internal(set) var effectsBusy = false
     /// The canvas view's size in points (the canvas view keeps it current).
     @ObservationIgnored public var viewport: (width: Double, height: Double) = (800, 600)
     @ObservationIgnored public private(set) var gesture: PaintGesture!
@@ -145,11 +148,11 @@ public final class PaintEditorModel {
 
     private func changed() {
         revision &+= 1
-        if !isQuietFrameChange { stateRevision &+= 1 }
+        if !isQuietFrameChange && !controller.emittingViewFrame { stateRevision &+= 1 }
     }
 
     /// Reads `stateRevision`, so a view reading a property below redraws when UI state changes (without re-evaluating panels on every stroke sample or wet tick).
-    private func track() { _ = stateRevision }
+    func track() { _ = stateRevision }
 
     /// Runs `fn`, turning a thrown error into `error` (`useAttempt`).
     @discardableResult
@@ -247,7 +250,20 @@ public final class PaintEditorModel {
 
     /// The painting as a file (`export_image` / `export_psd`): PNG with the paper, or an 8-bit RGB PSD with its layers.
     /// `scale` above 1 repaints the recorded strokes larger (`export_high_res`) instead of upscaling.
-    public func exportFile(_ format: PaintExportFormat, scale: Double = 1) async -> PaintExportFile? {
+    /// `time` draws live effect paint at that moment (ms into its animation; `export_image` / `export_psd` `time`).
+    public func exportFile(_ format: PaintExportFormat, scale: Double = 1, time: Double? = nil) async -> PaintExportFile? {
+        if let time {
+            do {
+                let file: PaintExportFile = try await controller.withEffectTime(time) {
+                    format == .png ? PaintExportFile(format: .png, bytes: Data(try controller.exportPng())) : PaintExportFile(format: .psd, bytes: Data(try controller.exportPsd().bytes))
+                }
+                error = nil
+                return file
+            } catch {
+                self.error = "\(error)"
+                return nil
+            }
+        }
         if format == .png && scale > 1 {
             do {
                 let img = try await controller.renderHighRes(scale: scale)

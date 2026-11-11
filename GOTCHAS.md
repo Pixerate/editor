@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint] Live Effect Frames Must Not Refresh the Panels, and the Player Re-anchors Only on Paused Ticks
+
+- **Issue / Symptom**: (1) Playing live effect paint in `PaintEditorView` re-evaluated every panel on every frame, and marking frames "quiet" around `await player.tick` also hid real changes an agent or the user made while a frame rendered. (2) A test that paused, waited, then resumed saw the moment jump forward by the paused time.
+- **Root Cause**: (1) Frames reach the model through the controller's ordinary `subscribe` listeners, and an effect frame renders asynchronously, so a model-side flag spanning the `await` covers other emits too. (2) Like `playEffects` in TS, `PaintEffectPlayer` moves its start time only on ticks that arrive while paused (the view ticks every frame, so the gap is one frame); a caller that stops ticking while paused skips that.
+- **Solution / Workaround**: (1) The controller sets `emittingViewFrame` only around the frame's own `emit` in `showEffectTime`, and `PaintEditorModel.changed()` skips the panel revision for it; the canvas still redraws. (2) Keep ticking while paused (`runEffectClock` does); tests tick through the pause. Frames are view state (`effectFrames`, dropped when their layer's committed surface changes), so an export without `time` draws the frame on show, as in TS; pass `time` (or use `withEffectTime`) for a fixed moment.
+
 ### [swift/paint] Save → Load Conformance: Clocks, Asset Hashes and Fields Swift Doesn't Model
 
 - **Issue / Symptom**: Adding a `reload` step to every paint scenario (save, then `loadJSON`, then compare the document) failed in three ways that were not loader bugs. (1) `culture` was not deterministic between two TS runs. (2) `culture-replay` matched pixels within tolerance but its document differed in one asset reference. (3) A hand-written wet event with a field outside `data` came back in TS but not in Swift.
