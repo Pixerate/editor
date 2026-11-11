@@ -1,7 +1,7 @@
 /**
  * The brush editor as data, for the React and Svelte `BrushEditor` and `BrushLibraryBrowser`:
  * `brushEditorSections` lists a brush's facets as ordered sections of controls (Medium, Shape,
- * Marks, Feel, Behaviour, Light, Motion, Colour), each control a facet path with its value,
+ * Marks, Feel, Behaviour, Light, Specialty, Motion, Colour), each control a facet path with its value,
  * range and label, leaving out what the host profile can't render. `setBrushEditorValue` applies
  * one control's change; `brushLibraryGroups` groups a library by medium and variety, tools apart.
  *
@@ -23,8 +23,9 @@ import { bytesToBase64, isPng } from '../raster/png';
 import { brushColourHex } from './colour';
 import { isDualColor } from '../color/dual';
 import { BRUSH_FLIPS, BRUSH_GRAIN_MODES, BRUSH_MEDIA, type Brush, type BrushMedium, type BrushTool } from './types';
+import { BRUSH_SPECIALTIES, brushSpecialties, brushSpecialtyInfo, type BrushSpecialtyKind } from './specialty';
 
-export type BrushEditorSectionId = 'medium' | 'shape' | 'grain' | 'marks' | 'feel' | 'behaviour' | 'light' | 'motion' | 'colour';
+export type BrushEditorSectionId = 'medium' | 'shape' | 'grain' | 'marks' | 'feel' | 'behaviour' | 'light' | 'specialty' | 'motion' | 'colour';
 
 interface ControlBase {
   /** Facet path the control sets (`tip.size`, `behaviour.exchange.pickup`…). */
@@ -34,6 +35,11 @@ interface ControlBase {
   ariaLabel: string;
   /** Set when the host paints without this setting (its profile ignores it). */
   note?: string;
+  /**
+   * Usage guidance shown under the control (a specialty toggle that is on says how to paint with
+   * it and which canvas controls bring the effect out). Not a warning, unlike `note`.
+   */
+  hint?: string;
 }
 
 export type BrushEditorControl =
@@ -239,7 +245,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|antimatter|scraper|vortex|iridescence|culture)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker|antimatter|scraper|vortex|iridescence|culture|ghost|mutation)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
   const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
@@ -250,10 +256,6 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     engineOk && engineControls?.mixingPath && (engine === 'wet' || exchangeFull) && fieldOf('behaviour.mixing') && choice('behaviour.mixing', 'Mixing', options(['pigment', 'rgb'], { pigment: 'Pigment', rgb: 'RGB' })),
     engineOk && engineControls?.dirty && exchangeFull && fieldOf('behaviour.exchange.dirty') && toggle('behaviour.exchange.dirty', 'Dirty brush'),
     engine === 'mixer' && engineOk && full(profile.reservoir) && toggle('behaviour.exchange.reservoir.refill', 'Load each stroke'),
-    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && choice('livePatterns.pattern', 'Live pattern', [{ value: '', label: 'None' }, ...options(LIVE_PATTERN_KINDS)], ''),
-    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.scale', label: 'Pattern scale', ariaLabel: 'Brush pattern scale', min: 0.5, max: 4, step: 0.1, value: brush.livePatterns.scale ?? 1 }),
-    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.contrast', label: 'Pattern contrast', ariaLabel: 'Brush pattern contrast', min: 0, max: 2, step: 0.05, value: brush.livePatterns.contrast ?? 1 }),
-    engine === 'wet' && engineOk && !isTool && full(profile.livePatterns ?? 'none') && !!brush.livePatterns && withNote({ kind: 'slider', path: 'livePatterns.relief', label: 'Pattern relief', ariaLabel: 'Brush pattern relief', min: 0, max: 1, step: 0.05, value: brush.livePatterns.relief ?? 0 }),
     !isTool && full(profile.culture ?? 'none') && marks !== 'objects' && withNote({ kind: 'toggle', path: 'culture', label: 'Biopaint (mycelial ink)', ariaLabel: 'Brush biopaint', value: Boolean(brush.culture) }),
     ...(brush.culture && !isTool && full(profile.culture ?? 'none')
       ? [
@@ -270,25 +272,67 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   if (!isTool && full(profile.light) && engineOk && engineControls?.light) {
+    // Glowing light paint only: its secondary controls once the brush lays light.
+    const lit = (brush.light?.amount ?? 0) > 0;
     add('light', 'Light', [
       slider({ path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 }),
-      toggle('light.pressure', 'Light follows pressure'),
-      ...(engine === 'impasto' ? [slider({ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }), slider({ path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 })] : []),
-      withNote({ kind: 'slider', path: 'light.spill.radius', label: 'Spill', ariaLabel: 'Brush light spill', min: 0, max: 128, step: 1, value: brush.light?.spill?.radius ?? 24 }),
-      toggle('light.glow', 'Suggest a glow'),
-      withNote({ kind: 'slider', path: 'fluorescence.amount', label: 'UV fluorescence', ariaLabel: 'Brush fluorescence amount', min: 0, max: 1, step: 0.01, value: brush.fluorescence?.amount ?? 0 }),
-      toggle('fluorescence.invisible', 'Invisible in daylight'),
-      withNote({ kind: 'colour', path: 'thermochromic.hotColor', label: 'Hot colour', ariaLabel: 'Brush thermochromic hot colour', value: brush.thermochromic?.hotColor ?? null, dark: null, gradient: false }),
-      withNote({ kind: 'slider', path: 'thermochromic.threshold', label: 'Heat threshold', ariaLabel: 'Brush thermochromic threshold', min: 0.05, max: 0.95, step: 0.01, value: brush.thermochromic?.threshold ?? 0.5 }),
-      full(profile.iridescence ?? 'none') && marks !== 'objects' && marks !== 'antimatter' && withNote({ kind: 'toggle', path: 'iridescence', label: 'Thin-film iridescence', ariaLabel: 'Brush thin-film iridescence', value: Boolean(brush.iridescence) }),
-      ...(brush.iridescence && full(profile.iridescence ?? 'none')
-        ? [
-            slider({ path: 'iridescence.thickness', label: 'Film (nm)', min: 100, max: 1000, step: 5 }),
-            slider({ path: 'iridescence.pressureToThickness', label: 'Pressure → film', min: 0, max: 1, step: 0.01 }),
-            slider({ path: 'iridescence.ior', label: 'Film IOR', min: 1.2, max: 2, step: 0.01 }),
-          ]
-        : []),
+      lit && toggle('light.pressure', 'Light follows pressure'),
+      ...(lit && engine === 'impasto' ? [slider({ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }), slider({ path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 })] : []),
+      lit && withNote({ kind: 'slider', path: 'light.spill.radius', label: 'Spill', ariaLabel: 'Brush light spill', min: 0, max: 128, step: 1, value: brush.light?.spill?.radius ?? 24 }),
+      lit && toggle('light.glow', 'Suggest a glow'),
     ]);
+  }
+
+  // Specialty paint: each kind an opt-in toggle; its settings and how to use it once it is on.
+  if (!isTool && engineOk) {
+    const on = new Set(brushSpecialties(brush));
+    const lays = Boolean(engineControls?.light);
+    const smartInks = profile.id === 'paint' && lays;
+    const reservoir = Boolean(brush.behaviour?.exchange?.reservoir);
+    const support: Record<BrushSpecialtyKind, boolean> = {
+      fluorescence: smartInks,
+      thermochromic: smartInks,
+      iridescence: full(profile.iridescence ?? 'none') && Boolean(engineControls?.iridescence) && marks !== 'objects' && marks !== 'antimatter',
+      ferro: full(profile.ferro ?? 'none') && lays,
+      ghost: engine === 'wet' && profile.surfaces.includes('wet') && full(profile.light) && !brush.mutation,
+      mutation: profile.id === 'paint' && ['dab', 'wet', 'impasto', 'particle', 'bristle'].includes(engine) && marks !== 'objects' && marks !== 'antimatter' && !reservoir,
+      livePatterns: engine === 'wet' && full(profile.livePatterns ?? 'none'),
+    };
+    const LABELS: Record<BrushSpecialtyKind, string> = { fluorescence: 'UV fluorescence', thermochromic: 'Thermochromic ink', iridescence: 'Thin-film iridescence', ferro: 'Ferrofluid', ghost: 'Ghost paint', mutation: 'Mutation paint', livePatterns: 'Live pattern' };
+    const ARIAS: Record<BrushSpecialtyKind, string> = { fluorescence: 'Brush UV fluorescence', thermochromic: 'Brush thermochromic ink', iridescence: 'Brush thin-film iridescence', ferro: 'Brush ferrofluid', ghost: 'Brush ghost paint', mutation: 'Brush mutation paint', livePatterns: 'Live pattern' };
+    const PATHS: Record<BrushSpecialtyKind, string> = { fluorescence: 'fluorescence.enabled', thermochromic: 'thermochromic.enabled', iridescence: 'iridescence', ferro: 'ferro.enabled', ghost: 'ghost.enabled', mutation: 'mutation.enabled', livePatterns: 'livePatterns.pattern' };
+    const hint = (kind: BrushSpecialtyKind) => (on.has(kind) ? { hint: brushSpecialtyInfo(kind).howToUse } : {});
+    const facetSlider = (path: string, label: string, min: number, max: number, step: number, fallback: number): BrushEditorControl => {
+      const v = value(path);
+      return withNote({ kind: 'slider', path, label, ariaLabel: aria(path, label), min, max, step, value: typeof v === 'number' ? v : fallback });
+    };
+    const settings: Record<BrushSpecialtyKind, () => BrushEditorControl[]> = {
+      fluorescence: () => [facetSlider('fluorescence.amount', 'UV glow', 0, 1, 0.01, 0.8), toggle('fluorescence.invisible', 'Invisible in daylight')],
+      thermochromic: () => [
+        withNote({ kind: 'colour', path: 'thermochromic.hotColor', label: 'Hot colour', ariaLabel: 'Brush thermochromic hot colour', value: brush.thermochromic?.hotColor ?? null, dark: null, gradient: false }),
+        facetSlider('thermochromic.threshold', 'Heat threshold', 0.05, 0.95, 0.01, 0.5),
+      ],
+      iridescence: () => [facetSlider('iridescence.thickness', 'Film (nm)', 100, 1000, 5, 400), facetSlider('iridescence.ior', 'Film IOR', 1.2, 2, 0.01, 1.5), facetSlider('iridescence.pressureToThickness', 'Pressure → film', 0, 1, 0.01, 0)],
+      ferro: () => [facetSlider('ferro.amount', 'Ferrofluid', 0, 1, 0.01, 0.8), facetSlider('ferro.wavelength', 'Spike spacing', 4, 64, 1, 16), facetSlider('ferro.threshold', 'Spike threshold', 0.01, 0.95, 0.01, 0.12)],
+      ghost: () => [facetSlider('ghost.linger', 'Linger (s)', 0.5, 60, 0.5, 4), facetSlider('ghost.smear', 'Smear', 0, 1, 0.01, 0.3)],
+      mutation: () => [facetSlider('mutation.settle', 'Settle (s)', 0.5, 10, 0.5, 1.5), facetSlider('mutation.patience', 'Patience (s)', 5, 300, 5, 45), facetSlider('mutation.fade', 'Fade (s)', 0.5, 10, 0.5, 2)],
+      livePatterns: () => [
+        facetSlider('livePatterns.scale', 'Pattern scale', 0.5, 4, 0.1, 1),
+        facetSlider('livePatterns.contrast', 'Pattern contrast', 0, 2, 0.05, 1),
+        facetSlider('livePatterns.relief', 'Pattern relief', 0, 1, 0.05, 0),
+      ],
+    };
+    add(
+      'specialty',
+      'Specialty',
+      BRUSH_SPECIALTIES.filter((s) => support[s.id]).flatMap((s): BrushEditorControl[] => {
+        const head: BrushEditorControl =
+          s.id === 'livePatterns'
+            ? withNote({ kind: 'choice', path: PATHS[s.id], label: LABELS[s.id], ariaLabel: ARIAS[s.id], options: [{ value: 'none', label: 'None' }, ...options(LIVE_PATTERN_KINDS)], value: brush.livePatterns?.pattern ?? (brush.livePatterns ? 'spots' : 'none'), ...hint(s.id) })
+            : withNote({ kind: 'toggle', path: PATHS[s.id], label: LABELS[s.id], ariaLabel: ARIAS[s.id], value: on.has(s.id), ...hint(s.id) });
+        return [head, ...(on.has(s.id) ? settings[s.id]() : [])];
+      }),
+    );
   }
 
   if (full(profile.motion) && engineOk && marks === 'particles') add('motion', 'Motion', [slider({ path: 'particle.waveSpeed', label: 'Wave speed', min: 0, max: 1, step: 0.01 })]);
@@ -468,6 +512,15 @@ export async function saveBrushEdit(library: Pick<BrushLibrary, 'get' | 'save' |
   return { ...saved, kept: check.kept };
 }
 
+/** The specialty toggles of the brush editor (`<facet>.enabled`): the facet each switches and what it starts with. */
+const SPECIALTY_TOGGLES: Readonly<Record<string, readonly ['fluorescence' | 'thermochromic' | 'ferro' | 'ghost' | 'mutation', () => object]>> = {
+  'fluorescence.enabled': ['fluorescence', () => ({ amount: 0.8 })],
+  'thermochromic.enabled': ['thermochromic', () => ({ hotColor: '#f97316', threshold: 0.5 })],
+  'ferro.enabled': ['ferro', () => ({ amount: 0.8 })],
+  'ghost.enabled': ['ghost', () => ({})],
+  'mutation.enabled': ['mutation', () => ({})],
+};
+
 /**
  * The brush with one control's value set (`undefined` removes it), normalised. Changing the kind,
  * the marks or the tip shape starts that facet afresh. Returns the brush and what was clamped or
@@ -501,6 +554,13 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
   } else if (path === 'iridescence') {
     if (value) next.iridescence = next.iridescence ?? { thickness: 400 };
     else delete next.iridescence;
+  } else if (path in SPECIALTY_TOGGLES) {
+    const [facet, fresh] = SPECIALTY_TOGGLES[path]!;
+    if (!value) delete next[facet];
+    // Off, or present but laying none (`amount` 0): start with paint that shows.
+    else if (!brushSpecialties(next).includes(facet)) (next as Record<string, unknown>)[facet] = { ...((next[facet] as object | undefined) ?? {}), ...fresh() };
+  } else if (path === 'livePatterns.pattern' && value === 'none') {
+    delete next.livePatterns;
   } else if (path === 'culture') {
     if (value) next.culture = next.culture ?? { species: 'mycelium' };
     else delete next.culture;
@@ -526,15 +586,25 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
 }
 
 export interface BrushLibraryGroup {
-  /** `tools`, or a medium (`paint`, `ink`, `dry`, `spray`), or `other`. */
-  id: string;
+  /**
+   * `tools`; `specialty` (reactive and simulated paint, `isSpecialtyBrush`, by kind: its varieties
+   * are `BrushSpecialtyKind`s titled `Ferrofluid`, `UV-fluorescent`…); or a medium (`paint`, `ink`,
+   * `dry`, `spray`), or `other`.
+   */
+  id: BrushMedium | 'other' | 'specialty' | 'tools';
   title: string;
   /** Brushes by variety (`''`: no variety), in library order. */
   varieties: Array<{ variety: string; title: string; entries: BrushLibraryEntry[] }>;
 }
 
+/** The order of `brushLibraryGroups`' groups. */
+const GROUP_ORDER: readonly BrushLibraryGroup['id'][] = ['dry', 'ink', 'paint', 'spray', 'other', 'specialty', 'tools'];
+const GROUP_TITLES: Readonly<Record<BrushLibraryGroup['id'], string>> = { ...MEDIUM_LABELS, other: 'Other', specialty: 'Specialty', tools: 'Tools' };
+
 /**
- * A library grouped for a browser: marks by medium, then variety; tools as their own group.
+ * A library grouped for a browser: marks by medium, then variety; specialty paint (ferrofluid,
+ * UV and thermochromic ink, iridescence, ghost, mutation, live patterns) in a `specialty` group by
+ * kind; tools as their own group.
  * `text` keeps brushes whose id, name, variety or tags start with each word; `profile` keeps only
  * what that host renders.
  */
@@ -550,16 +620,17 @@ export function brushLibraryGroups(entries: readonly BrushLibraryEntry[], filter
       if (!wanted.every((w) => text.some((t) => t.startsWith(w)))) continue;
     }
     if (filter.profile && !checkBrush(b, filter.profile).ok) continue;
-    const id = b.kind === 'tool' ? 'tools' : (b.medium ?? 'other');
+    // Specialty paint is filed apart from standard media, by its first kind (its medium is unchanged).
+    const specialty = b.kind === 'tool' ? undefined : brushSpecialties(b)[0];
+    const id: BrushLibraryGroup['id'] = b.kind === 'tool' ? 'tools' : specialty ? 'specialty' : (b.medium ?? 'other');
     let g = groups.get(id);
-    if (!g) groups.set(id, (g = { id, title: id === 'tools' ? 'Tools' : id === 'other' ? 'Other' : MEDIUM_LABELS[id as BrushMedium], varieties: [] }));
-    const variety = b.kind === 'tool' ? '' : (b.variety ?? '');
+    if (!g) groups.set(id, (g = { id, title: GROUP_TITLES[id], varieties: [] }));
+    const variety = b.kind === 'tool' ? '' : specialty ? specialty : (b.variety ?? '');
     let v = g.varieties.find((x) => x.variety === variety);
-    if (!v) g.varieties.push((v = { variety, title: variety ? title(variety) : '', entries: [] }));
+    if (!v) g.varieties.push((v = { variety, title: specialty ? brushSpecialtyInfo(specialty).group : variety ? title(variety) : '', entries: [] }));
     v.entries.push(e);
   }
-  const order = ['dry', 'ink', 'paint', 'spray', 'other', 'tools'];
-  return [...groups.values()].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  return [...groups.values()].sort((a, b) => GROUP_ORDER.indexOf(a.id) - GROUP_ORDER.indexOf(b.id));
 }
 
 /**

@@ -12201,6 +12201,23 @@
           }
         },
         {
+          "name": "get_specialty_guides",
+          "title": "Read how to use the brush’s specialty paint",
+          "description": "Reads guides for the specialty paint the active brush lays (ferro: ferrofluid, fluorescence: UV-fluorescent ink, thermochromic ink, iridescence: thin-film, ghost paint, mutation paint, livePatterns: reaction-diffusion), one per kind, empty for standard brushes and tools: title, howToUse (how strokes behave), status (whether the canvas is set up now: UV blacklight, heat, magnets, view tilt, a mutation agent, wet time), ready (the effect shows right away) and actions, the quick setups that apply now, each with the tool to call and its arguments (set_uv_light, paint_heat, advance_heat, clear_heat, add_magnet, cure_ferrofluid, set_view_tilt, seed_live_patterns). Call it after set_brush with a specialty brush, run an action’s tool with its arguments, then call it again to check ready. Changes nothing. Returns brushId, specialties and guides.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read how to use the brush’s specialty paint",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
           "name": "get_light",
           "title": "Read a layer’s light paint",
           "description": "Reads a layer’s light paint (laid by brushes with light.amount above 0): whether it has any, where it is (bounds, document pixels), its brightest value (peak 0..255) and its spill (radius px, strength). Changes nothing.",

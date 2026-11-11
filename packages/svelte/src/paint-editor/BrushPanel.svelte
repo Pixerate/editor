@@ -6,15 +6,18 @@
   import BrushEditor from '../brushes/BrushEditor.svelte';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
   import PaintGradientEditor from './PaintGradientEditor.svelte';
+  import SpecialtyGuideCard from './SpecialtyGuideCard.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
   interface Props {
     controller: PaintEditorController;
     thumbnailWidth?: number;
     thumbnailHeight?: number;
+    /** With it, the specialty guide card has an "Open Specialty panel" button (the paint editor's Specialty tab). */
+    onopenspecialtypanel?: () => void;
     class?: string;
   }
-  let { controller, thumbnailWidth = 112, thumbnailHeight = 32, class: className = '' }: Props = $props();
+  let { controller, thumbnailWidth = 112, thumbnailHeight = 32, onopenspecialtypanel, class: className = '' }: Props = $props();
   const editor = paintEditorState(() => controller);
   const snap = $derived(editor.current);
   const brush = $derived(snap.brush);
@@ -102,9 +105,10 @@
   {/if}
 {/snippet}
 
-<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. Images picked for an image tip or grain go into the brush library as sources; Import also reads brush packs (.abr, .brush, .brushset). -->
+<!-- The brush library (BrushLibraryBrowser), a guide card for a specialty brush (SpecialtyGuideCard) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. Images picked for an image tip or grain go into the brush library as sources; Import also reads brush packs (.abr, .brush, .brushset). -->
 <div class={`${panel} ${className}`} data-testid="brush-panel">
   <BrushLibraryBrowser {entries} activeId={brush.id} onselect={(id) => controller.setBrush({ id })} thumbnail={(id) => thumbs.get(id) ?? null} {thumbnailWidth} {thumbnailHeight} />
+  <SpecialtyGuideCard {controller} {onopenspecialtypanel} />
   <BrushEditor
     brush={spec}
     profile={PAINT_PROFILE}

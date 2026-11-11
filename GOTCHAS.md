@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint-editor] Specialty Guide Actions: Hosted Coordinates and Wet Mutation Brushes
+
+- **Issue / Symptom**: (1) On a paint document hosted as a canvas layer (`origin`), `get_specialty_guides` returned `add_magnet` / `paint_heat` arguments in document pixels, so an agent replaying them put magnets and heat in the wrong place; declaring `coordinates.out: ['guides[].actions[].arguments']` instead would also shift the view tilt action's `{ x: 0.6, y: -0.4 }`. (2) A wet mutation brush (`mutation-wash`) showed both a ghost and a mutation guide.
+- **Root Cause**: (1) `coordinates` paths shift every object with numeric `x` / `y` at the path; they cannot tell a position from a view tilt. (2) The engine brush (`PaintBrush`) of a wet mutation brush carries `ghost` (`trigger: 'agent'`) as its fade tracer, though the facet brush has no `ghost`.
+- **Solution / Workaround**: (1) The tool shifts the positions itself, per action tool (`hostedGuide` in `thick-tools.ts`, given the provider's `origin`); keep it that way when adding an action with a position. (2) `paintBrushSpecialties` counts `ghost` only without `mutation` (TS and Swift); `brushSpecialties` reads the facet brush, which needs no such rule.
+
 ### [monorepo] Vitest Says "Cannot find native binding" When an Intel Tool Launches It on Apple Silicon
 
 - **Issue / Symptom**: `vitest run` fails at startup with `Cannot find native binding … Cannot find module '@rolldown/binding-wasm32-wasi'`, although `@rolldown/binding-darwin-arm64` is installed and loads in plain `node`.

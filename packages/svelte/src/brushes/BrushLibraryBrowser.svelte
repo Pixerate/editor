@@ -21,15 +21,17 @@
   const groups = $derived(brushLibraryGroups(entries, { text, profile }));
 </script>
 
-<!-- The brush library grouped by medium, then variety, with tools as their own group, and a filter (brushLibraryGroups). -->
+<!-- The brush library grouped by medium, then variety, with specialty paint (by kind) and tools as their own groups, and a filter (brushLibraryGroups). -->
 <div class={`flex flex-col gap-1 ${className}`} data-testid="brush-library">
   <input type="search" bind:value={text} placeholder="Find a brush" aria-label="Find a brush" class="rounded bg-slate-800 px-1.5 py-0.5" />
   <div class="flex flex-col gap-1.5" role="listbox" aria-label="Brushes">
     {#each groups as g (g.id)}
-      <div role="group" aria-label={g.title} class="flex flex-col gap-0.5">
-        <span class="text-[10px] uppercase tracking-wide text-slate-500">{g.title}</span>
+      <div role="group" aria-label={g.title} data-group={g.id} class={`flex flex-col gap-0.5 ${g.id === 'specialty' ? 'mt-1 border-t border-indigo-500/40 pt-1' : ''}`}>
+        <span class={`text-[10px] uppercase tracking-wide ${g.id === 'specialty' ? 'text-indigo-300' : 'text-slate-500'}`}>{g.title}</span>
         <div class="grid grid-cols-2 gap-1">
           {#each g.varieties as v (v.variety)}
+            <!-- Specialty paint is listed by kind (Ferrofluid, UV-fluorescent…). -->
+            {#if g.id === 'specialty'}<span class="col-span-2 text-[10px] text-slate-400">{v.title}</span>{/if}
             {#each v.entries as e (e.brush.id)}
               <button
                 type="button"
