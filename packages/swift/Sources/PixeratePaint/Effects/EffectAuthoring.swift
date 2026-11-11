@@ -114,8 +114,11 @@ public struct EffectAuthoringDocument: Equatable, Sendable {
     /// from `source`. The generic session gives it back unchanged from `exportDocument`, and drops it
     /// when the source is edited, since it may describe the old source (undo brings it back).
     public var provider: JSONObject?
+    /// How the effect is best painted with (`EffectSummary.paint`, `EffectPaintHint`), as JSON. An effect saved from it keeps it.
+    public var paint: JSONValue?
 
-    public init(providerId: String, effectId: String, name: String, values: JSONObject = [:], tracks: EffectTracks = EffectTracks(), presets: [JSONObject] = [], duration: Double = 1000, loop: Bool = false, source: String? = nil, sourceLanguage: String? = nil, provider: JSONObject? = nil) {
+    public init(providerId: String, effectId: String, name: String, values: JSONObject = [:], tracks: EffectTracks = EffectTracks(), presets: [JSONObject] = [], duration: Double = 1000, loop: Bool = false, source: String? = nil, sourceLanguage: String? = nil, provider: JSONObject? = nil, paint: JSONValue? = nil) {
+        self.paint = paint
         self.providerId = providerId
         self.effectId = effectId
         self.name = name
@@ -143,6 +146,7 @@ public struct EffectAuthoringDocument: Equatable, Sendable {
         o["presets"] = .array(presets.map { .object($0) })
         o["duration"] = .number(duration)
         o["loop"] = .bool(loop)
+        if let paint { o["paint"] = paint }
         if let provider { o["provider"] = .object(provider) }
         return o
     }
@@ -258,6 +262,8 @@ public protocol EffectAuthoringSession: AnyObject {
     /// Removes a control's keyframes; its value at the playhead becomes its static value.
     func clearTrack(_ name: String) -> EffectAuthoringResult
     func setTiming(duration: Double?, loop: Bool?) -> EffectAuthoringResult
+    /// Sets how the effect is best painted with (`description.paint`, saved in the document), or removes it with nil. Refused when it names controls the effect lacks. One undo step.
+    func setPaintHint(_ hint: JSONValue?) -> EffectAuthoringResult
     func play()
     func pause()
     /// Moves the playhead (clamped to 0...duration).
@@ -273,6 +279,7 @@ public protocol EffectAuthoringSession: AnyObject {
 
 extension EffectAuthoringSession {
     public var canEditSource: Bool { false }
+    public func setPaintHint(_ hint: JSONValue?) -> EffectAuthoringResult { .refused("This effect's authoring session cannot keep a paint hint.") }
     public func setSource(_ source: String) async -> EffectSourceResult { .refused("this effect has no source to edit") }
     public func setValue(_ name: String, _ value: JSONValue) -> EffectAuthoringResult { setValue(name, value, gesture: nil) }
     public func setValues(_ values: JSONObject) -> EffectAuthoringResult { setValues(values, gesture: nil) }
@@ -469,6 +476,12 @@ private func documentErrors(_ doc: JSONObject, _ description: EffectDescription)
     if let d = doc["duration"], !(isFiniteNumber(d) && d.numberValue! > 0) { errors.append(SchemaValidationError(path: "/duration", message: "must be a finite number of ms > 0")) }
     if let l = doc["loop"], l.boolValue == nil { errors.append(SchemaValidationError(path: "/loop", message: "must be a boolean")) }
     if let p = doc["provider"], p.objectValue == nil { errors.append(SchemaValidationError(path: "/provider", message: "must be an object of the provider's own data")) }
+    if let p = doc["paint"] {
+        let shape = effectPaintHintShapeProblems(p)
+        for message in (shape.isEmpty ? effectPaintHintProblems(description, paint: p) : shape) {
+            errors.append(SchemaValidationError(path: "/paint", message: message.replacingOccurrences(of: "^paint(\\.| )", with: "", options: .regularExpression)))
+        }
+    }
     return errors
 }
 
@@ -593,7 +606,7 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
             requestedPreset = preset
         }
 
-        let description: EffectDescription
+        var description: EffectDescription
         if let backend {
             let docSource = initialDoc?["source"]?.stringValue
             let text = try docSource ?? backend.sourceOf(effectId)
@@ -614,6 +627,8 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
         if let initialDoc {
             let problems = documentErrors(initialDoc, description)
             if !problems.isEmpty { throw controlError(effectId, problems) }
+            // A document's own paint hint (or none) is what it paints with, not the catalog effect's.
+            description = withPaintHint(description, initialDoc["paint"])
         }
         if description.kind == "motion" { throw EffectError.unsupported("Motion effects cannot be authored as pixel effects", effectId) }
 
@@ -756,7 +771,10 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
         var after = before
         if let d = result.description {
             let carried = carryOver(d)
-            after = SourceSnapshot(sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: d, baseValues: carried.base, tracks: carried.tracks, providerData: keptData)
+            // The paint hint stays while the new controls still fit it.
+            var hint: JSONValue? = description.json["paint"]
+            if let h = hint, !effectPaintHintProblems(d, paint: h).isEmpty { hint = Optional<JSONValue>.none }
+            after = SourceSnapshot(sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: withPaintHint(d, hint), baseValues: carried.base, tracks: carried.tracks, providerData: keptData)
         } else {
             after.sourceText = src
             after.sourceIssues = result.issues
@@ -1023,6 +1041,25 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
         return .ok
     }
 
+    public func setPaintHint(_ hint: JSONValue?) -> EffectAuthoringResult {
+        if disposed { return Self.closed }
+        let next: JSONValue? = hint == .null ? nil : hint
+        if let next {
+            let problems = effectPaintHintProblems(description, paint: next)
+            if !problems.isEmpty { return .refused(problems.joined(separator: "; ")) }
+        }
+        let before = description.json["paint"]
+        history.execute(Command(name: next == nil ? "Remove paint hint" : "Set paint hint", execute: { [weak self] in
+            guard let self else { return }
+            description = withPaintHint(description, next)
+        }, undo: { [weak self] in
+            guard let self else { return }
+            description = withPaintHint(description, before)
+        }))
+        invalidateState()
+        return .ok
+    }
+
     // MARK: Playback
 
     private func pauseInternal() {
@@ -1132,7 +1169,7 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
     public func exportDocument() -> EffectAuthoringDocument {
         EffectAuthoringDocument(
             providerId: provider.id, effectId: effectId, name: docName ?? description.name, values: valuesAtTime(playheadTime, baseValues, tracks), tracks: tracks,
-            presets: savedPresets, duration: duration, loop: loop, source: backend != nil ? sourceText : nil, sourceLanguage: backend != nil && sourceText != nil ? backend!.language : nil, provider: providerData)
+            presets: savedPresets, duration: duration, loop: loop, source: backend != nil ? sourceText : nil, sourceLanguage: backend != nil && sourceText != nil ? backend!.language : nil, provider: providerData, paint: description.json["paint"])
     }
 
     public func dispose() {

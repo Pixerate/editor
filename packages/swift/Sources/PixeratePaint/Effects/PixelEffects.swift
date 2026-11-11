@@ -17,10 +17,12 @@ public struct PixelTemplate: Sendable {
     public let description: String
     public let loop: Bool
     public let duration: Double?
+    /// How it paints (`EffectSummary.paint`) as JSON; effects saved from it keep it.
+    public var paint: JSONValue? = nil
     public let source: String
 
     /// As description metadata.
-    public var meta: PixelEffectMeta { PixelEffectMeta(id: id, name: name, description: description, loop: loop, duration: duration) }
+    public var meta: PixelEffectMeta { PixelEffectMeta(id: id, name: name, description: description, loop: loop, duration: duration, paint: paint) }
 }
 
 /// The starting points, as in the TS core.
@@ -31,6 +33,7 @@ public let PIXEL_TEMPLATES: [PixelTemplate] = [
         description: "A starting point: a soft gradient between two colours, top to bottom.",
         loop: false,
         duration: nil,
+        paint: ["map": "stroke", "colors": ["top", "bottom"], "repeat": "mirror"],
         source: ["control top: color = #1d2b53 // Colour at the top.", "control bottom: color = #ff77a8 // Colour at the bottom.", "out = mix(top, bottom, uv.y)", ""].joined(separator: "\n")
     ),
     PixelTemplate(
@@ -39,6 +42,7 @@ public let PIXEL_TEMPLATES: [PixelTemplate] = [
         description: "Rings that spread from a point, over a transparent background.",
         loop: true,
         duration: 2000,
+        paint: ["map": "canvas", "colors": ["ink"], "live": true],
         source: [
             "control ink: color = #1d2b53 // Colour of the rings.",
             "control count: number = 12 range 1 64 // How many rings across the picture.",
@@ -55,6 +59,7 @@ public let PIXEL_TEMPLATES: [PixelTemplate] = [
         description: "Soft value-noise clouds drifting sideways.",
         loop: false,
         duration: 4000,
+        paint: ["map": "canvas", "colors": ["cloud", "sky"], "live": true],
         source: [
             "control sky: color = #3a6ea5 // Colour behind the clouds.",
             "control cloud: color = #f4f4f4 // Colour of the clouds.",
@@ -78,7 +83,10 @@ public struct PixelEffectMeta: Sendable {
     public var description: String?
     public var loop: Bool?
     public var duration: Double?
-    public init(id: String, name: String, description: String? = nil, loop: Bool? = nil, duration: Double? = nil) {
+    /// Its paint hint (JSON).
+    public var paint: JSONValue?
+    public init(id: String, name: String, description: String? = nil, loop: Bool? = nil, duration: Double? = nil, paint: JSONValue? = nil) {
+        self.paint = paint
         self.id = id
         self.name = name
         self.description = description
@@ -120,6 +128,7 @@ public func pixelDescription(program: PixelProgram, meta: PixelEffectMeta) -> Ef
     ]
     // `...(meta.duration ? { duration } : {})`: 0 and NaN are left out.
     if let d = meta.duration, d != 0, !d.isNaN { o["duration"] = .number(d) }
+    if let p = meta.paint { o["paint"] = p }
     o["controls"] = ["type": "object", "properties": .object(properties), "additionalProperties": false]
     o["defaults"] = .object(defaults)
     o["presets"] = []
@@ -198,7 +207,7 @@ public struct PixelSourceBackend: AuthoringSourceBackend {
 
     public func compile(_ source: String, effectId: String) -> AuthoringCompileResult {
         let t = pixelTemplate(effectId)
-        let r = describePixelSource(source, meta: PixelEffectMeta(id: effectId, name: t?.name ?? effectId, loop: t?.loop, duration: t?.duration), limits: limits)
+        let r = describePixelSource(source, meta: PixelEffectMeta(id: effectId, name: t?.name ?? effectId, loop: t?.loop, duration: t?.duration, paint: t?.paint), limits: limits)
         return AuthoringCompileResult(description: r.description, issues: r.issues)
     }
 

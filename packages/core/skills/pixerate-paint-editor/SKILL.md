@@ -175,7 +175,9 @@ for the controls and presets.
 
 ## Effect paint
 
-`set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image); transparency paints nothing. Call `search_effects` (`use` generator, overlay or title) and `describe_effect`, then `set_effect_paint` with `effect`, `values`, `time` (ms, default 0) and wait for it to return before painting. `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour; `update_effect` (target and effect `paint`, `values`) renders new values. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
+`set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image); transparency paints nothing. Call `search_effects` with `place: "paint"` and `describe_effect`, then `set_effect_paint` with `effect`, `values`, `time` (ms, default 0) and wait for it to return before painting.
+
+**Paint hints.** Many effects only show a still frame when painted (framed scenes, loaders, titles, audio visualisers). A provider can mark the ones that make good paint with a `paint` hint (search results and `describe_effect` show it: `map`, `colors`, `values`, `live`, `repeat`, `size`); when its capabilities include `paintHints`, `search_effects` `place: "paint"` lists only those and `set_effect_paint` refuses the rest, saying to use an effect layer or fill. Picking a hinted effect starts from its hint: its `map` (and `repeat`), its `values`, the paint and secondary colours (`set_color`) in its `colors` controls, and `live`. So set the colours first, then call `set_effect_paint` with just `effect`; pass `map`, `values` or `live` only to change what the hint chose (yours win, control by control). `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour; `update_effect` (target and effect `paint`, `values`) renders new values. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
 
 **An effect no provider has:** write it. When `open_effect_authoring` is available (the editor's `authoredEffects` is `author`), open `pixel.blank`, write it in pixel expressions with `effect_authoring_set_source`, then `save_authored_effect`. The returned `authored.<name>` id works with `set_effect_paint`, `set_paper_effect`, `add_effect_layer` and `fill_layer_with_effect`, and the painting keeps its source. The method is in `pixerate-effect-authoring`.
 
@@ -369,7 +371,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 
 | Tool | Use |
 | --- | --- |
-| `search_effects` | Find provider effects by `query`, `kind`, `category` and `use` (`generator` for paper and layers, `overlay` / `title` for layers and fills, `filter` for light on paint). `available: false` when no provider is registered. Call before the tools below. |
+| `search_effects` | Find provider effects by `query`, `kind`, `category` and `use` (`generator` for paper and layers, `overlay` / `title` for layers and fills, `filter` for light on paint), or `place` (`paper`, `layer`, `fill`, `light`, `paint`) for exactly what that place takes: `paint` honours the provider's paint hints. Each effect's `paint` hint shows how it paints. `available: false` when no provider is registered. Call before the tools below. |
 | `describe_effect` | Read an effect's controls (types, ranges, defaults), presets and inputs. Call before passing `values`. |
 | `list_applied_effects` | Read the effect paint (target `paint`), the effect paper (target `paper`) and every effect layer with its effect and values; with `target`, one of them. Baked light and fills are pixels and are not listed. Works without a provider. |
 | `apply_effect` | Light on dried paint: run a `filter` effect on a layer's paint and bake it in (`values`, `opacity` = strength 0..1). Refused on empty, wet, locked or hidden layers, with the fix. One undo step; undo takes it back. Returns the effect used and `baked: true`. |
@@ -378,7 +380,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `set_paper_effect` | Draw a generator over the paper (`values`, `opacity`, `blend` default `multiply`, `time`); `effect: null` removes it. One undo step. Returns the effect paper. |
 | `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect (`values`, `name`, `aboveId`, `opacity`, `blend`, `time`); it becomes active. Returns the layer and its effect. |
 | `fill_layer_with_effect` | Composite a generator, overlay or title effect onto a layer (`layerId`, `values`, `opacity`, `lockTransparency`, `time`). One undo step. Returns the layer id and the effect. |
-| `set_effect_paint` | Paint with a generator, overlay or title effect (`effect`, `values`, `time` ms default 0): rendered once at the canvas size, strokes take each pixel's colour from it; `map` `{ by: "stroke", length, repeat }` bends a strip along each stroke, or `{ by: "path" }` passes the stroke's centreline to an effect with a path control (`format: "svg-path"`, `accepts: ["path"]`); `live` keeps it playing on stroke layers. Call after `describe_effect`, then `paint_stroke`. Editor state, not an undo step. Returns `effectPaint`. |
+| `set_effect_paint` | Paint with a generator, overlay or title effect (`effect`, `values`, `time` ms default 0): rendered once at the canvas size, strokes take each pixel's colour from it; `map` `{ by: "stroke", length, repeat }` bends a strip along each stroke, or `{ by: "path" }` passes the stroke's centreline to an effect with a path control (`format: "svg-path"`, `accepts: ["path"]`); `live` keeps it playing on stroke layers. An effect with a `paint` hint starts from it (map, values, the two colours in its `colors` controls, live); what you pass wins. With a provider that declares `paintHints`, an effect without a hint is refused (use `add_effect_layer` or `fill_layer_with_effect`). Call after `search_effects` `place: "paint"` and `describe_effect`, then `paint_stroke`. Editor state, not an undo step. Returns `effectPaint`. |
 | `set_effect_playback` | Play or pause live effect paint in the view (`playing`) and cap its frame rate (`fps` 1..60). Editor state. Returns `playing`, `fps`, `time` and `animation` (what plays, or null). Export a moment with `export_image` / `export_psd` `time`. |
 
 ### Guides
@@ -469,5 +471,9 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   and in wet paint it flows with the water; for a crisp pattern in an exact shape, paint and dry
   the shape, then `fill_layer_with_effect` (`lockTransparency: true`). Erasers, blenders and
   smudges ignore it. Wait for `set_effect_paint` to return; strokes are refused while it renders.
+- **Don't paint with an effect meant to be seen whole.** A scene, loader, title or audio
+  visualiser shows only a still fragment inside a stroke. Search with `place: "paint"`; when the
+  provider has paint hints, only effects that suit paint come back. Put the others on an effect
+  layer (`add_effect_layer`) or in a fill (`fill_layer_with_effect`).
 - **Recorded strokes are kept in saved documents** (`save_paint_document`, `get_paint_document`),
   so a painting can be replayed and repainted at a higher resolution.

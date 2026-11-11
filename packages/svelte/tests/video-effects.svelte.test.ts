@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { createFakeEffectProvider, type EffectProvider } from "@pixerate/editor/effects";
+import { createFakeEffectProvider, type EffectProvider, type EffectSummary } from "@pixerate/editor/effects";
+import { paintEffectOffered } from "@pixerate/editor/paint-editor";
 import { VideoEditorController, type VideoProject } from "@pixerate/editor/video-editor";
 import { EffectParameters, EffectsBrowser } from "../src/effects";
 import { VideoEditor, VideoEffectsPanel } from "../src/video-editor";
@@ -100,6 +101,14 @@ describe("effects (Svelte)", () => {
     cleanups = [];
     expect(c.effectsProvider).toBeNull();
     expect(registry.listTools().tools).toEqual([]);
+  });
+
+  it("EffectsBrowser keeps only what filter keeps: the paint place with provider paint hints", async () => {
+    const provider = createFakeEffectProvider({ paintHints: true });
+    const filter = (e: EffectSummary) => paintEffectOffered(e, "paint", provider.capabilities);
+    render(EffectsBrowser, { provider, uses: ["generator", "overlay", "title"], filter, onpick: () => {}, thumbnails: false });
+    await flush();
+    expect([...target.querySelectorAll("[data-effect-id]")].map((b) => b.getAttribute("data-effect-id"))).toEqual(["fake.gradient", "fake.trail"]);
   });
 
   it("EffectsBrowser lists, filters and picks effects, and says when there is no provider", async () => {

@@ -14,6 +14,10 @@
  *
  * It writes words as path data (`pathFromText`): a zig-zag per letter, font `zig`.
  *
+ * With `paintHints: true` it declares `capabilities.paintHints`, and `gradient` and `trail` carry
+ * paint hints (`paint`: a strip bent along the stroke in the brush's two colours, and a line drawn
+ * along the stroke's own path), so editors offer only those two as paint; `bar` has none.
+ *
  * With `camera: true` it also has camera moves (no pixels): `glide` and `whip` (transitions; the
  * whip cuts halfway) and `drift` (a hold that zooms in slowly).
  *
@@ -45,6 +49,7 @@ import type {
 	CameraView,
 	EffectDescription,
 	EffectImageSource,
+	EffectPaintHint,
 	EffectPixels,
 	EffectProvider,
 	EffectProviderCapabilities,
@@ -452,6 +457,12 @@ const TIMING_DESCRIPTIONS: readonly EffectDescription[] = [
 	}
 ];
 
+/** The paint hints `paintHints: true` adds: `gradient` a strip bent along the stroke in the brush's two colours, `trail` a line along the stroke's own path. */
+const FAKE_PAINT_HINTS: Readonly<Record<string, EffectPaintHint>> = {
+	'fake.gradient': { map: 'stroke', colors: ['from', 'to'], values: { angle: 0 }, live: true, repeat: 'mirror', size: 24 },
+	'fake.trail': { map: 'path', colors: ['color'], values: { width: 4 } }
+};
+
 const summaryOf = ({ controls: _c, defaults: _d, presets: _p, inputs: _i, ...summary }: EffectDescription): EffectSummary => summary;
 
 const hexToRgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
@@ -689,6 +700,8 @@ export interface FakeEffectProviderOptions {
 	timing?: boolean;
 	/** Adds two sequence templates and `listTemplates` / `describeTemplate` / `instantiateTemplate` (default false). */
 	templates?: boolean;
+	/** Declares `capabilities.paintHints` and gives `gradient` and `trail` paint hints, so only they suit paint (default false). */
+	paintHints?: boolean;
 }
 
 /** A deterministic CPU effects provider with nine effects, and camera moves, timing effects and templates on request (see the module comment). */
@@ -704,10 +717,13 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		...(options.camera ? { supportsCamera: true } : {}),
 		...(options.timing ? { supportsTiming: true } : {}),
 		...(options.templates ? { supportsTemplates: true } : {}),
+		...(options.paintHints ? { paintHints: true } : {}),
 		maxSize: 8192,
 		...options.capabilities
 	};
-	const all = [...DESCRIPTIONS, ...(options.camera ? CAMERA_DESCRIPTIONS : []), ...(options.timing ? TIMING_DESCRIPTIONS : [])];
+	const all = [...DESCRIPTIONS, ...(options.camera ? CAMERA_DESCRIPTIONS : []), ...(options.timing ? TIMING_DESCRIPTIONS : [])].map((d) =>
+		options.paintHints && FAKE_PAINT_HINTS[d.id] ? { ...d, paint: FAKE_PAINT_HINTS[d.id] } : d
+	);
 	const byId = new Map(all.map((d) => [d.id, d]));
 	const get = (id: string) => {
 		const d = byId.get(id);

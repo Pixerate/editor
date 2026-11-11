@@ -9,7 +9,7 @@ import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
 import type { SchemaValidationError } from '../tools/schema.js';
 import { EffectControlError, EffectDisposedError, EffectUnsupportedError } from './errors.js';
-import { effectValueErrors } from './helpers.js';
+import { effectPaintHintProblems, effectPaintHintShapeProblems, effectValueErrors, readEffectPaintHint } from './helpers.js';
 import type {
 	EffectAuthoringDocument,
 	EffectAuthoringIssue,
@@ -22,6 +22,7 @@ import type {
 } from './authoring.js';
 import type {
 	EffectDescription,
+	EffectPaintHint,
 	EffectPreset,
 	EffectProvider,
 	EffectRenderer,
@@ -80,6 +81,12 @@ function valueErrorMessage(errors: readonly SchemaValidationError[]): string {
 		.join('; ');
 }
 
+/** `d` with `paint` as its paint hint (none when undefined). */
+function withPaintHint(d: EffectDescription, paint: EffectPaintHint | undefined): EffectDescription {
+	const { paint: _old, ...rest } = d;
+	return paint ? { ...rest, paint } : rest;
+}
+
 /** Problems with a saved document against the effect it names, as schema-style errors (empty when it is valid). */
 function documentErrors(doc: EffectAuthoringDocument, description: EffectDescription): SchemaValidationError[] {
 	const errors: SchemaValidationError[] = [];
@@ -118,6 +125,11 @@ function documentErrors(doc: EffectAuthoringDocument, description: EffectDescrip
 	}
 	if (doc.loop !== undefined && typeof doc.loop !== 'boolean') errors.push({ path: '/loop', message: 'must be a boolean' });
 	if (doc.provider !== undefined && !isRecord(doc.provider)) errors.push({ path: '/provider', message: "must be an object of the provider's own data" });
+	if (doc.paint !== undefined) {
+		const shape = effectPaintHintShapeProblems(doc.paint);
+		const problems = shape.length ? shape : effectPaintHintProblems({ controls: description.controls, paint: doc.paint });
+		for (const message of problems) errors.push({ path: '/paint', message: message.replace(/^paint(\.| )/, '') });
+	}
 	return errors;
 }
 
@@ -305,6 +317,8 @@ export async function createEffectAuthoringSession(
 	if (initialDoc) {
 		const problems = documentErrors(initialDoc, description);
 		if (problems.length) throw new EffectControlError(effectId, problems);
+		// A document's own paint hint (or none) is what it paints with, not the catalog effect's.
+		description = withPaintHint(description, initialDoc.paint === undefined ? undefined : readEffectPaintHint(initialDoc.paint));
 	}
 
 	if (description.kind === 'motion') {
@@ -504,7 +518,9 @@ export async function createEffectAuthoringSession(
 		let after: typeof before;
 		if (result.description) {
 			const carried = carryOver(result.description);
-			after = { sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: result.description, baseValues: carried.base, tracks: carried.tracks, providerData: keptData };
+			// The paint hint stays while the new controls still fit it.
+			const hint = description.paint && !effectPaintHintProblems({ controls: result.description.controls, paint: description.paint }).length ? description.paint : undefined;
+			after = { sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: withPaintHint(result.description, hint), baseValues: carried.base, tracks: carried.tracks, providerData: keptData };
 		} else {
 			after = { ...before, sourceText: src, sourceIssues: result.issues, compiled: false, providerData: keptData };
 		}
@@ -946,6 +962,28 @@ export async function createEffectAuthoringSession(
 			return { ok: true };
 		},
 
+		setPaintHint(hint: EffectPaintHint | null): EffectAuthoringResult {
+			const disp = checkDisposed();
+			if (disp) return disp;
+			if (hint !== null) {
+				const problems = effectPaintHintProblems({ controls: description.controls, paint: hint });
+				if (problems.length) return { ok: false, message: problems.join('; ') };
+			}
+			const next = hint === null ? undefined : readEffectPaintHint(hint);
+			const before = description.paint;
+			history.execute({
+				name: hint === null ? 'Remove paint hint' : 'Set paint hint',
+				execute: () => {
+					description = withPaintHint(description, next);
+				},
+				undo: () => {
+					description = withPaintHint(description, before);
+				}
+			});
+			invalidateState();
+			return { ok: true };
+		},
+
 		play(): void {
 			if (disposed || playing) return;
 			playing = true;
@@ -1056,6 +1094,7 @@ export async function createEffectAuthoringSession(
 				presets: JSON.parse(JSON.stringify(savedPresets)),
 				duration,
 				loop,
+				...(description.paint ? { paint: JSON.parse(JSON.stringify(description.paint)) } : {}),
 				...(providerData ? { provider: JSON.parse(JSON.stringify(providerData)) } : {})
 			} as EffectAuthoringDocument;
 		},

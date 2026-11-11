@@ -166,7 +166,7 @@ import type { EffectAuthoringSession } from '../effects/authoring.js';
 import { createPixelEffectProvider, isPixelDocument } from '../effects/pixel-provider.js';
 import { PIXEL_TEMPLATES } from '../effects/pixel-provider.js';
 import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, withStrokePath, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
-import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
+import { checkPaintEffectPlace, effectLayersToJSON, effectPaintFromHint, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, DEFAULT_VIEW_TILT, emptyThickChannels, FilmBuffer, hasThickChannels, LitCache, normalizeLighting, normalizeViewTilt, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type PaintViewTilt, type ThickChannels } from './thick';
 import {
   DEFAULT_UV_LIGHT,
@@ -2859,7 +2859,7 @@ export class PaintEditorController {
     const d = await this.rendererFor(effect).describe(this.providerFor(effect), effect);
     const pcs = pathControlsOf(d);
     if (pcs.length) this.effectPathControls.set(d.id, pcs[0]);
-    if (place) checkPaintEffectPlace(d, place);
+    if (place) checkPaintEffectPlace(d, place, this.providerFor(effect).capabilities);
     return d;
   }
 
@@ -3101,27 +3101,36 @@ export class PaintEditorController {
    * With `map: { by: 'stroke' }` the effect lies along each stroke as a strip; with
    * `map: { by: 'path' }` an effect with a path control (`format: 'svg-path'`) draws itself along
    * each stroke's centreline in canvas pixels; with `live`, strokes on a stroke layer keep playing
-   * it (see `setEffectPlayback`).
+   * it (see `setEffectPlayback`). An effect with a paint hint (`EffectSummary.paint`) starts from
+   * it: its map and repeat when `map` is not given, its values with the paint and secondary colours
+   * in its colour controls under `values`, and its `live` when `live` is not given. With a provider
+   * that declares `paintHints`, an effect without a hint is refused.
    */
   async setEffectPaint(source: { effect: string; values?: Record<string, EffectValue | null>; time?: number; map?: unknown; live?: boolean }): Promise<PaintEffectPaint> {
     if (!source || typeof source.effect !== 'string' || !source.effect) throw new PaintEditorError('effect is missing; pass an effect id from search_effects (use generator, overlay or title).');
     this.checkTime(source.time);
-    let map: PaintEffectPaint['map'];
-    try {
-      map = readEffectStrokeMap(source.map);
-    } catch (e) {
-      throw new PaintEditorError((e as Error).message);
-    }
+    const readMap = (raw: unknown) => {
+      try {
+        return readEffectStrokeMap(raw);
+      } catch (e) {
+        throw new PaintEditorError((e as Error).message);
+      }
+    };
+    let map: PaintEffectPaint['map'] = readMap(source.map);
     if (source.live !== undefined && typeof source.live !== 'boolean') throw new PaintEditorError('live must be true or false.');
     const epoch = ++this.paintEpoch;
     const changed = (name: string) => new PaintEditorError(`The paint changed while "${name}" rendered (set_color, set_paint or another set_effect_paint); call set_effect_paint again to paint with it.`);
     const d = await this.describeEffect(source.effect, 'paint');
+    // The provider's paint hint is where the paint starts; what the caller gives wins.
+    const hint = d.paint ? effectPaintFromHint(d.paint, { color: this.color, secondaryColor: this.secondaryColor }) : null;
+    if (hint && source.map === undefined) map = readMap(hint.map);
     if (map?.by === 'path' && !pathControlsOf(d).length) {
       throw new PaintEditorError(`Effect "${d.id}" has no path control (format "svg-path"); use by: "stroke" (bent along each stroke) or by: "canvas" (fixed to the canvas).`);
     }
-    const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, source.values);
+    const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, hint ? { ...hint.values, ...source.values } : source.values);
+    const live = source.live ?? hint?.live ?? false;
     if (epoch !== this.paintEpoch) throw changed(d.name);
-    const paint: PaintEffectPaint = { type: 'effect', effect: d.id, provider: this.providerFor(d.id).id, values, time: source.time ?? 0, ...(map ? { map } : {}), ...(source.live ? { live: true } : {}) };
+    const paint: PaintEffectPaint = { type: 'effect', effect: d.id, provider: this.providerFor(d.id).id, values, time: source.time ?? 0, ...(map ? { map } : {}), ...(live ? { live: true } : {}) };
     this.effectPaintPending = paint;
     this.emit([]);
     try {

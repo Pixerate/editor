@@ -5,7 +5,7 @@
  */
 
 import { isEffectError } from './errors.js';
-import { createEffectPixels, effectValueErrors, isCameraView, isEffectPixels, pathControlsOf, timingSampleProblems } from './helpers.js';
+import { createEffectPixels, effectPaintHintProblems, effectPaintHintShapeProblems, effectValueErrors, isCameraView, isEffectPixels, pathControlsOf, timingSampleProblems } from './helpers.js';
 import { checkEffectSequence, effectSequenceSlots, isSubjectTemplateSlot, templateValueProblem } from './templates.js';
 import {
 	CAMERA_MOVE_ROLES,
@@ -67,6 +67,7 @@ function checkSummary(e: EffectSummary, issues: EffectConformanceIssue[]) {
 	if (e.duration !== undefined && !(e.duration > 0)) at('duration must be a positive number of ms when present');
 	if (e.backgroundOpacity !== undefined && (typeof e.backgroundOpacity !== 'string' || !e.backgroundOpacity)) at('backgroundOpacity must name a control when present');
 	for (const a of e.accepts ?? []) if (!EFFECT_ACCEPTS.includes(a)) at(`accepts "${a}" is not one of ${EFFECT_ACCEPTS.join(', ')}`);
+	if (e.paint !== undefined) for (const p of effectPaintHintShapeProblems(e.paint)) at(p);
 	if (e.kind === 'camera') {
 		if (e.uses?.length !== 1 || e.uses[0] !== 'camera') at('a camera effect must have exactly the use "camera"');
 		const m = e.camera;
@@ -107,6 +108,8 @@ function checkDescription(id: string, d: EffectDescription, issues: EffectConfor
 	if (paths.length && !d.accepts?.includes('path')) at(`controls ${paths.map((p) => `"${p}"`).join(', ')} take a path, but accepts does not list "path"`);
 	if (!paths.length && d.accepts?.includes('path')) at('accepts lists "path", but no control has format "svg-path"');
 	for (const e of effectValueErrors(d, d.defaults)) at(`default ${e.path}: ${e.message}`);
+	for (const p of effectPaintHintProblems(d)) at(p);
+	if (d.paint && (d.kind !== 'shader' || !d.uses.some((u) => u === 'generator' || u === 'overlay' || u === 'title'))) at('only pixel generator, overlay or title effects can be painted with, so only they take a paint hint');
 	for (const p of d.presets ?? []) for (const e of effectValueErrors(d, p.values)) at(`preset "${p.name}" ${e.path}: ${e.message}`);
 	for (const input of d.inputs ?? []) {
 		if (!input.name || !input.description) at('every input needs a name and a description');
@@ -352,6 +355,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	if (provider.sampleCameraMove && typeof provider.cameraView !== 'function') top('sampleCameraMove is present but cameraView is missing');
 	if (caps?.supportsTiming !== undefined && typeof caps.supportsTiming !== 'boolean') top('capabilities.supportsTiming is not a boolean');
 	for (const m of ['timingLength', 'timingSample'] as const) if (caps?.supportsTiming && typeof provider[m] !== 'function') top(`supportsTiming is set but ${m} is missing`);
+	if (caps?.paintHints !== undefined && typeof caps.paintHints !== 'boolean') top('capabilities.paintHints is not a boolean');
 	if (caps?.supportsTemplates !== undefined && typeof caps.supportsTemplates !== 'boolean') top('capabilities.supportsTemplates is not a boolean');
 	const templateMethods = ['listTemplates', 'describeTemplate', 'instantiateTemplate'] as const;
 	if (caps?.supportsTemplates) for (const m of templateMethods) if (typeof provider[m] !== 'function') top(`supportsTemplates is set but ${m} is missing`);
@@ -411,6 +415,8 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 			continue;
 		}
 		checkDescription(id, d, issues);
+		const listed = list.find((e) => e.id === id);
+		if (listed && JSON.stringify(listed.paint ?? null) !== JSON.stringify(d.paint ?? null)) issues.push({ effectId: id, message: 'list() and describe() give different paint hints; summaries carry the same paint as the description, so editors can filter paint without describing every effect' });
 		if (options.render !== false && d.kind !== 'motion') await checkRender(provider, d, size, issues);
 		if (d.kind === 'camera' && d.camera && caps.supportsCamera && provider.cameraView) await checkCamera(provider, d, issues);
 		if (d.kind === 'timing' && timing) await checkTiming(provider, d, issues);

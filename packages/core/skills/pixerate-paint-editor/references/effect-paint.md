@@ -1,5 +1,10 @@
 # Effect paint along the stroke, and live effect paint
 
+- **Start from the paint hint.** An effect's `paint` hint (in `search_effects` and
+  `describe_effect`) already says how it lies on a stroke (`map`), which colour controls take the
+  paint and secondary colours, the values that make it work as paint and whether it plays live;
+  `set_effect_paint` with just `effect` applies it. Choose `map` yourself only to change that.
+
 - **Along the stroke (native path)** (`set_effect_paint` `map: { by: "path" }`): when an effect has
   a path control (`format: "svg-path"`, reported by `describe_effect` as `pathControls` and
   `accepts: ["path"]`), each stroke passes its centreline `[x0, y0, x1, y1, …]` in canvas pixels

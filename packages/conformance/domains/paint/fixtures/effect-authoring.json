@@ -431,6 +431,7 @@
           "kind": "shader",
           "loop": true,
           "name": "Blank",
+          "paint": null,
           "presets": [
             "Bright"
           ],

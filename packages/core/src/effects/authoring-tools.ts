@@ -7,7 +7,7 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { ANIMATION_EASING_PRESETS, type AnimationEasing } from '../animation/easing.js';
 import type { EffectAuthoringSession } from './authoring.js';
-import type { EffectValue, EffectValues } from './types.js';
+import { EFFECT_PAINT_MAPS, EFFECT_PAINT_MAX_COLORS, EFFECT_PAINT_REPEATS, type EffectPaintHint, type EffectValue, type EffectValues } from './types.js';
 import { effectParameterFields } from './ui.js';
 
 export interface EffectAuthoringToolHost {
@@ -108,7 +108,7 @@ export function createEffectAuthoringToolProvider(
 		name: 'effect_authoring_describe',
 		title: 'Describe open effect',
 		description:
-			'Describes the effect currently open for authoring: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead time, duration, loop, compile issues, and previewError: why there is no pixel preview (e.g. a vector effect the provider only draws as SVG), or null.',
+			'Describes the effect currently open for authoring: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead time, duration, loop, paint (how it is best painted with, saved with it; null for none), compile issues, and previewError: why there is no pixel preview (e.g. a vector effect the provider only draws as SVG), or null.',
 		inputSchema: object({}),
 		annotations: { title: 'Describe open effect', ...ANNOTATIONS.read },
 		handler: () => {
@@ -128,6 +128,7 @@ export function createEffectAuthoringToolProvider(
 				time: state.time,
 				duration: state.duration,
 				loop: state.loop,
+				paint: state.description.paint ?? null,
 				issues: state.issues,
 				previewError: state.previewError ?? null
 			};
@@ -355,6 +356,43 @@ export function createEffectAuthoringToolProvider(
 		}
 	};
 
+	const setPaintHintTool: AgentTool = {
+		name: 'effect_authoring_set_paint_hint',
+		title: 'Set the paint hint',
+		description:
+			"Sets how the open effect is best painted with, saved in its document (an authored effect saved from it keeps it), or removes it with paint null. When the effect is picked as paint (set_effect_paint) it starts from the hint: its map, its values over the defaults, the brush's main and second colours in its colors controls, and live. Refused when colors or values name controls the effect does not have (effect_authoring_describe lists them), when a colors control does not take #rrggbb, or for map \"path\" without a path control. One undo step. Returns the paint hint now (null for none).",
+		inputSchema: object(
+			{
+				paint: {
+					description: 'The paint hint, or null to remove it.',
+					anyOf: [
+						object(
+							{
+								map: { type: 'string', enum: [...EFFECT_PAINT_MAPS], description: 'How it follows a stroke: path (draws itself along the stroke through its path control), stroke (a strip bent along the stroke) or canvas (fixed to the canvas, painting reveals it).' },
+								colors: { type: 'array', maxItems: EFFECT_PAINT_MAX_COLORS, items: { type: 'string', minLength: 1, description: 'A colour control name.' }, description: "Up to two colour controls that take the brush's main and second colours, main first (default none)." },
+								values: { type: 'object', description: 'Control values applied over the defaults when painting (default none).' },
+								live: { type: 'boolean', description: 'Whether a stroke keeps playing the effect (default false).' },
+								repeat: { type: 'string', enum: [...EFFECT_PAINT_REPEATS], description: 'map stroke: past the strip end start again, run back (default mirror), or hold the last colour.' },
+								size: { type: 'number', exclusiveMinimum: 0, description: 'A suggested brush width in px (default none).' }
+							},
+							['map']
+						),
+						{ type: 'null' }
+					]
+				}
+			},
+			['paint']
+		),
+		annotations: { title: 'Set the paint hint', ...ANNOTATIONS.writeIdempotent },
+		handler: (args) => {
+			const session = requireSession();
+			if (!session.setPaintHint) throw new Error('This effect\'s authoring session cannot keep a paint hint.');
+			const res = session.setPaintHint((args.paint ?? null) as EffectPaintHint | null);
+			if (!res.ok) throw new Error(res.message);
+			return { paint: session.getState().description.paint ?? null };
+		}
+	};
+
 	const seekTool: AgentTool = {
 		name: 'effect_authoring_seek',
 		title: 'Seek effect playhead',
@@ -462,6 +500,7 @@ export function createEffectAuthoringToolProvider(
 				removeKeyframeTool,
 				clearTrackTool,
 				setTimingTool,
+				setPaintHintTool,
 				seekTool,
 				undoTool,
 				redoTool,

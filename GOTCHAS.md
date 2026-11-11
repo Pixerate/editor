@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift] A `nil` in a Ternary Becomes `JSONValue.null`
+
+- **Issue / Symptom**: After a source edit dropped an authored effect's paint hint, the exported Swift document had `"paint": null`, and reopening it was refused (`/paint: must be an object`); TS left the field out.
+- **Root Cause**: `JSONValue` conforms to `ExpressibleByNilLiteral`. In `cond ? value : nil` (or a `flatMap` closure returning it) where `value` is a `JSONValue`, the `nil` is typed as `JSONValue.null`, so the result is `.some(.null)`, not `Optional.none`. Assigning that to a `JSONObject` key writes `null` instead of removing the key.
+- **Solution / Workaround**: Give the variable an explicit `JSONValue?` type and clear it with `Optional<JSONValue>.none` (as the codebase does elsewhere), or use `if let` instead of a ternary. Treat any `nil` next to a `JSONValue` as suspect.
+
+### [core|swift/paint] Effect Paint Hints: Filter Only With the Capability, Re-Paint With an Explicit Map
+
+- **Issue / Symptom**: (1) Giving the fake provider's effects paint hints unconditionally changed every existing effect paint test and recording (the hint's stroke map and colours applied). (2) Changing the effect paint's values (`update_effect`, the panels' controls) after picking a hinted effect would put back the hint's map, undoing "fixed to the canvas", because a canvas paint has no `map` and `setEffectPaint` applies the hint's map whenever `map` is missing.
+- **Root Cause**: A hint is a starting point applied by `setEffectPaint` when the caller leaves a field out; callers that repaint with the paint's current settings leave `map` out for canvas paint.
+- **Solution / Workaround**: (1) `createFakeEffectProvider({ paintHints: true })` / `FakeEffectProvider(paintHints: true)` adds the hints and the capability together; scenarios ask for it with `setup.effectPaintHints`. (2) Every repaint passes `map: paint.map ?? { by: "canvas" }` and `live: paint.live ?? false` (React and Svelte `PaintEffectsPanel`, `update_effect` on the paint, Swift `repaintEffect`). Hints sit on `EffectSummary`, so list and search can filter without describing every effect; `checkEffectProvider` reports a summary whose hint differs from its description.
+
 ### [core|swift/effects] Name Lookups in Plain Objects Match `Object.prototype` (and Wall-Clock Budgets Stay Out of Tool Results)
 
 - **Issue / Symptom**: In pixel expressions, `let toString = 1` was refused as "a built-in value", and `toString(1)` reported a nonsense argument count, while Swift accepted both. Separately, a `save_authored_effect` result with the trial render's milliseconds made the conformance recorder fail as "not deterministic".

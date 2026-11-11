@@ -33,7 +33,7 @@ public func effectAuthoringToolNames(_ host: EffectAuthoringToolHost) -> [String
     if host.session()?.canEditSource == true || host.alwaysListSetSource { names.append("effect_authoring_set_source") }
     names += [
         "effect_authoring_set_values", "effect_authoring_reset_values", "effect_authoring_apply_preset", "effect_authoring_save_preset", "effect_authoring_set_keyframe",
-        "effect_authoring_remove_keyframe", "effect_authoring_clear_track", "effect_authoring_set_timing", "effect_authoring_seek", "effect_authoring_undo", "effect_authoring_redo",
+        "effect_authoring_remove_keyframe", "effect_authoring_clear_track", "effect_authoring_set_timing", "effect_authoring_set_paint_hint", "effect_authoring_seek", "effect_authoring_undo", "effect_authoring_redo",
     ]
     return names
 }
@@ -73,7 +73,7 @@ public func effectAuthoringToolHandlers(host: EffectAuthoringToolHost) -> [Strin
             "name": .string(d.name), "kind": .string(d.kind), "sourceLanguage": state.sourceLanguage.map { .string($0) } ?? .null,
             "controls": .array(effectParameterFields(d).map { .object($0) }), "values": .object(state.values), "presets": .array(presets),
             "tracks": .array(state.tracks.map { ["control": .string($0.control), "keyframes": .number(Double($0.keyframes.count))] }),
-            "time": .number(state.time), "duration": .number(state.duration), "loop": .bool(state.loop), "issues": .array(state.issues.map(\.json)),
+            "time": .number(state.time), "duration": .number(state.duration), "loop": .bool(state.loop), "paint": d.json["paint"] ?? .null, "issues": .array(state.issues.map(\.json)),
             "previewError": state.previewError.map { .string($0) } ?? .null,
         ]
         return .object(o)
@@ -144,6 +144,11 @@ public func effectAuthoringToolHandlers(host: EffectAuthoringToolHost) -> [Strin
         try check(session.setTiming(duration: duration, loop: loop))
         let state = session.getState()
         return ["duration": .number(state.duration), "loop": .bool(state.loop)]
+    }
+    h["effect_authoring_set_paint_hint"] = { a in
+        let session = try requireSession()
+        try check(session.setPaintHint(a["paint"] ?? .null))
+        return ["paint": session.getState().description.json["paint"] ?? .null]
     }
     h["effect_authoring_seek"] = { a in
         let session = try requireSession()

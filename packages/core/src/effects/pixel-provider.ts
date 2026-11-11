@@ -33,6 +33,7 @@ import {
 } from "./pixel-language.js";
 import type {
   EffectDescription,
+  EffectPaintHint,
   EffectPixels,
   EffectProvider,
   EffectProviderCapabilities,
@@ -53,6 +54,8 @@ export const PIXEL_TEMPLATES: readonly {
   description: string;
   loop: boolean;
   duration?: number;
+  /** How it paints (`EffectSummary.paint`); effects saved from it keep it. */
+  paint?: EffectPaintHint;
   source: string;
 }[] = [
   {
@@ -61,6 +64,7 @@ export const PIXEL_TEMPLATES: readonly {
     description:
       "A starting point: a soft gradient between two colours, top to bottom.",
     loop: false,
+    paint: { map: "stroke", colors: ["top", "bottom"], repeat: "mirror" },
     source: [
       "control top: color = #1d2b53 // Colour at the top.",
       "control bottom: color = #ff77a8 // Colour at the bottom.",
@@ -75,6 +79,7 @@ export const PIXEL_TEMPLATES: readonly {
       "Rings that spread from a point, over a transparent background.",
     loop: true,
     duration: 2000,
+    paint: { map: "canvas", colors: ["ink"], live: true },
     source: [
       "control ink: color = #1d2b53 // Colour of the rings.",
       "control count: number = 12 range 1 64 // How many rings across the picture.",
@@ -91,6 +96,7 @@ export const PIXEL_TEMPLATES: readonly {
     description: "Soft value-noise clouds drifting sideways.",
     loop: false,
     duration: 4000,
+    paint: { map: "canvas", colors: ["cloud", "sky"], live: true },
     source: [
       "control sky: color = #3a6ea5 // Colour behind the clouds.",
       "control cloud: color = #f4f4f4 // Colour of the clouds.",
@@ -133,6 +139,7 @@ export function pixelDescription(
     description?: string;
     loop?: boolean;
     duration?: number;
+    paint?: EffectPaintHint;
   },
 ): EffectDescription {
   const properties: Record<string, Record<string, unknown>> = {};
@@ -152,6 +159,7 @@ export function pixelDescription(
     transparent: program.out.size === 4,
     loop: meta.loop ?? false,
     ...(meta.duration ? { duration: meta.duration } : {}),
+    ...(meta.paint ? { paint: meta.paint } : {}),
     controls: {
       type: "object",
       properties,
@@ -201,6 +209,7 @@ export function describePixelSource(
     description?: string;
     loop?: boolean;
     duration?: number;
+    paint?: EffectPaintHint;
   },
   limits?: PixelLimits,
 ): {
@@ -278,7 +287,7 @@ export function createPixelEffectProvider(
       const t = templates.get(id);
       const r = describePixelSource(
         src,
-        { id, name: t?.name ?? id, loop: t?.loop, duration: t?.duration },
+        { id, name: t?.name ?? id, loop: t?.loop, duration: t?.duration, paint: t?.paint },
         limits,
       );
       return { description: r.description, issues: r.issues };

@@ -67,6 +67,9 @@ doesn't compile, the session keeps the last controls that did, and `compiled` is
    `effect_authoring_set_values`, animate with `effect_authoring_set_keyframe`.
 3. `save_authored_effect` with a name: it trial-renders the effect and returns its id,
    `authored.<name>`.
+   Before saving, give an effect meant for strokes a paint hint with
+   `effect_authoring_set_paint_hint` (the templates come with one): which colour controls take the
+   brush's colours, whether it follows the stroke (`map`), and whether it plays live.
 4. Use the id like any effect id: `set_effect_paint` (strokes), `set_paper_effect`,
    `add_effect_layer`, `fill_layer_with_effect`. `search_effects` and `describe_effect` find it too.
 5. `list_authored_effects` shows where each is used and anything stopping it drawing;
@@ -141,6 +144,7 @@ machine with no session or provider. Authoring needs the editor's `authoredEffec
 | `effect_authoring_remove_keyframe` | Deletes a keyframe at the exact millisecond timestamp from a control animation track. |
 | `effect_authoring_clear_track` | Removes all keyframes from an animated control track. The control's value at the playhead becomes its static value. |
 | `effect_authoring_set_timing` | Configures the effect's timeline duration in milliseconds and whether playback loops. |
+| `effect_authoring_set_paint_hint` | Sets how the effect is best painted with (`paint`: `map` path, stroke or canvas, up to two `colors` controls for the brush's colours, `values`, `live`, `repeat`, `size`), or removes it with `null`. Saved in the document, so an authored effect saved after it starts `set_effect_paint` from the hint. Refused when it names controls the effect lacks; check `effect_authoring_describe` first. Returns the hint. |
 | `effect_authoring_seek` | Moves the preview playhead to a specific timeline position in milliseconds (clamped to 0..duration) and returns values at that time. |
 | `effect_authoring_undo` | Undoes the most recent edit in the authoring session. |
 | `effect_authoring_redo` | Redoes the most recently undone edit in the authoring session. |

@@ -39,6 +39,30 @@ final class PaintEffectsPanelModelTests: XCTestCase {
         XCTAssertNil(model.error)
     }
 
+    func testWithPaintHintsTheBrowserOffersOnlyHintedPaintsAndPicksFromTheHint() async throws {
+        let model = try makeModel(provider: false)
+        model.controller.setEffectsProvider(FakeEffectProvider(paintHints: true))
+        let paints = await model.effects(for: .paint).map(\.id)
+        XCTAssertEqual(Set(paints), ["fake.gradient", "fake.trail"])
+        let layers = await model.effects(for: .layer).map(\.id)
+        XCTAssertTrue(layers.contains("fake.bar"), "layers still take every effect")
+        _ = try model.controller.setColor("#ff0000")
+        _ = try model.controller.setSecondaryColor("#0000ff")
+        await model.pickEffect("fake.gradient", for: .paint)
+        let p = try XCTUnwrap(model.effectPaint)
+        XCTAssertEqual(p.map?.by, "stroke")
+        XCTAssertEqual(p.map?.repeatMode, "mirror")
+        XCTAssertEqual(p.values["from"], "#ff0000")
+        XCTAssertEqual(p.values["to"], "#0000ff")
+        XCTAssertTrue(p.live)
+        // Repainting keeps what the paint has, not the hint.
+        await model.repaintEffect(map: ["by": "canvas"])
+        await model.repaintEffect(values: ["angle": 10])
+        XCTAssertNil(model.effectPaint?.map)
+        await model.pickEffect("fake.bar", for: .paint)
+        XCTAssertNotNil(model.error, "an effect without a hint is refused as paint")
+    }
+
     func testPickingPutsTheEffectInItsPlace() async throws {
         let model = try makeModel()
         await model.pickEffect("fake.gradient", for: .paper)

@@ -11,7 +11,7 @@ import type { EffectValue } from '../effects/types.js';
 import { BLEND_MODES } from '../raster/blend';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { PaintEditorController } from './controller';
-import { PAPER_EFFECT_BLENDS, type PaintEffectSource, type PaperEffectBlend } from './effects';
+import { PAINT_EFFECT_PLACE_NAMES, PAPER_EFFECT_BLENDS, paintEffectOffered, type PaintEffectPlace, type PaintEffectSource, type PaperEffectBlend } from './effects';
 
 export interface PaintEffectsToolProviderOptions {
   /** Provider id (unique per registry). Default `paint-effects`. */
@@ -88,6 +88,12 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     applyDetails:
       "Light on dried paint: the filter (search_effects with use filter, e.g. a light, glow or grade) runs on the layer's paint at the canvas size and is baked into its pixels; transparent areas stay transparent, and thick paint keeps its relief (an effect with a height input gets it). opacity is the strength (default 1). Wet paint is refused: dry it first (dry_paint). It is one undo step and is not listed afterwards (it is part of the pixels). Generators go on the paper (set_paper_effect), on their own layer (add_effect_layer) or into a layer (fill_layer_with_effect).",
     provider: () => controller.effectsCatalog,
+    searchPlaces: {
+      description:
+        'Only effects this place in the painting takes: paper (generators, set_paper_effect), layer and fill (generators, overlays and titles: add_effect_layer, fill_layer_with_effect), light (filters, apply_effect) or paint (set_effect_paint: generators, overlays and titles, and when the provider marks the effects that suit paint with a paint hint, only those).',
+      names: PAINT_EFFECT_PLACE_NAMES,
+      offered: (e, place, provider) => paintEffectOffered(e, place as PaintEffectPlace, provider.capabilities),
+    },
     readOnlyReason,
     list: (target): EffectTargetEffects[] => {
       if (target === PAPER_TARGET) return [{ target: PAPER_TARGET, name: 'Paper', effects: paperInfo() }];
@@ -117,7 +123,7 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
       if (target === PAINT_TARGET) {
         if (changes.opacity !== undefined) throw new Error('opacity does not apply to the effect paint: change the brush opacity (set_brush tip.opacity).');
         const p = controller.getEffectPaint()!;
-        await controller.setEffectPaint({ effect: p.effect, values: { ...p.values, ...((changes.values ?? {}) as Record<string, EffectValue | null>) }, time: p.time, map: p.map, live: p.live });
+        await controller.setEffectPaint({ effect: p.effect, values: { ...p.values, ...((changes.values ?? {}) as Record<string, EffectValue | null>) }, time: p.time, map: p.map ?? { by: 'canvas' }, live: p.live ?? false });
         const effects = paintInfo();
         return { target, effect: effects[0], effects };
       }
@@ -178,17 +184,17 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
         name: 'set_effect_paint',
         title: 'Paint with an effect',
         description:
-          "Makes brushes paint with a provider generator, overlay or title effect (search_effects with use generator, overlay or title): it is rendered once at the canvas size, and each stroke then takes every pixel's colour from it, fixed to the canvas, as if painting a hidden picture into view (the effect's transparency paints nothing). Dab, particle and bristle brushes take the colour per pixel; mixer brushes and dab brushes that pick up paint take it per dab, at its centre. Watercolour, gouache, oil and impasto brushes take it per pixel too, shifted by paint they pick up (in wet paint the pattern then flows with the water; impasto keeps its relief), and sprayed stickers take the colour at their centre. Erasers, blenders and smudges ignore it. It replaces the paint colour or gradient until set_color or set_paint; a brush with its own gradient paints that instead. Strokes record it and replay exactly. Editor state, not an undo step. Returns the effect paint: { effect, provider, values (every control), time } (list_applied_effects target \"paint\" shows it; update_effect / remove_effect with target and effect \"paint\" change or clear it).",
+          "Makes brushes paint with a provider generator, overlay or title effect (search_effects with use generator, overlay or title): it is rendered once at the canvas size, and each stroke then takes every pixel's colour from it, fixed to the canvas, as if painting a hidden picture into view (the effect's transparency paints nothing). Dab, particle and bristle brushes take the colour per pixel; mixer brushes and dab brushes that pick up paint take it per dab, at its centre. Watercolour, gouache, oil and impasto brushes take it per pixel too, shifted by paint they pick up (in wet paint the pattern then flows with the water; impasto keeps its relief), and sprayed stickers take the colour at their centre. Erasers, blenders and smudges ignore it. It replaces the paint colour or gradient until set_color or set_paint; a brush with its own gradient paints that instead. An effect with a paint hint (search_effects / describe_effect paint) starts from it: its map and repeat unless map is given, its values with the paint and secondary colours (set_color) in its colour controls under any values given, and its live unless live is given. When the provider marks the effects that suit paint (provider capabilities paintHints), an effect without a hint is refused: find paints with search_effects place \"paint\", and put other effects on an effect layer or fill instead. Strokes record it and replay exactly. Editor state, not an undo step. Returns the effect paint: { effect, provider, values (every control), time, map, live } (list_applied_effects target \"paint\" shows it; update_effect / remove_effect with target and effect \"paint\" change or clear it).",
         inputSchema: {
           type: 'object',
           properties: {
             effect: ctx.effectIdSchema(['generator', 'overlay', 'title']),
-            values: ctx.valuesSchema("Control values over the effect's defaults"),
+            values: ctx.valuesSchema("Control values over the effect's defaults (and over its paint hint's values and colours)"),
             time: { type: 'number', minimum: 0, description: 'Which moment of an animated effect to paint with, in ms (default 0).' },
             map: {
               type: 'object',
               description:
-                'How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g. search_effects accepts ["path"]: passes each stroke\'s centreline [x0, y0, x1, y1, …] in canvas pixels to that control so the effect draws itself along the stroke; strokes longer than 256 points are simplified rather than refused).',
+                'How the effect lies on the paint (default: its paint hint\'s map, else by canvas): by canvas (fixed to the canvas, painting reveals a hidden picture), by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip), or by path (for effects with a path control format svg-path, e.g. search_effects accepts ["path"]: passes each stroke\'s centreline [x0, y0, x1, y1, …] in canvas pixels to that control so the effect draws itself along the stroke; strokes longer than 256 points are simplified rather than refused).',
               properties: {
                 by: { type: 'string', enum: ['canvas', 'stroke', 'path'], description: 'canvas (default), stroke (bent strip along each stroke) or path (native path control for effects with format svg-path).' },
                 length: { type: 'number', minimum: 16, maximum: 4096, description: 'by stroke: px of stroke per repeat of the effect (default 300).' },
@@ -197,7 +203,7 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
               required: ['by'],
               additionalProperties: false,
             },
-            live: { type: 'boolean', description: 'Live effect paint (default false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time.' },
+            live: { type: 'boolean', description: 'Live effect paint (default: its paint hint\'s live, else false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time.' },
           },
           required: ['effect'],
           additionalProperties: false,
