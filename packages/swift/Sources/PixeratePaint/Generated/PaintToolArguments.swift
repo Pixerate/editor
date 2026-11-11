@@ -3087,6 +3087,206 @@ public struct FillLayerWithEffectArguments: Sendable {
     }
 }
 
+/// Arguments of `open_effect_authoring`.
+public struct OpenEffectAuthoringArguments: Sendable {
+    /// pixel.blank, pixel.rings or pixel.clouds; an authored.<name> id; or a provider effect id from search_effects.
+    public var effect: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        effect = try args.required(try args.string("effect"), "effect")
+    }
+}
+
+/// Arguments of `save_authored_effect`.
+public struct SaveAuthoredEffectArguments: Sendable {
+    /// The effect's name (default: the session's name); the id is made from it.
+    public var name: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        name = try args.string("name")
+    }
+}
+
+/// Arguments of `list_authored_effects`.
+public struct ListAuthoredEffectsArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `remove_authored_effect`.
+public struct RemoveAuthoredEffectArguments: Sendable {
+    /// An authored effect id (authored.<name>) from list_authored_effects.
+    public var id: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        id = try args.required(try args.string("id"), "id")
+    }
+}
+
+/// Arguments of `close_effect_authoring`.
+public struct CloseEffectAuthoringArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `effect_authoring_describe`.
+public struct EffectAuthoringDescribeArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `effect_authoring_get_source`.
+public struct EffectAuthoringGetSourceArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `effect_authoring_set_source`.
+public struct EffectAuthoringSetSourceArguments: Sendable {
+    /// The new shader or script source code to compile and apply.
+    public var source: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        source = try args.required(try args.string("source"), "source")
+    }
+}
+
+/// Arguments of `effect_authoring_set_values`.
+public struct EffectAuthoringSetValuesArguments: Sendable {
+    /// Map of control names to their new values (numbers, booleans, "#rrggbb" colors, vectors).
+    public var values: JSONValue
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        values = try args.required(args.argument("values"), "values")
+    }
+}
+
+/// Arguments of `effect_authoring_reset_values`.
+public struct EffectAuthoringResetValuesArguments: Sendable {
+    /// Names of the controls to reset.
+    public var names: [String]?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        names = try args.strings("names")
+    }
+}
+
+/// Arguments of `effect_authoring_apply_preset`.
+public struct EffectAuthoringApplyPresetArguments: Sendable {
+    /// Name of the preset to apply.
+    public var name: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        name = try args.required(try args.string("name"), "name")
+    }
+}
+
+/// Arguments of `effect_authoring_save_preset`.
+public struct EffectAuthoringSavePresetArguments: Sendable {
+    /// Name for the preset.
+    public var name: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        name = try args.required(try args.string("name"), "name")
+    }
+}
+
+/// Arguments of `effect_authoring_set_keyframe`.
+public struct EffectAuthoringSetKeyframeArguments: Sendable {
+    /// Name of the control to animate.
+    public var control: String
+    /// Time in milliseconds from the start of the effect.
+    public var time: Double
+    /// Value at this keyframe.
+    public var value: JSONValue?
+    /// Easing into the next keyframe: a preset name, or a curve { "type": "cubic-bezier", x1, y1, x2, y2 }, { "type": "spring", stiffness, damping, mass, velocity } or { "type": "elastic", amplitude, period, mode }.
+    public var easing: JSONValue?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        control = try args.required(try args.string("control"), "control")
+        time = try args.required(try args.number("time"), "time")
+        value = args.argument("value")
+        easing = args.argument("easing")
+    }
+}
+
+/// Arguments of `effect_authoring_remove_keyframe`.
+public struct EffectAuthoringRemoveKeyframeArguments: Sendable {
+    /// Name of the control.
+    public var control: String
+    /// Time in milliseconds of the keyframe to remove.
+    public var time: Double
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        control = try args.required(try args.string("control"), "control")
+        time = try args.required(try args.number("time"), "time")
+    }
+}
+
+/// Arguments of `effect_authoring_clear_track`.
+public struct EffectAuthoringClearTrackArguments: Sendable {
+    /// Name of the control whose animation track to remove.
+    public var control: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        control = try args.required(try args.string("control"), "control")
+    }
+}
+
+/// Arguments of `effect_authoring_set_timing`.
+public struct EffectAuthoringSetTimingArguments: Sendable {
+    /// Total duration of the effect in milliseconds (must be positive).
+    public var duration: Double?
+    /// Whether playback loops back to the start when it reaches duration.
+    public var loop: Bool?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        duration = try args.number("duration")
+        loop = try args.bool("loop")
+    }
+}
+
+/// Arguments of `effect_authoring_seek`.
+public struct EffectAuthoringSeekArguments: Sendable {
+    /// Time in milliseconds to move the playhead to.
+    public var time: Double
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        time = try args.required(try args.number("time"), "time")
+    }
+}
+
+/// Arguments of `effect_authoring_undo`.
+public struct EffectAuthoringUndoArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `effect_authoring_redo`.
+public struct EffectAuthoringRedoArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
 /// Arguments of `list_brush_presets`.
 public struct ListBrushPresetsArguments: Sendable {
     /// mark (lays a material) or tool (works on paint already down).
@@ -3810,6 +4010,25 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .setEffectPlayback: try SetEffectPlaybackArguments(args)
     case .addEffectLayer: try AddEffectLayerArguments(args)
     case .fillLayerWithEffect: try FillLayerWithEffectArguments(args)
+    case .openEffectAuthoring: try OpenEffectAuthoringArguments(args)
+    case .saveAuthoredEffect: try SaveAuthoredEffectArguments(args)
+    case .listAuthoredEffects: try ListAuthoredEffectsArguments(args)
+    case .removeAuthoredEffect: try RemoveAuthoredEffectArguments(args)
+    case .closeEffectAuthoring: try CloseEffectAuthoringArguments(args)
+    case .effectAuthoringDescribe: try EffectAuthoringDescribeArguments(args)
+    case .effectAuthoringGetSource: try EffectAuthoringGetSourceArguments(args)
+    case .effectAuthoringSetSource: try EffectAuthoringSetSourceArguments(args)
+    case .effectAuthoringSetValues: try EffectAuthoringSetValuesArguments(args)
+    case .effectAuthoringResetValues: try EffectAuthoringResetValuesArguments(args)
+    case .effectAuthoringApplyPreset: try EffectAuthoringApplyPresetArguments(args)
+    case .effectAuthoringSavePreset: try EffectAuthoringSavePresetArguments(args)
+    case .effectAuthoringSetKeyframe: try EffectAuthoringSetKeyframeArguments(args)
+    case .effectAuthoringRemoveKeyframe: try EffectAuthoringRemoveKeyframeArguments(args)
+    case .effectAuthoringClearTrack: try EffectAuthoringClearTrackArguments(args)
+    case .effectAuthoringSetTiming: try EffectAuthoringSetTimingArguments(args)
+    case .effectAuthoringSeek: try EffectAuthoringSeekArguments(args)
+    case .effectAuthoringUndo: try EffectAuthoringUndoArguments(args)
+    case .effectAuthoringRedo: try EffectAuthoringRedoArguments(args)
     case .listBrushPresets: try ListBrushPresetsArguments(args)
     case .describeBrush: try DescribeBrushArguments(args)
     case .checkBrush: try CheckBrushArguments(args)

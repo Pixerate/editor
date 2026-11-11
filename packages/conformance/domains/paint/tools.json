@@ -17945,6 +17945,558 @@
       ]
     },
     {
+      "id": "paint-effect-authoring",
+      "title": "Paint effect authoring",
+      "skill": "pixerate-effect-authoring",
+      "tools": [
+        {
+          "name": "open_effect_authoring",
+          "title": "Open an effect for authoring",
+          "description": "Opens an effect to write or change: a pixel expression template to write a new effect (pixel.blank: A starting point: a soft gradient between two colours, top to bottom. pixel.rings: Rings that spread from a point, over a transparent background. pixel.clouds: Soft value-noise clouds drifting sideways.), one of the painting's authored effects (list_authored_effects; saving makes a new id), or a provider effect when the provider supports authoring (values, keyframes and presets only). Returns the source (pixel expressions, see the skill), the controls, values and issues. One effect is open at a time: save_authored_effect or close_effect_authoring first. Refused when the editor doesn't allow authoring (authoredEffects not \"author\").",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "effect": {
+                "type": "string",
+                "minLength": 1,
+                "description": "pixel.blank, pixel.rings or pixel.clouds; an authored.<name> id; or a provider effect id from search_effects."
+              }
+            },
+            "required": [
+              "effect"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Open an effect for authoring",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "save_authored_effect",
+          "title": "Save the authored effect into the painting",
+          "description": "Saves the open effect into the painting as a new authored effect, after a trial render within budget (the source must compile). Returns its id (authored.<name>), name, controls (keyframed controls animate with the effect time and are listed as animated), duration and loop. Use the id with set_effect_paint, set_paper_effect, add_effect_layer or fill_layer_with_effect. One undo step. The session stays open: save again after changes to get another id (ids never change what they draw).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "The effect's name (default: the session's name); the id is made from it."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Save the authored effect into the painting",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "list_authored_effects",
+          "title": "List the authored effects",
+          "description": "Lists the painting's authored effects: id, name, language, controls, keyframed (animated) controls, duration, loop, where each is used (strokes, the effect paint, the paper, effect layers), and a problem when one can't draw here (the editor's policy, raw shader source, a stopped live playback). Also the editor's policy and the open authoring session.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List the authored effects",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "remove_authored_effect",
+          "title": "Remove an authored effect",
+          "description": "Removes an authored effect the painting no longer uses. Refused, saying where, while strokes, the effect paint, the paper or an effect layer use it. Returns the removed id and name. One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "An authored effect id (authored.<name>) from list_authored_effects."
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Remove an authored effect",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "close_effect_authoring",
+          "title": "Close the authoring session",
+          "description": "Closes the open authoring session without saving (save_authored_effect first to keep it). Nothing in the painting changes. Returns the closed effect name, or null when nothing was open.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Close the authoring session",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_describe",
+          "title": "Describe open effect",
+          "description": "Describes the effect currently open for authoring: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead time, duration, loop, compile issues, and previewError: why there is no pixel preview (e.g. a vector effect the provider only draws as SVG), or null.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Describe open effect",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_get_source",
+          "title": "Get effect source code",
+          "description": "Gets the shader or script source code and language of the currently open effect. Refused if the effect does not use source code.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Get effect source code",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_set_source",
+          "title": "Set effect source code",
+          "description": "Replaces the shader or script source code of the currently open effect and recompiles it. Returns any compile issues.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "description": "The new shader or script source code to compile and apply."
+              }
+            },
+            "required": [
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Set effect source code",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_set_values",
+          "title": "Set effect control values",
+          "description": "Sets one or more control values on the currently open effect at the current playhead time. All-or-nothing: if any control name or value is invalid, no values are changed. One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "values": {
+                "type": "object",
+                "description": "Map of control names to their new values (numbers, booleans, \"#rrggbb\" colors, vectors)."
+              }
+            },
+            "required": [
+              "values"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Set effect control values",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_reset_values",
+          "title": "Reset effect control values",
+          "description": "Resets specified controls (or all controls if names is omitted) to their default values. One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Names of the controls to reset. If omitted, resets all controls to their defaults."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Reset effect control values",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_apply_preset",
+          "title": "Apply effect preset",
+          "description": "Applies a saved or built-in preset by name, setting its values as one undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the preset to apply."
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Apply effect preset",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_save_preset",
+          "title": "Save effect preset",
+          "description": "Saves the current values as a preset under the given name (or updates an existing preset with that name). One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name for the preset."
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Save effect preset",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_set_keyframe",
+          "title": "Set effect keyframe",
+          "description": "Adds or updates a keyframe on a control track at a specific time in milliseconds. If value is omitted, uses the current resolved value of the control at that time. One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "control": {
+                "type": "string",
+                "description": "Name of the control to animate."
+              },
+              "time": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Time in milliseconds from the start of the effect."
+              },
+              "value": {
+                "description": "Value at this keyframe. If omitted, captures the control value at that time."
+              },
+              "easing": {
+                "description": "Easing into the next keyframe: a preset name, or a curve { \"type\": \"cubic-bezier\", x1, y1, x2, y2 }, { \"type\": \"spring\", stiffness, damping, mass, velocity } or { \"type\": \"elastic\", amplitude, period, mode }. Default: linear.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "linear",
+                      "ease",
+                      "ease-in",
+                      "ease-out",
+                      "ease-in-out",
+                      "ease-in-back",
+                      "ease-out-back",
+                      "ease-out-elastic",
+                      "ease-in-elastic",
+                      "ease-in-out-elastic",
+                      "elastic",
+                      "spring",
+                      "spring-gentle",
+                      "spring-quick",
+                      "spring-bouncy",
+                      "spring-slow",
+                      "hold"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "cubic-bezier",
+                          "spring",
+                          "elastic"
+                        ],
+                        "description": "Curve kind."
+                      },
+                      "x1": {
+                        "type": "number",
+                        "description": "cubic-bezier: out handle x (0–1)."
+                      },
+                      "y1": {
+                        "type": "number",
+                        "description": "cubic-bezier: out handle y."
+                      },
+                      "x2": {
+                        "type": "number",
+                        "description": "cubic-bezier: in handle x (0–1)."
+                      },
+                      "y2": {
+                        "type": "number",
+                        "description": "cubic-bezier: in handle y."
+                      },
+                      "stiffness": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "description": "spring: default 170."
+                      },
+                      "damping": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "spring: default 26, lower bounces more."
+                      },
+                      "mass": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "description": "spring: default 1."
+                      },
+                      "velocity": {
+                        "type": "number",
+                        "description": "spring: starting speed (default 0)."
+                      },
+                      "amplitude": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "elastic: overshoot (default 1)."
+                      },
+                      "period": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "description": "elastic: fraction of the length (default 0.3)."
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "out",
+                          "in",
+                          "in-out"
+                        ],
+                        "description": "elastic: default out."
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "control",
+              "time"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Set effect keyframe",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_remove_keyframe",
+          "title": "Remove effect keyframe",
+          "description": "Removes a keyframe at the exact time in milliseconds for the specified control. One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "control": {
+                "type": "string",
+                "description": "Name of the control."
+              },
+              "time": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Time in milliseconds of the keyframe to remove."
+              }
+            },
+            "required": [
+              "control",
+              "time"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Remove effect keyframe",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_clear_track",
+          "title": "Clear effect animation track",
+          "description": "Removes all keyframes from an animated control. The value it has at the playhead becomes its static value. One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "control": {
+                "type": "string",
+                "description": "Name of the control whose animation track to remove."
+              }
+            },
+            "required": [
+              "control"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Clear effect animation track",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_set_timing",
+          "title": "Set effect timing",
+          "description": "Sets the total duration in milliseconds and/or whether the effect loops. One undo step.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "duration": {
+                "type": "number",
+                "minimum": 1,
+                "description": "Total duration of the effect in milliseconds (must be positive)."
+              },
+              "loop": {
+                "type": "boolean",
+                "description": "Whether playback loops back to the start when it reaches duration."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Set effect timing",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_seek",
+          "title": "Seek effect playhead",
+          "description": "Moves the preview playhead to a specific time in milliseconds (clamped between 0 and duration). Returns the resolved control values at that time.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Time in milliseconds to move the playhead to."
+              }
+            },
+            "required": [
+              "time"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Seek effect playhead",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_undo",
+          "title": "Undo effect authoring edit",
+          "description": "Undoes the most recent edit in the authoring session.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Undo effect authoring edit",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "effect_authoring_redo",
+          "title": "Redo effect authoring edit",
+          "description": "Redoes the most recently undone edit in the authoring session.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Redo effect authoring edit",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ]
+    },
+    {
       "id": "brushes",
       "title": "Brush library",
       "skill": "pixerate-brushes",

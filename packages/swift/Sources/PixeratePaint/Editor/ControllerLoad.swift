@@ -46,7 +46,7 @@ extension PaintEditorController {
             if let n = idNumber(m.id, "mag"), n >= nextMagnetId { nextMagnetId = n + 1 }
         }
         for (_, list) in state.liveStrokes ?? OrderedMap() { for s in list { bumpStrokeCounter(s.id) } }
-        for k in ["layerChannels", "light", "lightSpill", "ferro", "magnets", "lighting", "stickers", "liveStrokes", "brushSources", "effectLayers", "paperEffect", "fluor", "thermo", "heat", "uvLight", "age", "cultures"] {
+        for k in ["layerChannels", "light", "lightSpill", "ferro", "magnets", "lighting", "stickers", "liveStrokes", "brushSources", "effectLayers", "paperEffect", "authoredEffects", "fluor", "thermo", "heat", "uvLight", "age", "cultures"] {
             extensions[k] = nil
         }
         viewCompositor = createPaintCompositor()
@@ -227,6 +227,11 @@ extension PaintEditorController {
                 live.set(id, ok)
             }
             if !live.isEmpty { state = state.with { $0.liveStrokes = live } }
+        }
+        if let raw = ext["authoredEffects"] {
+            let read = readAuthoredEffects(raw)
+            problems += read.problems
+            if !read.effects.isEmpty { state = state.with { $0.authoredEffects = read.effects } }
         }
         if let raw = ext["effectLayers"]?.objectValue {
             var effectLayers = OrderedMap<String, PaintEffectSource>()

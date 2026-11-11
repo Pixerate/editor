@@ -41,7 +41,7 @@ import { ImageEditorController, createImageEditorDocument, createImageEditorTool
 import { createStickerToolProvider, editorStickers } from '../src/stickers';
 import { createBrushLibrary, createBrushLibraryToolProvider } from '../src/brushes';
 import { createCanvasStickerHost } from '../src/canvas';
-import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider, createPaintProposalToolProvider, createPaintProposals } from '../src/paint-editor';
+import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectAuthoringToolProvider, createPaintEffectsToolProvider, createPaintProposalToolProvider, createPaintProposals } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { TokenStore, createTokensEditorDocument, createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
@@ -237,7 +237,8 @@ function expectedBySkill(): Record<string, string[]> {
 				session: () => authoringSession,
 				capture: async () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 			});
-			return toolNames(authoringProvider);
+			// The paint editor's authoring tools (its own five plus the shared ones above).
+			return [...new Set([...toolNames(authoringProvider), ...toolNames(createPaintEffectAuthoringToolProvider(new PaintEditorController({ width: 64, height: 64 })))])];
 		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
 		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))],
@@ -309,6 +310,7 @@ const FACTORIES: Record<string, string> = {
 	createTypographyToolProvider: 'pixerate-typography',
 	createFontPickerToolProvider: 'pixerate-typography',
 	createEffectAuthoringToolProvider: 'pixerate-effect-authoring',
+	createPaintEffectAuthoringToolProvider: 'pixerate-effect-authoring',
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
 	createCanvasCaptureToolProvider: 'pixerate-canvas',

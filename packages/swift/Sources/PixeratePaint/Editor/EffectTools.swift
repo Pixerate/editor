@@ -29,7 +29,7 @@ private func refJSON(_ s: PaintEffectSource) -> JSONObject {
 /// The effect tools of a paint editor (`createPaintEffectsToolProvider`).
 public func createPaintEffectsToolProvider(_ c: PaintEditorController) throws -> AgentToolProvider {
     func requireProvider() throws -> EffectProvider {
-        guard let p = c.effectsProvider else { throw ToolError(NO_EFFECTS_PROVIDER) }
+        guard let p = c.effectsCatalog else { throw ToolError(NO_EFFECTS_PROVIDER) }
         return p
     }
     func paperInfo() -> [JSONObject] {
@@ -102,7 +102,8 @@ public func createPaintEffectsToolProvider(_ c: PaintEditorController) throws ->
 
     let host = EffectToolHost(
         applyUses: APPLY_USES,
-        provider: { c.effectsProvider },
+        // The registered provider with the painting's authored effects (`effectsCatalog`).
+        provider: { c.effectsCatalog },
         list: list,
         apply: { target, effect, a in
             if target == PAPER_TARGET { throw ToolError("The paper takes generator effects through set_paper_effect; apply_effect runs a filter on a layer's paint.") }

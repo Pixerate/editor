@@ -29,7 +29,7 @@ import { VectorEditorController, createVectorEditorDocument, createVectorEffects
 import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
 import { canvasExplosionToolTarget, createCanvasCaptureToolProvider, createCanvasEdgeAnimationToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider, createCanvasExplosionStateController, createCanvasExplosionToolProvider, createCanvasProposalToolProvider, createCanvasProposals } from '../src/canvas';
-import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider, createPaintEvolutionToolProvider, createPaintProposalToolProvider, createPaintProposals } from '../src/paint-editor';
+import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectAuthoringToolProvider, createPaintEffectsToolProvider, createPaintEvolutionToolProvider, createPaintProposalToolProvider, createPaintProposals } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
 import { createStickerToolProvider, editorStickers } from '../src/stickers';
 import { CANVAS_PROFILE, createBrushLibrary, createBrushLibraryToolProvider, IMAGE_PROFILE } from '../src/brushes';
@@ -217,6 +217,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			const painter = new PaintEditorController({ width: 64, height: 64 });
 			painter.setEffectsProvider(createFakeEffectProvider());
 			registry.register(createPaintEffectsToolProvider(painter, { id: 'paint-effects', namespace: 'paintfx' }));
+			registry.register(createPaintEffectAuthoringToolProvider(painter, { id: 'paint-effect-authoring', namespace: 'paintauthor' }));
 		}
 		registry.register(createCanvasExplosionToolProvider(canvasExplosionToolTarget(createCanvasExplosionStateController(), { getNodes: () => [] }), { namespace: 'explosion' }));
 		registry.register(createCanvasProposalToolProvider(createCanvasProposals({ getNodes: () => [], getEdges: () => [], setNodes: () => {}, setEdges: () => {} }), { namespace: 'proposals' }));

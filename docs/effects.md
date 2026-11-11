@@ -164,14 +164,14 @@ const saved = session.exportDocument();                    // plain JSON
 
 ### The session
 
-- **State.** `getState()` returns the same object until something changes (so `useSyncExternalStore` and Svelte runes can use it directly) and `subscribe(listener)` reports every change. It holds the description (controls, defaults, presets), `values` at the playhead, `tracks` (keyframes per control), `source` and `sourceLanguage` (`'glsl' | 'svg' | null`), `issues` (with 1-based `line` when known), `compiled`, `time`, `duration`, `loop`, `playing`, `canUndo` and `canRedo`.
+- **State.** `getState()` returns the same object until something changes (so `useSyncExternalStore` and Svelte runes can use it directly) and `subscribe(listener)` reports every change. It holds the description (controls, defaults, presets), `values` at the playhead, `tracks` (keyframes per control), `source` and `sourceLanguage` (`'pixel' | 'glsl' | 'svg' | null`), `issues` (with 1-based `line` when known), `compiled`, `time`, `duration`, `loop`, `playing`, `canUndo` and `canRedo`.
 - **Edits return results, never throw.** `setValue`, `setValues` (all or nothing), `resetValues`, `applyPreset`, `savePreset`, `setKeyframe`, `removeKeyframe`, `clearTrack` and `setTiming` return `{ ok: true }` or `{ ok: false, message }`; a refusal changes nothing and its message names the control and the valid choices. Setting an animated control keys it at the playhead.
 - **Source.** `setSource(source)` is optional and only present when `sourceLanguage` is not null. It returns the compile `issues`.
 - **Playback and history.** `play`, `pause`, `seek`, `undo` and `redo`. Playback and seeking are not undo steps.
 - **Preview.** `createPreview({ width, height })` returns an `EffectRenderer` that draws the session's current effect; `render({ time })` uses the keyframed values for that time unless `values` is given. Filters and transitions need input pictures: `effectSampleInputs(description, size)` gives sample ones.
-- **Documents.** `exportDocument()` gives `{ version: 1, providerId, effectId, name, values, tracks, presets, duration, loop }`. Reopening checks it against the effect and throws `EffectControlError` naming each problem.
+- **Documents.** `exportDocument()` gives `{ version: 1, providerId, effectId, name, values, tracks, presets, duration, loop }`, plus `source` and `sourceLanguage` for sessions that edit source. Reopening checks it against the effect and throws `EffectControlError` naming each problem.
 
-`createEffectAuthoringSession(source, { provider, history?, schedule?, mergeWindowMs? })` (`authoring-session.ts`) is a generic session over any provider's `describe` and `createRenderer`: values, presets, keyframes, timing, playback and undo, with no source editing. The fake provider's `openAuthoring` uses it. Motion effects can't be authored (`EffectUnsupportedError`). `checkEffectProvider` opens a session when `supportsAuthoring` is set and checks state identity, refusals, undo and the document round trip (`authoring: false` skips it).
+`createEffectAuthoringSession(source, { provider, history?, schedule?, mergeWindowMs? })` (`authoring-session.ts`) is a generic session over any provider's `describe` and `createRenderer`: values, presets, keyframes, timing, playback and undo, with no source editing. The fake provider's `openAuthoring` uses it. Given a `source` backend (`AuthoringSourceBackend`: `sourceOf`, `compile`, `refuse`, `createRenderer`) it also edits source: `setSource` is one undo step, a source that doesn't compile keeps the last controls that did (`compiled: false`), and a fix keeps the values of controls that are still there. Motion effects can't be authored (`EffectUnsupportedError`). `checkEffectProvider` opens a session when `supportsAuthoring` is set and checks state identity, refusals, undo and the document round trip (`authoring: false` skips it).
 
 ### Agent tools
 
@@ -196,6 +196,55 @@ With no session open, every tool refuses and says how to open one.
 - **Svelte:** `effectAuthoringOf(() => session)` and `<EffectAuthoringEditor {session} />` from `@pixerate/editor-svelte/effects`.
 
 The editor has a toolbar (play, undo, redo, save preset), a preview canvas, a source pane (a plain textarea with line numbers and issue markers, shown only when the session has source), the parameter panel with a keyframe diamond per control, and a timeline (scrubber, duration, loop, keyframe rows per animated control). `EffectParameters` gained `onPresetName` and a per-control addon (`renderControlAddon` in React, the `addon` snippet in Svelte) for this.
+
+### Effects written at run time
+
+Effects that a person or an agent writes at run time use **pixel expressions**
+(`sourceLanguage: 'pixel'`), a small language this package defines and runs itself, documented in
+[pixel-expressions.md](./pixel-expressions.md). `createPixelEffectProvider()` offers three
+templates (`pixel.blank`, `pixel.rings`, `pixel.clouds`) that open with source editing; a saved
+document carries its source, so it renders anywhere without the author's provider.
+
+Pixel expressions exist so that hosts which must not run downloaded or generated code (Apple's App
+Store guideline 2.5.2) can still let agents write effects. A program has no loops, no functions of
+its own, no memory and no access to anything but the pixel's position, the time and its controls;
+it is data that this package's own code evaluates (on the CPU, or as Metal Shading Language that
+the Swift package generates from it). Its cost per pixel is fixed and capped, so it can't hang the
+GPU. Whether a host may ship it is still the host's call: this describes what the code does, not a
+review outcome.
+
+### Authored effects in a painting
+
+The paint editor keeps run-time effects in the painting (`doc.authoredEffects`, saved under
+`authoredEffects` in its JSON) with their source, values, keyframes and presets. Their ids are
+`authored.<name>` and work wherever an effect id does: effect paint (`setEffectPaint`), effect
+paper, effect layers, fills and light. An id never changes what it draws: saving again makes a new
+id. Keyframed controls animate with the effect time and are not settable where the effect is used.
+
+| Tools (`createPaintEffectAuthoringToolProvider`) | |
+| :--- | :--- |
+| `open_effect_authoring` | Open a template, an authored effect or a provider effect for authoring |
+| the `effect_authoring_*` tools above | Edit the open session (`effect_authoring_set_source` is always listed; it refuses for a session with no source) |
+| `save_authored_effect` | Trial render, then save as `authored.<name>` (one undo step) |
+| `list_authored_effects` | The effects, where each is used, and why one can't draw |
+| `remove_authored_effect` | Remove one nothing uses (one undo step) |
+| `close_effect_authoring` | Close the session without saving |
+
+**Host policy.** `new PaintEditorController({ authoredEffects })` takes:
+
+| `authoredEffects` | Authored effects in documents | Writing, saving, removing |
+| :--- | :--- | :--- |
+| `'off'` | Not drawn (strokes show nothing where they would paint; `list_authored_effects` says why) | Refused |
+| `'replay'` (default) | Drawn | Refused, with the reason |
+| `'author'` | Drawn | Allowed |
+
+Documents written in a provider's raw shader source (for example Flair's GLSL) are drawn through
+that provider only with `rawShaders: true` (default false, in TypeScript and Swift alike).
+
+**Budgets** (`authoredEffectLimits`): 64 KB of source and 1024 steps per pixel (`noise` counts 4);
+a 64×64 trial render within 100 ms before an effect is saved; and live effect paint stops playing
+an authored effect (each stroke keeps the frame it was painted with) after two frames over 50 ms.
+In Swift, compiling the generated Metal source has a 2 s budget.
 
 ## Writing a provider
 

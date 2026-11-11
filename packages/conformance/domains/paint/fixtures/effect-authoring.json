@@ -1,0 +1,1001 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "effect-authoring",
+  "description": "Writing an effect at run time in pixel expressions: opening a template, source with compile errors and a fix, values, presets, keyframes, timing, undo, saving it into the painting, and a provider effect that has no source.",
+  "setup": {
+    "width": 48,
+    "height": 32,
+    "authoredEffects": "author"
+  },
+  "steps": [
+    {
+      "tool": "list_authored_effects",
+      "expect": {
+        "result": {
+          "effects": [],
+          "open": null,
+          "policy": "author"
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_describe",
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No effect is open for authoring; open one with open_effect_authoring (start from pixel.blank to write a new effect), then use the effect_authoring_* tools."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "pixel.nope"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no template \"pixel.nope\"; the templates are pixel.blank, pixel.rings, pixel.clouds."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "pixel.blank"
+      },
+      "expect": {
+        "result": {
+          "compiled": true,
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1d2b53",
+              "description": "Colour at the top. (#rrggbb)",
+              "id": "top",
+              "type": "color"
+            },
+            {
+              "alpha": false,
+              "default": "#ff77a8",
+              "description": "Colour at the bottom. (#rrggbb)",
+              "id": "bottom",
+              "type": "color"
+            }
+          ],
+          "duration": 1000,
+          "from": "pixel.blank",
+          "issues": [],
+          "loop": false,
+          "name": "Blank",
+          "source": "control top: color = #1d2b53 // Colour at the top.\ncontrol bottom: color = #ff77a8 // Colour at the bottom.\nout = mix(top, bottom, uv.y)\n",
+          "sourceLanguage": "pixel",
+          "values": {
+            "bottom": "#ff77a8",
+            "top": "#1d2b53"
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_get_source",
+      "expect": {
+        "result": {
+          "language": "pixel",
+          "source": "control top: color = #1d2b53 // Colour at the top.\ncontrol bottom: color = #ff77a8 // Colour at the bottom.\nout = mix(top, bottom, uv.y)\n"
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_source",
+      "arguments": {
+        "source": "control glow: number = 0.5 range 0 1 // Glow.\nout = vec4(vec3(gloww), 1)"
+      },
+      "expect": {
+        "result": {
+          "issues": [
+            {
+              "line": 2,
+              "message": "there is no \"gloww\"; defined so far: glow; built in: uv, pos, size, time, PI, TAU",
+              "severity": "error"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "save_authored_effect",
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "The effect doesn't compile, so it can't be saved: line 2: there is no \"gloww\"; defined so far: glow; built in: uv, pos, size, time, PI, TAU. Fix the source (effect_authoring_set_source) and save again."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "effect_authoring_set_source",
+      "arguments": {
+        "source": "// Rings over drifting noise.\ncontrol ink: color = #1d2b53 // Colour of the rings.\ncontrol glow: number = 0.5 range 0 1 // How bright the noise is.\ncontrol count: number = 6 range 1 32 // Rings across the picture.\ncontrol center: vec2 = vec2(0.5, 0.5) range 0 1 // Where the rings spread from.\ncontrol soft: bool = true // Soft edges.\nlet d = distance(uv, center)\nlet wave = 0.5 + 0.5 * sin((d * count - time) * TAU)\nlet edge = select(soft, smoothstep(0.3, 0.7, wave), step(0.5, wave))\nlet n = noise(pos / 6 + vec2(time, 0)) * glow\nlet base = mix(vec3(n), ink.rgb, edge)\nout = vec4(clamp(base + hash(floor(pos / 4)) * 0.05, 0, 1), max(edge, 0.25))\n"
+      },
+      "expect": {
+        "result": {
+          "issues": []
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_values",
+      "arguments": {
+        "values": {
+          "glow": 0.8,
+          "count": 8
+        }
+      },
+      "expect": {
+        "result": {
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 0.8,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_values",
+      "arguments": {
+        "values": {
+          "glo": 0.8
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "there is no control \"glo\"; the controls are ink, glow, count, center, soft"
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "effect_authoring_set_values",
+      "arguments": {
+        "values": {
+          "count": 99
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "control \"count\": Must be <= 32."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "effect_authoring_save_preset",
+      "arguments": {
+        "name": "Bright"
+      },
+      "expect": {
+        "result": {
+          "name": "Bright",
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 0.8,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_reset_values",
+      "arguments": {
+        "names": [
+          "glow"
+        ]
+      },
+      "expect": {
+        "result": {
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 0.5,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_apply_preset",
+      "arguments": {
+        "name": "Bright"
+      },
+      "expect": {
+        "result": {
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 0.8,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_keyframe",
+      "arguments": {
+        "control": "glow",
+        "time": 0,
+        "value": 0.2
+      },
+      "expect": {
+        "result": {
+          "control": "glow",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_keyframe",
+      "arguments": {
+        "control": "glow",
+        "time": 1000,
+        "value": 1,
+        "easing": "ease-in-out"
+      },
+      "expect": {
+        "result": {
+          "control": "glow",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.2
+            },
+            {
+              "easing": "ease-in-out",
+              "time": 1000,
+              "value": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_seek",
+      "arguments": {
+        "time": 250
+      },
+      "expect": {
+        "result": {
+          "time": 250,
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 0.4,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_timing",
+      "arguments": {
+        "duration": 2000,
+        "loop": true
+      },
+      "expect": {
+        "result": {
+          "duration": 2000,
+          "loop": true
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_remove_keyframe",
+      "arguments": {
+        "control": "glow",
+        "time": 0
+      },
+      "expect": {
+        "result": {
+          "control": "glow",
+          "keyframes": [
+            {
+              "easing": "ease-in-out",
+              "time": 1000,
+              "value": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_undo",
+      "expect": {
+        "result": {
+          "canRedo": true,
+          "canUndo": true,
+          "changed": true
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_redo",
+      "expect": {
+        "result": {
+          "canRedo": false,
+          "canUndo": true,
+          "changed": true
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_undo",
+      "expect": {
+        "result": {
+          "canRedo": true,
+          "canUndo": true,
+          "changed": true
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_describe",
+      "expect": {
+        "result": {
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1d2b53",
+              "description": "Colour of the rings. (#rrggbb)",
+              "id": "ink",
+              "type": "color"
+            },
+            {
+              "default": 0.5,
+              "description": "How bright the noise is.",
+              "id": "glow",
+              "max": 1,
+              "min": 0,
+              "type": "number"
+            },
+            {
+              "default": 6,
+              "description": "Rings across the picture.",
+              "id": "count",
+              "max": 32,
+              "min": 1,
+              "type": "number"
+            },
+            {
+              "default": [
+                0.5,
+                0.5
+              ],
+              "description": "Where the rings spread from. ([x, y])",
+              "id": "center",
+              "max": 1,
+              "min": 0,
+              "size": 2,
+              "type": "vector"
+            },
+            {
+              "default": true,
+              "description": "Soft edges.",
+              "id": "soft",
+              "type": "boolean"
+            }
+          ],
+          "duration": 2000,
+          "issues": [],
+          "kind": "shader",
+          "loop": true,
+          "name": "Blank",
+          "presets": [
+            "Bright"
+          ],
+          "previewError": null,
+          "sourceLanguage": "pixel",
+          "time": 250,
+          "tracks": [
+            {
+              "control": "glow",
+              "keyframes": 2
+            }
+          ],
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 0.4,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "save_authored_effect",
+      "arguments": {
+        "name": "Glow rings"
+      },
+      "expect": {
+        "result": {
+          "animated": [
+            "glow"
+          ],
+          "controls": [
+            "ink",
+            "count",
+            "center",
+            "soft"
+          ],
+          "duration": 2000,
+          "id": "authored.glow-rings",
+          "loop": true,
+          "name": "Glow rings"
+        }
+      }
+    },
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "pixel.rings"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "An effect is already open for authoring (Blank, from \"pixel.blank\"); save it (save_authored_effect) or close it (close_effect_authoring) first."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "list_authored_effects",
+      "expect": {
+        "result": {
+          "effects": [
+            {
+              "animated": [
+                "glow"
+              ],
+              "controls": [
+                "ink",
+                "count",
+                "center",
+                "soft"
+              ],
+              "duration": 2000,
+              "id": "authored.glow-rings",
+              "language": "pixel",
+              "loop": true,
+              "name": "Glow rings",
+              "uses": {
+                "layers": [],
+                "paint": false,
+                "paper": false,
+                "strokes": 0
+              }
+            }
+          ],
+          "open": {
+            "from": "pixel.blank",
+            "name": "Blank"
+          },
+          "policy": "author"
+        }
+      }
+    },
+    {
+      "tool": "close_effect_authoring",
+      "expect": {
+        "result": {
+          "closed": "Blank"
+        }
+      }
+    },
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "authored.glow-rings"
+      },
+      "expect": {
+        "result": {
+          "compiled": true,
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1d2b53",
+              "description": "Colour of the rings. (#rrggbb)",
+              "id": "ink",
+              "type": "color"
+            },
+            {
+              "default": 0.5,
+              "description": "How bright the noise is.",
+              "id": "glow",
+              "max": 1,
+              "min": 0,
+              "type": "number"
+            },
+            {
+              "default": 6,
+              "description": "Rings across the picture.",
+              "id": "count",
+              "max": 32,
+              "min": 1,
+              "type": "number"
+            },
+            {
+              "default": [
+                0.5,
+                0.5
+              ],
+              "description": "Where the rings spread from. ([x, y])",
+              "id": "center",
+              "max": 1,
+              "min": 0,
+              "size": 2,
+              "type": "vector"
+            },
+            {
+              "default": true,
+              "description": "Soft edges.",
+              "id": "soft",
+              "type": "boolean"
+            }
+          ],
+          "duration": 2000,
+          "from": "authored.glow-rings",
+          "issues": [],
+          "loop": true,
+          "name": "Glow rings",
+          "source": "// Rings over drifting noise.\ncontrol ink: color = #1d2b53 // Colour of the rings.\ncontrol glow: number = 0.5 range 0 1 // How bright the noise is.\ncontrol count: number = 6 range 1 32 // Rings across the picture.\ncontrol center: vec2 = vec2(0.5, 0.5) range 0 1 // Where the rings spread from.\ncontrol soft: bool = true // Soft edges.\nlet d = distance(uv, center)\nlet wave = 0.5 + 0.5 * sin((d * count - time) * TAU)\nlet edge = select(soft, smoothstep(0.3, 0.7, wave), step(0.5, wave))\nlet n = noise(pos / 6 + vec2(time, 0)) * glow\nlet base = mix(vec3(n), ink.rgb, edge)\nout = vec4(clamp(base + hash(floor(pos / 4)) * 0.05, 0, 1), max(edge, 0.25))\n",
+          "sourceLanguage": "pixel",
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 1,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_clear_track",
+      "arguments": {
+        "control": "glow"
+      },
+      "expect": {
+        "result": {
+          "control": "glow",
+          "value": 1
+        }
+      }
+    },
+    {
+      "tool": "save_authored_effect",
+      "expect": {
+        "result": {
+          "animated": [],
+          "controls": [
+            "ink",
+            "glow",
+            "count",
+            "center",
+            "soft"
+          ],
+          "duration": 2000,
+          "id": "authored.glow-rings-2",
+          "loop": true,
+          "name": "Glow rings"
+        }
+      }
+    },
+    {
+      "tool": "close_effect_authoring",
+      "expect": {
+        "result": {
+          "closed": "Glow rings"
+        }
+      }
+    },
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "fake.gradient"
+      },
+      "expect": {
+        "result": {
+          "compiled": null,
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1e3a8a",
+              "description": "Start colour as #rrggbb. Default #1e3a8a.",
+              "id": "from",
+              "type": "color"
+            },
+            {
+              "alpha": false,
+              "default": "#f472b6",
+              "description": "End colour as #rrggbb. Default #f472b6.",
+              "id": "to",
+              "type": "color"
+            },
+            {
+              "default": 90,
+              "description": "Direction in degrees, 0 = left to right, 90 = top to bottom. Default 90.",
+              "id": "angle",
+              "max": 360,
+              "min": 0,
+              "type": "number"
+            },
+            {
+              "default": 0,
+              "description": "Turn per loop (4 s) in degrees. Default 0.",
+              "id": "spin",
+              "max": 360,
+              "min": -360,
+              "type": "number"
+            },
+            {
+              "default": 1,
+              "description": "Background opacity 0–1: 0 is fully transparent. Default 1.",
+              "id": "opacity",
+              "max": 1,
+              "min": 0,
+              "type": "number"
+            }
+          ],
+          "duration": 4000,
+          "from": "fake.gradient",
+          "issues": [],
+          "loop": true,
+          "name": "Gradient",
+          "sourceLanguage": null,
+          "values": {
+            "angle": 90,
+            "from": "#1e3a8a",
+            "opacity": 1,
+            "spin": 0,
+            "to": "#f472b6"
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_source",
+      "arguments": {
+        "source": "out = 1"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "The open effect (Gradient) has no source to edit: it is a catalog effect of its provider. Open an effect written in pixel expressions to edit source."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "close_effect_authoring",
+      "expect": {
+        "result": {
+          "closed": "Gradient"
+        }
+      }
+    },
+    {
+      "tool": "list_authored_effects",
+      "reload": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "effects": [
+            {
+              "animated": [
+                "glow"
+              ],
+              "controls": [
+                "ink",
+                "count",
+                "center",
+                "soft"
+              ],
+              "duration": 2000,
+              "id": "authored.glow-rings",
+              "language": "pixel",
+              "loop": true,
+              "name": "Glow rings",
+              "uses": {
+                "layers": [],
+                "paint": false,
+                "paper": false,
+                "strokes": 0
+              }
+            },
+            {
+              "animated": [],
+              "controls": [
+                "ink",
+                "glow",
+                "count",
+                "center",
+                "soft"
+              ],
+              "duration": 2000,
+              "id": "authored.glow-rings-2",
+              "language": "pixel",
+              "loop": true,
+              "name": "Glow rings",
+              "uses": {
+                "layers": [],
+                "paint": false,
+                "paper": false,
+                "strokes": 0
+              }
+            }
+          ],
+          "open": null,
+          "policy": "author"
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {},
+            "authoredEffects": {
+              "authored.glow-rings": {
+                "document": {
+                  "duration": 2000,
+                  "effectId": "pixel.blank",
+                  "loop": true,
+                  "name": "Glow rings",
+                  "presets": [
+                    {
+                      "name": "Bright",
+                      "values": {
+                        "center": [
+                          0.5,
+                          0.5
+                        ],
+                        "count": 8,
+                        "glow": 0.8,
+                        "ink": "#1d2b53",
+                        "soft": true
+                      }
+                    }
+                  ],
+                  "providerId": "pixel",
+                  "source": "// Rings over drifting noise.\ncontrol ink: color = #1d2b53 // Colour of the rings.\ncontrol glow: number = 0.5 range 0 1 // How bright the noise is.\ncontrol count: number = 6 range 1 32 // Rings across the picture.\ncontrol center: vec2 = vec2(0.5, 0.5) range 0 1 // Where the rings spread from.\ncontrol soft: bool = true // Soft edges.\nlet d = distance(uv, center)\nlet wave = 0.5 + 0.5 * sin((d * count - time) * TAU)\nlet edge = select(soft, smoothstep(0.3, 0.7, wave), step(0.5, wave))\nlet n = noise(pos / 6 + vec2(time, 0)) * glow\nlet base = mix(vec3(n), ink.rgb, edge)\nout = vec4(clamp(base + hash(floor(pos / 4)) * 0.05, 0, 1), max(edge, 0.25))\n",
+                  "sourceLanguage": "pixel",
+                  "tracks": {
+                    "glow": [
+                      {
+                        "time": 0,
+                        "value": 0.2
+                      },
+                      {
+                        "easing": "ease-in-out",
+                        "time": 1000,
+                        "value": 1
+                      }
+                    ]
+                  },
+                  "values": {
+                    "center": [
+                      0.5,
+                      0.5
+                    ],
+                    "count": 8,
+                    "glow": 0.4,
+                    "ink": "#1d2b53",
+                    "soft": true
+                  },
+                  "version": 1
+                },
+                "name": "Glow rings"
+              },
+              "authored.glow-rings-2": {
+                "document": {
+                  "duration": 2000,
+                  "effectId": "pixel.blank",
+                  "loop": true,
+                  "name": "Glow rings",
+                  "presets": [
+                    {
+                      "name": "Bright",
+                      "values": {
+                        "center": [
+                          0.5,
+                          0.5
+                        ],
+                        "count": 8,
+                        "glow": 0.8,
+                        "ink": "#1d2b53",
+                        "soft": true
+                      }
+                    }
+                  ],
+                  "providerId": "pixel",
+                  "source": "// Rings over drifting noise.\ncontrol ink: color = #1d2b53 // Colour of the rings.\ncontrol glow: number = 0.5 range 0 1 // How bright the noise is.\ncontrol count: number = 6 range 1 32 // Rings across the picture.\ncontrol center: vec2 = vec2(0.5, 0.5) range 0 1 // Where the rings spread from.\ncontrol soft: bool = true // Soft edges.\nlet d = distance(uv, center)\nlet wave = 0.5 + 0.5 * sin((d * count - time) * TAU)\nlet edge = select(soft, smoothstep(0.3, 0.7, wave), step(0.5, wave))\nlet n = noise(pos / 6 + vec2(time, 0)) * glow\nlet base = mix(vec3(n), ink.rgb, edge)\nout = vec4(clamp(base + hash(floor(pos / 4)) * 0.05, 0, 1), max(edge, 0.25))\n",
+                  "sourceLanguage": "pixel",
+                  "tracks": {},
+                  "values": {
+                    "center": [
+                      0.5,
+                      0.5
+                    ],
+                    "count": 8,
+                    "glow": 1,
+                    "ink": "#1d2b53",
+                    "soft": true
+                  },
+                  "version": 1
+                },
+                "name": "Glow rings"
+              }
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    }
+  ]
+}

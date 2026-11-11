@@ -134,12 +134,15 @@ extension PaintEditorController {
         let width = doc.canvas.width, height = doc.canvas.height
         let w = JS.round(Double(width) * scale), h = JS.round(Double(height) * scale)
         if w > 16384 || h > 16384 { throw PaintEditorError("At scale \(jsText(scale)) the canvas would be \(jsText(w))×\(jsText(h)); the limit is 16384 px per side. Use a smaller scale.") }
-        let target = try PaintEditorController(width: w, height: h, dpi: doc.canvas.dpi * scale, brushLibrary: brushLibrary, wet: wetOptions)
+        let target = try PaintEditorController(width: w, height: h, dpi: doc.canvas.dpi * scale, brushLibrary: brushLibrary, wet: wetOptions, authoredEffects: authoredPolicy, rawShaders: rawShaders, authoredEffectLimits: authoredEffectLimits)
         target.brushEntries = brushEntries
         target.brushSources.set(brushSources.all())
         var paper = doc.paper
         paper.scale = Swift.min(8, paper.scale * scale)
         target.doc = PaintDocumentState(canvas: target.doc.canvas, paper: paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [])
+        // Authored effects travel with the painting, so strokes that paint with them repaint (the TS target leaves them out).
+        target.doc.authoredEffects = doc.authoredEffects
+        target.authoredEffectsGPU = false
         target.lighting = lighting
         target.uvLight = uvLight
         target.age = age

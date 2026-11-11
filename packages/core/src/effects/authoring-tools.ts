@@ -20,6 +20,13 @@ export interface EffectAuthoringToolHost {
 	capture?(): Promise<string>;
 	/** Lets the tool list follow session opens, closes, or changes. */
 	subscribe?: (notify: () => void) => () => void;
+	/** What the tools say when no session is open (how this host opens one). */
+	noSession?: string;
+	/**
+	 * List `effect_authoring_set_source` even while no session (or one without source) is open; it
+	 * then refuses with the reason. For hosts whose tool list is a fixed contract.
+	 */
+	alwaysListSetSource?: boolean;
 }
 
 export interface EffectAuthoringToolOptions {
@@ -93,7 +100,7 @@ export function createEffectAuthoringToolProvider(
 
 	const requireSession = (): EffectAuthoringSession => {
 		const s = host.session();
-		if (!s) throw new Error(NO_SESSION);
+		if (!s) throw new Error(host.noSession ?? NO_SESSION);
 		return s;
 	};
 
@@ -161,7 +168,7 @@ export function createEffectAuthoringToolProvider(
 		handler: async (args) => {
 			const session = requireSession();
 			if (!session.setSource) {
-				throw new Error('The currently open session does not support setting source code.');
+				throw new Error(`The open effect (${session.getState().name}) has no source to edit: it is a catalog effect of its provider. Open an effect written in pixel expressions to edit source.`);
 			}
 			const res = await session.setSource(args.source as string);
 			if (!res.ok) throw new Error(res.message);
@@ -446,7 +453,7 @@ export function createEffectAuthoringToolProvider(
 			const tools: AgentTool[] = [
 				describeTool,
 				getSourceTool,
-				...(session?.setSource ? [setSourceTool] : []),
+				...(session?.setSource || host.alwaysListSetSource ? [setSourceTool] : []),
 				setValuesTool,
 				resetValuesTool,
 				applyPresetTool,

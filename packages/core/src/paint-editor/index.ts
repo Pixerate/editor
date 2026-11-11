@@ -58,6 +58,8 @@ export * from './sticker-tools';
 export * from './effects';
 export * from './effect-paint';
 export * from './effect-tools';
+export * from './effect-authoring-tools';
+export * from './authored-effects';
 export { WET_FLOW_KINDS, DEFAULT_FLOW, normalizeFlow, type WetFlowKind, type WetFlowSpec } from '../paint/wet/flow';
 export { DEFAULT_WET_PARAMS, WET_PARAM_KEYS, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 export { wetSupport, type WetSupport } from '../paint/wet/wasm';

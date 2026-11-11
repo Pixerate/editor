@@ -294,6 +294,32 @@ public final class PaintEditorController {
     var effectFrames: [String: (base: TiledSurface, surface: TiledSurface)] = [:]
     /// Set while live strokes are drawn at a moment of their effects (`liveEffectAt`).
     var liveEffectAt: Double?
+    /// What authored effects may do here (the `authoredEffects` option).
+    public let authoredPolicy: AuthoredEffectsPolicy
+    /// Whether authored effects in a provider's raw shader source are drawn through that provider.
+    public let rawShaders: Bool
+    /// The budgets for authored effects this editor was made with (`authoredEffectLimits`).
+    public let authoredEffectLimits: AuthoredEffectLimits
+    let authoredLimits: ResolvedAuthoredLimits
+    /**
+     * Draw live view frames of pixel expression authored effects with Metal when the device has
+     * it (default true). Frames drawn on the GPU are view only and dropped once shown, so
+     * exports, replays and saved pixels always come from the CPU renderer.
+     */
+    public var authoredEffectsGPU = true
+    /// The authored effects provider for the current `doc.authoredEffects` (made anew when they change).
+    var authoredCache: (of: OrderedMap<String, PaintAuthoredEffect>?, provider: AuthoredEffectsProvider)?
+    var catalogCache: (host: EffectProvider?, authored: AuthoredEffectsProvider, has: Bool, catalog: EffectProvider?)?
+    /// The open effect authoring session, and what it was opened from.
+    var authoring: (session: EffectAuthoringSession, from: String)?
+    var authoringListeners: [UUID: () -> Void] = [:]
+    /// Authored effects whose live playback stopped (too slow), with the reason.
+    var frozenAuthored: [String: String] = [:]
+    var slowAuthoredFrames: [String: Int] = [:]
+    /// Set while live frames render, so authored effect renders are timed.
+    var timingLiveFrames = false
+    /// Effect paint keys rendered on the GPU for the view frame being drawn (dropped once it is shown).
+    var gpuFrameKeys = Set<String>()
     /// `withEffectTime`: stroke layer surfaces at another moment, for one export (`frameOverride`).
     var frameOverride: [String: TiledSurface]?
     /// True while listeners hear a view-only frame (live effect paint): the canvas redraws, panels need not.
@@ -355,8 +381,12 @@ public final class PaintEditorController {
         deinit { c.cancel() }
     }
 
-    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions(), stickers: (any StickerProvider)? = nil) throws {
+    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions(), stickers: (any StickerProvider)? = nil, authoredEffects: AuthoredEffectsPolicy = .replay, rawShaders: Bool = false, authoredEffectLimits: AuthoredEffectLimits = AuthoredEffectLimits()) throws {
         self.historyLimit = Swift.max(1, historyLimit ?? 200)
+        authoredPolicy = authoredEffects
+        self.rawShaders = rawShaders
+        self.authoredEffectLimits = authoredEffectLimits
+        authoredLimits = authoredEffectLimits.resolved
         var paperRaw = paper ?? [:]
         if let presetId {
             guard let p = paperPreset(presetId) else { throw PaintEditorError("Unknown paper \"\(presetId)\". Call list_papers for the ids.") }

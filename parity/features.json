@@ -2030,7 +2030,7 @@
           "swift": "`PaintEditorController.breedStrokes`, `PaintEditorController.breedProposal`, `PaintEditorController.getProposalGenome`"
         },
         {
-                    "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; reference-layer region / flats flood fill with gap closing (`closeGap`), line-edge bleed (`expand`), antialiasing, paper grain, wet wash pour (`wet: true`), leak warning and enclosed unfilled-region detection; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `fill_region`, `find_unfilled_regions`, `clear_layer`, `pick_color` agent tools)",
+          "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; reference-layer region / flats flood fill with gap closing (`closeGap`), line-edge bleed (`expand`), antialiasing, paper grain, wet wash pour (`wet: true`), leak warning and enclosed unfilled-region detection; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `fill_region`, `find_unfilled_regions`, `clear_layer`, `pick_color` agent tools)",
           "core": "`addLayer`, `updateLayer`, `fillLayer`, `fillRegion`, `findUnfilledRegions`, `fillRegionMask`, `findUnfilledRegionsMask`, `mergeDown`, `pickColor`",
           "react": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
           "svelte": "`<PaintLayersPanel>`, Fill tool (G) in `<PaintToolbar>` & `<PaintCanvas>` (eyedropper in `<PaintCanvas>`)",
@@ -2270,7 +2270,14 @@
           "core": "`createEffectAuthoringSession`, `createEffectAuthoringToolProvider`, `pixerate-effect-authoring` skill (`/effects`)",
           "react": "`useEffectAuthoring`, `<EffectAuthoringEditor>` (`/effects`)",
           "svelte": "`effectAuthoringOf`, `<EffectAuthoringEditor>` (`/effects`)",
-          "swift": "Planned (#533)"
+          "swift": "✅ headless: `GenericEffectAuthoringSession` (values, keyframes with `evaluateEasing`, presets, timing, playback, undo, source editing through an `AuthoringSourceBackend`), `AuthoringEffectProvider`, `effectAuthoringToolHandlers`, `pixerate-effect-authoring` skill; the editor view: Planned (#533)"
+        },
+        {
+          "feature": "Effects Written at Run Time (pixel expressions: a bounded per-pixel language with controls, line-numbered issues and a cost cap, safe for hosts that may not run generated code; `pixel.blank` / `pixel.rings` / `pixel.clouds` templates with source editing; authored effects kept in the painting with their source and used as effect paint, paper, effect layers, fills and light; `off` / `replay` / `author` host policy, raw shader opt-in, trial render and live frame budgets; Metal rendering in Swift)",
+          "core": "`compilePixelSource`, `createPixelEffectProvider`, `createPaintEffectAuthoringToolProvider`, `PaintEditorController.effectsCatalog` (`/effects`, `/paint-editor`)",
+          "react": "authored effects in `PaintEffectsPanel` (via `usePaintEffectsProvider`), authoring tools registered by `usePaintEffectsTools` (`/paint-editor`)",
+          "svelte": "authored effects in the paint effects panel (via `paintEffectsProvider`), authoring tools registered by `usePaintEffectsTools` (`/paint-editor`)",
+          "swift": "✅ `compilePixelSource`, `PixelEffectProvider`, `PixelMetalRenderer` (generated MSL, no loops), `createPaintEffectAuthoringToolProvider`, authored effects in `PaintProviderEffectsPanel`"
         }
       ]
     },

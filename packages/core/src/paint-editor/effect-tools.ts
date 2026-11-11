@@ -87,7 +87,7 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     applyUses: ['filter'],
     applyDetails:
       "Light on dried paint: the filter (search_effects with use filter, e.g. a light, glow or grade) runs on the layer's paint at the canvas size and is baked into its pixels; transparent areas stay transparent, and thick paint keeps its relief (an effect with a height input gets it). opacity is the strength (default 1). Wet paint is refused: dry it first (dry_paint). It is one undo step and is not listed afterwards (it is part of the pixels). Generators go on the paper (set_paper_effect), on their own layer (add_effect_layer) or into a layer (fill_layer_with_effect).",
-    provider: () => controller.effectsProvider,
+    provider: () => controller.effectsCatalog,
     readOnlyReason,
     list: (target): EffectTargetEffects[] => {
       if (target === PAPER_TARGET) return [{ target: PAPER_TARGET, name: 'Paper', effects: paperInfo() }];

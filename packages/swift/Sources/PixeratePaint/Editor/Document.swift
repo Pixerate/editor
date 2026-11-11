@@ -98,6 +98,8 @@ public final class PaintDocumentState {
     public var effectLayers: OrderedMap<String, PaintEffectSource>?
     /// Effect paper: a provider generator drawn over the paper, under the paint.
     public var paperEffect: PaintPaperEffect?
+    /// Authored effects: effects written at run time, kept with their source (`authored.<name>` ids).
+    public var authoredEffects: OrderedMap<String, PaintAuthoredEffect>?
     /// Sticker layers: each layer's stickers, bottom first (its pixels are drawn from them).
     public var stickers: OrderedMap<String, [Sticker]>?
     /// Thick paint: each layer's height and material channels (layers without relief are missing).
@@ -133,6 +135,7 @@ public final class PaintDocumentState {
         d.origin = origin
         d.effectLayers = effectLayers
         d.paperEffect = paperEffect
+        d.authoredEffects = authoredEffects
         d.stickers = stickers
         d.thick = thick
         d.wetEvents = wetEvents

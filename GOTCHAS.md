@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/effects] Name Lookups in Plain Objects Match `Object.prototype` (and Wall-Clock Budgets Stay Out of Tool Results)
+
+- **Issue / Symptom**: In pixel expressions, `let toString = 1` was refused as "a built-in value", and `toString(1)` reported a nonsense argument count, while Swift accepted both. Separately, a `save_authored_effect` result with the trial render's milliseconds made the conformance recorder fail as "not deterministic".
+- **Root Cause**: `name in PIXEL_BUILTINS` (and `PIXEL_FUNCTIONS[fn]`) also finds inherited keys such as `toString` and `constructor`. Timings depend on the machine.
+- **Solution / Workaround**: Look names up with `Object.hasOwn` (or a `Map`) in any table that user text indexes. Keep timing-based checks (trial render, live frame budget) as pass/refuse decisions with a message, never as numbers in a recorded result. Tests reach the budget paths with a limit of 0 (`authoredEffectLimits: { trialRenderMs: 0 }`), which every render meets or exceeds.
+
+### [core|swift/paint] Authored Effect Ids Never Change What They Draw
+
+- **Issue / Symptom**: If saving an edited authored effect replaced the old one under the same id, effect paint pixels cached by `effectPaintKey` (effect id and values), baked effect layers and strokes painted earlier would disagree with the document after a reload, and undo couldn't bring the old look back.
+- **Root Cause**: Every cache in the paint editor keys effects by id, on the assumption (true for provider catalogs) that an id always draws the same thing.
+- **Solution / Workaround**: `save_authored_effect` always adds a new id (`authored.<name>`, `-2`, `-3`, …), and `remove_authored_effect` is refused while anything uses one. The authored effects provider is rebuilt whenever `doc.authoredEffects` changes identity (save, remove, undo, load), which also clears the authored renderer's description cache. Keyframed controls are left out of the description where the effect is used, since paint passes every control value and would otherwise pin them.
+
+### [swift/paint] Authored Pixel Effects Render on the CPU, Except Frames the View Shows
+
+- **Issue / Symptom**: Drawing authored (pixel expression) effects with `PixelMetalRenderer` everywhere made effect paint, layers and exports differ from the TS evaluator by a level or two, and a live frame shown on the GPU could be reused by an export at the same moment (`renderAnimationFrame`, `withEffectTime`), because rendered effect paint is cached by `PaintEffectPaint.key`, which says nothing about how it was rendered.
+- **Root Cause**: Metal works in `float`; the TS evaluator (and `PixelCPURenderer`) in doubles. Conformance compares pixels with a tolerance of 2 per channel, but strokes, fills and saved PNG hashes compound small differences.
+- **Solution / Workaround**: Everything that ends in the document, an export or a replay renders on the CPU. Only live view frames (`showEffectTime`, while `timingLiveFrames` is set) use Metal, when `authoredEffectsGPU` is on (default) and `PixelGPU.isAvailable`; their keys go into `gpuFrameKeys` and are dropped from the cache as soon as the frame is drawn (`dropGPUFrames`). The conformance host and replay targets turn `authoredEffectsGPU` off. The paint tool provider lives in `Editor/PaintEffectAuthoringTools.swift`: SwiftPM refuses two files with the same name in one target, and `Effects/EffectAuthoringTools.swift` already holds the shared handlers.
+
 ### [swift/paint] Live Effect Frames Must Not Refresh the Panels, and the Player Re-anchors Only on Paused Ticks
 
 - **Issue / Symptom**: (1) Playing live effect paint in `PaintEditorView` re-evaluated every panel on every frame, and marking frames "quiet" around `await player.tick` also hid real changes an agent or the user made while a frame rendered. (2) A test that paused, waited, then resumed saw the moment jump forward by the paused time.

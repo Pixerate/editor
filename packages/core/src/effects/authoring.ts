@@ -27,6 +27,10 @@ export interface EffectAuthoringDocument {
 	presets: readonly EffectPreset[];
 	duration: number;
 	loop: boolean;
+	/** The effect's own source, for sessions that edit it (e.g. pixel expressions). */
+	source?: string;
+	/** The language of `source`. */
+	sourceLanguage?: Exclude<EffectSourceLanguage, null>;
 }
 
 /** What to open: a catalog effect (optionally with a preset applied), or a document saved earlier by `exportDocument`. */
@@ -34,8 +38,11 @@ export type EffectAuthoringSource =
 	| { effectId: string; preset?: string }
 	| { document: EffectAuthoringDocument | unknown };
 
-/** The language of an editable source, or null when the effect has no source to edit. */
-export type EffectSourceLanguage = 'glsl' | 'svg' | null;
+/**
+ * The language of an editable source, or null when the effect has no source to edit. `pixel` is
+ * this package's bounded pixel expression language (`compilePixelSource`, docs/pixel-expressions.md).
+ */
+export type EffectSourceLanguage = 'glsl' | 'svg' | 'pixel' | null;
 
 /** One keyframe of an animated control. */
 export interface EffectKeyframe {

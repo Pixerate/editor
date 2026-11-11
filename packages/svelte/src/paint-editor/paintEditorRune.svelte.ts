@@ -1,5 +1,5 @@
 import { untrack } from 'svelte';
-import { createPaintEditorDocument, createPaintEffectsToolProvider, PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState, type PaintEffectsToolProviderOptions } from '@pixerate/editor/paint-editor';
+import { createPaintEditorDocument, createPaintEffectAuthoringToolProvider, createPaintEffectsToolProvider, PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState, type PaintEffectsToolProviderOptions } from '@pixerate/editor/paint-editor';
 import type { EffectProvider } from '@pixerate/editor/effects';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 
@@ -79,16 +79,26 @@ export function attempt(fn: () => unknown, onError: (msg: string | null) => void
   }
 }
 
-/** The controller's effects provider as a rune, following `setEffectsProvider`. */
+/**
+ * The effects the panel offers as a rune: the controller's provider with the painting's authored
+ * effects (`controller.effectsCatalog`), following `setEffectsProvider` and saved or removed
+ * authored effects.
+ */
 export function paintEffectsProvider(controller: () => PaintEditorController): { readonly current: EffectProvider | null } {
-  let provider = $state.raw<EffectProvider | null>(controller().effectsProvider);
+  let provider = $state.raw<EffectProvider | null>(controller().effectsCatalog);
   $effect(() => {
     const c = controller();
     return untrack(() => {
-      provider = c.effectsProvider;
-      return c.effects.subscribe((p) => {
-        provider = p;
-      });
+      const sync = () => {
+        provider = c.effectsCatalog;
+      };
+      sync();
+      const a = c.effects.subscribe(sync);
+      const b = c.subscribe(sync);
+      return () => {
+        a();
+        b();
+      };
     });
   });
   return {
@@ -101,7 +111,8 @@ export function paintEffectsProvider(controller: () => PaintEditorController): {
 /**
  * Registers the paint editor's provider-effect tools (`set_paper_effect`, `add_effect_layer`,
  * `fill_layer_with_effect`, `apply_effect`, …) for the lifetime of the calling component. Before
- * an effects provider is registered the read tools say so and the write tools refuse.
+ * an effects provider is registered the read tools say so and the write tools refuse. Also
+ * registers the effect authoring tools (`open_effect_authoring`, `save_authored_effect`, …).
  */
 export function usePaintEffectsTools(
   registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
@@ -111,6 +122,12 @@ export function usePaintEffectsTools(
   $effect(() => {
     const target = typeof registry === 'function' ? registry() : registry;
     if (!target) return;
-    return target.register(createPaintEffectsToolProvider(controller, options));
+    const a = target.register(createPaintEffectsToolProvider(controller, options));
+    const { id, namespace } = options;
+    const b = target.register(createPaintEffectAuthoringToolProvider(controller, { ...options, id: id ? `${id}-authoring` : undefined, namespace: namespace === undefined ? undefined : namespace && `${namespace}-authoring` }));
+    return () => {
+      a();
+      b();
+    };
   });
 }
