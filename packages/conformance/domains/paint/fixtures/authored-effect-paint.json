@@ -340,7 +340,7 @@
       }
     },
     {
-      "tool": "set_effect_paint",
+      "tool": "describe_effect",
       "arguments": {
         "effect": "authored.nothing"
       },
