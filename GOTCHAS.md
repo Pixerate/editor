@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift] A `public struct` Without an Explicit `public init` Can't Be Built by Hosts
+
+- **Issue / Symptom**: Code outside the module fails with "initializer is inaccessible due to 'internal' protection level" when building an options struct such as `ReplayOptions(strokeIds:)`, so the public method that takes it (`replayStrokes`) is unusable. The package's own tests never notice (#747).
+- **Root Cause**: Swift's implicit memberwise initializer is always `internal`, even on a `public struct` with all-`public` fields. Test targets use `@testable import`, which exposes internal symbols.
+- **Solution / Workaround**: Give every public struct a host must construct (options, settings, init values) an explicit `public init` with the same labels and order as the memberwise one, `nil` defaults for optionals (as the memberwise one has) and `@escaping` on closure fields. Prove it with a test file that uses plain `import` (`PaintPublicInitTests.swift`, `VectorPublicInitTests.swift`). Result types the module only returns don't need one.
+
 ### [swift/paint] Save → Load Conformance: Clocks, Asset Hashes and Fields Swift Doesn't Model
 
 - **Issue / Symptom**: Adding a `reload` step to every paint scenario (save, then `loadJSON`, then compare the document) failed in three ways that were not loader bugs. (1) `culture` was not deterministic between two TS runs. (2) `culture-replay` matched pixels within tolerance but its document differed in one asset reference. (3) A hand-written wet event with a field outside `data` came back in TS but not in Swift.

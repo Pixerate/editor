@@ -32,6 +32,13 @@ public struct VectorArtContext {
     public var model: ModelCapabilities
     public var plan: GenerationPlan
     public var idempotencyKey: String
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(model: ModelCapabilities, plan: GenerationPlan, idempotencyKey: String) {
+        self.model = model
+        self.plan = plan
+        self.idempotencyKey = idempotencyKey
+    }
 }
 
 /// The host's generator (`VectorArtGenerator`): sends a planned request to its model and returns the art.
