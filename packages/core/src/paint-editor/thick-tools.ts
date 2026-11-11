@@ -4,16 +4,44 @@
  * clear light paint, and switch instant drying of wet strokes.
  */
 
-import type { PaintAgentTool } from './hosted';
+import type { PaintAgentTool, PaintOrigin } from './hosted';
 import type { PaintEditorController } from './controller';
+import { brushSpecialtyGuides, type BrushSpecialtyGuide } from './specialty-guides';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const SET = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 const LAYER_ID = { type: 'string', description: 'Pixel layer id from list_layers (default the active layer).' } as const;
 
-export function createPaintThickTools(c: PaintEditorController): PaintAgentTool[] {
+/** A guide's action arguments in host coordinates (`origin`: where document (0, 0) is on the host canvas). */
+function hostedGuide(g: BrushSpecialtyGuide, origin: PaintOrigin | undefined): BrushSpecialtyGuide {
+  if (!origin || (!origin.x && !origin.y)) return g;
+  const at = (p: { x: number; y: number }) => ({ ...p, x: p.x + origin.x, y: p.y + origin.y });
+  return {
+    ...g,
+    actions: g.actions.map((a) => {
+      if (a.tool === 'add_magnet') return { ...a, arguments: at(a.arguments as { x: number; y: number }) };
+      if (a.tool === 'paint_heat' || a.tool === 'seed_live_patterns') return { ...a, arguments: { ...a.arguments, points: (a.arguments.points as Array<{ x: number; y: number }>).map(at) } };
+      return a;
+    }),
+  };
+}
+
+export function createPaintThickTools(c: PaintEditorController, options: { origin?: PaintOrigin } = {}): PaintAgentTool[] {
   return [
+    {
+      name: 'get_specialty_guides',
+      title: 'Read how to use the brush’s specialty paint',
+      description:
+        'Reads guides for the specialty paint the active brush lays (ferro: ferrofluid, fluorescence: UV-fluorescent ink, thermochromic ink, iridescence: thin-film, ghost paint, mutation paint, livePatterns: reaction-diffusion), one per kind, empty for standard brushes and tools: title, howToUse (how strokes behave), status (whether the canvas is set up now: UV blacklight, heat, magnets, view tilt, a mutation agent, wet time), ready (the effect shows right away) and actions, the quick setups that apply now, each with the tool to call and its arguments (set_uv_light, paint_heat, advance_heat, clear_heat, add_magnet, cure_ferrofluid, set_view_tilt, seed_live_patterns). Call it after set_brush with a specialty brush, run an action’s tool with its arguments, then call it again to check ready. Changes nothing. Returns brushId, specialties and guides.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      annotations: { title: 'Read how to use the brush’s specialty paint', ...READ },
+      handler: () => {
+        const state = c.getState();
+        const guides = brushSpecialtyGuides(state).map((g) => hostedGuide(g, options.origin));
+        return { brushId: state.brush.id, specialties: guides.map((g) => g.kind), guides };
+      },
+    },
     {
       name: 'get_light',
       title: 'Read a layer’s light paint',

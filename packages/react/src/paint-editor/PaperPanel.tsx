@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, UV_LIGHT_SLIDERS, VIEW_TILT_SLIDERS, patchPath, readPath, renderPaper, requestDeviceTiltPermission, startDeviceTilt, type PaintEditorController } from '@pixerate/editor/paint-editor';
+import React, { useMemo } from 'react';
+import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
-import { FerroPanel } from './FerroPanel';
 import { TimeMachinePanel } from './TimeMachinePanel';
 import { CulturePanel } from './CulturePanel';
-import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, chip, panel, useAttempt } from './shared';
+import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, panel, useAttempt } from './shared';
 
 export interface PaperPanelProps {
   controller: PaintEditorController;
@@ -17,13 +16,12 @@ const SWATCH = { x: 0, y: 0, width: 64, height: 40 };
  * The paper library by family (each a generated grain preview) and the current paper's colour,
  * grain depth, scale, shading and contrast, the wet-media properties, metallic sheen and backlight
  * with its colour (each change one undo step; sliders commit on release); then the light for thick paint and metallic
- * paper (not an undo step) and Flatten relief for the active layer.
+ * paper (not an undo step) and Flatten relief for the active layer. The UV blacklight, heat, magnets
+ * and view tilt for specialty paint are in `SpecialtyPanel`.
  */
 export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className }) => {
   const state = usePaintEditorState(controller);
   const [error, attempt] = useAttempt();
-  const [tiltFollow, setTiltFollow] = useState(false);
-  useEffect(() => (tiltFollow ? startDeviceTilt(controller) : undefined), [controller, tiltFollow]);
   const paper = state.document.paper;
   const previews = useMemo(() => new Map(PAPER_LIBRARY.map((p) => [p.preset, { ...SWATCH, data: renderPaper({ ...p, shading: Math.max(0.8, p.shading) }, SWATCH) }])), []);
 
@@ -72,47 +70,10 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
         {LIGHT_SLIDERS.map((c) => (
           <PaintSlider key={c.path} control={c} value={readPath(controller.getLighting(), c.path)} onChange={(v) => attempt(() => controller.setLighting({ [c.path]: v }))} />
         ))}
-        {VIEW_TILT_SLIDERS.map((c) => (
-          <PaintSlider key={c.path} control={c} value={readPath(state.viewTilt, c.path)} onChange={(v) => attempt(() => controller.setViewTilt({ [c.path]: v }))} />
-        ))}
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            aria-pressed={tiltFollow}
-            className={chip(tiltFollow)}
-            onClick={() =>
-              attempt(async () => {
-                if (!tiltFollow && !(await requestDeviceTiltPermission())) return;
-                setTiltFollow((v) => !v);
-              })
-            }
-          >
-            Device tilt
-          </button>
-          <button type="button" className="self-start px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.flattenRelief())}>
-            Flatten relief
-          </button>
-        </div>
+        <button type="button" className="self-start px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.flattenRelief())}>
+          Flatten relief
+        </button>
       </div>
-      <div className="flex flex-col gap-1.5" data-testid="uv-heat-panel">
-        <span className="font-medium text-slate-300">UV blacklight &amp; heat</span>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={state.uvLight.on} onChange={(e) => attempt(() => controller.setUvLight({ on: e.target.checked }))} /> UV blacklight
-        </label>
-        {UV_LIGHT_SLIDERS.map((c) => (
-          <PaintSlider key={c.path} control={c} value={readPath(state.uvLight, c.path)} onChange={(v) => attempt(() => controller.setUvLight({ [c.path]: v }))} />
-        ))}
-        <div className="flex items-center gap-1.5">
-          <button type="button" className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.advanceHeat(10))}>
-            Step heat
-          </button>
-          <button type="button" className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-200 hover:bg-slate-700" onClick={() => attempt(() => controller.clearHeat())}>
-            Cool canvas
-          </button>
-          {state.heat.hotCells > 0 && <span className="text-[11px] text-amber-400">{Math.round(state.heat.max * 100)}% warm</span>}
-        </div>
-      </div>
-      <FerroPanel controller={controller} />
       <TimeMachinePanel controller={controller} />
       <CulturePanel controller={controller} />
       <ErrorLine error={error} />

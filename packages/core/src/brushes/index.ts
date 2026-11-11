@@ -82,6 +82,7 @@ export {
   type BrushEditorSectionId,
   type BrushLibraryGroup,
 } from './ui';
+export { BRUSH_SPECIALTIES, brushSpecialties, brushSpecialtyInfo, isSpecialtyBrush, type BrushSpecialtyInfo, type BrushSpecialtyKind } from './specialty';
 export { createBrushLibraryToolProvider, createBrushLibraryTools, type BrushLibraryToolProviderOptions, type BrushPreviewImage, type BrushPreviewRenderer } from './tools';
 export {
   BRUSH_PACK_FORMATS,

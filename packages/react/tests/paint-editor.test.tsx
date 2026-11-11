@@ -191,7 +191,7 @@ describe('React paint editor', () => {
     render(<BrushPanel controller={c} />);
     const q = <T extends Element>(sel: string) => container.querySelector(sel) as unknown as T;
     // The library is grouped by medium; the filter narrows it.
-    expect([...container.querySelectorAll('[data-testid="brush-library"] [role="group"]')].map((g) => g.getAttribute('aria-label'))).toEqual(['Dry media', 'Ink', 'Paint', 'Spray', 'Other', 'Tools']);
+    expect([...container.querySelectorAll('[data-testid="brush-library"] [role="group"]')].map((g) => g.getAttribute('aria-label'))).toEqual(['Dry media', 'Ink', 'Paint', 'Spray', 'Other', 'Specialty', 'Tools']);
     setValue(q('input[aria-label="Find a brush"]'), 'highlighter');
     expect(container.querySelectorAll('[data-testid="brush-library"] [role="option"]')).toHaveLength(1);
     click(q('[data-testid="brush-library"] [role="option"]'));
@@ -200,7 +200,7 @@ describe('React paint editor', () => {
     expect(q<HTMLInputElement>('input[aria-label="Brush variety"]').value).toBe('highlighter');
     // Facets of the preset, edited: a narrower tip, a pink default colour and a palette colour.
     expect(q('[data-testid="brush-editor"] canvas[aria-label="Brush preview"]')).not.toBeNull();
-    expect([...container.querySelectorAll('[data-testid="brush-editor"] section')].map((s) => s.getAttribute('data-section'))).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'colour']);
+    expect([...container.querySelectorAll('[data-testid="brush-editor"] section')].map((s) => s.getAttribute('data-section'))).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'specialty', 'colour']);
     setValue(q('input[aria-label="Size"]'), '18');
     setValue(q('input[aria-label="Brush default colour"]'), '#ff6ec7');
     setValue(q('input[aria-label="Add a palette colour"]'), '#ffd1ec');

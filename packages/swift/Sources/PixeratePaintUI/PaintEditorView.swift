@@ -4,7 +4,8 @@ import SwiftUI
 
 /**
  * The paint editor (`PaintEditor`): the toolbar, the brush panel on the left, the canvas, and
- * colour, paper (with the light for thick paint), layers (with light spill and the stroke layer's
+ * colour, paper (with the light for thick paint), specialty paint (UV blacklight, heat, magnets,
+ * view tilt), layers (with light spill and the stroke layer's
  * strokes), layer styles and wet paint on the right. Wet paint keeps flowing: the view ticks the
  * simulation every frame (`runWetClock`), living biopaint grows live (`runCultureClock`), and
  * live effect paint plays (`runEffectClock`). With an effects provider registered, an Effects tab
@@ -49,7 +50,8 @@ public struct PaintEditorView: View {
                 Divider()
                 VStack(spacing: 0) {
                     Picker("Panels", selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
-                        ForEach(model.tabs) { Text($0.label).tag($0) }
+                        // The Specialty tab is marked while specialty paint is in play.
+                        ForEach(model.tabs) { t in Text(t == .specialty && model.specialtyInPlay ? "\(t.label) •" : t.label).tag(t) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -59,6 +61,7 @@ public struct PaintEditorView: View {
                             switch model.tab {
                             case .color: PaintColorPanel(model: model)
                             case .paper: PaintPaperPanel(model: model)
+                            case .specialty: PaintSpecialtyPanel(model: model)
                             case .layers:
                                 PaintLayersPanel(model: model)
                                 PaintLightSpillPanel(model: model)
