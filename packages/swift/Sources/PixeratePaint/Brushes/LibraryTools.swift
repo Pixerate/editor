@@ -159,6 +159,7 @@ func brushSummary(_ e: BrushLibraryEntry, withCheck: Bool) -> JSONValue {
     if let v = b["variety"] { o["variety"] = v }
     if let t = b["tool"] { o["tool"] = t }
     o["category"] = .string(resolveCategory(b, engine))
+    if let family = resolveFamily(b, engine) { o["family"] = .string(family) }
     o["engine"] = .string(engine)
     o["tip"] = b.path("tip.shape") ?? .null
     if let s = b.path("tip.size") { o["size"] = s }
@@ -218,7 +219,7 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
     var h: [String: PaintToolHandler] = [:]
     h["list_brush_presets"] = { a in
         let source = a["source"]?.stringValue == "all" ? nil : a["source"]?.stringValue
-        let found = library.list(BrushFilter(kind: a["kind"]?.stringValue, medium: a["medium"]?.stringValue, variety: a["variety"]?.stringValue, tool: a["tool"]?.stringValue, tag: a["tag"]?.stringValue, text: a["text"]?.stringValue, source: source)).filter { a["all"] == .bool(true) || checkBrush($0.brush, profile).ok }
+        let found = library.list(BrushFilter(kind: a["kind"]?.stringValue, medium: a["medium"]?.stringValue, family: a["family"]?.stringValue, variety: a["variety"]?.stringValue, tool: a["tool"]?.stringValue, tag: a["tag"]?.stringValue, text: a["text"]?.stringValue, source: source)).filter { a["all"] == .bool(true) || checkBrush($0.brush, profile).ok }
         let offset = Int(a["offset"]?.numberValue ?? 0)
         let page = found.dropFirst(offset).prefix(Int(a["limit"]?.numberValue ?? 100))
         return ["host": .string(profile.id), "total": .number(Double(found.count)), "brushes": .array(page.map { brushSummary($0, withCheck: a["all"] == .bool(true)) })]
@@ -226,7 +227,9 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
     h["describe_brush"] = { a in
         let e = try entry(a["id"]?.stringValue ?? "")
         let engine = resolveEngine(e.brush)
-        return ["brush": .object(e.brush), "builtin": .bool(e.builtin), "engine": .string(engine), "category": .string(resolveCategory(e.brush, engine)), "check": .object(checkBrush(e.brush, profile).json)]
+        var out: JSONObject = ["brush": .object(e.brush), "builtin": .bool(e.builtin), "engine": .string(engine), "category": .string(resolveCategory(e.brush, engine)), "check": .object(checkBrush(e.brush, profile).json)]
+        if let family = resolveFamily(e.brush, engine) { out["family"] = .string(family) }
+        return .object(out)
     }
     h["check_brush"] = { a in
         if (a["id"] == nil) == (a["brush"] == nil) { throw BrushLibraryError(.invalid, "Give either id (a library brush) or brush (a spec), not both or neither.") }

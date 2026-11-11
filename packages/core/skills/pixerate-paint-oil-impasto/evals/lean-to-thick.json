@@ -3,7 +3,7 @@
 	"fixture": { "editor": "paint", "width": 64, "height": 64, "setup": [{ "tool": "set_paper", "args": { "preset": "cotton-canvas" } }] },
 	"checks": [
 		{ "why": "thin paint first", "tool": "list_strokes", "expect": { "strokes": { "$expr": "v.length >= 2 && ['oil-round', 'oil-flat', 'bristle-flat', 'bristle-round', 'dry-brush'].includes(v[0].brushId)" } } },
-		{ "why": "thick paint after it", "tool": "list_strokes", "expect": { "strokes": { "$expr": "v.slice(1).some((s) => ['impasto-brush', 'palette-knife', 'paint-tube', 'gloop-pen'].includes(s.brushId))" } } },
+		{ "why": "thick paint after it", "tool": "list_strokes", "expect": { "strokes": { "$expr": "v.slice(1).some((s) => ['impasto-brush', 'paint-tube', 'gloop-pen', 'metallic-paint'].includes(s.brushId))" } } },
 		{ "why": "the thick paint stands up from the canvas", "tool": "get_relief", "expect": { "relief": { "maxHeight": { "$min": 50 } } } }
 	],
 	"solution": [

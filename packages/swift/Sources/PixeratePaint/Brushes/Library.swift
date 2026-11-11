@@ -35,14 +35,17 @@ public struct BrushLibraryEntry: Sendable {
 public struct BrushFilter {
     public var kind: String?
     public var medium: String?
+    /// Marks of this family (`resolveFamily`).
+    public var family: String?
     public var variety: String?
     public var tool: String?
     public var tag: String?
     public var text: String?
     public var source: String?
-    public init(kind: String? = nil, medium: String? = nil, variety: String? = nil, tool: String? = nil, tag: String? = nil, text: String? = nil, source: String? = nil) {
+    public init(kind: String? = nil, medium: String? = nil, family: String? = nil, variety: String? = nil, tool: String? = nil, tag: String? = nil, text: String? = nil, source: String? = nil) {
         self.kind = kind
         self.medium = medium
+        self.family = family
         self.variety = variety
         self.tool = tool
         self.tag = tag
@@ -72,6 +75,7 @@ private func matches(_ entry: BrushLibraryEntry, _ f: BrushFilter) -> Bool {
     if let m = f.medium, b["medium"]?.stringValue != m { return false }
     if let v = f.variety, b["variety"]?.stringValue != v { return false }
     if let t = f.tool, b["tool"]?.stringValue != t { return false }
+    if let fam = f.family, resolveFamily(b) != fam { return false }
     let tags = (b["tags"]?.arrayValue ?? []).compactMap(\.stringValue)
     if let t = f.tag, !tags.contains(t) { return false }
     if let q = f.text {

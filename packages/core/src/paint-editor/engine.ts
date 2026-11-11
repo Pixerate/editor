@@ -175,6 +175,8 @@ export class PenDabWalker {
   private firstT: number | null = null;
   private speed: number | null = null;
   private travelled = 0;
+  /** Path distance of the last dab laid (`null` before the first). */
+  private lastLaid: number | null = null;
 
   constructor(
     readonly brush: PaintBrush,
@@ -329,8 +331,19 @@ export class PenDabWalker {
     }
   }
 
+  /**
+   * Lays a dab at the last point fed when the path has gone at least `fraction` of a spacing
+   * step past the last dab, so a stroke ends with a mark at its end. Call after `finish`.
+   */
+  layEnd(out: PenDab[], fraction = 0.5): void {
+    const s = this.last;
+    if (!s || this.lastLaid === null) return;
+    if (s.travel - this.lastLaid >= fraction * this.stepLen(s) - 1e-9) this.lay(s, out);
+  }
+
   /** The dabs of one spacing step: `dynamics.count` of them, each with its own index and so its own jitter. */
   private lay(s: Sample, out: PenDab[]): void {
+    this.lastLaid = s.travel;
     const n = this.brush.dynamics.count ?? 1;
     for (let k = 0; k < n; k++) out.push(this.dab(s));
   }

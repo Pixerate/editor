@@ -740,9 +740,6 @@ export class ThickStrokeDriver {
     }
     const off = this.init.target.offset;
     const k = Math.min(1, d.alpha * d.opacity * b.tip.opacity) * st.amount;
-    const thick = im.thickness * (1 - 0.8 * im.thinner);
-    // The paint runs out along the stroke.
-    st.amount *= 1 - 0.06 * (1 - im.load);
     // Across-the-stroke coordinate for bristle ridges and the roller's stipple.
     const nxs = Math.sin(d.direction);
     const nys = Math.cos(d.direction);
@@ -756,6 +753,9 @@ export class ThickStrokeDriver {
       if (this.film && b.iridescence) this.film.deposit(rect, tip, k * 0.6, b.iridescence, d.pressure);
       return;
     }
+    const thick = im.thickness * (1 - 0.8 * im.thinner);
+    // The paint runs out along the stroke (a knife carries none, so it never runs out).
+    st.amount *= 1 - 0.06 * (1 - im.load);
     // Colour: the exchange mixes the brush paint with the wet paint it picks up (like oil).
     const ex = st.exchange;
     let flow = 1;

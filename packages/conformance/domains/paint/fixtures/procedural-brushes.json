@@ -588,6 +588,7 @@
                     "pressureOpacity": true,
                     "smoothing": 0.1
                   },
+                  "family": "glow",
                   "id": "sparkle-dust",
                   "kind": "mark",
                   "marks": {

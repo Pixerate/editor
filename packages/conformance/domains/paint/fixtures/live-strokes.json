@@ -476,6 +476,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -665,6 +666,7 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "family": "ink",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -866,6 +868,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -1055,6 +1058,7 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "family": "ink",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -1256,6 +1260,7 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "family": "ink",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -1448,6 +1453,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -1646,6 +1652,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -2202,6 +2209,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -2391,6 +2399,7 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "family": "ink",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -2592,6 +2601,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -2781,6 +2791,7 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "family": "ink",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -2982,6 +2993,7 @@
                           "velocitySize": -0.45
                         },
                         "engine": "dab",
+                        "family": "ink",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -3174,6 +3186,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,
@@ -3372,6 +3385,7 @@
                           "velocitySize": 0
                         },
                         "engine": "dab",
+                        "family": "dry",
                         "ferro": {
                           "amount": 0,
                           "threshold": 0.12,

@@ -20,6 +20,7 @@
               "builtin": true,
               "category": "marker",
               "engine": "dab",
+              "family": "ink",
               "id": "marker",
               "kind": "mark",
               "marks": "continuous",
@@ -34,6 +35,7 @@
               "builtin": true,
               "category": "ink",
               "engine": "dab",
+              "family": "ink",
               "id": "ink-pen",
               "kind": "mark",
               "marks": "continuous",
@@ -48,6 +50,7 @@
               "builtin": true,
               "category": "ink",
               "engine": "dab",
+              "family": "ink",
               "id": "brush-pen",
               "kind": "mark",
               "marks": "continuous",
@@ -62,6 +65,7 @@
               "builtin": true,
               "category": "marker",
               "engine": "dab",
+              "family": "ink",
               "id": "rainbow-marker",
               "kind": "mark",
               "marks": "continuous",
@@ -76,6 +80,7 @@
               "builtin": true,
               "category": "watercolor",
               "engine": "wet",
+              "family": "living",
               "id": "coral-ink",
               "kind": "mark",
               "marks": "continuous",
@@ -106,6 +111,7 @@
               "smoothing": 0.5,
               "velocitySize": -0.45
             },
+            "family": "ink",
             "id": "ink-pen",
             "kind": "mark",
             "medium": "ink",
@@ -123,7 +129,8 @@
             "issues": [],
             "ok": true
           },
-          "engine": "dab"
+          "engine": "dab",
+          "family": "ink"
         }
       }
     },
@@ -167,6 +174,7 @@
               "smoothing": 0.5,
               "velocitySize": -0.45
             },
+            "family": "ink",
             "id": "my-pen",
             "kind": "mark",
             "medium": "ink",
@@ -204,6 +212,7 @@
               "smoothing": 0.5,
               "velocitySize": -0.45
             },
+            "family": "ink",
             "id": "my-pen",
             "kind": "mark",
             "medium": "ink",
@@ -244,6 +253,7 @@
               "smoothing": 0.5,
               "velocitySize": -0.45
             },
+            "family": "ink",
             "id": "my-pen-2",
             "kind": "mark",
             "medium": "ink",
@@ -282,6 +292,7 @@
                   "smoothing": 0.5,
                   "velocitySize": -0.45
                 },
+                "family": "ink",
                 "id": "my-pen",
                 "kind": "mark",
                 "medium": "ink",
@@ -304,6 +315,7 @@
                   "smoothing": 0.5,
                   "velocitySize": -0.45
                 },
+                "family": "ink",
                 "id": "my-pen-2",
                 "kind": "mark",
                 "medium": "ink",
@@ -390,6 +402,7 @@
               "builtin": false,
               "category": "ink",
               "engine": "dab",
+              "family": "ink",
               "id": "my-pen",
               "kind": "mark",
               "marks": "continuous",
@@ -407,6 +420,7 @@
               "builtin": false,
               "category": "ink",
               "engine": "dab",
+              "family": "ink",
               "id": "imported",
               "kind": "mark",
               "marks": "continuous",

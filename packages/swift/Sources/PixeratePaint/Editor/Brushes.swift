@@ -13,6 +13,8 @@ import PixerateRaster
 public let PAINT_BRUSH_ENGINES = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker", "antimatter", "scraper", "vortex"]
 public let ANTIMATTER_INVERT_MODES = ["rgb", "oklab"]
 public let PAINT_BRUSH_CATEGORIES = ["pencil", "pastel", "charcoal", "airbrush", "marker", "ink", "paint", "eraser", "blender", "smudge", "mixer", "watercolor", "wet-tool", "oil", "impasto", "procedural", "bristle", "sticker", "light", "custom"]
+/// What a paint does, beside its medium category (`PaintFamily` in the TypeScript core). Tools have none.
+public let PAINT_FAMILIES = ["dry", "ink", "wet", "thick", "metallic", "spray", "glow", "iridescent", "strands", "stickers", "living", "ethereal", "volatile", "reactive"]
 public let WET_TOOLS = ["paint", "water", "dry", "blow", "blend", "smudge", "blot", "vortex"]
 public let VORTEX_DIRECTIONS = ["follow", "cw", "ccw"]
 public let WET_MEDIA = ["watercolor", "gouache", "oil"]
@@ -573,6 +575,8 @@ public struct PaintBrush: Equatable, Sendable {
     public var id: String
     public var name: String
     public var category: String
+    /// What the paint does (`PAINT_FAMILIES`); tools and scrapers have none.
+    public var family: String? = nil
     public var engine: String
     public var tip: BrushSettings
     public var grain: Double
@@ -626,6 +630,15 @@ public struct PaintBrush: Equatable, Sendable {
             "antimatter": antimatter.json,
             "scraper": scraper.json,
         ]
+        if let family {
+            // TS key order: the family follows the engine.
+            var keyed = JSONObject()
+            for (k, v) in o {
+                keyed[k] = v
+                if k == "engine" { keyed["family"] = .string(family) }
+            }
+            o = keyed
+        }
         if let vortex { o["vortex"] = vortex.json }
         o["light"] = light.json
         o["fluorescence"] = fluorescence.json
@@ -653,6 +666,7 @@ public func usesPaintExchange(_ brush: PaintBrush, _ gradient: Bool? = nil) -> B
 /// Whether strokes of a brush paint colour, so gradient paint applies.
 public func brushTakesPaint(_ brush: PaintBrush) -> Bool {
     if brush.engine == "eraser" || brush.engine == "blender" || brush.engine == "smudge" || brush.engine == "scraper" { return false }
+    if brush.engine == "impasto" { return brush.loadsColor }
     if brush.engine == "vortex" { return brushVortex(brush).ink > 0 }
     if brush.engine == "wet" { return brush.wet.tool == "paint" || (brush.wet.tool == "vortex" && brushVortex(brush).ink > 0) }
     if brush.engine == "mixer" { return brush.loadsColor }
@@ -844,6 +858,7 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
         id: id,
         name: name,
         category: raw["category"]?.stringValue.flatMap { PAINT_BRUSH_CATEGORIES.contains($0) ? $0 : nil } ?? b.category,
+        family: raw["family"] == .null ? nil : raw["family"]?.stringValue.flatMap { PAINT_FAMILIES.contains($0) ? $0 : nil } ?? b.family,
         engine: engine,
         tip: normalizeBrushSettings(tipRaw),
         grain: unitValue(raw["grain"], b.grain),
@@ -886,4 +901,55 @@ public func normalizePaintBrush(_ raw: JSONObject, _ base: PaintBrush? = nil) ->
 /// `normalizePaintBrush(brush, brush)`: a brush read again over itself (a copy in range).
 public func renormalized(_ brush: PaintBrush) -> PaintBrush {
     normalizePaintBrush(brush.json(), brush)
+}
+
+// MARK: - Groupings
+
+/**
+ * One group of a brush grouping (`PaintBrushGroup`): its `id`, display `label`, and which brushes
+ * it holds: those whose `facet` (`category` or `family`) is one of `values`.
+ */
+public struct PaintBrushGroup: Equatable, Sendable {
+    public var id: String
+    public var label: String
+    public var facet: String
+    public var values: [String]
+
+    public init(id: String, label: String, facet: String, values: [String]) {
+        self.id = id
+        self.label = label
+        self.facet = facet
+        self.values = values
+    }
+
+    /// Whether the group holds `brush`.
+    public func holds(_ brush: PaintBrush) -> Bool {
+        guard let v = facet == "family" ? brush.family : brush.category else { return false }
+        return values.contains(v)
+    }
+}
+
+/**
+ * The ways a host can group its brush library (`PAINT_GROUPINGS`), in display order, read from the
+ * paint UI contract (`ui.json` `paintGroupings`): `byMedium` groups by the medium `category`,
+ * `byFamily` by what the paint does (`family`), with the tools last.
+ */
+public enum PAINT_GROUPINGS {
+    private static func read(_ key: String) -> [PaintBrushGroup] {
+        guard let list = (try? PaintContracts.json("ui.json"))?.objectValue?["paintGroupings"]?.objectValue?[key]?.arrayValue else { return [] }
+        return list.compactMap { v in
+            guard let o = v.objectValue, let id = o["id"]?.stringValue, let label = o["label"]?.stringValue, let facet = o["facet"]?.stringValue else { return nil }
+            return PaintBrushGroup(id: id, label: label, facet: facet, values: (o["values"]?.arrayValue ?? []).compactMap(\.stringValue))
+        }
+    }
+
+    /// Grouped by the medium `category` (pencils, inks, watercolour…).
+    public static let byMedium: [PaintBrushGroup] = read("byMedium")
+    /// Grouped by what the paint does (`family`), with the tools last.
+    public static let byFamily: [PaintBrushGroup] = read("byFamily")
+}
+
+/// The id of the first group of `grouping` that holds `brush`, or nil when none does.
+public func paintBrushGroup(_ grouping: [PaintBrushGroup], _ brush: PaintBrush) -> String? {
+    grouping.first { $0.holds(brush) }?.id
 }

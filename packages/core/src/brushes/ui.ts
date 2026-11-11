@@ -10,7 +10,7 @@
  */
 
 import { BLEND_MODES } from '../raster/blend';
-import { BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
+import { BRUSH_ROTATIONS, IMPASTO_TOOLS, LIVE_PATTERN_KINDS, MAX_BRUSH_SIZE, PAINT_FAMILIES, WET_MEDIA, type PaintFamily } from '../paint-editor/brushes';
 import { BRUSH_SLIDERS, brushEngineControls, type SliderControl } from '../paint-editor/brush-controls';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, INVERT_MODES, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS, STICKER_FRAME_MODES, VORTEX_DIRECTIONS } from '../paint-editor/mark-settings';
 import { BrushLibraryError, type AddBrushSourceResult, type BrushLibrary, type BrushLibraryEntry, type SaveBrushResult } from './library';
@@ -71,7 +71,8 @@ const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g
 const options = (values: readonly string[], labels: Readonly<Record<string, string>> = {}) => values.map((value) => ({ value, label: labels[value] ?? title(value) }));
 
 const MEDIUM_LABELS: Readonly<Record<BrushMedium, string>> = { paint: 'Paint', ink: 'Ink', dry: 'Dry media', spray: 'Spray' };
-const TOOL_LABELS: Readonly<Record<BrushTool, string>> = { eraser: 'Eraser', blender: 'Blender', smudge: 'Smudge', water: 'Add water', dryer: 'Dry', blow: 'Blow', blot: 'Blot', 'wet-blend': 'Wet blend', 'wet-drag': 'Wet smudge' };
+const TOOL_LABELS: Readonly<Record<BrushTool, string>> = { eraser: 'Eraser', blender: 'Blender', smudge: 'Smudge', water: 'Add water', dryer: 'Dry', blow: 'Blow', blot: 'Blot', 'wet-blend': 'Wet blend', 'wet-drag': 'Wet smudge', knife: 'Palette knife' };
+const FAMILY_LABELS: Readonly<Record<PaintFamily, string>> = { dry: 'Dry', ink: 'Ink', wet: 'Wet', thick: 'Thick', metallic: 'Metallic', spray: 'Spray', glow: 'Glow', iridescent: 'Iridescent', strands: 'Strands', stickers: 'Stickers', living: 'Living', ethereal: 'Ethereal', volatile: 'Volatile', reactive: 'Reactive' };
 const SHAPE_LABELS: Readonly<Record<string, string>> = { round: 'Round', flat: 'Flat', chisel: 'Chisel', bristle: 'Bristle', stamp: 'Stamp' };
 const MARKS_LABELS: Readonly<Record<string, string>> = { continuous: 'Continuous', scatter: 'Spray', particles: 'Particles', objects: 'Stickers', antimatter: 'Antimatter', scraper: 'Scraper', vortex: 'Vortex' };
 /** How an animated sticker's frames are picked along a stroke (`marks.frameMode`). */
@@ -168,6 +169,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     profile.kinds.length > 1 && profile.kinds.includes(brush.kind) && choice('kind', 'Kind', options(profile.kinds, { mark: 'Lays a material', tool: 'Works on paint' })),
     !isTool && choice('medium', 'Medium', [{ value: '', label: 'Any' }, ...options(BRUSH_MEDIA, MEDIUM_LABELS)], ''),
     !isTool && withNote({ kind: 'text', path: 'variety', label: 'Variety', ariaLabel: 'Brush variety', value: brush.variety ?? '', placeholder: 'pencil, oil, highlighter…' }),
+    !isTool && choice('family', 'Family', [{ value: '', label: 'Automatic' }, ...options(PAINT_FAMILIES, FAMILY_LABELS)], ''),
     isTool && !!brush.tool && profile.tools.includes(brush.tool) && choice('tool', 'Tool', options(profile.tools, TOOL_LABELS)),
   ]);
 
@@ -243,7 +245,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
     full(profile.grain) && slider({ path: 'grain', label: 'Grain', min: 0, max: 1, step: 0.01 }, 'behaviour.grain'),
     engine === 'wet' && engineOk && !isTool && choice('behaviour.wet.medium', 'Medium', options(WET_MEDIA, WET_MEDIUM_LABELS), 'watercolor'),
-    engine === 'impasto' && engineOk && choice('behaviour.thick.applicator', 'Tool', options(IMPASTO_TOOLS, APPLICATOR_LABELS), 'brush'),
+    engine === 'impasto' && engineOk && !isTool && choice('behaviour.thick.applicator', 'Tool', options(IMPASTO_TOOLS, APPLICATOR_LABELS), 'brush'),
     ...engineSliders.map((c) => (exchangeOk(facetOf(c.path)) ? slider(c) : null)),
     engineOk && engineControls?.mixingPath && (engine === 'wet' || exchangeFull) && fieldOf('behaviour.mixing') && choice('behaviour.mixing', 'Mixing', options(['pigment', 'rgb'], { pigment: 'Pigment', rgb: 'RGB' })),
     engineOk && engineControls?.dirty && exchangeFull && fieldOf('behaviour.exchange.dirty') && toggle('behaviour.exchange.dirty', 'Dirty brush'),
@@ -477,6 +479,7 @@ export function setBrushEditorValue(brush: Brush, path: string, value: unknown):
     if (value === 'tool') {
       delete next.medium;
       delete next.variety;
+      delete next.family;
       delete next.marks;
       delete next.light;
       delete next.fluorescence;

@@ -20,6 +20,7 @@
               "pressureSmoothing": 0.25,
               "smoothing": 0.35
             },
+            "family": "living",
             "id": "mutation-ink",
             "kind": "mark",
             "medium": "ink",
@@ -260,6 +261,7 @@
               "pressureSmoothing": 0.25,
               "smoothing": 0.35
             },
+            "family": "living",
             "id": "mutation-ink",
             "kind": "mark",
             "medium": "ink",

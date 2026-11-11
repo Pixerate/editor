@@ -36,7 +36,8 @@
           "blow",
           "blot",
           "wet-blend",
-          "wet-drag"
+          "wet-drag",
+          "knife"
         ]
       },
       "description": "Tools it has (kind tool)."

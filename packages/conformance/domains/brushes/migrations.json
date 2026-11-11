@@ -17,6 +17,7 @@
       "name": "Plain",
       "category": "custom",
       "engine": "dab",
+      "family": "wet",
       "tip": {
         "size": 20,
         "hardness": 1,
@@ -186,6 +187,7 @@
       "name": "6B pencil",
       "category": "pencil",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 7,
         "hardness": 0.55,
@@ -378,6 +380,7 @@
       "name": "6B pencil",
       "category": "pencil",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 7,
         "hardness": 0.55,
@@ -547,6 +550,7 @@
       "name": "My pastel",
       "category": "custom",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 50,
         "hardness": 0.55,
@@ -712,6 +716,7 @@
       "id": "my-pastel",
       "name": "My pastel",
       "kind": "mark",
+      "family": "dry",
       "tip": {
         "shape": "flat",
         "size": 50,
@@ -739,6 +744,7 @@
       "name": "My pastel",
       "category": "custom",
       "engine": "dab",
+      "family": "dry",
       "tip": {
         "size": 50,
         "hardness": 0.55,
@@ -908,6 +914,7 @@
       "name": "Mixer Brush",
       "category": "mixer",
       "engine": "mixer",
+      "family": "wet",
       "tip": {
         "size": 30,
         "hardness": 0.7,
@@ -1099,6 +1106,7 @@
       "name": "Mixer Brush",
       "category": "mixer",
       "engine": "mixer",
+      "family": "wet",
       "tip": {
         "size": 30,
         "hardness": 0.7,
@@ -1268,6 +1276,7 @@
       "name": "Wash brush",
       "category": "watercolor",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 90,
         "hardness": 0.35,
@@ -1466,6 +1475,7 @@
       "name": "Wash brush",
       "category": "watercolor",
       "engine": "wet",
+      "family": "wet",
       "tip": {
         "size": 90,
         "hardness": 0.35,
@@ -1635,6 +1645,7 @@
       "name": "Impasto brush",
       "category": "impasto",
       "engine": "impasto",
+      "family": "thick",
       "tip": {
         "size": 36,
         "hardness": 0.8,
@@ -1830,6 +1841,7 @@
       "name": "Impasto brush",
       "category": "impasto",
       "engine": "impasto",
+      "family": "thick",
       "tip": {
         "size": 36,
         "hardness": 0.8,
@@ -1999,6 +2011,7 @@
       "name": "Hair strands",
       "category": "procedural",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 40,
         "hardness": 0.8,
@@ -2190,6 +2203,7 @@
       "name": "Hair strands",
       "category": "procedural",
       "engine": "particle",
+      "family": "strands",
       "tip": {
         "size": 40,
         "hardness": 0.8,
@@ -2359,6 +2373,7 @@
       "name": "Bristle round",
       "category": "bristle",
       "engine": "bristle",
+      "family": "wet",
       "tip": {
         "size": 30,
         "hardness": 0.85,
@@ -2552,6 +2567,7 @@
       "name": "Bristle round",
       "category": "bristle",
       "engine": "bristle",
+      "family": "wet",
       "tip": {
         "size": 30,
         "hardness": 0.85,
@@ -2721,6 +2737,7 @@
       "name": "Star stickers",
       "category": "sticker",
       "engine": "sticker",
+      "family": "stickers",
       "tip": {
         "size": 36,
         "hardness": 1,
@@ -2912,6 +2929,7 @@
       "name": "Star stickers",
       "category": "sticker",
       "engine": "sticker",
+      "family": "stickers",
       "tip": {
         "size": 36,
         "hardness": 1,
@@ -3082,6 +3100,7 @@
       "name": "Rainbow marker",
       "category": "marker",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 18,
         "hardness": 0.9,
@@ -3341,6 +3360,7 @@
       "name": "Rainbow marker",
       "category": "marker",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 18,
         "hardness": 0.9,
@@ -4255,6 +4275,7 @@
       "name": "Spray can",
       "category": "airbrush",
       "engine": "dab",
+      "family": "spray",
       "tip": {
         "size": 60,
         "hardness": 0.9,
@@ -4448,6 +4469,7 @@
       "name": "Spray can",
       "category": "airbrush",
       "engine": "dab",
+      "family": "spray",
       "tip": {
         "size": 60,
         "hardness": 0.9,
@@ -4620,6 +4642,7 @@
       "name": "Ink with mixer settings",
       "category": "ink",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 4,
         "hardness": 1,
@@ -4803,6 +4826,7 @@
       "name": "Ink with mixer settings",
       "category": "ink",
       "engine": "dab",
+      "family": "ink",
       "tip": {
         "size": 4,
         "hardness": 1,

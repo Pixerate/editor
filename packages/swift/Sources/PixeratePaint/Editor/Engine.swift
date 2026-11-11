@@ -188,6 +188,8 @@ final class PenDabWalker {
     private var firstT: Double?
     private var speed: Double?
     private var travelled = 0.0
+    /// Path distance of the last dab laid (nil before the first).
+    private var lastLaid: Double?
 
     init(_ brush: PaintBrush, _ seed: Int = 0, _ linear: Linear2 = [1, 0, 0, 1]) {
         self.brush = brush
@@ -315,7 +317,17 @@ final class PenDabWalker {
     }
 
     /// The dabs of one spacing step: `dynamics.count` of them, each with its own index and so its own jitter.
+    /**
+     * Lays a dab at the last point fed when the path has gone at least `fraction` of a spacing
+     * step past the last dab, so a stroke ends with a mark at its end. Call after `finish`.
+     */
+    func layEnd(_ out: inout [PenDab], _ fraction: Double = 0.5) {
+        guard let s = last, let laid = lastLaid else { return }
+        if s.travel - laid >= fraction * stepLen(s) - 1e-9 { lay(s, &out) }
+    }
+
     private func lay(_ s: Sample, _ out: inout [PenDab]) {
+        lastLaid = s.travel
         for _ in 0..<(brush.dynamics.count ?? 1) { out.append(dab(s)) }
     }
 }

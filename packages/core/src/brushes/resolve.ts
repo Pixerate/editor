@@ -16,6 +16,7 @@ import {
   type PaintBrushCategory,
   type PaintBrushEngine,
   type PaintBrushInput,
+  type PaintFamily,
   type WetMediumKind,
   type WetTool,
 } from '../paint-editor/brush-model';
@@ -182,7 +183,7 @@ const copy = <T>(v: T): T => (v !== null && typeof v === 'object' ? (JSON.parse(
  * reservoir makes a Mixer Brush); everything else paints dabs.
  */
 export function resolveEngine(brush: Pick<Brush, 'kind' | 'tool' | 'tip' | 'marks' | 'behaviour'>): PaintBrushEngine {
-  if (brush.kind === 'tool') return brush.tool === 'eraser' || brush.tool === 'blender' || brush.tool === 'smudge' ? brush.tool : 'wet';
+  if (brush.kind === 'tool') return brush.tool === 'eraser' || brush.tool === 'blender' || brush.tool === 'smudge' ? brush.tool : brush.tool === 'knife' ? 'impasto' : 'wet';
   if (brush.marks?.kind === 'antimatter') return 'antimatter';
   if (brush.marks?.kind === 'vortex') return brush.behaviour?.surface === 'wet' ? 'wet' : 'vortex';
   if (brush.marks?.kind === 'particles') return 'particle';
@@ -222,7 +223,7 @@ export function resolveWetMedium(brush: Pick<Brush, 'variety' | 'behaviour'>): W
  * watercolour, the Mixer Brush); dab brushes by variety, then medium.
  */
 export function resolveCategory(brush: Brush, engine: PaintBrushEngine = resolveEngine(brush)): PaintBrushCategory {
-  if (brush.kind === 'tool') return brush.tool === 'eraser' || brush.tool === 'blender' || brush.tool === 'smudge' ? brush.tool : 'wet-tool';
+  if (brush.kind === 'tool') return brush.tool === 'eraser' || brush.tool === 'blender' || brush.tool === 'smudge' ? brush.tool : brush.tool === 'knife' ? 'smudge' : 'wet-tool';
   if ((brush.light?.amount ?? 0) > 0) return 'light';
   switch (engine) {
     case 'particle':
@@ -244,6 +245,33 @@ export function resolveCategory(brush: Brush, engine: PaintBrushEngine = resolve
   }
 }
 
+/**
+ * What a paint does (`PaintFamily`): the brush's own `family` when it names one, else derived
+ * from its facets: antimatter and vortices are volatile; ghost and fluorescent paint ethereal;
+ * thermochromic and ferrofluid paint reactive; culture, mutation and live patterns living; thin
+ * films iridescent; light paint glow; objects stickers; particles strands; thick paint metallic
+ * or thick; spray marks spray; then the medium (dry, ink; paint is wet). Tools and scrapers,
+ * which lay no paint, have none (`undefined`).
+ */
+export function resolveFamily(brush: Brush, engine: PaintBrushEngine = resolveEngine(brush)): PaintFamily | undefined {
+  if (brush.kind === 'tool' || engine === 'scraper') return undefined;
+  if (brush.family) return brush.family;
+  const marks = brush.marks?.kind;
+  if (marks === 'antimatter' || marks === 'vortex') return 'volatile';
+  if (brush.ghost || (brush.fluorescence?.amount ?? 0) > 0) return 'ethereal';
+  if (brush.thermochromic || brush.ferro) return 'reactive';
+  if (brush.culture || brush.mutation || brush.livePatterns) return 'living';
+  if (brush.iridescence) return 'iridescent';
+  if ((brush.light?.amount ?? 0) > 0) return 'glow';
+  if (engine === 'sticker') return 'stickers';
+  if (engine === 'particle') return 'strands';
+  if (engine === 'impasto') return (brush.behaviour?.thick?.metallic ?? 0) > 0 ? 'metallic' : 'thick';
+  if (marks === 'scatter' || brush.medium === 'spray') return 'spray';
+  if (brush.medium === 'dry') return 'dry';
+  if (brush.medium === 'ink') return 'ink';
+  return 'wet';
+}
+
 export interface ResolveBrushOptions {
   /** Mark the result built-in (a library's presets). */
   builtin?: boolean;
@@ -256,7 +284,8 @@ export interface ResolveBrushOptions {
  */
 export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): ResolvedBrush {
   const engine = resolveEngine(brush);
-  const input: Record<string, unknown> = { id: brush.id, name: brush.name, category: resolveCategory(brush, engine), engine };
+  const family = resolveFamily(brush, engine);
+  const input: Record<string, unknown> = { id: brush.id, name: brush.name, category: resolveCategory(brush, engine), ...(family ? { family } : {}), engine };
   for (const field of BRUSH_FIELDS) {
     if (!field.engines.includes(engine) || (field.shapes && !field.shapes.includes(brush.tip.shape)) || (field.marks && !field.marks.includes(brush.marks?.kind ?? 'continuous'))) continue;
     const v = getPath(brush, field.facet);
@@ -275,8 +304,13 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
     if (brush.kind !== 'tool' && brush.ghost) input.ghost = { ...((input.ghost as object | undefined) ?? {}) };
   }
   if (brush.kind !== 'tool' && brush.mutation) input.mutation = { ...((input.mutation as object | undefined) ?? {}) };
-  // Blenders, smudges and scrapers only work on paint already down.
-  if (engine === 'blender' || engine === 'smudge' || engine === 'scraper') input.loadsColor = false;
+  // The palette knife tool: an impasto knife that carries no paint, so it only moves what is down.
+  if (brush.kind === 'tool' && brush.tool === 'knife') {
+    setPath(input, 'impasto.tool', 'knife');
+    setPath(input, 'impasto.load', 0);
+  }
+  // Blenders, smudges, scrapers and the knife only work on paint already down.
+  if (engine === 'blender' || engine === 'smudge' || engine === 'scraper' || (brush.kind === 'tool' && brush.tool === 'knife')) input.loadsColor = false;
   const paint = brush.colour?.default;
   if (paint && typeof paint === 'object' && 'type' in paint && paint.type === 'gradient') input.paint = copy(paint);
   return normalizePaintBrush({ ...(input as PaintBrushInput), ...(options.builtin ? { builtin: true } : {}) });

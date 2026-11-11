@@ -12,7 +12,7 @@ import PixerateRaster
  */
 
 public let BRUSH_KINDS = ["mark", "tool"]
-public let BRUSH_TOOLS = ["eraser", "blender", "smudge", "water", "dryer", "blow", "blot", "wet-blend", "wet-drag"]
+public let BRUSH_TOOLS = ["eraser", "blender", "smudge", "water", "dryer", "blow", "blot", "wet-blend", "wet-drag", "knife"]
 /// The tools that work on the wet layer.
 public let WET_BRUSH_TOOLS = ["water", "dryer", "blow", "blot", "wet-blend", "wet-drag"]
 public let MAX_BRUSH_PALETTE = 16
@@ -165,7 +165,7 @@ private func readPaint(_ value: JSONValue, _ path: String, _ problems: inout [St
 }
 
 /// The facet order of a hand-written brush.
-let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "culture", "motion", "colour", "livePatterns"]
+let BRUSH_KEY_ORDER = ["id", "name", "description", "tags", "kind", "medium", "variety", "family", "tool", "tip", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "culture", "motion", "colour", "livePatterns"]
 
 func orderedBrush(_ brush: JSONObject) -> Brush {
     var out = Brush()
@@ -270,6 +270,10 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             drop("marks", "tools lay no marks")
             brush["marks"] = nil
         }
+        if brush["family"] != nil {
+            drop("family", "tools lay no paint, so they have no family")
+            brush["family"] = nil
+        }
         if brush["ferro"] != nil {
             drop("ferro", "tools lay no ferrofluid")
             brush["ferro"] = nil
@@ -357,11 +361,11 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
             drop("behaviour.wet", "it needs surface wet or a wet tool")
             b["wet"] = nil
         }
-        if b["thick"] != nil && b["surface"] != "thick" {
-            drop("behaviour.thick", "it needs surface thick")
+        if b["thick"] != nil && b["surface"] != "thick" && !(kind == "tool" && toolName == "knife") {
+            drop("behaviour.thick", "it needs surface thick (or the knife tool)")
             b["thick"] = nil
         }
-        if b["strength"] != nil && !(kind == "tool" && toolName != "eraser") {
+        if b["strength"] != nil && !(kind == "tool" && toolName != "eraser" && toolName != "knife") {
             drop("behaviour.strength", "only the blender, smudge and wet tools have a strength")
             b["strength"] = nil
         }
@@ -429,7 +433,7 @@ public func normalizeBrushSpec(_ rawValue: JSONValue, _ problems: inout [String]
 // MARK: - Patches (`brushes/patch.ts`)
 
 /// The facets a patch can remove (`unset`), back to the engine's defaults.
-public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "culture", "motion", "colour", "livePatterns"]
+public let UNSETTABLE_BRUSH_FACETS = ["description", "tags", "medium", "variety", "family", "marks", "dynamics", "behaviour", "ghost", "mutation", "light", "fluorescence", "thermochromic", "iridescence", "ferro", "culture", "motion", "colour", "livePatterns"]
 
 /// `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks.
 public func mergeBrushPatch(_ base: JSONObject, _ patch: JSONObject, _ path: String = "") -> JSONObject {

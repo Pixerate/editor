@@ -14,7 +14,8 @@ built-in presets (read-only) and the user's brushes, shared by every editor that
 | --- | --- |
 | Kind | `mark` lays a material; `tool` works on paint already down. |
 | Medium and variety | Marks: what it lays (`paint`, `ink`, `dry`, `spray`) and what kind (`oil`, `watercolor`, `gouache`, `pencil`, `charcoal`, `airbrush`, `marker`, `highlighter`…). Descriptive, for finding brushes; a wet brush whose variety is `watercolor`, `gouache` or `oil` paints that medium. |
-| Tool | Tools: `eraser`, `blender`, `smudge`, and on wet paint `water`, `dryer`, `blow`, `blot`, `wet-blend`, `wet-drag`. |
+| Family | Marks: what the paint does, for grouping a library by behaviour rather than medium: `dry`, `ink`, `wet`, `thick`, `metallic`, `spray`, `glow`, `iridescent`, `strands` (hair, fur, curls, ribbons), `stickers`, `living` (grows or mutates), `ethereal` (ghost, invisible), `volatile` (antimatter, vortices), `reactive` (heat, magnets). Derived from the other facets when not set; set it only when a brush belongs somewhere its facets don't say. Tools have none. |
+| Tool | Tools: `eraser`, `blender`, `smudge`, `knife` (the palette knife: scrapes and spreads thick paint already down, carrying none; `behaviour.thick` `drag` and `gloss`), and on wet paint `water`, `dryer`, `blow`, `blot`, `wet-blend`, `wet-drag`. |
 | Tip | `shape` (`round`, `flat`, `chisel` are ellipses set by `roundness` and `angle`; `bristle` has a tuft; `stamp` takes the shape of `stamps`: an editor stamp `editor:star`, any sticker ref from `find_stickers`, or an image source `source:<id>` from `list_brush_sources`), size in px, hardness (an image tip fades towards its edges below 1), spacing, opacity, flow, blend mode, and `grain`: texture inside each dab (`source`: a pattern such as `rough`, `canvas`, `sanded`, or `source:<id>`; `mode` `texturised` stays put on the canvas, `moving` rolls with the tip; `scale`, `depth`, `contrast`, `invert`). |
 | Marks | `continuous` dabs (default; on a stamp tip every dab is the first stamp's shape, in the paint colour), `scatter` (a spray: droplets across the tip, `density`, `size`), `particles` (strands, springs, ribbons, sparks; textured dots from the stamps), `vortex` (pulls in and winds surrounding paint around the drawn point, open stroke or closed loop: `reach`, `turns`, `pull`, `direction`, `ink`, `duration`; presets `vortex`, `ink-vortex`, `whirlpool`, `wet-vortex`), `objects` (each mark an editable sticker, in its own colours; for animated stickers `frameMode` `perform`, the default, plays the frames by stroke time, `random` picks a seeded frame per mark), `antimatter` (reactive blasts that invert, scorch and annihilate paint across every visible layer in the paint editor; presets `antimatter`, `antimatter-flare`, `antimatter-charge`) or `scraper` (carves through the top visible layers to reveal what is underneath, `depth` 0..1 layers per pass and `sharpness` 0..1; preset `paint-scraper`). |
 | Dynamics | Pen feel: pressure to size and opacity, smoothing, tilt, velocity, jitter (`sizeJitter`, `angleJitter` for rotation, `opacityJitter`, `scatter`), rotation, `count` (dabs per spacing step, each jittered) and `flip` (mirror dabs at random: `x`, `y`, `xy`). |
@@ -72,7 +73,7 @@ drawn.
 
 ## Working method
 
-1. **Find the nearest brush.** `list_brush_presets` with `medium`, `variety`, `kind` or `text`.
+1. **Find the nearest brush.** `list_brush_presets` with `medium`, `family`, `variety`, `kind` or `text`.
    It lists only what this host can render (`all: true` lists the rest with `renderable`).
 2. **Read it.** `describe_brush` for the full spec, the engine it resolves to and its check.
 3. **Make a brush.** `create_brush` with a new `id`, a `name`, `basedOn` the nearest preset and
@@ -163,8 +164,8 @@ drawn.
 
 | Tool | Use |
 | --- | --- |
-| `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, engine, tip, size, marks, surface, light) and `total`. Call first. |
-| `describe_brush` | One brush by `id`: its full facet `brush` (with its `colour`: default, palette, own), `builtin`, `engine`, `category` and `check` for this host (stamp stickers included). Unknown ids are refused with the closest ones. |
+| `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `family`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, family, engine, tip, size, marks, surface, light) and `total`. Call first. |
+| `describe_brush` | One brush by `id`: its full facet `brush` (with its `colour`: default, palette, own), `builtin`, `engine`, `category`, `family` (marks) and `check` for this host (stamp stickers included). Unknown ids are refused with the closest ones. |
 | `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets, `colour` included (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host (and its sticker library, for stamp tips); refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
 | `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes that add what the host can't render; keeps what the brush already had for other hosts. Returns `brush`, `changed` paths, `problems`, `warnings` and, when there are any, `kept` (facets this host can't use, left as they were). |
 | `duplicate_brush` | Copy any brush, built-ins included, to a saved brush (`newId` default `<id>-copy`, `name`). Returns the new `id` and `brush`; then `update_brush` it. |

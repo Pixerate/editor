@@ -580,7 +580,25 @@ public struct SetBrushArguments: Sendable {
         case spray
     }
 
-    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.
+    /// Marks: what the paint does, for grouping a library by family instead of medium: dry, ink, wet, thick, metallic, spray, glow (light paint), iridescent, strands (hair, fur, curls, ribbons), stickers, living (grows or mutates), ethereal (ghost, invisible), volatile (antimatter, vortices) or reactive (heat, magnets).
+    public enum Family: String, CaseIterable, Sendable {
+        case dry
+        case ink
+        case wet
+        case thick
+        case metallic
+        case spray
+        case glow
+        case iridescent
+        case strands
+        case stickers
+        case living
+        case ethereal
+        case volatile
+        case reactive
+    }
+
+    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint; knife scrapes and spreads thick paint already down without adding any (behaviour.thick.drag sets how far it carries).
     public enum Tool: String, CaseIterable, Sendable {
         case eraser
         case blender
@@ -591,6 +609,7 @@ public struct SetBrushArguments: Sendable {
         case blot
         case wetBlend = "wet-blend"
         case wetDrag = "wet-drag"
+        case knife
     }
 
     /// Facets to remove, back to their defaults (applied before the facets given).
@@ -599,6 +618,7 @@ public struct SetBrushArguments: Sendable {
         case tags
         case medium
         case variety
+        case family
         case marks
         case dynamics
         case behaviour
@@ -629,7 +649,9 @@ public struct SetBrushArguments: Sendable {
     public var medium: Medium?
     /// What kind of the medium: oil, watercolor, gouache, pencil, pastel, charcoal, airbrush, marker, highlighter… A wet brush whose variety is watercolor, gouache or oil paints that medium.
     public var variety: String?
-    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.
+    /// Marks: what the paint does, for grouping a library by family instead of medium: dry, ink, wet, thick, metallic, spray, glow (light paint), iridescent, strands (hair, fur, curls, ribbons), stickers, living (grows or mutates), ethereal (ghost, invisible), volatile (antimatter, vortices) or reactive (heat, magnets).
+    public var family: Family?
+    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint; knife scrapes and spreads thick paint already down without adding any (behaviour.thick.drag sets how far it carries).
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
@@ -673,6 +695,7 @@ public struct SetBrushArguments: Sendable {
         kind = try args.enumeration("kind", as: Kind.self)
         medium = try args.enumeration("medium", as: Medium.self)
         variety = try args.string("variety")
+        family = try args.enumeration("family", as: Family.self)
         tool = try args.enumeration("tool", as: Tool.self)
         tip = args.argument("tip")
         marks = args.argument("marks")
@@ -3303,6 +3326,24 @@ public struct ListBrushPresetsArguments: Sendable {
         case spray
     }
 
+    /// Marks of this family: what the paint does (dry, ink, wet, thick, metallic, spray, glow, iridescent, strands, stickers, living, ethereal, volatile, reactive).
+    public enum Family: String, CaseIterable, Sendable {
+        case dry
+        case ink
+        case wet
+        case thick
+        case metallic
+        case spray
+        case glow
+        case iridescent
+        case strands
+        case stickers
+        case living
+        case ethereal
+        case volatile
+        case reactive
+    }
+
     /// Tools that do this.
     public enum Tool: String, CaseIterable, Sendable {
         case eraser
@@ -3314,6 +3355,7 @@ public struct ListBrushPresetsArguments: Sendable {
         case blot
         case wetBlend = "wet-blend"
         case wetDrag = "wet-drag"
+        case knife
     }
 
     /// all (default), builtin presets only, or user (saved) brushes only.
@@ -3327,6 +3369,8 @@ public struct ListBrushPresetsArguments: Sendable {
     public var kind: Kind?
     /// Marks laying this medium.
     public var medium: Medium?
+    /// Marks of this family: what the paint does (dry, ink, wet, thick, metallic, spray, glow, iridescent, strands, stickers, living, ethereal, volatile, reactive).
+    public var family: Family?
     /// This variety (oil, watercolor, pencil, highlighter…).
     public var variety: String?
     /// Tools that do this.
@@ -3348,6 +3392,7 @@ public struct ListBrushPresetsArguments: Sendable {
     public init(_ args: JSONObject) throws {
         kind = try args.enumeration("kind", as: Kind.self)
         medium = try args.enumeration("medium", as: Medium.self)
+        family = try args.enumeration("family", as: Family.self)
         variety = try args.string("variety")
         tool = try args.enumeration("tool", as: Tool.self)
         tag = try args.string("tag")
@@ -3459,7 +3504,25 @@ public struct CreateBrushArguments: Sendable {
         case spray
     }
 
-    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.
+    /// Marks: what the paint does, for grouping a library by family instead of medium: dry, ink, wet, thick, metallic, spray, glow (light paint), iridescent, strands (hair, fur, curls, ribbons), stickers, living (grows or mutates), ethereal (ghost, invisible), volatile (antimatter, vortices) or reactive (heat, magnets).
+    public enum Family: String, CaseIterable, Sendable {
+        case dry
+        case ink
+        case wet
+        case thick
+        case metallic
+        case spray
+        case glow
+        case iridescent
+        case strands
+        case stickers
+        case living
+        case ethereal
+        case volatile
+        case reactive
+    }
+
+    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint; knife scrapes and spreads thick paint already down without adding any (behaviour.thick.drag sets how far it carries).
     public enum Tool: String, CaseIterable, Sendable {
         case eraser
         case blender
@@ -3470,6 +3533,7 @@ public struct CreateBrushArguments: Sendable {
         case blot
         case wetBlend = "wet-blend"
         case wetDrag = "wet-drag"
+        case knife
     }
 
     /// The new brush id: lowercase letters, digits and dashes, not taken (list_brush_presets).
@@ -3488,7 +3552,9 @@ public struct CreateBrushArguments: Sendable {
     public var medium: Medium?
     /// What kind of the medium: oil, watercolor, gouache, pencil, pastel, charcoal, airbrush, marker, highlighter… A wet brush whose variety is watercolor, gouache or oil paints that medium.
     public var variety: String?
-    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.
+    /// Marks: what the paint does, for grouping a library by family instead of medium: dry, ink, wet, thick, metallic, spray, glow (light paint), iridescent, strands (hair, fur, curls, ribbons), stickers, living (grows or mutates), ethereal (ghost, invisible), volatile (antimatter, vortices) or reactive (heat, magnets).
+    public var family: Family?
+    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint; knife scrapes and spreads thick paint already down without adding any (behaviour.thick.drag sets how far it carries).
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
@@ -3531,6 +3597,7 @@ public struct CreateBrushArguments: Sendable {
         kind = try args.enumeration("kind", as: Kind.self)
         medium = try args.enumeration("medium", as: Medium.self)
         variety = try args.string("variety")
+        family = try args.enumeration("family", as: Family.self)
         tool = try args.enumeration("tool", as: Tool.self)
         tip = args.argument("tip")
         marks = args.argument("marks")
@@ -3566,7 +3633,25 @@ public struct UpdateBrushArguments: Sendable {
         case spray
     }
 
-    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.
+    /// Marks: what the paint does, for grouping a library by family instead of medium: dry, ink, wet, thick, metallic, spray, glow (light paint), iridescent, strands (hair, fur, curls, ribbons), stickers, living (grows or mutates), ethereal (ghost, invisible), volatile (antimatter, vortices) or reactive (heat, magnets).
+    public enum Family: String, CaseIterable, Sendable {
+        case dry
+        case ink
+        case wet
+        case thick
+        case metallic
+        case spray
+        case glow
+        case iridescent
+        case strands
+        case stickers
+        case living
+        case ethereal
+        case volatile
+        case reactive
+    }
+
+    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint; knife scrapes and spreads thick paint already down without adding any (behaviour.thick.drag sets how far it carries).
     public enum Tool: String, CaseIterable, Sendable {
         case eraser
         case blender
@@ -3577,6 +3662,7 @@ public struct UpdateBrushArguments: Sendable {
         case blot
         case wetBlend = "wet-blend"
         case wetDrag = "wet-drag"
+        case knife
     }
 
     /// Facets to remove, back to their defaults (applied before the facets given).
@@ -3585,6 +3671,7 @@ public struct UpdateBrushArguments: Sendable {
         case tags
         case medium
         case variety
+        case family
         case marks
         case dynamics
         case behaviour
@@ -3615,7 +3702,9 @@ public struct UpdateBrushArguments: Sendable {
     public var medium: Medium?
     /// What kind of the medium: oil, watercolor, gouache, pencil, pastel, charcoal, airbrush, marker, highlighter… A wet brush whose variety is watercolor, gouache or oil paints that medium.
     public var variety: String?
-    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.
+    /// Marks: what the paint does, for grouping a library by family instead of medium: dry, ink, wet, thick, metallic, spray, glow (light paint), iridescent, strands (hair, fur, curls, ribbons), stickers, living (grows or mutates), ethereal (ghost, invisible), volatile (antimatter, vortices) or reactive (heat, magnets).
+    public var family: Family?
+    /// Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint; knife scrapes and spreads thick paint already down without adding any (behaviour.thick.drag sets how far it carries).
     public var tool: Tool?
     /// The tip: its shape and the dab it lays.
     public var tip: JSONValue?
@@ -3659,6 +3748,7 @@ public struct UpdateBrushArguments: Sendable {
         kind = try args.enumeration("kind", as: Kind.self)
         medium = try args.enumeration("medium", as: Medium.self)
         variety = try args.string("variety")
+        family = try args.enumeration("family", as: Family.self)
         tool = try args.enumeration("tool", as: Tool.self)
         tip = args.argument("tip")
         marks = args.argument("marks")

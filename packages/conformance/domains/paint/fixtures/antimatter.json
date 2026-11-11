@@ -447,6 +447,7 @@
               "minSize": 0.4,
               "smoothing": 0.25
             },
+            "family": "volatile",
             "id": "film-antimatter",
             "kind": "mark",
             "marks": {

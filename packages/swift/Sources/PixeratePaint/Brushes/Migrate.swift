@@ -31,6 +31,12 @@ private func skeleton(_ b: PaintBrush) -> JSONObject {
         brush["tool"] = .string(b.engine)
         return brush
     }
+    // The palette knife tool: an impasto knife that carries no paint.
+    if b.engine == "impasto" && b.impasto.tool == "knife" && !b.loadsColor {
+        brush["kind"] = "tool"
+        brush["tool"] = "knife"
+        return brush
+    }
     if b.engine == "wet" && b.wet.tool == "vortex" {
         brush["medium"] = "paint"
         brush["variety"] = .string(b.wet.medium)
@@ -108,5 +114,7 @@ public func migrateBrushV1(_ raw: PaintBrush) -> Brush {
         }
     }
     if let paint = b.paint { setPath(&brush, "colour.default", paint.json) }
+    // A family the facets would not give is kept.
+    if let family = b.family, resolveFamily(brush) != nil, resolveFamily(brush) != family { brush["family"] = .string(family) }
     return orderedBrush(brush)
 }
