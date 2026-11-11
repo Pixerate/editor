@@ -16,6 +16,35 @@ public struct ReplayOptions {
     public var color: String?
     public var brushId: String?
     public var repeatCount: Int?
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(
+        strokeIds: [String],
+        dx: Double? = nil,
+        dy: Double? = nil,
+        scale: Double? = nil,
+        rotate: Double? = nil,
+        flipX: Bool? = nil,
+        origin: (x: Double, y: Double)? = nil,
+        pressureScale: Double? = nil,
+        layerId: String? = nil,
+        color: String? = nil,
+        brushId: String? = nil,
+        repeatCount: Int? = nil
+    ) {
+        self.strokeIds = strokeIds
+        self.dx = dx
+        self.dy = dy
+        self.scale = scale
+        self.rotate = rotate
+        self.flipX = flipX
+        self.origin = origin
+        self.pressureScale = pressureScale
+        self.layerId = layerId
+        self.color = color
+        self.brushId = brushId
+        self.repeatCount = repeatCount
+    }
 }
 
 /// The affine map of a variation about `origin`.

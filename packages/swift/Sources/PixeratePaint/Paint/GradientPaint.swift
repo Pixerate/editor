@@ -353,6 +353,25 @@ public struct PaintDabParams {
     public var speed: Double?
     public var direction: Double
     public var time: Double?
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(
+        travel: Double,
+        index: Int,
+        pressure: Double,
+        lean: Double,
+        speed: Double? = nil,
+        direction: Double,
+        time: Double? = nil
+    ) {
+        self.travel = travel
+        self.index = index
+        self.pressure = pressure
+        self.lean = lean
+        self.speed = speed
+        self.direction = direction
+        self.time = time
+    }
 }
 
 /**
