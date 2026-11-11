@@ -265,6 +265,44 @@ final class EffectAuthoringTests: XCTestCase {
         XCTAssertEqual(renamed.exportDocument().name, "My tint")
     }
 
+    func testGivesADocumentsProviderDataBackUnchangedAndRefusesDataThatIsNotAnObject() async throws {
+        let first = try await open(.effect("fake.invert"))
+        XCTAssertNil(first.exportDocument().json["provider"])
+        let data: JSONObject = ["metal": ["sourceHash": "abc", "msl": "fragment float4 f() { return 1; }"], "n": [1, 2]]
+        var doc = first.exportDocument().json
+        doc["provider"] = .object(data)
+        let opened = try await open(.document(.object(doc)))
+        _ = opened.setValue("amount", 0.3)
+        let saved = opened.exportDocument()
+        XCTAssertEqual(saved.provider, data)
+        XCTAssertEqual(saved.json.keys.last, "provider")
+        let again = try await open(.document(try JSONValue.parse(JSONValue.object(saved.json).stringified())))
+        XCTAssertEqual(again.exportDocument().provider, data)
+        doc["provider"] = "metal"
+        let notObject = await openError(.document(.object(doc)))
+        XCTAssertEqual(notObject?.code, "invalid_values")
+        XCTAssertTrue(notObject?.message.contains("- /provider: must be an object of the provider's own data") == true, notObject?.message ?? "")
+    }
+
+    func testDropsProviderDataWhenTheSourceIsEditedAndUndoBringsItBack() async throws {
+        let backend = StubBackend()
+        let first = try await open(.effect("stub.a"), source: backend)
+        let data: JSONObject = ["compiled": "for the old source"]
+        var doc = first.exportDocument().json
+        doc["provider"] = .object(data)
+        let s = try await open(.document(.object(doc)), source: backend)
+        let source = s.getState().source!
+        // The same source again is not an edit of it.
+        _ = await s.setSource(source)
+        XCTAssertEqual(s.exportDocument().provider, data)
+        _ = await s.setSource(source + "\ncontrol third")
+        XCTAssertNil(s.exportDocument().provider)
+        XCTAssertTrue(s.undo())
+        XCTAssertEqual(s.exportDocument().provider, data)
+        XCTAssertTrue(s.redo())
+        XCTAssertNil(s.exportDocument().provider)
+    }
+
     func testRefusesBadDocumentsNamingEachProblem() async throws {
         let good = try await open(.effect("fake.tint")).exportDocument().json
         func message(_ change: (inout JSONObject) -> Void) async -> String? {

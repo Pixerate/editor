@@ -388,6 +388,27 @@ describe("authored effects in the paint editor", () => {
     );
   });
 
+  it("keeps a provider's data in its documents through reopening and saving again", async () => {
+    const data = { metal: { sourceHash: "abc", msl: "fragment float4 f() { return 1; }" } };
+    const t = setup({ rawShaders: true });
+    const json = JSON.parse(JSON.stringify(t.c.toJSON()));
+    findKey(json, "layers")!.authoredEffects = {
+      "authored.raw": {
+        name: "Raw",
+        document: { version: 1, providerId: "fake", effectId: "fake.gradient", name: "Raw", values: { angle: 45 }, tracks: {}, presets: [], duration: 1000, loop: false, provider: data },
+      },
+    };
+    expect(t.c.loadJSON(json)).toEqual([]);
+    await t.call("open_effect_authoring", { effect: "authored.raw" });
+    await t.call("effect_authoring_set_values", { values: { angle: 120 } });
+    const saved = await t.call("save_authored_effect", { name: "Raw again" });
+    const again = JSON.parse(JSON.stringify(t.c.toJSON()));
+    const docs = findKey(again, "authoredEffects")!.authoredEffects;
+    expect(docs[saved.id].document.provider).toEqual(data);
+    expect(docs[saved.id].document.values.angle).toBe(120);
+    expect(docs["authored.raw"].document.provider).toEqual(data);
+  });
+
   it("drops unreadable entries with a problem", () => {
     const t = setup();
     const json = JSON.parse(JSON.stringify(t.c.toJSON()));

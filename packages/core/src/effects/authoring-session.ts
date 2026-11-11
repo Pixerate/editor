@@ -117,6 +117,7 @@ function documentErrors(doc: EffectAuthoringDocument, description: EffectDescrip
 		errors.push({ path: '/duration', message: 'must be a finite number of ms > 0' });
 	}
 	if (doc.loop !== undefined && typeof doc.loop !== 'boolean') errors.push({ path: '/loop', message: 'must be a boolean' });
+	if (doc.provider !== undefined && !isRecord(doc.provider)) errors.push({ path: '/provider', message: "must be an object of the provider's own data" });
 	return errors;
 }
 
@@ -325,6 +326,8 @@ export async function createEffectAuthoringSession(
 
 	// Saved presets: only user-saved presets
 	let savedPresets: EffectPreset[] = initialDoc ? [...(initialDoc.presets ?? [])] : [];
+	let providerData: Readonly<Record<string, unknown>> | undefined =
+		initialDoc?.provider !== undefined ? JSON.parse(JSON.stringify(initialDoc.provider)) : undefined;
 
 	// Base values (for controls when not keyframed)
 	let baseValues: Record<string, EffectValue> = { ...description.defaults };
@@ -495,13 +498,15 @@ export async function createEffectAuthoringSession(
 		const refused = backend!.refuse?.(src);
 		if (refused) return { ok: false, message: refused };
 		const result = backend!.compile(src, effectId);
-		const before = { sourceText, compiledSource, sourceIssues, compiled, description, baseValues: { ...baseValues }, tracks: { ...tracks } };
+		const before = { sourceText, compiledSource, sourceIssues, compiled, description, baseValues: { ...baseValues }, tracks: { ...tracks }, providerData };
+		// The provider's data may describe the old source: a new source drops it.
+		const keptData = src === sourceText ? providerData : undefined;
 		let after: typeof before;
 		if (result.description) {
 			const carried = carryOver(result.description);
-			after = { sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: result.description, baseValues: carried.base, tracks: carried.tracks };
+			after = { sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: result.description, baseValues: carried.base, tracks: carried.tracks, providerData: keptData };
 		} else {
-			after = { ...before, sourceText: src, sourceIssues: result.issues, compiled: false };
+			after = { ...before, sourceText: src, sourceIssues: result.issues, compiled: false, providerData: keptData };
 		}
 		const apply = (s: typeof before) => {
 			sourceText = s.sourceText;
@@ -511,6 +516,7 @@ export async function createEffectAuthoringSession(
 			description = s.description;
 			baseValues = { ...s.baseValues };
 			tracks = { ...s.tracks };
+			providerData = s.providerData;
 		};
 		history.execute({ name: 'Edit source', execute: () => apply(after), undo: () => apply(before) });
 		invalidateState();
@@ -1049,7 +1055,8 @@ export async function createEffectAuthoringSession(
 				tracks: JSON.parse(JSON.stringify(tracks)),
 				presets: JSON.parse(JSON.stringify(savedPresets)),
 				duration,
-				loop
+				loop,
+				...(providerData ? { provider: JSON.parse(JSON.stringify(providerData)) } : {})
 			} as EffectAuthoringDocument;
 		},
 

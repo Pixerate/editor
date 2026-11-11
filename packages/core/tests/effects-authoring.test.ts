@@ -6,6 +6,7 @@ import {
   createEffectPixels,
 } from '../src/effects/index.js';
 import { createFakeEffectProvider } from '../src/effects/fake.js';
+import { createPixelEffectProvider } from '../src/effects/pixel-provider.js';
 
 describe('createEffectAuthoringSession', () => {
   const provider = createFakeEffectProvider();
@@ -340,6 +341,42 @@ describe('createEffectAuthoringSession', () => {
     const wrongTime = session.removeKeyframe('amount', 100);
     expect(!wrongTime.ok && wrongTime.message).toMatch(/its keyframes are at 250 ms/);
     expect(before.canUndo).toBe(false);
+  });
+
+  it("gives a document's provider data back unchanged, and refuses data that is not an object", async () => {
+    const first = await createEffectAuthoringSession({ effectId: 'fake.invert' }, { provider });
+    expect('provider' in first.exportDocument()).toBe(false);
+    const data = { metal: { sourceHash: 'abc', msl: 'fragment float4 f() { return 1; }' }, n: [1, 2] };
+    const doc = { ...first.exportDocument(), provider: data };
+    const opened = await createEffectAuthoringSession({ document: doc }, { provider });
+    opened.setValue('amount', 0.3);
+    const saved = opened.exportDocument();
+    expect(saved.provider).toEqual(data);
+    expect(Object.keys(saved).at(-1)).toBe('provider');
+    // A copy: changing what came back changes neither the session nor the next export.
+    (saved.provider as { n: number[] }).n.push(3);
+    expect(opened.exportDocument().provider).toEqual(data);
+    const again = await createEffectAuthoringSession({ document: JSON.parse(JSON.stringify(opened.exportDocument())) }, { provider });
+    expect(again.exportDocument().provider).toEqual(data);
+    await expect(createEffectAuthoringSession({ document: { ...doc, provider: 'metal' } }, { provider })).rejects.toThrow("/provider: must be an object of the provider's own data");
+    await expect(createEffectAuthoringSession({ document: { ...doc, provider: [1] } }, { provider })).rejects.toMatchObject({ code: 'invalid_values' });
+  });
+
+  it('drops provider data when the source is edited, and brings it back on undo', async () => {
+    const pixel = createPixelEffectProvider({ session: { schedule: () => () => {} } });
+    const blank = await pixel.openAuthoring!({ effectId: 'pixel.blank' });
+    const data = { compiled: 'for the old source' };
+    const s = await pixel.openAuthoring!({ document: { ...blank.exportDocument(), provider: data } });
+    const source = s.getState().source!;
+    // The same source again is not an edit of it.
+    await s.setSource!(source);
+    expect(s.exportDocument().provider).toEqual(data);
+    await s.setSource!(`${source}\n// changed`);
+    expect('provider' in s.exportDocument()).toBe(false);
+    s.undo();
+    expect(s.exportDocument().provider).toEqual(data);
+    s.redo();
+    expect('provider' in s.exportDocument()).toBe(false);
   });
 
   it('keeps the document name across export and reopen', async () => {

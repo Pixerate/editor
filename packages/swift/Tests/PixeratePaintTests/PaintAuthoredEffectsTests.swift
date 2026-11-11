@@ -286,6 +286,23 @@ final class PaintAuthoredEffectsTests: XCTestCase {
         XCTAssertTrue(rawProblem.contains("needs the provider \"flair\" with authoring; the registered provider is \"fake\""), rawProblem)
     }
 
+    func testKeepsAProvidersDataInItsDocumentsThroughReopeningAndSavingAgain() async throws {
+        let data: JSONObject = ["metal": ["sourceHash": "abc", "msl": "fragment float4 f() { return 1; }"]]
+        let t = try setup(rawShaders: true)
+        var json = t.c.toJSON()
+        json["authoredEffects"] = ["authored.raw": ["name": "Raw", "document": ["version": 1, "providerId": "fake", "effectId": "fake.gradient", "name": "Raw", "values": ["angle": 45], "tracks": [:], "presets": [], "duration": 1000, "loop": false, "provider": .object(data)]]]
+        XCTAssertEqual(try t.c.loadJSON(.object(json)), [])
+        _ = try await t.call("open_effect_authoring", ["effect": "authored.raw"])
+        _ = try await t.call("effect_authoring_set_values", ["values": ["angle": 120]])
+        let saved = try await t.call("save_authored_effect", ["name": "Raw again"])
+        let id = try XCTUnwrap(saved["id"]?.stringValue)
+        let again = t.c.toJSON()
+        let docs = again["authoredEffects"]?.objectValue ?? [:]
+        XCTAssertEqual(docs[id]?.objectValue?["document"]?.objectValue?["provider"], .object(data))
+        XCTAssertEqual(docs[id]?.objectValue?["document"]?.objectValue?["values"]?.objectValue?["angle"], 120)
+        XCTAssertEqual(docs["authored.raw"]?.objectValue?["document"]?.objectValue?["provider"], .object(data))
+    }
+
     func testDropsUnreadableEntriesWithAProblem() throws {
         let t = try setup()
         var json = t.c.toJSON()
