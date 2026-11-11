@@ -11,7 +11,13 @@ final class PaintStrokeLayerEraserLightTests: XCTestCase {
     private var size: (Double, Double) { (Double(w), Double(h)) }
 
     private func wave(_ y: Double, _ n: Int = 20) -> [PenPoint] {
-        (0..<n).map { i in PenPoint(x: 10 + Double(i) * 7, y: y + sin(Double(i) / 3) * 10, pressure: 0.4 + 0.6 * sin(Double(i) / Double(n - 1) * .pi)) }
+        (0..<n).map { (i: Int) -> PenPoint in
+            let t: Double = Double(i)
+            let x: Double = 10 + t * 7
+            let py: Double = y + sin(t / 3) * 10
+            let pressure: Double = 0.4 + 0.6 * sin(t / Double(n - 1) * Double.pi)
+            return PenPoint(x: x, y: py, pressure: pressure)
+        }
     }
 
     private func down(_ x: Double, _ n: Int = 14) -> [PenPoint] {
