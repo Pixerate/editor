@@ -528,6 +528,23 @@ public struct PaintUIPaintGroupings: Equatable, Sendable {
     }
 }
 
+public struct PaintUISpecialtiesItem: Equatable, Sendable {
+    public var id: String
+    public var label: String
+    public var group: String
+    public var summary: String
+    public var howToUse: String
+
+    public init(json: JSONValue) throws {
+        let o = try ContractTable.object(json, "PaintUISpecialtiesItem")
+        id = try ContractTable.field(o["id"]?.stringValue, "id", "PaintUISpecialtiesItem")
+        label = try ContractTable.field(o["label"]?.stringValue, "label", "PaintUISpecialtiesItem")
+        group = try ContractTable.field(o["group"]?.stringValue, "group", "PaintUISpecialtiesItem")
+        summary = try ContractTable.field(o["summary"]?.stringValue, "summary", "PaintUISpecialtiesItem")
+        howToUse = try ContractTable.field(o["howToUse"]?.stringValue, "howToUse", "PaintUISpecialtiesItem")
+    }
+}
+
 public struct PaintUILabelsWetTools: Equatable, Sendable {
     public var paint: String
     public var water: String
@@ -747,6 +764,7 @@ public struct PaintUITables: Equatable, Sendable {
     public var padSampleSizes: [Double]
     public var wetGpu: [PaintUIWetGpuItem]
     public var paintGroupings: PaintUIPaintGroupings
+    public var specialties: [PaintUISpecialtiesItem]
     public var labels: PaintUILabels
 
     public init(json: JSONValue) throws {
@@ -760,6 +778,7 @@ public struct PaintUITables: Equatable, Sendable {
         padSampleSizes = try ContractTable.field(try o["padSampleSizes"]?.arrayValue?.map { try ContractTable.value($0, "Double") { v in v?.numberValue } }, "padSampleSizes", "PaintUITables")
         wetGpu = try ContractTable.field(try o["wetGpu"]?.arrayValue?.map { try ContractTable.value($0, "PaintUIWetGpuItem") { v in try v.map(PaintUIWetGpuItem.init(json:)) } }, "wetGpu", "PaintUITables")
         paintGroupings = try ContractTable.field(try o["paintGroupings"].map(PaintUIPaintGroupings.init(json:)), "paintGroupings", "PaintUITables")
+        specialties = try ContractTable.field(try o["specialties"]?.arrayValue?.map { try ContractTable.value($0, "PaintUISpecialtiesItem") { v in try v.map(PaintUISpecialtiesItem.init(json:)) } }, "specialties", "PaintUITables")
         labels = try ContractTable.field(try o["labels"].map(PaintUILabels.init(json:)), "labels", "PaintUITables")
     }
 }

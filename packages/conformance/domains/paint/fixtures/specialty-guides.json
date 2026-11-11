@@ -1,0 +1,1443 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "specialty-guides",
+  "description": "Guides for specialty brushes (UV and thermochromic ink, ferrofluid, iridescence, ghost, mutation and live-pattern paint): how to use each, whether the canvas is ready and the quick actions that set it up, followed through the tools they name.",
+  "setup": {
+    "width": 64,
+    "height": 64
+  },
+  "steps": [
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "pencil-6b",
+          "guides": [],
+          "specialties": []
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "uv-marker"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": "#22d3ee",
+              "palette": [
+                "#22d3ee",
+                "#a855f7",
+                "#4ade80",
+                "#f472b6"
+              ]
+            },
+            "dynamics": {
+              "minSize": 0.5,
+              "smoothing": 0.3
+            },
+            "family": "ethereal",
+            "fluorescence": {
+              "amount": 0.9,
+              "invisible": true
+            },
+            "id": "uv-marker",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "UV marker",
+            "tip": {
+              "hardness": 0.75,
+              "opacity": 0.9,
+              "shape": "round",
+              "size": 18,
+              "spacing": 0.06
+            },
+            "variety": "uv-ink"
+          },
+          "engine": "dab",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "uv-marker",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "on": true
+                  },
+                  "id": "uv-on",
+                  "label": "Turn on UV blacklight",
+                  "tool": "set_uv_light"
+                }
+              ],
+              "howToUse": "Paint as usual, then switch the UV blacklight on: the room dims and fluorescent strokes glow and spill light in their colour. Invisible ink lays nothing you can see in daylight, so it only shows under UV.",
+              "kind": "fluorescence",
+              "ready": false,
+              "status": "UV blacklight is off (strokes are invisible until UV is on)",
+              "title": "UV-fluorescent ink"
+            }
+          ],
+          "specialties": [
+            "fluorescence"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_uv_light",
+      "arguments": {
+        "on": true
+      },
+      "expect": {
+        "result": {
+          "ambient": 0.15,
+          "fluorescentLayerIds": [],
+          "on": true,
+          "strength": 1
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "uv-marker",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "on": false
+                  },
+                  "id": "uv-off",
+                  "label": "Turn off UV blacklight",
+                  "tool": "set_uv_light"
+                }
+              ],
+              "howToUse": "Paint as usual, then switch the UV blacklight on: the room dims and fluorescent strokes glow and spill light in their colour. Invisible ink lays nothing you can see in daylight, so it only shows under UV.",
+              "kind": "fluorescence",
+              "ready": true,
+              "status": "UV blacklight is on (100%)",
+              "title": "UV-fluorescent ink"
+            }
+          ],
+          "specialties": [
+            "fluorescence"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_uv_light",
+      "arguments": {
+        "on": false
+      },
+      "expect": {
+        "result": {
+          "ambient": 0.15,
+          "fluorescentLayerIds": [],
+          "on": false,
+          "strength": 1
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "thermo-ink"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": "#1e3a8a",
+              "palette": [
+                "#1e3a8a",
+                "#312e81",
+                "#065f46",
+                "#7f1d1d"
+              ]
+            },
+            "dynamics": {
+              "minSize": 0.4,
+              "smoothing": 0.3
+            },
+            "family": "reactive",
+            "id": "thermo-ink",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "Thermochromic ink",
+            "thermochromic": {
+              "hotColor": "#ff7a18",
+              "threshold": 0.45
+            },
+            "tip": {
+              "hardness": 0.85,
+              "shape": "round",
+              "size": 12,
+              "spacing": 0.05
+            },
+            "variety": "thermochromic"
+          },
+          "engine": "dab",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "thermo-ink",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "points": [
+                      {
+                        "x": 32,
+                        "y": 32
+                      }
+                    ],
+                    "radius": 32,
+                    "temperature": 1
+                  },
+                  "id": "warm-canvas",
+                  "label": "Warm canvas",
+                  "tool": "paint_heat"
+                }
+              ],
+              "howToUse": "Paint with the ink, then warm the canvas: where the heat passes the ink’s threshold it shifts toward its hot colour. Step the heat to let it spread and cool, or cool the canvas to bring the cold colour back.",
+              "kind": "thermochromic",
+              "ready": false,
+              "status": "Canvas is cool — warm the canvas or paint heat to shift toward #ff7a18",
+              "title": "Thermochromic ink"
+            }
+          ],
+          "specialties": [
+            "thermochromic"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "paint_heat",
+      "arguments": {
+        "points": [
+          {
+            "x": 32,
+            "y": 32
+          }
+        ],
+        "radius": 32,
+        "temperature": 1
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 56,
+            "width": 56,
+            "x": 4,
+            "y": 4
+          },
+          "dried": [],
+          "hotCells": 148,
+          "max": 0.978,
+          "mean": 0.236
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "thermo-ink",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "points": [
+                      {
+                        "x": 32,
+                        "y": 32
+                      }
+                    ],
+                    "radius": 32,
+                    "temperature": 1
+                  },
+                  "id": "warm-canvas",
+                  "label": "Warm canvas",
+                  "tool": "paint_heat"
+                },
+                {
+                  "arguments": {
+                    "steps": 10
+                  },
+                  "id": "step-heat",
+                  "label": "Step heat",
+                  "tool": "advance_heat"
+                },
+                {
+                  "arguments": {},
+                  "id": "cool-canvas",
+                  "label": "Cool canvas",
+                  "tool": "clear_heat"
+                }
+              ],
+              "howToUse": "Paint with the ink, then warm the canvas: where the heat passes the ink’s threshold it shifts toward its hot colour. Step the heat to let it spread and cool, or cool the canvas to bring the cold colour back.",
+              "kind": "thermochromic",
+              "ready": true,
+              "status": "Canvas is warm (max 98%)",
+              "title": "Thermochromic ink"
+            }
+          ],
+          "specialties": [
+            "thermochromic"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "advance_heat",
+      "arguments": {
+        "steps": 40
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 48,
+            "width": 48,
+            "x": 8,
+            "y": 8
+          },
+          "dried": [],
+          "hotCells": 120,
+          "max": 0.222,
+          "mean": 0.07,
+          "steps": 40
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "thermo-ink",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "points": [
+                      {
+                        "x": 32,
+                        "y": 32
+                      }
+                    ],
+                    "radius": 32,
+                    "temperature": 1
+                  },
+                  "id": "warm-canvas",
+                  "label": "Warm canvas",
+                  "tool": "paint_heat"
+                },
+                {
+                  "arguments": {
+                    "steps": 10
+                  },
+                  "id": "step-heat",
+                  "label": "Step heat",
+                  "tool": "advance_heat"
+                },
+                {
+                  "arguments": {},
+                  "id": "cool-canvas",
+                  "label": "Cool canvas",
+                  "tool": "clear_heat"
+                }
+              ],
+              "howToUse": "Paint with the ink, then warm the canvas: where the heat passes the ink’s threshold it shifts toward its hot colour. Step the heat to let it spread and cool, or cool the canvas to bring the cold colour back.",
+              "kind": "thermochromic",
+              "ready": false,
+              "status": "Canvas is warm (max 22%), below the ink's 45% threshold",
+              "title": "Thermochromic ink"
+            }
+          ],
+          "specialties": [
+            "thermochromic"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "clear_heat",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "cleared": true
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "ferrofluid"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": "#111827",
+              "palette": [
+                "#111827",
+                "#1e293b",
+                "#312e81",
+                "#0f3d3e",
+                "#3b0764",
+                "#451a03"
+              ]
+            },
+            "dynamics": {
+              "smoothing": 0.35
+            },
+            "family": "reactive",
+            "ferro": {
+              "amount": 0.85
+            },
+            "id": "ferrofluid",
+            "kind": "mark",
+            "medium": "paint",
+            "name": "Ferrofluid",
+            "tip": {
+              "flow": 0.9,
+              "hardness": 0.75,
+              "shape": "round",
+              "size": 28
+            },
+            "variety": "ferrofluid"
+          },
+          "engine": "dab",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "ferrofluid",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "x": 32,
+                    "y": 32
+                  },
+                  "id": "add-magnet",
+                  "label": "Add magnet",
+                  "tool": "add_magnet"
+                }
+              ],
+              "howToUse": "Paint a pool of ferrofluid, then add a magnet near it: the liquid flows toward the magnet and rises into Rosensweig spikes. Move or retune magnets to reshape them, and cure the spikes to keep them as permanent relief.",
+              "kind": "ferro",
+              "ready": false,
+              "status": "No magnets placed — add a magnet to pull liquid ferrofluid into 3D spikes",
+              "title": "Ferrofluid"
+            }
+          ],
+          "specialties": [
+            "ferro"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "color": "#111827",
+        "seed": 5,
+        "points": [
+          {
+            "x": 16,
+            "y": 32,
+            "pressure": 0.8
+          },
+          {
+            "x": 48,
+            "y": 32,
+            "pressure": 0.8
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 63,
+            "x": 0,
+            "y": 16
+          },
+          "dabs": 15,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "add_magnet",
+      "arguments": {
+        "x": 32,
+        "y": 32
+      },
+      "expect": {
+        "result": {
+          "id": "mag1",
+          "radius": 72,
+          "strength": 0.75,
+          "x": 32,
+          "y": 32
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "ferrofluid",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "x": 56,
+                    "y": 32
+                  },
+                  "id": "add-magnet",
+                  "label": "Add magnet",
+                  "tool": "add_magnet"
+                },
+                {
+                  "arguments": {},
+                  "id": "cure-ferrofluid",
+                  "label": "Cure spikes",
+                  "tool": "cure_ferrofluid"
+                }
+              ],
+              "howToUse": "Paint a pool of ferrofluid, then add a magnet near it: the liquid flows toward the magnet and rises into Rosensweig spikes. Move or retune magnets to reshape them, and cure the spikes to keep them as permanent relief.",
+              "kind": "ferro",
+              "ready": true,
+              "status": "1 magnet active — cure the spikes to keep them as relief",
+              "title": "Ferrofluid"
+            }
+          ],
+          "specialties": [
+            "ferro"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "soap-film"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": {
+                "dark": "#bae6fd",
+                "light": "#0284c7"
+              },
+              "palette": [
+                {
+                  "dark": "#bae6fd",
+                  "light": "#0284c7"
+                },
+                "#f472b6",
+                "#a78bfa",
+                "#34d399"
+              ]
+            },
+            "dynamics": {
+              "minSize": 0.35,
+              "pressureOpacity": true,
+              "smoothing": 0.35
+            },
+            "family": "iridescent",
+            "id": "soap-film",
+            "iridescence": {
+              "ior": 1.33,
+              "pressureToThickness": 0.8,
+              "thickness": 340
+            },
+            "kind": "mark",
+            "medium": "paint",
+            "name": "Soap film",
+            "tip": {
+              "flow": 0.75,
+              "hardness": 0.4,
+              "opacity": 0.85,
+              "shape": "round",
+              "size": 32,
+              "spacing": 0.06
+            },
+            "variety": "iridescent"
+          },
+          "engine": "dab",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "soap-film",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "x": 0.6,
+                    "y": -0.4
+                  },
+                  "id": "tilt-view",
+                  "label": "Tilt view",
+                  "tool": "set_view_tilt"
+                }
+              ],
+              "howToUse": "Paint a coat, then tilt the view (or move the light, or turn on device tilt): the film’s interference colours sweep across the spectrum as the angle changes. Pressure varies the film thickness on brushes that follow it.",
+              "kind": "iridescence",
+              "ready": true,
+              "status": "Tilt the view or move the light to shift interference colours",
+              "title": "Thin-film iridescence"
+            }
+          ],
+          "specialties": [
+            "iridescence"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_view_tilt",
+      "arguments": {
+        "x": 0.6,
+        "y": -0.4
+      },
+      "expect": {
+        "result": {
+          "x": 0.6,
+          "y": -0.4
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "soap-film",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "id": "reset-tilt",
+                  "label": "Reset tilt",
+                  "tool": "set_view_tilt"
+                }
+              ],
+              "howToUse": "Paint a coat, then tilt the view (or move the light, or turn on device tilt): the film’s interference colours sweep across the spectrum as the angle changes. Pressure varies the film thickness on brushes that follow it.",
+              "kind": "iridescence",
+              "ready": true,
+              "status": "View is tilted — interference colours shift as the angle changes",
+              "title": "Thin-film iridescence"
+            }
+          ],
+          "specialties": [
+            "iridescence"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "ghost-gouache"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "behaviour": {
+              "surface": "wet",
+              "wet": {
+                "body": 1,
+                "pigment": 0.85,
+                "rewet": 0.3,
+                "water": 0.35
+              }
+            },
+            "dynamics": {
+              "minSize": 0.5,
+              "smoothing": 0.25
+            },
+            "family": "ethereal",
+            "ghost": {
+              "linger": 5,
+              "smear": 0.4
+            },
+            "id": "ghost-gouache",
+            "kind": "mark",
+            "medium": "paint",
+            "name": "Ghost gouache",
+            "tip": {
+              "hardness": 0.7,
+              "shape": "round",
+              "size": 26
+            },
+            "variety": "gouache"
+          },
+          "engine": "wet",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "ghost-gouache",
+          "guides": [
+            {
+              "actions": [],
+              "howToUse": "Drag it through wet or dried paint on the layer: it pushes and lifts that paint while its own colour shows, then its pigment fades away and only the smear stays. Invisible ink is a ghost paint with no colour of its own.",
+              "kind": "ghost",
+              "ready": true,
+              "status": "Smears existing paint on this layer, then its own pigment fades away over 5s",
+              "title": "Ghost paint"
+            }
+          ],
+          "specialties": [
+            "ghost"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "invisible-ink"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "behaviour": {
+              "surface": "wet",
+              "wet": {
+                "pigment": 0,
+                "rewet": 0.35,
+                "water": 0.45
+              }
+            },
+            "dynamics": {
+              "minSize": 0.4,
+              "smoothing": 0.3
+            },
+            "family": "ethereal",
+            "ghost": {
+              "smear": 0.65
+            },
+            "id": "invisible-ink",
+            "kind": "mark",
+            "medium": "paint",
+            "name": "Invisible ink",
+            "tip": {
+              "hardness": 0.65,
+              "shape": "round",
+              "size": 24
+            },
+            "variety": "watercolor"
+          },
+          "engine": "wet",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "invisible-ink",
+          "guides": [
+            {
+              "actions": [],
+              "howToUse": "Drag it through wet or dried paint on the layer: it pushes and lifts that paint while its own colour shows, then its pigment fades away and only the smear stays. Invisible ink is a ghost paint with no colour of its own.",
+              "kind": "ghost",
+              "ready": true,
+              "status": "Smears existing paint on this layer, then its own pigment fades away over 4s",
+              "title": "Ghost paint"
+            }
+          ],
+          "specialties": [
+            "ghost"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "mutation-wash"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "behaviour": {
+              "surface": "wet",
+              "wet": {
+                "rewet": 0.2,
+                "water": 0.6
+              }
+            },
+            "dynamics": {
+              "minSize": 0.35,
+              "pressureOpacity": true,
+              "smoothing": 0.25
+            },
+            "family": "living",
+            "id": "mutation-wash",
+            "kind": "mark",
+            "medium": "paint",
+            "mutation": {},
+            "name": "Mutation wash",
+            "tip": {
+              "hardness": 0.6,
+              "shape": "round",
+              "size": 28,
+              "spacing": 0.12
+            },
+            "variety": "watercolor"
+          },
+          "engine": "wet",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "mutation-wash",
+          "guides": [
+            {
+              "actions": [],
+              "howToUse": "Paint a mark and pause: after a moment it becomes a mutation request. A connected agent claims it, your paint sinks away and the agent paints its answer. With no agent connected the stroke stays as ordinary paint.",
+              "kind": "mutation",
+              "ready": false,
+              "status": "No mutation agent connected — strokes will stay as ordinary paint",
+              "title": "Mutation paint"
+            }
+          ],
+          "specialties": [
+            "mutation"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "turing-wash"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "behaviour": {
+              "exchange": {
+                "pickup": 0.45
+              },
+              "surface": "wet",
+              "wet": {
+                "pigment": 0.55,
+                "rewet": 0.2,
+                "water": 0.75
+              }
+            },
+            "dynamics": {
+              "minSize": 0.35,
+              "pressureOpacity": true,
+              "smoothing": 0.25
+            },
+            "family": "living",
+            "id": "turing-wash",
+            "kind": "mark",
+            "livePatterns": {
+              "contrast": 1.2,
+              "pattern": "spots",
+              "relief": 0.25,
+              "secondColor": "#0ea5e9"
+            },
+            "medium": "paint",
+            "name": "Turing wash",
+            "tip": {
+              "hardness": 0.5,
+              "shape": "round",
+              "size": 36,
+              "spacing": 0.12
+            },
+            "variety": "watercolor"
+          },
+          "engine": "wet",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "turing-wash",
+          "guides": [
+            {
+              "actions": [],
+              "howToUse": "Paint a wet wash: spots, stripes, coral, maze or worm patterns grow inside it while it is wet and freeze where it dries. Seed the pattern to start growth in a spot, and keep wet time running so it develops.",
+              "kind": "livePatterns",
+              "ready": true,
+              "status": "Paint a wet wash: spot patterns grow while it is wet and freeze as it dries",
+              "title": "Live patterns"
+            }
+          ],
+          "specialties": [
+            "livePatterns"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Wash"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Wash",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "color": "#0f766e",
+        "seed": 6,
+        "points": [
+          {
+            "x": 12,
+            "y": 20,
+            "pressure": 0.8
+          },
+          {
+            "x": 52,
+            "y": 20,
+            "pressure": 0.8
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 48,
+            "width": 85,
+            "x": -12,
+            "y": -4
+          },
+          "dabs": 11,
+          "layerId": "@2",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#0f766e"
+          },
+          "strokeId": "s2",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "brushId": "turing-wash",
+          "guides": [
+            {
+              "actions": [
+                {
+                  "arguments": {
+                    "pattern": "spots",
+                    "points": [
+                      {
+                        "x": 32,
+                        "y": 32
+                      }
+                    ],
+                    "radius": 16
+                  },
+                  "id": "seed-pattern",
+                  "label": "Seed pattern",
+                  "tool": "seed_live_patterns"
+                }
+              ],
+              "howToUse": "Paint a wet wash: spots, stripes, coral, maze or worm patterns grow inside it while it is wet and freeze where it dries. Seed the pattern to start growth in a spot, and keep wet time running so it develops.",
+              "kind": "livePatterns",
+              "ready": true,
+              "status": "Spot patterns grow in the wet paint on this layer and freeze as it dries",
+              "title": "Live patterns"
+            }
+          ],
+          "specialties": [
+            "livePatterns"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_specialty_guides",
+      "arguments": {
+        "brushId": "uv-marker"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Unknown property \"brushId\".",
+                "path": "/brushId"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__get_specialty_guides\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 41,
+                "width": 64,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Wash",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 256,
+                "width": 256,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@1": "pixerate-asset:zq-v5chiphf8k",
+              "@2": "pixerate-asset:4ai-4zeh2ehgyd"
+            },
+            "dpi": 300,
+            "ferro": {
+              "@1": {
+                "ferro": "pixerate-asset:ru-1mnxv2updus",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 32
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 64,
+            "layerChannels": {
+              "@2": {
+                "height": "pixerate-asset:ne-2fn261xg0pr",
+                "material": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 17
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Wash",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "magnets": [
+              {
+                "id": "mag1",
+                "radius": 72,
+                "strength": 0.75,
+                "x": 32,
+                "y": 32
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 1,
+                "data": {
+                  "advect": true,
+                  "magnets": [
+                    {
+                      "id": "mag1",
+                      "radius": 72,
+                      "strength": 0.75,
+                      "x": 32,
+                      "y": 32
+                    }
+                  ]
+                },
+                "kind": "magnets",
+                "layerId": ""
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "smoothing": 0.35
+                  },
+                  "ferro": {
+                    "amount": 0.85
+                  },
+                  "id": "ferrofluid",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Ferrofluid",
+                  "tip": {
+                    "flow": 0.9,
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 28
+                  }
+                },
+                "color": "#111827",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 16,
+                    "y": 32
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 48,
+                    "y": 32
+                  }
+                ],
+                "seed": 5
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.45
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "pigment": 0.55,
+                      "rewet": 0.2,
+                      "water": 0.75
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "turing-wash",
+                  "kind": "mark",
+                  "livePatterns": {
+                    "contrast": 1.2,
+                    "pattern": "spots",
+                    "relief": 0.25,
+                    "secondColor": "#0ea5e9"
+                  },
+                  "medium": "paint",
+                  "name": "Turing wash",
+                  "tip": {
+                    "hardness": 0.5,
+                    "shape": "round",
+                    "size": 36,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#0f766e",
+                "id": "s2",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.058823529411764705,
+                    0.4627450980392157,
+                    0.43137254901960786
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 12,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 52,
+                    "y": 20
+                  }
+                ],
+                "seed": 6,
+                "steps": [
+                  0,
+                  0
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "@2": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "livePatterns": {
+                    "contrast": 1.2,
+                    "feed": 0.035,
+                    "kill": 0.065,
+                    "pattern": "spots",
+                    "relief": 0.25,
+                    "scale": 1,
+                    "secondColor": "#0ea5e9"
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.45,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    }
+  ]
+}

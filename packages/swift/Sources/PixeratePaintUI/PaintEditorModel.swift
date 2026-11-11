@@ -59,12 +59,13 @@ public let WET_LIVE_PATTERN_LABELS: [(kind: String, label: String)] = [("none", 
 
 /// The side panels of `PaintEditorView`.
 public enum PaintPanelTab: String, CaseIterable, Identifiable, Sendable {
-    case color, paper, layers, effects, providerEffects, wet
+    case color, paper, specialty, layers, effects, providerEffects, wet
     public var id: String { rawValue }
     public var label: String {
         switch self {
         case .color: return "Colour"
         case .paper: return "Paper"
+        case .specialty: return "Specialty"
         case .layers: return "Layers"
         case .effects: return "Styles"
         case .providerEffects: return "Effects"
@@ -615,6 +616,28 @@ public final class PaintEditorModel {
     public func setLightSpill(radius: Double? = nil, strength: Double? = nil) { attempt { _ = try controller.setLightSpill(nil, radius: radius, strength: strength) } }
     /// Takes the active layer's light away (one undo step).
     public func clearLight() { attempt { _ = try controller.clearLight() } }
+
+    // MARK: - Specialty paint
+
+    /// How to use the active brush's specialty paint, the canvas's status and one-click setups (`brushSpecialtyGuides`; empty for a standard brush).
+    public var specialtyGuides: [BrushSpecialtyGuide] { track(); return controller.brushSpecialtyGuides() }
+    /// Runs a guide's quick action (`runBrushSpecialtyAction`).
+    public func runSpecialtyAction(_ action: BrushSpecialtyAction) { attempt { try controller.runBrushSpecialtyAction(action) } }
+    /// Whether the Specialty tab shows its indicator: a specialty brush, or the UV blacklight, heat, magnets or a view tilt in play.
+    public var specialtyInPlay: Bool { track(); return controller.specialtyInPlay }
+    /// Warms the canvas for thermochromic ink (`warmCanvasHeat`; one undo step).
+    public func warmCanvas() {
+        let heat = warmCanvasHeat(width: controller.doc.canvas.width, height: controller.doc.canvas.height)
+        attempt { _ = try controller.paintHeat(points: heat.points, radius: heat.radius, temperature: heat.temperature) }
+    }
+    /// Specialty presets the Specialty tab offers while a standard brush is active.
+    public var specialtyPicks: [PaintBrush] {
+        let ids = ["ferrofluid", "uv-marker", "thermo-ink", "soap-film", "ghost-wash", "mutation-wash", "turing-wash"]
+        let all = brushes
+        return ids.compactMap { id in all.first { $0.id == id } }
+    }
+    /// Whether a library brush is specialty paint (`isSpecialtyBrush`), for the picker's Specialty group.
+    public func isSpecialtyBrush(_ id: String) -> Bool { controller.getBrushSpec(id).map { !brushSpecialties($0).isEmpty } ?? false }
 
     // MARK: - Ferrofluid & Magnets
 

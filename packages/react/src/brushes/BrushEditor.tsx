@@ -38,7 +38,7 @@ export interface BrushEditorProps {
 
 /**
  * Edits a brush by its facets (`brushEditorSections`): Medium, Shape, Marks, Feel, Behaviour,
- * Light, Motion and Colour, each control a facet, with a live preview stroke, "Save" and "Save
+ * Light, Specialty (opt-in specialty paint, with how to use each once it is on), Motion and Colour, each control a facet, with a live preview stroke, "Save" and "Save
  * as". It needs no editor controller, so every host that paints uses it. Only what the host
  * profile uses is shown; what the brush has for other hosts is kept and named
  * (`brushEditorScope`). `BrushLibraryEditor` wires it to a brush library.
@@ -92,6 +92,11 @@ export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT
           {s.controls.map((c) => (
             <React.Fragment key={c.path}>
               <EditorControl control={c} onSet={set} />
+              {c.hint && (
+                <p className="text-[10px] leading-snug text-slate-400" data-hint={c.path}>
+                  {c.hint}
+                </p>
+              )}
               {addSource && (c.path === 'tip.stamps' || c.path === 'tip.grain.source') && <AddImage label={c.path === 'tip.stamps' ? 'Add image tip…' : 'Add grain image…'} onFile={(f) => addSource(f, c.path === 'tip.stamps' ? 'tip' : 'grain')} />}
             </React.Fragment>
           ))}

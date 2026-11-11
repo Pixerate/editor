@@ -1131,7 +1131,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
 
   tools.push(...createPaintGuideTools(c));
   tools.push(...createPaintWetTools(c));
-  tools.push(...createPaintThickTools(c));
+  tools.push(...createPaintThickTools(c, { origin: options.origin }));
   tools.push(...createFerroTools(c));
   tools.push(...createTimeMachineTools(c));
   tools.push(...createCultureTools(c));

@@ -3436,6 +3436,57 @@
       }
     ]
   },
+  "specialties": [
+    {
+      "id": "ferro",
+      "label": "Ferrofluid",
+      "group": "Ferrofluid",
+      "summary": "Lays liquid magnetic paint that magnets pull into glossy 3D spikes.",
+      "howToUse": "Paint a pool of ferrofluid, then add a magnet near it: the liquid flows toward the magnet and rises into Rosensweig spikes. Move or retune magnets to reshape them, and cure the spikes to keep them as permanent relief."
+    },
+    {
+      "id": "fluorescence",
+      "label": "UV-fluorescent ink",
+      "group": "UV-fluorescent",
+      "summary": "Glows in its own colour under the UV blacklight.",
+      "howToUse": "Paint as usual, then switch the UV blacklight on: the room dims and fluorescent strokes glow and spill light in their colour. Invisible ink lays nothing you can see in daylight, so it only shows under UV."
+    },
+    {
+      "id": "thermochromic",
+      "label": "Thermochromic ink",
+      "group": "Thermochromic",
+      "summary": "Shifts toward its hot colour where the canvas is warm.",
+      "howToUse": "Paint with the ink, then warm the canvas: where the heat passes the ink’s threshold it shifts toward its hot colour. Step the heat to let it spread and cool, or cool the canvas to bring the cold colour back."
+    },
+    {
+      "id": "iridescence",
+      "label": "Thin-film iridescence",
+      "group": "Iridescence",
+      "summary": "A thin film whose interference colours shift with the viewing angle.",
+      "howToUse": "Paint a coat, then tilt the view (or move the light, or turn on device tilt): the film’s interference colours sweep across the spectrum as the angle changes. Pressure varies the film thickness on brushes that follow it."
+    },
+    {
+      "id": "ghost",
+      "label": "Ghost paint",
+      "group": "Ghost paint",
+      "summary": "Wet paint that smears what it touches, then fades away.",
+      "howToUse": "Drag it through wet or dried paint on the layer: it pushes and lifts that paint while its own colour shows, then its pigment fades away and only the smear stays. Invisible ink is a ghost paint with no colour of its own."
+    },
+    {
+      "id": "mutation",
+      "label": "Mutation paint",
+      "group": "Mutation paint",
+      "summary": "Your stroke sinks away once an agent claims it and paints its answer.",
+      "howToUse": "Paint a mark and pause: after a moment it becomes a mutation request. A connected agent claims it, your paint sinks away and the agent paints its answer. With no agent connected the stroke stays as ordinary paint."
+    },
+    {
+      "id": "livePatterns",
+      "label": "Live patterns",
+      "group": "Live patterns",
+      "summary": "Reaction-diffusion patterns grow in the wet paint and freeze as it dries.",
+      "howToUse": "Paint a wet wash: spots, stripes, coral, maze or worm patterns grow inside it while it is wet and freeze where it dries. Seed the pattern to start growth in a spot, and keep wet time running so it develops."
+    }
+  ],
   "labels": {
     "wetTools": {
       "paint": "Paint",
