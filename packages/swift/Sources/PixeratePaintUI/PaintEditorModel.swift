@@ -134,6 +134,8 @@ public final class PaintEditorModel {
         subscriptions.append(try r.register(createPaintEditorToolProvider(c)))
         // Provider effects: their read tools say when no provider is set (`controller.setEffectsProvider`).
         subscriptions.append(try r.register(createPaintEffectsToolProvider(c)))
+        // Effects written at run time (`open_effect_authoring`, `save_authored_effect`, the `effect_authoring_*` tools); the controller's `authoredEffects` policy decides what they may do.
+        subscriptions.append(try r.register(createPaintEffectAuthoringToolProvider(c)))
         subscriptions.append(try r.register(createPaintBrushLibraryToolProvider(c)))
         gesture = PaintGesture(controller: c) { [unowned self] in self.viewport }
         gesture.onSelectStroke = { [unowned self] id in self.selectedStroke = id }

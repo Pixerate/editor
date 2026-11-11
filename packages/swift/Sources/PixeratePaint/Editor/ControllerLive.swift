@@ -303,7 +303,7 @@ extension PaintEditorController {
         var i = PaintStrokeInit(layerId: plain.id, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
         i.fixedBrush = st.brush
         // At a moment of live effects (`liveEffectAt`), a live stroke paints that frame of its effect.
-        if let at = liveEffectAt, let e = st.effect, e.live { i.paint = liveEffectFrame(e, at).json } else { i.paint = st.effect?.json ?? st.paint?.json }
+        if let at = liveEffectAt, let e = st.effect, e.live { i.paint = framePaint(e, at).json } else { i.paint = st.effect?.json ?? st.paint?.json }
         i.snapToPerspective = false
         i.stencils = false
         i.maskStencils = st.stencils ?? []

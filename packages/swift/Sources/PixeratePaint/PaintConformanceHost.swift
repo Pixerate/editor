@@ -7,7 +7,7 @@ import PixerateCore
  * `createPaintConformanceHost` in `paint-editor/contract.ts`: every paint tool provider this port
  * has in one registry that validates arguments, the saved document (the `pixerate.editor-document`
  * envelope) and the composited pixels. Wet paint runs with the GPU engine off, as in the TS host. `setup` is the scenario's editor options (`width`,
- * `height`, `dpi`, `paper`, `brushId`, `color`). Provider effects come from `FakeEffectProvider`,
+ * `height`, `dpi`, `paper`, `brushId`, `color`, `authoredEffects`, `rawShaders`, `authoredEffectLimits`). Provider effects come from `FakeEffectProvider`,
  * as the TS host uses the fake provider.
  */
 public final class PaintConformanceHost: ConformanceHost {
@@ -21,16 +21,27 @@ public final class PaintConformanceHost: ConformanceHost {
             paper: paper?.objectValue, paperPreset: paper?.stringValue, brushId: setup["brushId"]?.stringValue,
             color: setup["color"]?.stringValue, hand: setup["hand"]?.stringValue,
             // The TypeScript wet kernel with the GPU off is the reference, as the TS host forces it.
-            wet: PaintWetOptions(gpu: "off")
+            wet: PaintWetOptions(gpu: "off"),
+            authoredEffects: try setup["authoredEffects"]?.stringValue.map(AuthoredEffectsPolicy.parse) ?? .replay,
+            rawShaders: setup["rawShaders"]?.boolValue ?? false,
+            authoredEffectLimits: Self.limits(setup["authoredEffectLimits"]?.objectValue)
         )
+        // Authored effects render on the CPU, as the TS evaluator does.
+        controller.authoredEffectsGPU = false
         controller.setEffectsProvider(FakeEffectProvider())
         if setup["stickers"] == "fake", let p = try? combineStickerProviders([editorStickers(), createFakeStickerProvider()]) {
             controller.setStickersProvider(p)
         }
         _ = try registry.register(createPaintEditorToolProvider(controller))
         _ = try registry.register(createPaintEffectsToolProvider(controller))
+        _ = try registry.register(createPaintEffectAuthoringToolProvider(controller))
         _ = try registry.register(createPaintBrushLibraryToolProvider(controller))
         _ = try registry.register(createPaintProposalToolProvider(PaintProposals(controller: controller)))
+    }
+
+    private static func limits(_ o: JSONObject?) -> AuthoredEffectLimits {
+        guard let o else { return AuthoredEffectLimits() }
+        return AuthoredEffectLimits(maxSourceLength: o["maxSourceLength"]?.numberValue.map { Int($0) }, maxCost: o["maxCost"]?.numberValue.map { Int($0) }, trialSize: o["trialSize"]?.numberValue.map { Int($0) }, trialRenderMs: o["trialRenderMs"]?.numberValue, liveFrameMs: o["liveFrameMs"]?.numberValue)
     }
 
     public func callTool(_ name: String, _ args: JSONObject) async -> McpToolResult {

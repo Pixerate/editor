@@ -1,0 +1,917 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "authored-effect-paint",
+  "description": "An effect written at run time used as paint: saved into the painting, painted with fixed to the canvas and along a stroke, as an effect layer and as paper, kept with its source in the document, and painted with again after a reload with no authoring session.",
+  "setup": {
+    "width": 48,
+    "height": 32,
+    "authoredEffects": "author"
+  },
+  "steps": [
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "pixel.blank"
+      },
+      "expect": {
+        "result": {
+          "compiled": true,
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1d2b53",
+              "description": "Colour at the top. (#rrggbb)",
+              "id": "top",
+              "type": "color"
+            },
+            {
+              "alpha": false,
+              "default": "#ff77a8",
+              "description": "Colour at the bottom. (#rrggbb)",
+              "id": "bottom",
+              "type": "color"
+            }
+          ],
+          "duration": 1000,
+          "from": "pixel.blank",
+          "issues": [],
+          "loop": false,
+          "name": "Blank",
+          "source": "control top: color = #1d2b53 // Colour at the top.\ncontrol bottom: color = #ff77a8 // Colour at the bottom.\nout = mix(top, bottom, uv.y)\n",
+          "sourceLanguage": "pixel",
+          "values": {
+            "bottom": "#ff77a8",
+            "top": "#1d2b53"
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_source",
+      "arguments": {
+        "source": "control leaf: color = #2f6b3a // Colour of the moss.\ncontrol light: color = #c9e27a // Colour of its tips.\ncontrol scale: number = 5 range 1 16 // Cells across the picture.\nlet n = noise(uv * scale) * 0.7 + noise(uv * scale * 3) * 0.3\nout = vec4(mix(leaf, light, smoothstep(0.35, 0.8, n)), smoothstep(0.2, 0.4, n))\n"
+      },
+      "expect": {
+        "result": {
+          "issues": []
+        }
+      }
+    },
+    {
+      "tool": "save_authored_effect",
+      "arguments": {
+        "name": "Moss"
+      },
+      "expect": {
+        "result": {
+          "animated": [],
+          "controls": [
+            "leaf",
+            "light",
+            "scale"
+          ],
+          "duration": 1000,
+          "id": "authored.moss",
+          "loop": false,
+          "name": "Moss"
+        }
+      }
+    },
+    {
+      "tool": "close_effect_authoring",
+      "expect": {
+        "result": {
+          "closed": "Blank"
+        }
+      }
+    },
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "query": "moss"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [
+            {
+              "category": "authored",
+              "description": "An effect written in pixel expressions.",
+              "duration": 1000,
+              "id": "authored.moss",
+              "kind": "shader",
+              "loop": false,
+              "name": "Moss",
+              "tags": [
+                "authored",
+                "pixel"
+              ],
+              "transparent": true,
+              "uses": [
+                "generator"
+              ]
+            }
+          ],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [
+            {
+              "count": 1,
+              "tag": "authored"
+            },
+            {
+              "count": 1,
+              "tag": "pixel"
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "describe_effect",
+      "arguments": {
+        "effect": "authored.moss"
+      },
+      "expect": {
+        "result": {
+          "appliesHere": false,
+          "available": true,
+          "category": "authored",
+          "controls": {
+            "additionalProperties": false,
+            "properties": {
+              "leaf": {
+                "description": "Colour of the moss. (#rrggbb)",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              },
+              "light": {
+                "description": "Colour of its tips. (#rrggbb)",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              },
+              "scale": {
+                "description": "Cells across the picture.",
+                "maximum": 16,
+                "minimum": 1,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "defaults": {
+            "leaf": "#2f6b3a",
+            "light": "#c9e27a",
+            "scale": 5
+          },
+          "description": "An effect written in pixel expressions.",
+          "duration": 1000,
+          "id": "authored.moss",
+          "inputs": [],
+          "kind": "shader",
+          "loop": false,
+          "name": "Moss",
+          "presets": [],
+          "tags": [
+            "authored",
+            "pixel"
+          ],
+          "transparent": true,
+          "uses": [
+            "generator"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "authored.moss",
+        "values": {
+          "scale": 7
+        }
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "authored.moss",
+            "provider": "authored",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "leaf": "#2f6b3a",
+              "light": "#c9e27a",
+              "scale": 7
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.8
+          },
+          {
+            "x": 24,
+            "y": 14,
+            "pressure": 0.9
+          },
+          {
+            "x": 44,
+            "y": 26,
+            "pressure": 0.8
+          }
+        ],
+        "seed": 5
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 33,
+            "width": 53,
+            "x": -3,
+            "y": -1
+          },
+          "dabs": 90,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/authored-effect-paint.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "75114e40d1b144194bb99e323d7363bdfb043fce953567005c5621198999d48e",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "authored.moss",
+        "map": {
+          "by": "stroke",
+          "length": 40
+        }
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "authored.moss",
+            "map": {
+              "by": "stroke",
+              "length": 40,
+              "repeat": "repeat"
+            },
+            "provider": "authored",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "leaf": "#2f6b3a",
+              "light": "#c9e27a",
+              "scale": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 26,
+            "pressure": 0.9
+          },
+          {
+            "x": 24,
+            "y": 20,
+            "pressure": 0.9
+          },
+          {
+            "x": 44,
+            "y": 8,
+            "pressure": 0.9
+          }
+        ],
+        "seed": 6
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 54,
+            "x": -3,
+            "y": 1
+          },
+          "dabs": 89,
+          "layerId": "@1",
+          "strokeId": "s2"
+        },
+        "pixels": {
+          "file": "png/authored-effect-paint.10.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "14b1da85dadb7f77f7fb821119b7bb97898d3c4ecbd61e872c800f1cc0a587a3",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "authored.nothing"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown effect \"authored.nothing\" in this painting's authored effects (authored.moss; list_authored_effects lists them). Call search_effects or list() for valid ids."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "add_effect_layer",
+      "arguments": {
+        "effect": "authored.moss",
+        "name": "Moss layer",
+        "opacity": 0.5
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "effects": [
+            {
+              "effect": "authored.moss",
+              "enabled": true,
+              "id": "effect",
+              "name": "Moss",
+              "provider": "authored",
+              "role": "effect layer",
+              "values": {
+                "leaf": "#2f6b3a",
+                "light": "#c9e27a",
+                "scale": 5
+              }
+            }
+          ],
+          "layer": {
+            "active": true,
+            "blend": "normal",
+            "bounds": {
+              "height": 32,
+              "width": 48,
+              "x": 0,
+              "y": 0
+            },
+            "clipped": false,
+            "depth": 0,
+            "id": "@2",
+            "locks": {},
+            "name": "Moss layer",
+            "opacity": 0.5,
+            "parentId": null,
+            "type": "pixel",
+            "visible": true
+          }
+        },
+        "pixels": {
+          "file": "png/authored-effect-paint.12.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "3d81987aec7383f22083152b7ee0a27c25c50d5846efff95dae9a30b0fe07d37",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_paper_effect",
+      "arguments": {
+        "effect": "authored.moss",
+        "values": {
+          "scale": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "paperEffect": {
+            "blend": "multiply",
+            "effect": "authored.moss",
+            "name": "Moss",
+            "opacity": 1,
+            "provider": "authored",
+            "values": {
+              "leaf": "#2f6b3a",
+              "light": "#c9e27a",
+              "scale": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "remove_authored_effect",
+      "arguments": {
+        "id": "authored.moss"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "\"authored.moss\" (Moss) is still used by 2 strokes, the effect paint, the effect paper, effect layer \"@2\"; remove those first (or rasterize the layers), then remove it."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "list_authored_effects",
+      "expect": {
+        "result": {
+          "effects": [
+            {
+              "animated": [],
+              "controls": [
+                "leaf",
+                "light",
+                "scale"
+              ],
+              "duration": 1000,
+              "id": "authored.moss",
+              "language": "pixel",
+              "loop": false,
+              "name": "Moss",
+              "uses": {
+                "layers": [
+                  "@2"
+                ],
+                "paint": true,
+                "paper": true,
+                "strokes": 2
+              }
+            }
+          ],
+          "open": null,
+          "policy": "author"
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Moss layer",
+              "opacity": 0.5,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 30,
+                "width": 50,
+                "x": -1,
+                "y": 1
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@1": "pixerate-asset:342-27rv3bp9bcp",
+              "@2": "pixerate-asset:3g2-cscmf9lgxm"
+            },
+            "authoredEffects": {
+              "authored.moss": {
+                "document": {
+                  "duration": 1000,
+                  "effectId": "pixel.blank",
+                  "loop": false,
+                  "name": "Moss",
+                  "presets": [],
+                  "providerId": "pixel",
+                  "source": "control leaf: color = #2f6b3a // Colour of the moss.\ncontrol light: color = #c9e27a // Colour of its tips.\ncontrol scale: number = 5 range 1 16 // Cells across the picture.\nlet n = noise(uv * scale) * 0.7 + noise(uv * scale * 3) * 0.3\nout = vec4(mix(leaf, light, smoothstep(0.35, 0.8, n)), smoothstep(0.2, 0.4, n))\n",
+                  "sourceLanguage": "pixel",
+                  "tracks": {},
+                  "values": {
+                    "leaf": "#2f6b3a",
+                    "light": "#c9e27a",
+                    "scale": 5
+                  },
+                  "version": 1
+                },
+                "name": "Moss"
+              }
+            },
+            "dpi": 300,
+            "effectLayers": {
+              "@2": {
+                "effect": "authored.moss",
+                "name": "Moss",
+                "provider": "authored",
+                "values": {
+                  "leaf": "#2f6b3a",
+                  "light": "#c9e27a",
+                  "scale": 5
+                }
+              }
+            },
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -1,
+                "y": 1
+              },
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Moss layer",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 0.5,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "paperEffect": {
+              "blend": "multiply",
+              "effect": "authored.moss",
+              "name": "Moss",
+              "opacity": 1,
+              "png": "pixerate-asset:27u-os6yy83fcw",
+              "provider": "authored",
+              "values": {
+                "leaf": "#2f6b3a",
+                "light": "#c9e27a",
+                "scale": 2
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.7
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.2,
+                    "tiltOpacity": 0.35,
+                    "tiltRoundness": 0.75,
+                    "tiltSize": 1
+                  },
+                  "id": "pencil-6b",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "6B pencil",
+                  "tip": {
+                    "flow": 0.75,
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 7,
+                    "spacing": 0.07
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#1f2937",
+                "id": "s1",
+                "layerId": "@1",
+                "paint": {
+                  "effect": "authored.moss",
+                  "provider": "authored",
+                  "time": 0,
+                  "type": "effect",
+                  "values": {
+                    "leaf": "#2f6b3a",
+                    "light": "#c9e27a",
+                    "scale": 7
+                  }
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 6
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 24,
+                    "y": 14
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 26
+                  }
+                ],
+                "seed": 5
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.7
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.2,
+                    "tiltOpacity": 0.35,
+                    "tiltRoundness": 0.75,
+                    "tiltSize": 1
+                  },
+                  "id": "pencil-6b",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "6B pencil",
+                  "tip": {
+                    "flow": 0.75,
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 7,
+                    "spacing": 0.07
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#1f2937",
+                "id": "s2",
+                "layerId": "@1",
+                "paint": {
+                  "effect": "authored.moss",
+                  "map": {
+                    "by": "stroke",
+                    "length": 40,
+                    "repeat": "repeat"
+                  },
+                  "provider": "authored",
+                  "time": 0,
+                  "type": "effect",
+                  "values": {
+                    "leaf": "#2f6b3a",
+                    "light": "#c9e27a",
+                    "scale": 5
+                  }
+                },
+                "points": [
+                  {
+                    "pressure": 0.9,
+                    "x": 4,
+                    "y": 26
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 24,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 44,
+                    "y": 8
+                  }
+                ],
+                "seed": 6
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/authored-effect-paint.16.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "f0597a317f37a0b2a0d1a1fd67b854daf02a04594077a239186af6006d97c246",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_effect_paint",
+      "arguments": {
+        "effect": "authored.moss",
+        "values": {
+          "leaf": "#6b2f3a"
+        }
+      },
+      "expect": {
+        "result": {
+          "effectPaint": {
+            "effect": "authored.moss",
+            "provider": "authored",
+            "time": 0,
+            "type": "effect",
+            "values": {
+              "leaf": "#6b2f3a",
+              "light": "#c9e27a",
+              "scale": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 10,
+            "y": 2,
+            "pressure": 0.9
+          },
+          {
+            "x": 10,
+            "y": 30,
+            "pressure": 0.9
+          }
+        ],
+        "seed": 7
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 42,
+            "width": 14,
+            "x": 3,
+            "y": -5
+          },
+          "dabs": 57,
+          "layerId": "@2",
+          "strokeId": "s3"
+        },
+        "pixels": {
+          "file": "png/authored-effect-paint.18.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "6f28fdcab9b13d81411ce52c157783a235fb6a00c76ba6d3cdb72d6ba15ab737",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

@@ -151,7 +151,7 @@ extension PaintEditorController {
 
     /// The provider's description of an effect, checked for `place`.
     public func describeEffect(_ effect: String, place: String? = nil) async throws -> EffectDescription {
-        let d = try await requireEffectsProvider().describe(effect)
+        let d = try await providerFor(effect).describe(effect)
         let paths = pathControlsOf(d)
         if let first = paths.first { effectPathControls[d.id] = first }
         if let place { try checkPaintEffectPlace(d, place) }
@@ -170,7 +170,7 @@ extension PaintEditorController {
     }
 
     private func renderEffectCanvas(_ d: EffectDescription, _ values: JSONObject, _ time: Double? = nil) async throws -> EffectPixels {
-        try await renderEffect(try requireEffectsProvider(), d.id, doc.canvas.width, doc.canvas.height, EffectRenderRequest(time: time ?? 0, values: values))
+        try await renderEffect(try providerFor(d.id), d.id, doc.canvas.width, doc.canvas.height, EffectRenderRequest(time: time ?? 0, values: values))
     }
 
     /// Values over `base` (`null` resets a control to its default), checked against the effect's controls.
@@ -191,7 +191,7 @@ extension PaintEditorController {
     }
 
     private func sourceOf(_ d: EffectDescription, _ values: JSONObject, _ time: Double?) throws -> PaintEffectSource {
-        PaintEffectSource(effect: d.id, provider: try requireEffectsProvider().id, name: d.name, values: values, time: time.flatMap { $0 != 0 ? $0 : nil })
+        PaintEffectSource(effect: d.id, provider: try providerFor(d.id).id, name: d.name, values: values, time: time.flatMap { $0 != 0 ? $0 : nil })
     }
 
     private func checkTime(_ time: Double?) throws {
@@ -377,7 +377,7 @@ extension PaintEditorController {
         let images = d.inputs.filter { $0["kind"]?.stringValue == "image" }
         let heightInput = images.first { ($0["name"]?.stringValue ?? "").range(of: "^(height|depth|relief)$", options: [.regularExpression, .caseInsensitive]) != nil }?["name"]?.stringValue
         let sourceName = images.first { $0["name"]?.stringValue != heightInput }?["name"]?.stringValue ?? "source"
-        let out = try await renderEffect(try requireEffectsProvider(), d.id, rect.width, rect.height, EffectRenderRequest(time: time ?? 0, values: vals, inputs: [sourceName: EffectPixels(width: rect.width, height: rect.height, data: before)]))
+        let out = try await renderEffect(try providerFor(d.id), d.id, rect.width, rect.height, EffectRenderRequest(time: time ?? 0, values: vals, inputs: [sourceName: EffectPixels(width: rect.width, height: rect.height, data: before)]))
         let now = try sameLayerAfterRender(l)
         let surface = writeRegion(now.pixelSurface, rect, mixPixels(before, out.data, amount))
         commit("Light effect", doc.with { $0.layers = mapLayer(doc.layers, now.id) { $0.withSurface(surface) } })
@@ -425,7 +425,7 @@ extension PaintEditorController {
         let vals = try effectValues(d, d.defaults, values)
         func changed() -> PaintEditorError { PaintEditorError("The paint changed while \"\(d.name)\" rendered (set_color, set_paint or another set_effect_paint); call set_effect_paint again to paint with it.") }
         if epoch != paintEpoch { throw changed() }
-        let paint = PaintEffectPaint(effect: d.id, provider: try requireEffectsProvider().id, values: vals, time: time ?? 0, map: map, live: live == true)
+        let paint = PaintEffectPaint(effect: d.id, provider: try providerFor(d.id).id, values: vals, time: time ?? 0, map: map, live: live == true)
         effectPaintPending = paint
         emit()
         do { _ = try await renderEffectPaint(paint) } catch {
@@ -470,11 +470,24 @@ extension PaintEditorController {
     /// Renders an effect paint at the canvas size without keeping it.
     func renderEffectPaintPixels(_ p: PaintEffectPaint) async throws -> EffectPaintPixels {
         let what = "the effect \"\(p.effect)\"\(p.provider.isEmpty ? "" : " from provider \"\(p.provider)\"")"
-        guard let provider = effectsProvider else { throw PaintEditorError("Effect paint needs \(what), but no effects provider is registered; register it (setEffectsProvider) and try again.") }
+        let authored = isAuthoredEffectId(p.effect)
+        guard let provider = authored ? authoredProvider() : effectsProvider else { throw PaintEditorError("Effect paint needs \(what), but no effects provider is registered; register it (setEffectsProvider) and try again.") }
         if !p.provider.isEmpty && provider.id != p.provider { throw PaintEditorError("Effect paint needs \(what), but the registered provider is \"\(provider.id)\"; register \"\(p.provider)\" (setEffectsProvider) and try again.") }
         let size = p.size(doc.canvas)
         let pixels: EffectPixels
-        do { pixels = try await renderEffect(provider, p.effect, size.width, size.height, EffectRenderRequest(time: p.time, values: p.values)) } catch {
+        do {
+            let t0 = authoredNow()
+            // A live view frame of a pixel expression effect may render on the GPU; it is dropped once shown (`gpuFrameKeys`).
+            if authored && timingLiveFrames && authoredEffectsGPU && PixelGPU.isAvailable {
+                let r = try authoredProvider().createRenderer(p.effect, width: size.width, height: size.height, gpu: true)
+                defer { r.dispose() }
+                pixels = try await r.render(EffectRenderRequest(time: p.time, values: p.values))
+                if let a = r as? AuthoredSyncRenderer, !(a.inner is PixelCPURenderer) { gpuFrameKeys.insert(p.key) }
+            } else {
+                pixels = try await renderEffect(provider, p.effect, size.width, size.height, EffectRenderRequest(time: p.time, values: p.values))
+            }
+            noteLiveFrame(p.effect, authoredNow() - t0)
+        } catch {
             throw PaintEditorError("Effect paint could not render \(what): \(error.localizedDescription)")
         }
         return EffectPaintPixels(width: size.width, height: size.height, data: pixels.data, map: p.map?.by == "stroke" ? p.map : nil)
@@ -483,12 +496,15 @@ extension PaintEditorController {
     /// Renders an effect paint synchronously when its provider supports synchronous rendering (`SyncEffectRenderer`).
     func renderEffectPaintSync(_ p: PaintEffectPaint) -> EffectPaintPixels? {
         if let have = effectPaintImage(p) { return have }
-        guard let provider = effectsProvider, p.provider.isEmpty || provider.id == p.provider else { return nil }
+        guard let provider = isAuthoredEffectId(p.effect) ? authoredProvider() : effectsProvider, p.provider.isEmpty || provider.id == p.provider else { return nil }
         let size = p.size(doc.canvas)
         guard let made = try? provider.createRenderer(p.effect, width: size.width, height: size.height) else { return nil }
         defer { made.dispose() }
         guard let r = made as? SyncEffectRenderer else { return nil }
-        guard let pixels = try? r.renderSync(EffectRenderRequest(time: p.time, values: p.values)),
+        let t0 = authoredNow()
+        let rendered = try? r.renderSync(EffectRenderRequest(time: p.time, values: p.values))
+        noteLiveFrame(p.effect, authoredNow() - t0)
+        guard let pixels = rendered,
               pixels.width == size.width, pixels.height == size.height, pixels.data.count == size.width * size.height * 4 else { return nil }
         let img = EffectPaintPixels(width: size.width, height: size.height, data: pixels.data, map: p.map?.by == "stroke" ? p.map : nil)
         effectPaintPixels.set(p.key, img)
@@ -515,7 +531,7 @@ extension PaintEditorController {
             raw = nil
         }
         guard let raw, raw.map?.by == "path" else { return }
-        if effectPathControls[raw.effect] == nil, let d = try? await effectsProvider?.describe(raw.effect) {
+        if effectPathControls[raw.effect] == nil, let d = try? await (isAuthoredEffectId(raw.effect) ? authoredProvider() : effectsProvider)?.describe(raw.effect) {
             if let first = pathControlsOf(d).first { effectPathControls[d.id] = first }
         }
         _ = try await renderEffectPaint(strokeEffectWithPath(raw, points))
@@ -599,6 +615,7 @@ extension PaintEditorController {
             o["png"] = .string(pngDataUrl(p.image.width, p.image.height, p.image.data))
             out["paperEffect"] = .object(o)
         }
+        if let authored = authoredEffectsToJSON(d.authoredEffects) { out["authoredEffects"] = .object(authored) }
         return out
     }
 }

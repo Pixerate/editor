@@ -86,7 +86,7 @@ extension PaintEditorController {
     private func liveSurfacesAt(_ time: Double) async throws -> [String: TiledSurface] {
         let (layers, sources) = liveEffects()
         if layers.isEmpty { return [:] }
-        try await prepareEffectPaints(sources.map { liveEffectFrame($0, time) })
+        try await prepareEffectPaints(sources.map { framePaint($0, time) })
         var out: [String: TiledSurface] = [:]
         liveEffectAt = time
         defer { liveEffectAt = nil }
@@ -108,7 +108,14 @@ extension PaintEditorController {
         try checkEffectMoment(time)
         let (layers, sources) = liveEffects()
         let before = doc
-        try await prepareEffectPaints(sources.map { liveEffectFrame($0, time) })
+        // Authored effect renders are timed for the live frame budget (`noteLiveFrame`).
+        timingLiveFrames = true
+        do {
+            defer { timingLiveFrames = false }
+            try await prepareEffectPaints(sources.map { framePaint($0, time) })
+        }
+        // Frames drawn on the GPU are for this view frame only: exports and replays render on the CPU.
+        defer { dropGPUFrames() }
         if doc !== before || liveStroke != nil { return false }
         var next: [String: (base: TiledSurface, surface: TiledSurface)] = [:]
         var dirty: [RasterRect] = []
@@ -127,6 +134,12 @@ extension PaintEditorController {
         defer { emittingViewFrame = false }
         emit(cleared || dirty.isEmpty ? nil : dirty)
         return true
+    }
+
+    /// Drops the effect paint renders the GPU drew for a view frame.
+    func dropGPUFrames() {
+        for k in gpuFrameKeys { _ = effectPaintPixels.delete(k) }
+        gpuFrameKeys = []
     }
 
     /**

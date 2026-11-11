@@ -46,10 +46,16 @@ public struct PaintLiveAnimation: Equatable, Sendable {
  * renders shows `effectsBusy` meanwhile and reports a failure in `error`.
  */
 extension PaintEditorModel {
-    /// The registered effects provider, or nil (the Effects tab is shown only with one).
-    public var effectsProvider: EffectProvider? { track(); return controller.effectsProvider }
+    /**
+     * The effects the panel offers (`controller.effectsCatalog`): the registered provider with the
+     * painting's authored effects, or nil with neither (the Effects tab is shown only with one).
+     */
+    public var effectsProvider: EffectProvider? { track(); return controller.effectsCatalog }
 
-    /// The side panel tabs: the Effects tab only while an effects provider is registered.
+    /// The painting's authored effects (written at run time and kept in the painting), with where each is used.
+    public func authoredEffects() async -> [AuthoredEffectInfo] { track(); return await controller.listAuthoredEffects() }
+
+    /// The side panel tabs: the Effects tab only while there are effects to offer (a provider, or authored effects).
     public var tabs: [PaintPanelTab] { effectsProvider != nil ? PaintPanelTab.allCases : PaintPanelTab.allCases.filter { $0 != .providerEffects } }
 
     /// The effect paper (its source, opacity and blend), or nil.
@@ -93,9 +99,9 @@ extension PaintEditorModel {
         }
     }
 
-    /// The provider's effects that `place` takes, matching `query` when it is not empty (`EffectsBrowser`).
+    /// The provider's and the painting's authored effects that `place` takes, matching `query` when it is not empty (`EffectsBrowser`).
     public func effects(for place: PaintEffectPlace, query: String = "") async -> [EffectDescription] {
-        guard let provider = controller.effectsProvider else { return [] }
+        guard let provider = controller.effectsCatalog else { return [] }
         do {
             let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
             var found: [EffectDescription] = []
