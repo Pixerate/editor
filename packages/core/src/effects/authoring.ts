@@ -31,6 +31,12 @@ export interface EffectAuthoringDocument {
 	source?: string;
 	/** The language of `source`. */
 	sourceLanguage?: Exclude<EffectSourceLanguage, null>;
+	/**
+	 * Data the provider that saved the document keeps with it (JSON), such as code compiled ahead of
+	 * time from `source`. The generic session gives it back unchanged from `exportDocument`, and drops
+	 * it when the source is edited, since it may describe the old source (undo brings it back).
+	 */
+	provider?: Readonly<Record<string, unknown>>;
 }
 
 /** What to open: a catalog effect (optionally with a preset applied), or a document saved earlier by `exportDocument`. */

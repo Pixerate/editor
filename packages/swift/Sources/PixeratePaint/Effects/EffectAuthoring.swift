@@ -110,8 +110,12 @@ public struct EffectAuthoringDocument: Equatable, Sendable {
     public var source: String?
     /// The language of `source` (`glsl`, `svg` or `pixel`).
     public var sourceLanguage: String?
+    /// Data the provider that saved the document keeps with it, such as code compiled ahead of time
+    /// from `source`. The generic session gives it back unchanged from `exportDocument`, and drops it
+    /// when the source is edited, since it may describe the old source (undo brings it back).
+    public var provider: JSONObject?
 
-    public init(providerId: String, effectId: String, name: String, values: JSONObject = [:], tracks: EffectTracks = EffectTracks(), presets: [JSONObject] = [], duration: Double = 1000, loop: Bool = false, source: String? = nil, sourceLanguage: String? = nil) {
+    public init(providerId: String, effectId: String, name: String, values: JSONObject = [:], tracks: EffectTracks = EffectTracks(), presets: [JSONObject] = [], duration: Double = 1000, loop: Bool = false, source: String? = nil, sourceLanguage: String? = nil, provider: JSONObject? = nil) {
         self.providerId = providerId
         self.effectId = effectId
         self.name = name
@@ -122,9 +126,10 @@ public struct EffectAuthoringDocument: Equatable, Sendable {
         self.loop = loop
         self.source = source
         self.sourceLanguage = sourceLanguage
+        self.provider = provider
     }
 
-    /// The document as the TS core exports it: `source` and `sourceLanguage` first when there is a source.
+    /// The document as the TS core exports it: `source` and `sourceLanguage` first when there is a source, `provider` last.
     public var json: JSONObject {
         var o = JSONObject()
         if let source { o["source"] = .string(source) }
@@ -138,6 +143,7 @@ public struct EffectAuthoringDocument: Equatable, Sendable {
         o["presets"] = .array(presets.map { .object($0) })
         o["duration"] = .number(duration)
         o["loop"] = .bool(loop)
+        if let provider { o["provider"] = .object(provider) }
         return o
     }
 }
@@ -462,6 +468,7 @@ private func documentErrors(_ doc: JSONObject, _ description: EffectDescription)
     }
     if let d = doc["duration"], !(isFiniteNumber(d) && d.numberValue! > 0) { errors.append(SchemaValidationError(path: "/duration", message: "must be a finite number of ms > 0")) }
     if let l = doc["loop"], l.boolValue == nil { errors.append(SchemaValidationError(path: "/loop", message: "must be a boolean")) }
+    if let p = doc["provider"], p.objectValue == nil { errors.append(SchemaValidationError(path: "/provider", message: "must be an object of the provider's own data")) }
     return errors
 }
 
@@ -558,6 +565,8 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
     private var loop: Bool
     private var compiled: Bool?
     private var savedPresets: [JSONObject]
+    /// The opened document's `provider` data, until the source changes.
+    private var providerData: JSONObject?
     private var baseValues: JSONObject
     private var tracks: EffectTracks
     private var livePreviews: [ObjectIdentifier: EffectRenderer] = [:]
@@ -642,6 +651,7 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
         loop = initialDoc?["loop"]?.boolValue ?? description.json["loop"]?.boolValue ?? false
         compiled = backend != nil ? true : nil
         savedPresets = (initialDoc?["presets"]?.arrayValue ?? []).compactMap(\.objectValue)
+        providerData = initialDoc?["provider"]?.objectValue
         baseValues = base
         self.tracks = tracks
         self.description = description
@@ -720,6 +730,7 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
         var description: EffectDescription
         var baseValues: JSONObject
         var tracks: EffectTracks
+        var providerData: JSONObject?
     }
 
     /// Values and tracks carried over to new controls: kept where the control is still there and the value still fits.
@@ -739,15 +750,18 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
         guard let backend else { return .refused("this effect has no source to edit") }
         if let refused = backend.refuse(src) { return .refused(refused) }
         let result = backend.compile(src, effectId: effectId)
-        let before = SourceSnapshot(sourceText: sourceText, compiledSource: compiledSource, sourceIssues: sourceIssues, compiled: compiled, description: description, baseValues: baseValues, tracks: tracks)
+        let before = SourceSnapshot(sourceText: sourceText, compiledSource: compiledSource, sourceIssues: sourceIssues, compiled: compiled, description: description, baseValues: baseValues, tracks: tracks, providerData: providerData)
+        // The provider's data may describe the old source: a new source drops it.
+        let keptData = src == sourceText ? providerData : nil
         var after = before
         if let d = result.description {
             let carried = carryOver(d)
-            after = SourceSnapshot(sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: d, baseValues: carried.base, tracks: carried.tracks)
+            after = SourceSnapshot(sourceText: src, compiledSource: src, sourceIssues: result.issues, compiled: true, description: d, baseValues: carried.base, tracks: carried.tracks, providerData: keptData)
         } else {
             after.sourceText = src
             after.sourceIssues = result.issues
             after.compiled = false
+            after.providerData = keptData
         }
         let apply: (SourceSnapshot) -> Void = { [weak self] s in
             guard let self else { return }
@@ -758,6 +772,7 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
             description = s.description
             baseValues = s.baseValues
             tracks = s.tracks
+            providerData = s.providerData
         }
         history.execute(Command(name: "Edit source", execute: { apply(after) }, undo: { apply(before) }))
         invalidateState()
@@ -1117,7 +1132,7 @@ public final class GenericEffectAuthoringSession: EffectAuthoringSession {
     public func exportDocument() -> EffectAuthoringDocument {
         EffectAuthoringDocument(
             providerId: provider.id, effectId: effectId, name: docName ?? description.name, values: valuesAtTime(playheadTime, baseValues, tracks), tracks: tracks,
-            presets: savedPresets, duration: duration, loop: loop, source: backend != nil ? sourceText : nil, sourceLanguage: backend != nil && sourceText != nil ? backend!.language : nil)
+            presets: savedPresets, duration: duration, loop: loop, source: backend != nil ? sourceText : nil, sourceLanguage: backend != nil && sourceText != nil ? backend!.language : nil, provider: providerData)
     }
 
     public func dispose() {
