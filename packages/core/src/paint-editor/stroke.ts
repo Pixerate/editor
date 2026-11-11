@@ -436,6 +436,22 @@ export class PaintStrokeSession {
     });
   }
 
+  /**
+   * Everywhere the stroke's marks reached, its light twin's included, whether or not they changed
+   * a pixel (`result.bounds` is `null` when nothing changed). A stroke layer redraws a stroke
+   * wherever it reaches: an eraser drawn over nothing changes nothing, but erases what is later
+   * put under it.
+   */
+  reach(): RasterRect | null {
+    const twin = this.lightTwin?.reach() ?? null;
+    return twin ? union(this.bounds, twin) : this.bounds ? { ...this.bounds } : null;
+  }
+
+  /** Whether the stroke paints the layer's light channel too (a light twin). */
+  get hasLightTwin(): boolean {
+    return this.lightTwin !== null;
+  }
+
   /** Light paint: the layer's light channel after the stroke, or `null` when the stroke has no twin or left it unchanged. */
   lightChannel(): TiledSurface | null {
     return this.lightResult;

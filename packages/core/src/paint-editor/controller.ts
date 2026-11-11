@@ -215,6 +215,7 @@ import { createPaintProposals, type PaintProposals } from './collaboration';
 import {
   crossoverGenomes,
   describeGenomeDiff,
+  evolutionStrokeRefusal,
   mutateGenome,
   normalizeMutationRates,
   proposalGenomeStrokes,
@@ -4314,7 +4315,7 @@ export class PaintEditorController {
         }
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
-        this.paintedBounds.set(stroke, s.result?.bounds ?? null);
+        this.paintedBounds.set(stroke, redrawArea(s));
         const amOutputs = s.antimatterOutputs();
         if (amOutputs) {
           this.commit(
@@ -4388,7 +4389,7 @@ export class PaintEditorController {
         // Painted on the scheme's view of a stroke layer, or in a dual colour's dark side: the document draws it in its own colours.
         const list = next.liveStrokes?.[l.id];
         if (list && (viewBase || stroke.color !== s.init.colorHex)) {
-          const canonical = this.withLiveStrokes({ ...next, layers: mapLayer(next.layers, l.id, () => l) }, l, list, s.result?.bounds ? [s.result.bounds] : null, { record: false });
+          const canonical = this.withLiveStrokes({ ...next, layers: mapLayer(next.layers, l.id, () => l) }, l, list, this.strokeAreas([stroke]), { record: false });
           const drawn = findLayer(canonical.layers, l.id)?.layer as PaintPixelLayer;
           // What was painted is the view in the scheme it was painted in.
           this.schemeViews.set(l.id, { scheme: viewScheme, list, base: drawn.surface, surface });
@@ -4535,7 +4536,7 @@ export class PaintEditorController {
         if (cancelled || !surface) return;
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
-        this.paintedBounds.set(stroke, s.result?.bounds ?? null);
+        this.paintedBounds.set(stroke, redrawArea(s));
         const amOutputs = s.antimatterOutputs();
         if (amOutputs) {
           out = this.applyAntimatterOutputs(out, amOutputs, stroke);
@@ -6630,7 +6631,11 @@ export class PaintEditorController {
       const layerThick = this.liveThickMulti?.get(id) ?? (this.liveThick?.layerId === id ? this.liveThick.channels : this.animatedThick.get(id) ?? this.doc.thick?.[id]);
       const glowed = cache.glow(l.surface, layerLight, layerThick);
       if (glowed !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: glowed }));
-      const committed = findLayer(this.doc.layers, id)?.layer;
+      // A stroke layer's spill takes the colours the scheme shows (its view of dual-colour strokes).
+      const doc = findLayer(this.doc.layers, id)?.layer;
+      const strokes = this.doc.liveStrokes?.[id];
+      const view = layerLight && strokes && isPixelLayer(doc) ? this.schemeSurface(doc, strokes) : null;
+      const committed = view && isPixelLayer(doc) ? { ...doc, surface: view } : doc;
       const spill = layerLight && isPixelLayer(committed) ? cache.spill(committed.surface, layerLight, this.lightSpillOf(id)) : null;
       if (spill) out = insertAfter(out, id, { type: 'pixel', id: `${id}${SPILL_SUFFIX}`, name: `${l.name} light`, visible: l.visible, opacity: l.opacity, blend: 'linear-dodge', surface: spill, offset: { ...l.offset } } as PaintPixelLayer);
     }
@@ -7978,7 +7983,13 @@ export class PaintEditorController {
     if (record && isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it (update_layer locks) first.`);
     const current = findLayer(doc.layers, layer.id)?.layer as PaintPixelLayer | undefined;
     const hasFilm = list.some((s) => Boolean(s.brush.iridescence)) || Boolean(doc.thick?.[layer.id]);
-    const surface = this.drawLiveStrokes(current ?? layer, list, hasFilm ? null : dirty);
+    // Light is drawn with the strokes while any of them lays it (each stroke's twin dims or erases it too).
+    const lit = list.some((s) => s.brush.light.amount > 0);
+    const drawn = this.drawLiveLayer(current ?? layer, list, hasFilm ? null : dirty, lit ? (doc.light?.[layer.id] ?? null) : undefined);
+    const surface = drawn.surface;
+    const light = { ...(doc.light ?? {}) };
+    if (drawn.light?.tiles.size) light[layer.id] = drawn.light;
+    else delete light[layer.id];
     let thick = doc.thick;
     if (hasFilm) {
       const plain: PaintPixelLayer = { ...(current ?? layer), visible: true, locks: undefined, offset: { x: 0, y: 0 } };
@@ -7994,7 +8005,7 @@ export class PaintEditorController {
       }
       thick = withLayerThick(doc.thick, layer.id, ch);
     }
-    const next = { ...doc, layers: mapLayer(doc.layers, layer.id, (l) => ({ ...(l as PaintPixelLayer), surface, offset: { x: 0, y: 0 } })), liveStrokes: { ...(doc.liveStrokes ?? {}), [layer.id]: [...list] }, ...(thick ? { thick } : {}) };
+    const next = { ...doc, layers: mapLayer(doc.layers, layer.id, (l) => ({ ...(l as PaintPixelLayer), surface, offset: { x: 0, y: 0 } })), liveStrokes: { ...(doc.liveStrokes ?? {}), [layer.id]: [...list] }, ...(doc.light || drawn.light?.tiles.size ? { light } : {}), ...(thick ? { thick } : {}) };
     if (!record) return next;
     return this.withPaintEvent(next, { kind: 'live-strokes', layerId: layer.id, data: { strokes: list.map((x) => JSON.parse(JSON.stringify(x))) } });
   }
@@ -8015,8 +8026,14 @@ export class PaintEditorController {
     return out;
   }
 
-  /** Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area it painted. */
-  private drawLiveStroke(doc: PaintDocumentState, plain: PaintPixelLayer, surface: TiledSurface, st: RecordedStroke, thick?: ThickChannels): { surface: TiledSurface; bounds: RasterRect | null; thick?: ThickChannels } {
+  /**
+   * Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area
+   * it painted. With `light` (the layer's light channel so far, `null` for none yet), the stroke's
+   * light twin paints it too and the result's `light` is the channel after it; without, the
+   * layer's light is left out and no twin runs (except for a brush that lays light, whose light
+   * is then dropped).
+   */
+  private drawLiveStroke(doc: PaintDocumentState, plain: PaintPixelLayer, surface: TiledSurface, st: RecordedStroke, thick?: ThickChannels, light?: TiledSurface | null): { surface: TiledSurface; bounds: RasterRect | null; thick?: ThickChannels; light: TiledSurface | null } {
     let out = surface;
     let outThick = thick;
     const host: StrokeSessionHost = {
@@ -8030,13 +8047,17 @@ export class PaintEditorController {
     };
     const paint = st.paint && this.liveEffectAt !== null && isLiveEffect(st) ? this.framePaint(st.paint as PaintEffectPaint, this.liveEffectAt) : st.paint;
     const init: PaintStrokeInit = { layerId: plain.id, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(paint ? { paint } : {}), snapToPerspective: false, stencils: false, maskStencils: st.stencils ?? [] };
-    const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })), ...(outThick ? { thick: { ...(doc.thick ?? {}), [plain.id]: outThick } } : {}) }, init, host);
+    const lights = { ...(doc.light ?? {}) };
+    if (light !== undefined) lights[plain.id] = light ?? emptyLight();
+    else delete lights[plain.id];
+    const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })), light: lights, ...(outThick ? { thick: { ...(doc.thick ?? {}), [plain.id]: outThick } } : {}) }, init, host);
     session.push(st.points);
     const result = session.end();
+    const area = redrawArea(session);
     // Only ever grown: a live effect's frames can paint more or less of a stroke (its alpha moves).
     const had = this.paintedBounds.get(st);
-    this.paintedBounds.set(st, had && result.bounds ? unionRect(had, result.bounds) : (result.bounds ?? had ?? null));
-    return { surface: out, bounds: result.bounds, thick: outThick };
+    this.paintedBounds.set(st, had && area ? unionRect(had, area) : (area ?? had ?? null));
+    return { surface: out, bounds: area, thick: outThick, light: light === undefined ? null : (session.lightChannel() ?? light) };
   }
 
   /**
@@ -8046,35 +8067,58 @@ export class PaintEditorController {
    * strokes over it); the other tiles are kept. Without it, or with `null`, every stroke is drawn.
    */
   private drawLiveStrokes(layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): TiledSurface {
+    return this.drawLiveLayer(layer, list, dirty).surface;
+  }
+
+  /**
+   * `drawLiveStrokes`, and with `light` (the layer's light channel as it was drawn, `null` for
+   * none) the light channel too: every stroke's light twin runs over it in the same order and the
+   * same areas, so light comes and goes with the strokes that lay, dim or erase it.
+   */
+  private drawLiveLayer(layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null, light?: TiledSurface | null): { surface: TiledSurface; light: TiledSurface | null } {
     // Drawn on a copy of the layer as a visible, unlocked, plain layer at offset 0.
     const plain: PaintPixelLayer = { ...layer, visible: true, locks: undefined, offset: { x: 0, y: 0 } };
     const doc: PaintDocumentState = { ...this.doc, liveStrokes: undefined, stickers: undefined };
+    const lit = light !== undefined;
     const unknown = list.filter((s) => !this.paintedBounds.has(s));
     const partial = dirty && !layer.offset.x && !layer.offset.y && unknown.length <= 4;
     if (!partial) {
       let surface = emptySurface(4);
-      for (const st of list) surface = this.drawLiveStroke(doc, plain, surface, st).surface;
-      return surface;
+      let l: TiledSurface | null | undefined = lit ? null : undefined;
+      for (const st of list) {
+        const r = this.drawLiveStroke(doc, plain, surface, st, undefined, l);
+        surface = r.surface;
+        if (lit) l = r.light;
+      }
+      return { surface, light: l ?? null };
     }
     // A stroke that is new here is drawn once alone to learn where it paints.
     const areas = [...dirty];
     for (const st of unknown) {
-      const b = this.drawLiveStroke(doc, plain, emptySurface(4), st).bounds;
+      const b = this.drawLiveStroke(doc, plain, emptySurface(4), st, undefined, lit ? null : undefined).bounds;
       if (b) areas.push(b);
     }
-    const { width, height } = this.doc.canvas;
-    const rects = areas.map((r) => clipRect(r, width, height)).filter((r): r is RasterRect => r !== null);
-    if (!rects.length) return layer.surface;
+    // Not clipped to the canvas: strokes paint past its edges, and a full redraw draws those pixels too.
+    const rects = areas.filter((r) => r.width > 0 && r.height > 0);
+    if (!rects.length) return { surface: layer.surface, light: light ?? null };
     const overlaps = (a: RasterRect, b: RasterRect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     let drawn = emptySurface(4);
+    let drawnLight: TiledSurface | null | undefined = lit ? null : undefined;
     for (const st of list) {
       const b = this.paintedBounds.get(st);
-      if (b && rects.some((r) => overlaps(r, b))) drawn = this.drawLiveStroke(doc, plain, drawn, st).surface;
+      if (!b || !rects.some((r) => overlaps(r, b))) continue;
+      const r = this.drawLiveStroke(doc, plain, drawn, st, undefined, drawnLight);
+      drawn = r.surface;
+      if (lit) drawnLight = r.light;
     }
     // Only the changed areas are copied in; every other pixel is kept.
     let surface = layer.surface;
     for (const r of rects) surface = writeRegion(surface, r, readRegion(drawn, r));
-    return surface;
+    if (!lit) return { surface, light: null };
+    let outLight = light ?? emptyLight();
+    const fromLight = drawnLight ?? emptyLight();
+    for (const r of rects) outLight = writeRegion(outLight, r, readRegion(fromLight, r));
+    return { surface, light: outLight };
   }
 
   // --- Live effect paint ------------------------------------------------------------
@@ -9342,7 +9386,7 @@ export class PaintEditorController {
     const parents = strokeIds.map((id) => {
       const s = byId.get(id);
       if (!s) throw new PaintEditorError(`Unknown stroke "${id}". Call list_strokes for the ids.`);
-      const refusal = liveStrokeRefusal(s.brush);
+      const refusal = evolutionStrokeRefusal(s.brush);
       if (refusal) throw new PaintEditorError(refusal);
       return s;
     });
@@ -9407,7 +9451,7 @@ export class PaintEditorController {
       const strokes = proposalGenomeStrokes(this, p);
       if (!strokes.length) throw new PaintEditorError(`Proposal "${p.id}" has no stroke genome to breed from.`);
       for (const s of strokes) {
-        const refusal = liveStrokeRefusal(s.brush);
+        const refusal = evolutionStrokeRefusal(s.brush);
         if (refusal) throw new PaintEditorError(refusal);
       }
       return strokes;
@@ -9467,6 +9511,16 @@ const moveRect = <R extends { x: number; y: number }>(r: R, dx: number, dy: numb
 /** The id suffix of a layer's spill pass in the compositor (and PSD export). */
 const SPILL_SUFFIX = '::light';
 const UV_SPILL_SUFFIX = '::uv';
+
+/**
+ * Where a stroke layer must redraw a stroke: the area it painted, or for an eraser or a stroke
+ * with a light twin, everywhere its marks (and its twin's) reached, since an eraser that found
+ * nothing to erase still erases what is later put under it.
+ */
+function redrawArea(s: PaintStrokeSession): RasterRect | null {
+  if (s.init.brush.engine !== 'eraser' && !s.hasLightTwin) return s.result?.bounds ?? null;
+  return s.reach() ?? s.result?.bounds ?? null;
+}
 
 /** The document's light with one layer's set (removed when it is empty), or the same map when `next` is `null`. */
 function withLayerLight(light: PaintDocumentState['light'], layerId: string, next: TiledSurface | null): Record<string, TiledSurface> | undefined {

@@ -1,0 +1,4465 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "stroke-layer-eraser-light",
+  "description": "A stroke layer takes erasers and light: an eraser stroke and glowing strokes stay editable, and the layer's pixels and light are redrawn from them.",
+  "setup": {
+    "width": 64,
+    "height": 40
+  },
+  "steps": [
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Glow",
+        "type": "strokes"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "liveStrokes": 0,
+          "locks": {},
+          "name": "Glow",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 12,
+            "pressure": 0.6
+          },
+          {
+            "x": 24,
+            "y": 16,
+            "pressure": 0.9
+          },
+          {
+            "x": 58,
+            "y": 10,
+            "pressure": 0.7
+          }
+        ],
+        "seed": 11,
+        "brushId": "highlighter",
+        "color": "#fff200"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 49,
+            "width": 98,
+            "x": -18,
+            "y": -12
+          },
+          "dabs": 46,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 6,
+            "y": 30,
+            "pressure": 0.5
+          },
+          {
+            "x": 30,
+            "y": 24,
+            "pressure": 1
+          },
+          {
+            "x": 60,
+            "y": 32,
+            "pressure": 0.6
+          }
+        ],
+        "seed": 12,
+        "brushId": "neon-marker",
+        "color": "#22d3ee"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 23,
+            "width": 72,
+            "x": -3,
+            "y": 18
+          },
+          "dabs": 110,
+          "layerId": "@1",
+          "strokeId": "s2"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 30,
+            "y": 2,
+            "pressure": 0.9
+          },
+          {
+            "x": 32,
+            "y": 20,
+            "pressure": 0.9
+          },
+          {
+            "x": 30,
+            "y": 38,
+            "pressure": 0.9
+          }
+        ],
+        "seed": 13,
+        "brushId": "eraser-soft"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 103,
+            "width": 69,
+            "x": -4,
+            "y": -32
+          },
+          "dabs": 12,
+          "layerId": "@1",
+          "strokeId": "s3"
+        },
+        "pixels": {
+          "file": "png/stroke-layer-eraser-light.4.png",
+          "width": 64,
+          "height": 40,
+          "sha256": "0c84868502f594bf1e8f051ad941a50ad465745665a1470260641fd714a3b41f",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_light",
+      "arguments": {
+        "layerId": "@1"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 512,
+            "width": 512,
+            "x": -256,
+            "y": -256
+          },
+          "hasLight": true,
+          "layerId": "@1",
+          "peak": 255,
+          "spill": {
+            "radius": 24,
+            "strength": 1
+          }
+        }
+      }
+    },
+    {
+      "tool": "list_strokes",
+      "arguments": {
+        "live": true
+      },
+      "expect": {
+        "result": {
+          "strokes": [
+            {
+              "bounds": {
+                "height": 36,
+                "width": 84,
+                "x": -11,
+                "y": -5
+              },
+              "brushId": "highlighter",
+              "brushName": "Highlighter",
+              "color": "#fff200",
+              "copies": 0,
+              "id": "s1",
+              "layerId": "@1",
+              "live": true,
+              "points": 3,
+              "seed": 11
+            },
+            {
+              "bounds": {
+                "height": 18,
+                "width": 64,
+                "x": 1,
+                "y": 19
+              },
+              "brushId": "neon-marker",
+              "brushName": "Neon marker",
+              "color": "#22d3ee",
+              "copies": 0,
+              "id": "s2",
+              "layerId": "@1",
+              "live": true,
+              "points": 3,
+              "seed": 12
+            },
+            {
+              "bounds": {
+                "height": 76,
+                "width": 42,
+                "x": 10,
+                "y": -18
+              },
+              "brushId": "eraser-soft",
+              "brushName": "Soft eraser",
+              "color": "#1f2937",
+              "copies": 0,
+              "id": "s3",
+              "layerId": "@1",
+              "live": true,
+              "points": 3,
+              "seed": 13
+            }
+          ],
+          "total": 3
+        }
+      }
+    },
+    {
+      "tool": "edit_stroke_points",
+      "arguments": {
+        "id": "s3",
+        "transform": {
+          "dx": 14
+        }
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 103,
+            "width": 83,
+            "x": -4,
+            "y": -32
+          },
+          "stroke": {
+            "bounds": {
+              "height": 76,
+              "width": 42,
+              "x": 24,
+              "y": -18
+            },
+            "brushId": "eraser-soft",
+            "brushName": "Soft eraser",
+            "color": "#1f2937",
+            "copies": 0,
+            "id": "s3",
+            "layerId": "@1",
+            "live": true,
+            "points": [
+              {
+                "pressure": 0.9,
+                "x": 44,
+                "y": 2
+              },
+              {
+                "pressure": 0.9,
+                "x": 46,
+                "y": 20
+              },
+              {
+                "pressure": 0.9,
+                "x": 44,
+                "y": 38
+              }
+            ],
+            "seed": 13
+          }
+        },
+        "pixels": {
+          "file": "png/stroke-layer-eraser-light.7.png",
+          "width": 64,
+          "height": 40,
+          "sha256": "1f64c58b191d045a76b32fc6599ac36f1a0fcaf8d6229445d4b7a9d8f4d01913",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "update_stroke",
+      "arguments": {
+        "id": "s2",
+        "seed": 5,
+        "brush": {
+          "light": {
+            "amount": 0.4
+          }
+        }
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 23,
+            "width": 72,
+            "x": -3,
+            "y": 18
+          },
+          "stroke": {
+            "bounds": {
+              "height": 18,
+              "width": 64,
+              "x": 1,
+              "y": 19
+            },
+            "brushId": "neon-marker",
+            "brushName": "Neon marker",
+            "color": "#22d3ee",
+            "copies": 0,
+            "id": "s2",
+            "layerId": "@1",
+            "live": true,
+            "points": 3,
+            "seed": 5
+          }
+        },
+        "pixels": {
+          "file": "png/stroke-layer-eraser-light.8.png",
+          "width": 64,
+          "height": 40,
+          "sha256": "4f0f9a50e61a62d736873e05ae244c01973a80b976ae95b130cd89db97aefc93",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "remove_strokes",
+      "arguments": {
+        "ids": [
+          "s1"
+        ]
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 49,
+            "width": 98,
+            "x": -18,
+            "y": -12
+          },
+          "removed": [
+            "s1"
+          ]
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:ye-238ykx37dif"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 20
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 40,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Glow",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": -1,
+                "y": 19
+              }
+            ],
+            "light": {
+              "@1": {
+                "light": "pixerate-asset:oe-1gehyk4ln39",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "liveStrokes": {
+              "@1": [
+                {
+                  "brush": {
+                    "dynamics": {
+                      "pressureSize": false,
+                      "smoothing": 0.45
+                    },
+                    "id": "neon-marker",
+                    "kind": "mark",
+                    "light": {
+                      "amount": 0.4
+                    },
+                    "name": "Neon marker",
+                    "tip": {
+                      "hardness": 0.9,
+                      "shape": "round",
+                      "size": 10,
+                      "spacing": 0.04
+                    }
+                  },
+                  "color": "#22d3ee",
+                  "id": "s2",
+                  "layerId": "@1",
+                  "points": [
+                    {
+                      "pressure": 0.5,
+                      "x": 6,
+                      "y": 30
+                    },
+                    {
+                      "pressure": 1,
+                      "x": 30,
+                      "y": 24
+                    },
+                    {
+                      "pressure": 0.6,
+                      "x": 60,
+                      "y": 32
+                    }
+                  ],
+                  "seed": 5
+                },
+                {
+                  "brush": {
+                    "dynamics": {
+                      "pressureOpacity": true,
+                      "pressureSize": false
+                    },
+                    "id": "eraser-soft",
+                    "kind": "tool",
+                    "name": "Soft eraser",
+                    "tip": {
+                      "flow": 0.6,
+                      "hardness": 0.2,
+                      "shape": "round",
+                      "size": 40,
+                      "spacing": 0.08
+                    },
+                    "tool": "eraser"
+                  },
+                  "color": "#1f2937",
+                  "id": "s3",
+                  "layerId": "@1",
+                  "points": [
+                    {
+                      "pressure": 0.9,
+                      "x": 44,
+                      "y": 2
+                    },
+                    {
+                      "pressure": 0.9,
+                      "x": 46,
+                      "y": 20
+                    },
+                    {
+                      "pressure": 0.9,
+                      "x": 44,
+                      "y": 38
+                    }
+                  ],
+                  "seed": 13
+                }
+              ]
+            },
+            "paintEvents": [
+              {
+                "at": 3,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "ink",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0.05,
+                        "id": "highlighter",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.5,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Highlighter",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 45,
+                          "blend": "multiply",
+                          "flow": 1,
+                          "hardness": 0.85,
+                          "opacity": 0.6,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 0.35,
+                          "size": 30,
+                          "smoothing": 0.3,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#fff200",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.6,
+                          "x": 4,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 24,
+                          "y": 16
+                        },
+                        {
+                          "pressure": 0.7,
+                          "x": 58,
+                          "y": 10
+                        }
+                      ],
+                      "seed": 11
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "glow",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "neon-marker",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 1,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Neon marker",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 0.9,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 10,
+                          "smoothing": 0.45,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22d3ee",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.5,
+                          "x": 6,
+                          "y": 30
+                        },
+                        {
+                          "pressure": 1,
+                          "x": 30,
+                          "y": 24
+                        },
+                        {
+                          "pressure": 0.6,
+                          "x": 60,
+                          "y": 32
+                        }
+                      ],
+                      "seed": 12
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "eraser",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "eraser",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "eraser-soft",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Soft eraser",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.6,
+                          "hardness": 0.2,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 40,
+                          "smoothing": 0,
+                          "spacing": 0.08
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#1f2937",
+                      "id": "s3",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 2
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 46,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 38
+                        }
+                      ],
+                      "seed": 13
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 3,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "ink",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0.05,
+                        "id": "highlighter",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.5,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Highlighter",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 45,
+                          "blend": "multiply",
+                          "flow": 1,
+                          "hardness": 0.85,
+                          "opacity": 0.6,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 0.35,
+                          "size": 30,
+                          "smoothing": 0.3,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#fff200",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.6,
+                          "x": 4,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 24,
+                          "y": 16
+                        },
+                        {
+                          "pressure": 0.7,
+                          "x": 58,
+                          "y": 10
+                        }
+                      ],
+                      "seed": 11
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "glow",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "neon-marker",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.4,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Neon marker",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 0.9,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 10,
+                          "smoothing": 0.45,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22d3ee",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.5,
+                          "x": 6,
+                          "y": 30
+                        },
+                        {
+                          "pressure": 1,
+                          "x": 30,
+                          "y": 24
+                        },
+                        {
+                          "pressure": 0.6,
+                          "x": 60,
+                          "y": 32
+                        }
+                      ],
+                      "seed": 5
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "eraser",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "eraser",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "eraser-soft",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Soft eraser",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.6,
+                          "hardness": 0.2,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 40,
+                          "smoothing": 0,
+                          "spacing": 0.08
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#1f2937",
+                      "id": "s3",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 2
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 46,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 38
+                        }
+                      ],
+                      "seed": 13
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 3,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "glow",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "neon-marker",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.4,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Neon marker",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 0.9,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 10,
+                          "smoothing": 0.45,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22d3ee",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.5,
+                          "x": 6,
+                          "y": 30
+                        },
+                        {
+                          "pressure": 1,
+                          "x": 30,
+                          "y": 24
+                        },
+                        {
+                          "pressure": 0.6,
+                          "x": 60,
+                          "y": 32
+                        }
+                      ],
+                      "seed": 5
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "eraser",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "eraser",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "eraser-soft",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Soft eraser",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.6,
+                          "hardness": 0.2,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 40,
+                          "smoothing": 0,
+                          "spacing": 0.08
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#1f2937",
+                      "id": "s3",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 2
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 46,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 38
+                        }
+                      ],
+                      "seed": 13
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.05
+                  },
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.3
+                  },
+                  "family": "ink",
+                  "id": "highlighter",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 0.5
+                  },
+                  "name": "Highlighter",
+                  "tip": {
+                    "angle": 45,
+                    "blend": "multiply",
+                    "hardness": 0.85,
+                    "opacity": 0.6,
+                    "roundness": 0.35,
+                    "shape": "chisel",
+                    "size": 30,
+                    "spacing": 0.04
+                  }
+                },
+                "color": "#fff200",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 12
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 24,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.7,
+                    "x": 58,
+                    "y": 10
+                  }
+                ],
+                "seed": 11
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.45
+                  },
+                  "id": "neon-marker",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 1
+                  },
+                  "name": "Neon marker",
+                  "tip": {
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 10,
+                    "spacing": 0.04
+                  }
+                },
+                "color": "#22d3ee",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 6,
+                    "y": 30
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 30,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 60,
+                    "y": 32
+                  }
+                ],
+                "seed": 12
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "pressureSize": false
+                  },
+                  "id": "eraser-soft",
+                  "kind": "tool",
+                  "name": "Soft eraser",
+                  "tip": {
+                    "flow": 0.6,
+                    "hardness": 0.2,
+                    "shape": "round",
+                    "size": 40,
+                    "spacing": 0.08
+                  },
+                  "tool": "eraser"
+                },
+                "color": "#1f2937",
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.9,
+                    "x": 30,
+                    "y": 2
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 32,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 30,
+                    "y": 38
+                  }
+                ],
+                "seed": 13
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/stroke-layer-eraser-light.9.png",
+          "width": 64,
+          "height": 40,
+          "sha256": "97c2896753d6033d9ea85d996d43fdb0eb1988e03778841fa24e396706140e40",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "update_stroke",
+      "arguments": {
+        "id": "s2",
+        "brushId": "smudge"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "The Smudge brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 40,
+            "y": 8
+          }
+        ],
+        "seed": 14,
+        "brushId": "watercolor-round"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Layer \"Glow\" is a stroke layer. The Watercolour round brush paints wet media, which a stroke layer can't redraw (the paint depends on the simulation's history); paint it on a pixel layer (add_layer)."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "remove_strokes",
+      "arguments": {
+        "ids": [
+          "s2"
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 23,
+            "width": 72,
+            "x": -3,
+            "y": 18
+          },
+          "removed": [
+            "s2"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_light",
+      "arguments": {
+        "layerId": "@1"
+      },
+      "expect": {
+        "result": {
+          "bounds": null,
+          "hasLight": false,
+          "layerId": "@1",
+          "peak": 0,
+          "spill": {
+            "radius": 24,
+            "strength": 1
+          }
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "liveStrokes": 1,
+              "locks": {},
+              "name": "Glow",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {},
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 32,
+                  "y": 20
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 40,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "@1",
+                "name": "Glow",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "liveStrokes": {
+              "@1": [
+                {
+                  "brush": {
+                    "dynamics": {
+                      "pressureOpacity": true,
+                      "pressureSize": false
+                    },
+                    "id": "eraser-soft",
+                    "kind": "tool",
+                    "name": "Soft eraser",
+                    "tip": {
+                      "flow": 0.6,
+                      "hardness": 0.2,
+                      "shape": "round",
+                      "size": 40,
+                      "spacing": 0.08
+                    },
+                    "tool": "eraser"
+                  },
+                  "color": "#1f2937",
+                  "id": "s3",
+                  "layerId": "@1",
+                  "points": [
+                    {
+                      "pressure": 0.9,
+                      "x": 44,
+                      "y": 2
+                    },
+                    {
+                      "pressure": 0.9,
+                      "x": 46,
+                      "y": 20
+                    },
+                    {
+                      "pressure": 0.9,
+                      "x": 44,
+                      "y": 38
+                    }
+                  ],
+                  "seed": 13
+                }
+              ]
+            },
+            "paintEvents": [
+              {
+                "at": 3,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "ink",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0.05,
+                        "id": "highlighter",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.5,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Highlighter",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 45,
+                          "blend": "multiply",
+                          "flow": 1,
+                          "hardness": 0.85,
+                          "opacity": 0.6,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 0.35,
+                          "size": 30,
+                          "smoothing": 0.3,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#fff200",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.6,
+                          "x": 4,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 24,
+                          "y": 16
+                        },
+                        {
+                          "pressure": 0.7,
+                          "x": 58,
+                          "y": 10
+                        }
+                      ],
+                      "seed": 11
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "glow",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "neon-marker",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 1,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Neon marker",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 0.9,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 10,
+                          "smoothing": 0.45,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22d3ee",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.5,
+                          "x": 6,
+                          "y": 30
+                        },
+                        {
+                          "pressure": 1,
+                          "x": 30,
+                          "y": 24
+                        },
+                        {
+                          "pressure": 0.6,
+                          "x": 60,
+                          "y": 32
+                        }
+                      ],
+                      "seed": 12
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "eraser",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "eraser",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "eraser-soft",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Soft eraser",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.6,
+                          "hardness": 0.2,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 40,
+                          "smoothing": 0,
+                          "spacing": 0.08
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#1f2937",
+                      "id": "s3",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 2
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 46,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 38
+                        }
+                      ],
+                      "seed": 13
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 3,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "ink",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0.05,
+                        "id": "highlighter",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.5,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Highlighter",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 45,
+                          "blend": "multiply",
+                          "flow": 1,
+                          "hardness": 0.85,
+                          "opacity": 0.6,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 0.35,
+                          "size": 30,
+                          "smoothing": 0.3,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#fff200",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.6,
+                          "x": 4,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 24,
+                          "y": 16
+                        },
+                        {
+                          "pressure": 0.7,
+                          "x": 58,
+                          "y": 10
+                        }
+                      ],
+                      "seed": 11
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "glow",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "neon-marker",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.4,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Neon marker",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 0.9,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 10,
+                          "smoothing": 0.45,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22d3ee",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.5,
+                          "x": 6,
+                          "y": 30
+                        },
+                        {
+                          "pressure": 1,
+                          "x": 30,
+                          "y": 24
+                        },
+                        {
+                          "pressure": 0.6,
+                          "x": 60,
+                          "y": 32
+                        }
+                      ],
+                      "seed": 5
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "eraser",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "eraser",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "eraser-soft",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Soft eraser",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.6,
+                          "hardness": 0.2,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 40,
+                          "smoothing": 0,
+                          "spacing": 0.08
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#1f2937",
+                      "id": "s3",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 2
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 46,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 38
+                        }
+                      ],
+                      "seed": 13
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 3,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "light",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "family": "glow",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "neon-marker",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0.4,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Neon marker",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 0.9,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 10,
+                          "smoothing": 0.45,
+                          "spacing": 0.04
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22d3ee",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.5,
+                          "x": 6,
+                          "y": 30
+                        },
+                        {
+                          "pressure": 1,
+                          "x": 30,
+                          "y": 24
+                        },
+                        {
+                          "pressure": 0.6,
+                          "x": 60,
+                          "y": 32
+                        }
+                      ],
+                      "seed": 5
+                    },
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "eraser",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "eraser",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "eraser-soft",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Soft eraser",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.6,
+                          "hardness": 0.2,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 40,
+                          "smoothing": 0,
+                          "spacing": 0.08
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#1f2937",
+                      "id": "s3",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 2
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 46,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 38
+                        }
+                      ],
+                      "seed": 13
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 3,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "antimatter": {
+                          "annihilate": 0.25,
+                          "blastRadius": 2.5,
+                          "blastSpacing": 2,
+                          "crater": 0.5,
+                          "duration": 0.7,
+                          "invert": 1,
+                          "invertMode": "rgb",
+                          "scorch": 0.6,
+                          "sparkReach": 3,
+                          "sparks": 0.5,
+                          "threshold": 0.1
+                        },
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "eraser",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "eraser",
+                        "ferro": {
+                          "amount": 0,
+                          "threshold": 0.12,
+                          "wavelength": 16
+                        },
+                        "fluorescence": {
+                          "amount": 0,
+                          "invisible": false
+                        },
+                        "grain": 0,
+                        "id": "eraser-soft",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Soft eraser",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0,
+                        "rotation": "fixed",
+                        "scraper": {
+                          "depth": 0.5,
+                          "sharpness": 0.7
+                        },
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "thermochromic": {
+                          "hotColor": null,
+                          "threshold": 0.5
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.6,
+                          "hardness": 0.2,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": false,
+                          "roundness": 1,
+                          "size": 40,
+                          "smoothing": 0,
+                          "spacing": 0.08
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#1f2937",
+                      "id": "s3",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 2
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 46,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 44,
+                          "y": 38
+                        }
+                      ],
+                      "seed": 13
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.05
+                  },
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.3
+                  },
+                  "family": "ink",
+                  "id": "highlighter",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 0.5
+                  },
+                  "name": "Highlighter",
+                  "tip": {
+                    "angle": 45,
+                    "blend": "multiply",
+                    "hardness": 0.85,
+                    "opacity": 0.6,
+                    "roundness": 0.35,
+                    "shape": "chisel",
+                    "size": 30,
+                    "spacing": 0.04
+                  }
+                },
+                "color": "#fff200",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 12
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 24,
+                    "y": 16
+                  },
+                  {
+                    "pressure": 0.7,
+                    "x": 58,
+                    "y": 10
+                  }
+                ],
+                "seed": 11
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureSize": false,
+                    "smoothing": 0.45
+                  },
+                  "id": "neon-marker",
+                  "kind": "mark",
+                  "light": {
+                    "amount": 1
+                  },
+                  "name": "Neon marker",
+                  "tip": {
+                    "hardness": 0.9,
+                    "shape": "round",
+                    "size": 10,
+                    "spacing": 0.04
+                  }
+                },
+                "color": "#22d3ee",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.5,
+                    "x": 6,
+                    "y": 30
+                  },
+                  {
+                    "pressure": 1,
+                    "x": 30,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 60,
+                    "y": 32
+                  }
+                ],
+                "seed": 12
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "pressureOpacity": true,
+                    "pressureSize": false
+                  },
+                  "id": "eraser-soft",
+                  "kind": "tool",
+                  "name": "Soft eraser",
+                  "tip": {
+                    "flow": 0.6,
+                    "hardness": 0.2,
+                    "shape": "round",
+                    "size": 40,
+                    "spacing": 0.08
+                  },
+                  "tool": "eraser"
+                },
+                "color": "#1f2937",
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.9,
+                    "x": 30,
+                    "y": 2
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 32,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 30,
+                    "y": 38
+                  }
+                ],
+                "seed": 13
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 64
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/stroke-layer-eraser-light.14.png",
+          "width": 64,
+          "height": 40,
+          "sha256": "7a13f271a9b5fcf99965cff013ef500eca3122775627b0d58c9ed188fab056c7",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

@@ -15,19 +15,25 @@ func liveStrokeRefusal(_ brush: PaintBrush) -> String? {
     case "impasto": return "The \(brush.name) brush paints thick paint with relief, which a stroke layer doesn't keep; paint it on a pixel layer (add_layer)."
     case "sticker": return "The \(brush.name) brush sprays stickers, which are their own objects; spray them on an empty pixel layer (add_layer)."
     case "antimatter": return "The \(brush.name) brush detonates across every visible layer, which a stroke layer can't redraw; paint it on a pixel layer (add_layer)."
-    case "eraser": return "Erasers don't paint on a stroke layer; delete strokes instead (remove_strokes), or rasterize the layer first (rasterize_stroke_layer)."
     case "scraper": return "The \(brush.name) brush scrapes down through pixel layers, so it can't paint on a stroke layer; rasterize the layer first (rasterize_stroke_layer) or scrape on a pixel layer."
     case "blender", "smudge", "vortex": return "The \(brush.name) brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer."
     default: break
     }
     if brush.mutation != nil { return "The \(brush.name) brush paints mutation strokes (which fade when an agent reads them), so it can't paint on a stroke layer; paint on a pixel layer (add_layer), or set mutation to null (set_brush)." }
-    if brush.light.amount > 0 { return "The \(brush.name) brush lays light, which a stroke layer doesn't redraw yet; paint light on a pixel layer (add_layer), or set light.amount to 0 (set_brush)." }
     if brush.fluorescence.amount > 0 { return "The \(brush.name) brush paints UV-fluorescent ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or set fluorescence.amount to 0 (set_brush)." }
     if brush.thermochromic.hotColor != nil { return "The \(brush.name) brush paints thermochromic ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or remove thermochromic (set_brush)." }
     if brush.ferro.amount > 0 { return "The \(brush.name) brush lays liquid ferrofluid, which a stroke layer doesn't redraw; paint ferrofluid on a pixel layer (add_layer), or set ferro.amount to 0 (set_brush)." }
     if brush.culture != nil { return "The \(brush.name) brush seeds a living mycelial culture (which grows into the layer's pixels), so it can't paint on a stroke layer; paint on a pixel layer (add_layer), or set culture to null (set_brush)." }
     if brush.behavior.pickup > 0 { return "The \(brush.name) brush picks up the paint under it (pickup \(jsText(brush.behavior.pickup))), so it can't be redrawn on its own; set behavior.pickup to 0 (set_brush) or paint on a pixel layer." }
     return nil
+}
+
+/// Where a stroke layer must redraw a stroke: the area it painted, or for an eraser or a stroke
+/// with a light twin, everywhere its marks (and its twin's) reached, since an eraser that found
+/// nothing to erase still erases what is later put under it.
+func redrawArea(_ s: PaintStrokeSession) -> RasterRect? {
+    if s.initValues.brush.engine != "eraser" && !s.hasLightTwin { return s.result?.bounds }
+    return s.reach() ?? s.result?.bounds
 }
 
 /// A stroke's extent in document pixels: its points and symmetry copies, padded by the brush.
@@ -265,9 +271,12 @@ extension PaintEditorController {
     private func withLiveStrokes(_ d: PaintDocumentState, _ layer: PaintLayer, _ list: [RecordedStroke]) throws -> PaintDocumentState {
         if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) first.") }
         let current = findLayer(d.layers, layer.id)?.layer ?? layer
-        let drawn = try drawLiveStrokes(current, list)
+        // Light is drawn with the strokes while any of them lays it (each stroke's twin dims or erases it too).
+        let lit = list.contains { $0.brush.light.amount > 0 }
+        let drawn = try drawLiveStrokes(current, list, light: lit)
         let next = d.with { o in
             o.layers = mapLayer(d.layers, layer.id) { $0.withSurface(drawn.surface, offset: LayerOffset(x: 0, y: 0)) }
+            if let l = drawn.light, !l.tiles.isEmpty { o.settingLight(layer.id, l) } else { o.removingLight([layer.id]) }
             var live = o.liveStrokes ?? OrderedMap()
             live.set(layer.id, list)
             o.liveStrokes = live
@@ -299,7 +308,10 @@ extension PaintEditorController {
     }
 
     /// Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area it painted.
-    private func drawLiveStroke(_ d: PaintDocumentState, _ plain: PaintLayer, _ surface: TiledSurface, _ st: RecordedStroke, _ film: TiledSurface = emptySurface(4, 0)) throws -> (surface: TiledSurface, film: TiledSurface, bounds: RasterRect?) {
+    /// With `light` (the layer's light channel so far, `.some(nil)` for none yet) the stroke's light
+    /// twin paints it too and the result's `light` is the channel after it; without (nil), the
+    /// layer's light is left out.
+    private func drawLiveStroke(_ d: PaintDocumentState, _ plain: PaintLayer, _ surface: TiledSurface, _ st: RecordedStroke, _ film: TiledSurface = emptySurface(4, 0), light: TiledSurface?? = nil) throws -> (surface: TiledSurface, film: TiledSurface, bounds: RasterRect?, light: TiledSurface?) {
         var i = PaintStrokeInit(layerId: plain.id, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
         i.fixedBrush = st.brush
         // At a moment of live effects (`liveEffectAt`), a live stroke paints that frame of its effect.
@@ -315,28 +327,36 @@ extension PaintEditorController {
                 t.set(plain.id, ThickChannels(height: prev.height, material: prev.material, film: film))
                 o.thick = t
             }
+            var lights = o.light ?? OrderedMap()
+            if let light { lights.set(plain.id, light ?? emptyLight()) } else { _ = lights.delete(plain.id) }
+            o.light = lights
         }
         let session = try sessionFor(baseDoc, i)
         try session.push(st.points)
-        let result = try session.end()
+        _ = try session.end()
+        let area = redrawArea(session)
         // Only ever grown.
         let had = paintedBounds[st.key] ?? nil
-        paintedBounds[st.key] = .some(had != nil && result.bounds != nil ? unionRect(had!, result.bounds!) : (result.bounds ?? had))
-        return (session.surfaceAfter ?? surface, session.filmChannel() ?? film, result.bounds)
+        paintedBounds[st.key] = .some(had != nil && area != nil ? unionRect(had!, area!) : (area ?? had))
+        let outLight: TiledSurface? = light == nil ? nil : (session.lightChannel ?? (light ?? nil))
+        return (session.surfaceAfter ?? surface, session.filmChannel() ?? film, area, outLight)
     }
 
-    /// A stroke layer's pixels drawn from its strokes, bottom first (every stroke drawn again).
-    func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke]) throws -> (surface: TiledSurface, film: TiledSurface) {
+    /// A stroke layer's pixels drawn from its strokes, bottom first (every stroke drawn again). With
+    /// `light`, the layer's light channel too: every stroke's light twin runs over it in order.
+    func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke], light: Bool = false) throws -> (surface: TiledSurface, film: TiledSurface, light: TiledSurface?) {
         let plain = layer.copy(visible: true, locks: .some(nil)).withSurface(layer.pixelSurface, offset: LayerOffset(x: 0, y: 0))
         let base = doc.with { $0.liveStrokes = nil }
         var surface = emptySurface(4)
         var film = emptySurface(4, 0)
+        var lightSoFar: TiledSurface? = nil
         for st in list {
-            let r = try drawLiveStroke(base, plain, surface, st, film)
+            let r = try drawLiveStroke(base, plain, surface, st, film, light: light ? .some(lightSoFar) : nil)
             surface = r.surface
             film = r.film
+            if light { lightSoFar = r.light }
         }
-        return (surface, film)
+        return (surface, film, lightSoFar)
     }
 }
 

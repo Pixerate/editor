@@ -153,8 +153,14 @@ inner glow, shadows, stroke, bevel, satin and overlays, as in the image editor
   `update_sticker` take `frame` (0..frameCount-1; past the last, or above 0 on a static sticker,
   is refused), and restamping (`ref`) without `frame` goes back to frame 0.
 - **Stroke layers**: pixels drawn from the layer's strokes; they take `dab`, `particle`, `bristle`
-  and Mixer Brush strokes that pick up no paint. `list_strokes {live: true}` → `update_stroke` /
-  `edit_stroke_points` / `reorder_stroke` / `remove_strokes`; `rasterize_stroke_layer` once settled.
+  and Mixer Brush strokes that pick up no paint, erasers, and light (`light.amount`, e.g. the
+  highlighter's glow or `neon-marker`). An eraser stroke is a stroke like the others: it erases
+  what lies under it in the list, so editing, moving or removing the strokes under it (or the
+  eraser itself) redraws exactly, and a dual-colour stroke that was partly erased follows the
+  scheme with only what is left. Light comes and goes with the strokes that lay, cover or erase it.
+  Wet, thick, sticker, smudge, blender and pick-up strokes are refused (paint them on a pixel
+  layer). `list_strokes {live: true}` → `update_stroke` / `edit_stroke_points` / `reorder_stroke` /
+  `remove_strokes`; `rasterize_stroke_layer` once settled.
 - **Stencils**: `add_stencil` lays a `ruler` or `arc` (strokes that start within `snap` px follow
   it exactly: straight lines, circles, rainbows) or a `line` / `shape` mask (paint lands only on
   one side or inside a rect, ellipse or polygon; `invert` for outside). Stencils stay until
@@ -291,9 +297,9 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `update_stroke` | Change a stroke on a stroke layer: `brushId` (keeps its size), `brush` facets (as `set_brush` takes), `color`, `paint` (null drops a gradient), `seed`. Redraws exactly. One undo step. Returns the stroke and the changed `bounds`. |
 | `edit_stroke_points` | Replace a stroke's `points`, or `transform` it (`dx`, `dy`, `scale`, `rotate`, `flipX`, about its centre or `origin`). One undo step. Returns the stroke with its points and the changed `bounds`. |
 | `reorder_stroke` | Move a stroke to `index` in its stroke layer (0 = bottom). One undo step. Returns the order. |
-| `remove_strokes` | Delete strokes from stroke layers (their eraser). One undo step. Returns the ids and `bounds`. |
+| `remove_strokes` | Delete whole strokes from stroke layers. To erase part of one, paint an eraser stroke on the layer instead (it stays editable, and removing it brings the paint back). One undo step. Returns the ids and `bounds`. |
 | `convert_to_stroke_layer` | Make an empty pixel layer a stroke layer. Returns the layer. |
-| `rasterize_stroke_layer` | Turn a stroke layer into a plain pixel layer with the same pixels (strokes no longer editable). Do it before erasing, smudging or filling on it. |
+| `rasterize_stroke_layer` | Turn a stroke layer into a plain pixel layer with the same pixels (strokes no longer editable). Do it before smudging, blending, wet paint or filling on it (erasers and light paint on stroke layers). |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
 | `breed_strokes` | Breed `count` (2..12, default 4) mutated variants from recorded `strokeIds` (1..16) as ghost paint proposals: `mutation` (`geometry`, `color`, `brush`, `seed`, each 0..1), `seed`. Returns `proposalIds` and each variant's `diff` and `bounds`. Read [references/evolution.md](references/evolution.md). |
 | `breed_proposal` | Breed `count` (2..12, default 4) next-generation variants from `proposalIds` (1 id mutates it; 2 ids cross their points and brush facets over, then mutate), with `mutation` and `seed`. Returns `proposalIds` and `proposals`. |
