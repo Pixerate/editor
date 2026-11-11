@@ -1,5 +1,11 @@
 # @pixerate/swift
 
+## 0.39.1
+
+### Patch Changes
+
+- 351972c: Public initializers for option structs hosts build outside the module: `ReplayOptions` (so `replayStrokes` is callable without `@testable import`), `BrushHostProfile`, `MixerSettings`, `ExchangeRates`, `BlenderSettings`, `SmudgeSettings`, `WetPaperInput`, `PaintDabParams`, `VectorWiggleParams` and `VectorArtContext` (#747).
+
 ## 0.39.0
 
 ### Minor Changes
