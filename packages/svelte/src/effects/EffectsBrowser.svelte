@@ -9,6 +9,8 @@
     uses?: readonly EffectUse[];
     /** Only effects of these kinds (default: any). */
     kinds?: readonly EffectKind[];
+    /** Only effects this also keeps (e.g. `paintEffectOffered` for the paint editor's paint, which honours provider paint hints). */
+    filter?: (effect: EffectSummary) => boolean;
     /** Called with the effect the user picks. */
     onpick: (effect: EffectSummary) => void;
     /** Draw previews with the provider's renderer (default true). */
@@ -18,7 +20,7 @@
     class?: string;
   }
 
-  let { provider, uses, kinds, onpick, thumbnails = true, title = 'Effects', class: className = '' }: Props = $props();
+  let { provider, uses, kinds, filter, onpick, thumbnails = true, title = 'Effects', class: className = '' }: Props = $props();
   let all = $state.raw<readonly EffectSummary[]>([]);
   let found = $state.raw<readonly EffectSummary[]>([]);
   let query = $state('');
@@ -68,7 +70,7 @@
       live = false;
     };
   });
-  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && effectOffered(e, uses);
+  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && effectOffered(e, uses) && (!filter || filter(e));
   const categories = $derived([...new Set(all.filter(allowed).map((e) => e.category))]);
   const shown = $derived(found.filter(allowed));
 </script>

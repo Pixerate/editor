@@ -7,7 +7,7 @@ import PixerateCore
  * `createPaintConformanceHost` in `paint-editor/contract.ts`: every paint tool provider this port
  * has in one registry that validates arguments, the saved document (the `pixerate.editor-document`
  * envelope) and the composited pixels. Wet paint runs with the GPU engine off, as in the TS host. `setup` is the scenario's editor options (`width`,
- * `height`, `dpi`, `paper`, `brushId`, `color`, `authoredEffects`, `rawShaders`, `authoredEffectLimits`). Provider effects come from `FakeEffectProvider`,
+ * `height`, `dpi`, `paper`, `brushId`, `color`, `authoredEffects`, `rawShaders`, `authoredEffectLimits`). Provider effects come from `FakeEffectProvider` (with paint hints for `effectPaintHints: true`),
  * as the TS host uses the fake provider.
  */
 public final class PaintConformanceHost: ConformanceHost {
@@ -28,7 +28,7 @@ public final class PaintConformanceHost: ConformanceHost {
         )
         // Authored effects render on the CPU, as the TS evaluator does.
         controller.authoredEffectsGPU = false
-        controller.setEffectsProvider(FakeEffectProvider())
+        controller.setEffectsProvider(FakeEffectProvider(paintHints: setup["effectPaintHints"]?.boolValue ?? false))
         if setup["stickers"] == "fake", let p = try? combineStickerProviders([editorStickers(), createFakeStickerProvider()]) {
             controller.setStickersProvider(p)
         }

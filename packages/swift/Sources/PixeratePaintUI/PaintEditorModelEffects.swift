@@ -109,8 +109,9 @@ extension PaintEditorModel {
                 let some = q.isEmpty ? try await provider.list(EffectSearchOptions(use: use)) : try await provider.search(q, EffectSearchOptions(use: use))
                 for d in some where !found.contains(where: { $0.id == d.id }) { found.append(d) }
             }
-            // Vector and motion effects draw no pixels, so no place in a painting takes them (`checkPaintEffectPlace`).
-            return found.filter { effectOffered($0, place.uses) && $0.kind != "vector" && $0.kind != "motion" }
+            // Vector and motion effects draw no pixels, so no place in a painting takes them (`checkPaintEffectPlace`);
+            // paint takes only effects that suit paint when the provider says which do (paint hints).
+            return found.filter { paintEffectOffered($0, place.rawValue, capabilities: provider.capabilities) }
         } catch {
             self.error = "\(error)"
             return []
@@ -154,7 +155,7 @@ extension PaintEditorModel {
         guard let p = controller.getEffectPaint() else { return }
         var merged = p.values
         for (k, v) in values ?? [:] { merged[k] = v }
-        await runEffect { _ = try await controller.setEffectPaint(p.effect, values: merged, time: p.time, map: map ?? p.map?.json, live: live ?? p.live) }
+        await runEffect { _ = try await controller.setEffectPaint(p.effect, values: merged, time: p.time, map: map ?? p.map?.json ?? ["by": "canvas"], live: live ?? p.live) }
     }
 
     /// Stops painting with the effect: brushes paint the colour again.

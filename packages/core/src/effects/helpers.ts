@@ -15,8 +15,10 @@ import type {
 	CameraView,
 	EffectDescription,
 	EffectImageSource,
+	EffectPaintHint,
 	EffectPixels,
 	EffectProvider,
+	EffectProviderCapabilities,
 	EffectSearchOptions,
 	EffectSummary,
 	EffectUse,
@@ -27,7 +29,7 @@ import type {
 	TimingSample,
 	TimingSampleRequest
 } from './types.js';
-import { EFFECT_PATH_FORMAT, TIMING_BLENDS, TIMING_DEFAULT_FPS, TIMING_MAX_FPS, TIMING_MAX_FRAMES } from './types.js';
+import { EFFECT_PAINT_MAPS, EFFECT_PAINT_MAX_COLORS, EFFECT_PAINT_REPEATS, EFFECT_PATH_FORMAT, TIMING_BLENDS, TIMING_DEFAULT_FPS, TIMING_MAX_FPS, TIMING_MAX_FRAMES } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Values
@@ -105,6 +107,76 @@ export function pathControlsOf(d: Pick<EffectDescription, 'controls'>): string[]
 	return Object.entries(d.controls?.properties ?? {})
 		.filter(([, s]) => isPath(s as JsonSchema))
 		.map(([name]) => name);
+}
+
+// ---------------------------------------------------------------------------
+// Paint hints
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether effect paint should offer `e`: always, unless the provider declares `paintHints`, when
+ * only effects with a `paint` hint suit paint. Effect layers, fills and the paper don't ask this.
+ */
+export function effectSuitsPaint(e: Pick<EffectSummary, 'paint'>, capabilities?: Pick<EffectProviderCapabilities, 'paintHints'> | null): boolean {
+	return !capabilities?.paintHints || !!e.paint;
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Problems with the shape of a paint hint (not checked against controls), each a sentence fragment. */
+export function effectPaintHintShapeProblems(raw: unknown): string[] {
+	if (!isPlainObject(raw)) return ['paint must be an object { map, colors?, values?, live?, repeat?, size? }'];
+	const out: string[] = [];
+	const known = new Set(['map', 'colors', 'values', 'live', 'repeat', 'size']);
+	for (const k of Object.keys(raw)) if (!known.has(k)) out.push(`paint.${k} is not a paint hint field (map, colors, values, live, repeat, size)`);
+	if (!(EFFECT_PAINT_MAPS as readonly unknown[]).includes(raw.map)) out.push(`paint.map must be ${EFFECT_PAINT_MAPS.map((m) => `"${m}"`).join(', ')}`);
+	if (raw.colors !== undefined) {
+		const c = raw.colors;
+		if (!Array.isArray(c) || !c.every((k) => typeof k === 'string' && k)) out.push('paint.colors must be a list of colour control names');
+		else if (c.length > EFFECT_PAINT_MAX_COLORS) out.push(`paint.colors names ${c.length} controls; at most ${EFFECT_PAINT_MAX_COLORS} (the main colour, then the second)`);
+		else if (new Set(c).size !== c.length) out.push('paint.colors names a control twice');
+	}
+	if (raw.values !== undefined && !isPlainObject(raw.values)) out.push('paint.values must be an object of control values');
+	if (raw.live !== undefined && typeof raw.live !== 'boolean') out.push('paint.live must be true or false');
+	if (raw.repeat !== undefined && !(EFFECT_PAINT_REPEATS as readonly unknown[]).includes(raw.repeat)) out.push(`paint.repeat must be ${EFFECT_PAINT_REPEATS.map((m) => `"${m}"`).join(', ')}`);
+	if (raw.size !== undefined && !(typeof raw.size === 'number' && Number.isFinite(raw.size) && raw.size > 0)) out.push('paint.size must be a brush width in px above 0');
+	return out;
+}
+
+/**
+ * Problems with an effect's paint hint against its own controls: shape, colour controls that
+ * exist and take `#rrggbb`, values its controls accept, and a path control for `map: "path"`.
+ * Empty when it has no hint. `checkEffectProvider` reports these.
+ */
+export function effectPaintHintProblems(d: Pick<EffectDescription, 'controls' | 'paint'>): string[] {
+	if (d.paint === undefined) return [];
+	const shape = effectPaintHintShapeProblems(d.paint);
+	if (shape.length) return shape;
+	const hint = d.paint as EffectPaintHint;
+	const out: string[] = [];
+	const controls = d.controls?.properties ?? {};
+	for (const c of hint.colors ?? []) {
+		if (!(c in controls)) out.push(`paint.colors names "${c}", which is not a control`);
+		else if (effectValueErrors(d, { [c]: '#000000' }).length) out.push(`paint.colors names "${c}", which does not take a "#rrggbb" colour`);
+	}
+	for (const e of effectValueErrors(d, hint.values)) out.push(`paint.values ${e.path}: ${e.message}`);
+	if (hint.map === 'path' && !pathControlsOf(d).length) out.push('paint.map is "path", but no control takes a path (format "svg-path"); use "stroke" or "canvas"');
+	return out;
+}
+
+/** A paint hint as saved (an authored effect's document), or a thrown `Error` saying what is wrong. */
+export function readEffectPaintHint(raw: unknown): EffectPaintHint {
+	const problems = effectPaintHintShapeProblems(raw);
+	if (problems.length) throw new Error(`${problems.join('; ')}.`);
+	const r = raw as Record<string, unknown>;
+	return {
+		map: r.map as EffectPaintHint['map'],
+		...(r.colors ? { colors: [...(r.colors as string[])] } : {}),
+		...(r.values ? { values: { ...(r.values as EffectValues) } } : {}),
+		...(r.live !== undefined ? { live: r.live as boolean } : {}),
+		...(r.repeat !== undefined ? { repeat: r.repeat as EffectPaintHint['repeat'] } : {}),
+		...(r.size !== undefined ? { size: r.size as number } : {})
+	};
 }
 
 /**

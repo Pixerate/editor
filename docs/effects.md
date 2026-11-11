@@ -39,7 +39,7 @@ interface EffectRenderer {
 ```
 
 - **Kinds** are `shader`, `vector`, `motion`, `camera` and `timing`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, `interactive`, `camera` and `timing`; each editor offers the uses that make sense in it (`effectOffered(effect, uses)` decides, and offers motion, camera and timing effects only where their use is named).
-- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring`, `supportsCamera`, `supportsTiming` and `supportsTemplates`. Editors check them before asking for something (16/32-bit pixels, masks, vector output).
+- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring`, `supportsCamera`, `supportsTiming`, `supportsTemplates` and `paintHints` (see [Paint hints](#paint-hints)). Editors check them before asking for something (16/32-bit pixels, masks, vector output).
 - **Errors** (`errors.ts`) are typed with codes: `unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider` and `unknown_template` (`UnknownEffectError`, `EffectControlError`, `EffectUnsupportedError`, `EffectDisposedError`, `NoEffectsProviderError`, `UnknownTemplateError`; `isEffectError`). Agent tools turn them into `isError` results.
 - **One render at a time per renderer.** `EffectRendererPool` (`pool.ts`) keeps a few renderers alive per effect, size and depth (default 4) and disposes the least recently used. GPU providers hold one WebGL context per renderer, and browsers drop the oldest after about sixteen (#281).
 - **Saved documents** keep the provider id, effect id and values. They load and save unchanged without a provider; filters pass pixels through and generated layers keep their last pixels.
@@ -75,7 +75,7 @@ const release = editor.useEffects(effects);
 | Animation | Motion effects become ordinary, tagged animation commands in a new shot; vector effects add an artwork group | #282 |
 | Vector | A vector effect's picture at rest, as an editable group tagged `providerEffect` | #282 |
 | Canvas | One effect per shape node (`data.shape.effect`), and scene transitions | #283 |
-| Paint | Effect paper under every layer, effect layers, effect fills, and filter effects baked into dried paint as light (wet paint is refused) | #284 |
+| Paint | Effect paper under every layer, effect layers, effect fills, filter effects baked into dried paint as light (wet paint is refused), and effect paint (offered from paint hints when the provider has them) | #284, #757 |
 
 ## Agent tools
 
@@ -88,9 +88,52 @@ const release = editor.useEffects(effects);
 | `createAnimationEffectsToolProvider` | `add_vector_effect` |
 | `createVectorEffectsToolProvider` | none |
 | `createCanvasEffectsToolProvider` | `set_canvas_effect_mode`, `list_scene_transitions`, `set_scene_transition` |
-| `createPaintEffectsToolProvider` | `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect` |
+| `createPaintEffectsToolProvider` | `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect`, `set_effect_paint`, `set_effect_playback`; `search_effects` also takes `place` (`paper`, `layer`, `fill`, `light`, `paint`) |
 
 The tools are described in each domain's skill (and, for the image editor, `skills/pixerate-image-editor/references/provider-effects.md`).
+
+## Paint hints
+
+Most generators, overlays and titles add nothing as paint: painting with a framed scene, a loader, a
+title or an audio visualiser only reveals a still frame of something meant to be seen whole. A
+provider says which effects make good paint, and how, with an optional `paint` hint on
+`EffectSummary` (so on `list` / `search` results as well as `describe`; `checkEffectProvider` checks
+they agree):
+
+```ts
+paint?: {
+  map: 'path' | 'stroke' | 'canvas'; // along its own path control, a strip bent along the stroke, or fixed to the canvas
+  colors?: string[];                 // up to two colour controls (#rrggbb): the brush's main colour, then its second
+  values?: EffectValues;             // over the defaults when painting (a transparent background, a demo path on)
+  live?: boolean;                    // strokes keep playing it
+  repeat?: 'repeat' | 'mirror' | 'clamp'; // map 'stroke': past the strip end (default mirror)
+  size?: number;                     // a suggested brush width (px)
+}
+```
+
+- **`capabilities.paintHints: true`** means every effect that suits paint has a hint and the rest
+  don't. The paint editor then offers only hinted effects as paint: its paint browser (React and
+  Svelte `PaintEffectsPanel`, Swift `PaintProviderEffectsPanel` / `PaintEditorModel.effects(for:)`),
+  `search_effects` with `place: "paint"`, and `set_effect_paint`, which refuses an unhinted effect
+  and says to put it on an effect layer or in a fill. Effect layers, fills and the paper are
+  unchanged. A provider without the capability behaves exactly as before. The painting's authored
+  effects always suit paint.
+- **Picking a hinted effect starts from the hint**, in the browser or through `set_effect_paint`:
+  its `map` and `repeat`, its `values` over the defaults, the editor's paint and secondary colours
+  in its `colors` controls, and `live`. Arguments the caller gives win (`map`, `live`, and `values`
+  control by control); changing the paint afterwards (`update_effect`, the panel's placement and
+  controls) keeps what the paint has.
+- `paintEffectOffered(effect, place, capabilities)` and `effectPaintFromHint(hint, colours)`
+  (`/paint-editor`) are the rules; `effectSuitsPaint` and `effectPaintHintProblems` (`/effects`) are
+  the generic parts. The React and Svelte `EffectsBrowser` take a `filter` for them.
+- **Authored effects** (#750) keep a hint in their document (`EffectAuthoringDocument.paint`):
+  `effect_authoring_set_paint_hint` (session `setPaintHint`) sets or removes it, an effect opened
+  from a catalog effect starts with that effect's hint, and a source edit keeps it while its
+  controls still exist. The pixel expression templates carry one (`pixel.blank` a two-colour
+  strip, `pixel.rings` and `pixel.clouds` live canvas textures).
+- `createFakeEffectProvider({ paintHints: true })` (Swift `FakeEffectProvider(paintHints: true)`)
+  declares the capability and hints `fake.gradient` (a two-colour strip, live) and `fake.trail`
+  (along its path); the conformance scenario `effect-paint-hints` checks Swift against TS.
 
 ## Camera moves
 
@@ -185,6 +228,7 @@ const saved = session.exportDocument();                    // plain JSON
 | `effect_authoring_apply_preset`, `effect_authoring_save_preset` | Presets |
 | `effect_authoring_set_keyframe`, `effect_authoring_remove_keyframe`, `effect_authoring_clear_track` | Keyframes, with any easing (presets, cubic-bezier, spring, elastic) |
 | `effect_authoring_set_timing`, `effect_authoring_seek` | Duration, loop and the playhead |
+| `effect_authoring_set_paint_hint` | How the effect is best painted with, saved in its document (`paint`, or null to remove it); refused when it names controls the effect lacks |
 | `effect_authoring_undo`, `effect_authoring_redo` | History |
 | `effect_authoring_view` | A picture of the preview (only listed when the host gives `capture`) |
 
@@ -254,6 +298,7 @@ In Swift, compiling the generated Metal source has a 2 s budget.
 4. For camera moves, set `supportsCamera`, give each `camera: { role, durationMs, cut? }` and the use `camera`, and implement `cameraView` as a pure function (see [Camera moves](#camera-moves)).
 5. For timing effects, set `supportsTiming`, give each the use `timing` and no `duration`, and implement `timingLength` and `timingSample` as pure, synchronous functions; `normaliseTimingSample` makes a sample keep the rules (see [Timing effects](#timing-effects)).
 6. For sequence templates, set `supportsTemplates` and implement `listTemplates`, `describeTemplate` and `instantiateTemplate`. Fill to an `EffectSequence` that names only effects you list, and return value problems as `{ ok: false, errors }` rather than throwing (see [Sequence templates](#sequence-templates)).
-7. Run `checkEffectProvider` in your tests.
+7. For paint, give each effect that makes good paint a `paint` hint (on its summary too) and set `paintHints`, so editors stop offering the rest as paint (see [Paint hints](#paint-hints)).
+8. Run `checkEffectProvider` in your tests.
 
 See [outstanding.md](./outstanding.md) for what is not done here.

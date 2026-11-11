@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { PAPER_EFFECT_BLENDS, type PaintEditorController, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
+  import { paintEffectOffered, PAPER_EFFECT_BLENDS, type PaintEditorController, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
   import { pathControlsOf, type EffectUse } from '@pixerate/editor/effects';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
   import { effectDescriptionOf } from '../effects/effects.svelte.js';
@@ -34,7 +34,7 @@
   const repaint = (patch: { values?: Record<string, unknown>; map?: unknown; live?: boolean }) => {
     const fx = view.effectPaint;
     if (!fx) return;
-    run(() => controller.setEffectPaint({ effect: fx.effect, values: fx.values as never, time: fx.time, map: fx.map, live: fx.live, ...(patch as object) }));
+    run(() => controller.setEffectPaint({ effect: fx.effect, values: fx.values as never, time: fx.time, map: fx.map ?? { by: 'canvas' }, live: fx.live ?? false, ...(patch as object) }));
   };
   const thumbnail = $derived.by(() => {
     const { effectPaint, rendering } = view;
@@ -99,7 +99,7 @@
   </div>
   {#if !provider}<p class="text-[11px] text-slate-400">No effects provider is registered. Effects in the painting are kept.</p>{/if}
   {#if browse}
-    <EffectsBrowser {provider} uses={BROWSERS[browse].uses} title={BROWSERS[browse].title} onpick={(e) => pick(e.id)} />
+    <EffectsBrowser {provider} uses={BROWSERS[browse].uses} filter={(e) => paintEffectOffered(e, browse!, provider?.capabilities)} title={BROWSERS[browse].title} onpick={(e) => pick(e.id)} />
   {/if}
   {#if view.paper}
     {@const paper = view.paper}

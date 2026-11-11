@@ -9,6 +9,8 @@ export interface EffectsBrowserProps {
   uses?: readonly EffectUse[];
   /** Only effects of these kinds (default: any). */
   kinds?: readonly EffectKind[];
+  /** Only effects this also keeps (e.g. `paintEffectOffered` for the paint editor's paint, which honours provider paint hints). */
+  filter?: (effect: EffectSummary) => boolean;
   /** Called with the effect the user picks. */
   onPick: (effect: EffectSummary) => void;
   /** Draw previews with the provider's renderer (default true). */
@@ -22,7 +24,7 @@ export interface EffectsBrowserProps {
  * Browses a provider's effects: a search box, a category filter (and a use filter when more than
  * one use is allowed), and a grid of effects with previews. Picking one calls `onPick`.
  */
-export function EffectsBrowser({ provider, uses, kinds, onPick, thumbnails = true, title = 'Effects', className = '' }: EffectsBrowserProps) {
+export function EffectsBrowser({ provider, uses, kinds, filter, onPick, thumbnails = true, title = 'Effects', className = '' }: EffectsBrowserProps) {
   const [all, setAll] = useState<readonly EffectSummary[]>([]);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
@@ -52,8 +54,8 @@ export function EffectsBrowser({ provider, uses, kinds, onPick, thumbnails = tru
       live = false;
     };
   }, [provider, query, category, use]);
-  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && effectOffered(e, uses);
-  const categories = useMemo(() => [...new Set(all.filter(allowed).map((e) => e.category))], [all, uses, kinds]);
+  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && effectOffered(e, uses) && (!filter || filter(e));
+  const categories = useMemo(() => [...new Set(all.filter(allowed).map((e) => e.category))], [all, uses, kinds, filter]);
   const shown = found.filter(allowed);
   if (!provider)
     return (

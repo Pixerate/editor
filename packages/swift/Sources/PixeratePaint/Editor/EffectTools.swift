@@ -105,6 +105,7 @@ public func createPaintEffectsToolProvider(_ c: PaintEditorController) throws ->
         // The registered provider with the painting's authored effects (`effectsCatalog`).
         provider: { c.effectsCatalog },
         list: list,
+        searchPlaceOffered: { e, place, provider in paintEffectOffered(e, place, capabilities: provider.capabilities) },
         apply: { target, effect, a in
             if target == PAPER_TARGET { throw ToolError("The paper takes generator effects through set_paper_effect; apply_effect runs a filter on a layer's paint.") }
             if target == PAINT_TARGET { throw ToolError("Brushes paint with an effect through set_effect_paint; apply_effect runs a filter on a layer's paint.") }
@@ -128,7 +129,7 @@ public func createPaintEffectsToolProvider(_ c: PaintEditorController) throws ->
                 let p = c.getEffectPaint()!
                 var merged = p.values
                 for (k, v) in values ?? [:] { merged[k] = v }
-                _ = try await c.setEffectPaint(p.effect, values: merged, time: p.time, map: p.map?.json, live: p.live)
+                _ = try await c.setEffectPaint(p.effect, values: merged, time: p.time, map: p.map?.json ?? ["by": "canvas"], live: p.live)
                 return change(target, paintInfo())
             }
             if target == PAPER_TARGET {

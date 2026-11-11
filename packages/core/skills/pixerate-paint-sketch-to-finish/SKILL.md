@@ -87,7 +87,7 @@ the Ink layer → `find_unfilled_regions` `{ reference: inkLayerId, layerId: fla
 to fill multiple regions of the same colour in one undo step). If `leaked: true`, `undo_paint` and
 increase `closeGap`.
 
-**Effect flats.** With an effects provider: `search_effects` (`use` generator) → `describe_effect`
+**Effect flats.** With an effects provider: `search_effects` (`place: "paint"`) → `describe_effect`
 → `set_effect_paint` → `marker` strokes inside the shape on the Flats layer (the effect shows
 where the brush goes, fixed to the canvas) → `set_color` to go back to plain colour. Wet,
 impasto and sticker brushes refuse effect paint.

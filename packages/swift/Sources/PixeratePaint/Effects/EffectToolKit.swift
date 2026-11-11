@@ -43,13 +43,17 @@ public struct EffectToolHost {
     public var list: (_ target: String?) throws -> [JSONObject]
     /// Arguments `update_effect` takes on this editor besides the shared ones.
     public var updateOptions: [String]
+    /// Whether a `search_effects` `place` (the editor's own places) takes an effect (`searchPlaces.offered`); nil when it has none.
+    public var searchPlaceOffered: ((EffectDescription, String, EffectProvider) -> Bool)?
     /// Adds an effect: `args` holds the given `values`, `index`, `enabled`, `opacity` (and host options).
     public var apply: (_ target: String, _ effect: String, _ args: JSONObject) async throws -> JSONValue
     public var update: (_ target: String, _ instance: String, _ changes: JSONObject) async throws -> JSONValue
     public var remove: (_ target: String, _ instance: String) async throws -> JSONValue
 
     public init(applyUses: [String], applyImageInputs: Bool = false, provider: @escaping () -> EffectProvider?, readOnlyReason: @escaping () -> String? = { nil }, list: @escaping (String?) throws -> [JSONObject], updateOptions: [String] = [],
+                searchPlaceOffered: ((EffectDescription, String, EffectProvider) -> Bool)? = nil,
                 apply: @escaping (String, String, JSONObject) async throws -> JSONValue, update: @escaping (String, String, JSONObject) async throws -> JSONValue, remove: @escaping (String, String) async throws -> JSONValue) {
+        self.searchPlaceOffered = searchPlaceOffered
         self.applyUses = applyUses
         self.applyImageInputs = applyImageInputs
         self.provider = provider
@@ -73,6 +77,7 @@ public func effectSummaryJSON(_ e: EffectDescription) -> JSONObject {
     if let d = j["duration"] { o["duration"] = d }
     if let c = j["camera"] { o["camera"] = c }
     if let a = j["accepts"]?.arrayValue, !a.isEmpty { o["accepts"] = .array(a) }
+    if let p = j["paint"] { o["paint"] = p }
     return o
 }
 
@@ -112,6 +117,7 @@ public func effectToolHandlers(_ host: EffectToolHost) -> [String: EffectToolHan
             }
             found = kept
         }
+        if let place = a["place"]?.stringValue, let offered = host.searchPlaceOffered { found = found.filter { offered($0, place, p) } }
         let limit = Int(a["limit"]?.numberValue ?? 20)
         var out: JSONObject = [
             "available": true, "provider": ["id": .string(p.id), "name": .string(p.name), "capabilities": .object(p.capabilities)],

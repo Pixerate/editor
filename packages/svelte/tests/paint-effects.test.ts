@@ -71,6 +71,21 @@ describe('Svelte paint effects', () => {
     expect(c.getPaperEffect()).toBeNull();
   });
 
+  it('with provider paint hints, Paint… lists only hinted effects and picks from the hint; Layer… lists every effect', async () => {
+    const c = new PaintEditorController({ width: 16, height: 8 });
+    c.setEffectsProvider(createFakeEffectProvider({ paintHints: true }));
+    c.setColor('#ff0000');
+    c.setSecondaryColor('#0000ff');
+    show(PaintEffectsPanel, { controller: c });
+    const listed = () => Array.from(target.querySelectorAll('[data-effect-id]')).map((b) => b.getAttribute('data-effect-id'));
+    await click(button('Layer…'));
+    expect(listed()).toContain('fake.bar');
+    await click(button('Paint…'));
+    expect(listed()).toEqual(['fake.gradient', 'fake.trail']);
+    await pickEffect('fake.gradient');
+    expect(c.getEffectPaint()).toMatchObject({ map: { by: 'stroke', repeat: 'mirror' }, live: true, values: { from: '#ff0000', to: '#0000ff' } });
+  });
+
   it('shows why nothing can be added without a provider, and errors from the controller', async () => {
     const c = new PaintEditorController({ width: 16, height: 8 });
     show(PaintEffectsPanel, { controller: c });

@@ -8,6 +8,7 @@ import type { AnimationEasing } from '../animation/easing.js';
 import type {
 	EffectDescription,
 	EffectKind,
+	EffectPaintHint,
 	EffectPreset,
 	EffectRenderer,
 	EffectRendererOptions,
@@ -37,6 +38,11 @@ export interface EffectAuthoringDocument {
 	 * it when the source is edited, since it may describe the old source (undo brings it back).
 	 */
 	provider?: Readonly<Record<string, unknown>>;
+	/**
+	 * How the effect is best painted with (see `EffectSummary.paint`). An effect saved from it
+	 * (a paint editor's authored effect) carries it, so picking it as paint starts from it.
+	 */
+	paint?: EffectPaintHint;
 }
 
 /** What to open: a catalog effect (optionally with a preset applied), or a document saved earlier by `exportDocument`. */
@@ -175,6 +181,12 @@ export interface EffectAuthoringSession {
 
 	/** Configures timeline duration and loop behavior. */
 	setTiming(timing: { duration?: number; loop?: boolean }): EffectAuthoringResult;
+
+	/**
+	 * Sets how the effect is best painted with (`description.paint`, saved in the document), or
+	 * removes it with null. Refused when it names controls the effect does not have. One undo step.
+	 */
+	setPaintHint?(hint: EffectPaintHint | null): EffectAuthoringResult;
 
 	/** Starts playback. */
 	play(): void;

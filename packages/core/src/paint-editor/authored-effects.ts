@@ -21,6 +21,7 @@ import {
 } from "../effects/errors.js";
 import {
   createEffectPixels,
+  effectPaintHintProblems,
   searchEffectSummaries,
 } from "../effects/helpers.js";
 import {
@@ -190,8 +191,16 @@ function asUsed(
       Object.entries(p.values).filter(([k]) => k in properties),
     ),
   }));
+  const { paint: _paint, ...rest } = d;
+  // The document's paint hint, while the controls left here still fit it.
+  const paint =
+    doc.paint &&
+    !effectPaintHintProblems({ controls: { ...d.controls, properties } as EffectDescription["controls"], paint: doc.paint }).length
+      ? doc.paint
+      : undefined;
   return {
-    ...d,
+    ...rest,
+    ...(paint ? { paint } : {}),
     id: entry.id,
     name: entry.name,
     category: "authored",

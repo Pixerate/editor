@@ -246,7 +246,7 @@ final class EffectAuthoringTests: XCTestCase {
         _ = s.savePreset("Mine")
         let h = effectAuthoringToolHandlers(host: EffectAuthoringToolHost(session: { s }))
         let described = try await h["effect_authoring_describe"]!([:])
-        XCTAssertEqual(described.stringified(), ##"{"name":"Tint","kind":"shader","sourceLanguage":null,"controls":[{"id":"color","description":"Tint colour as #rrggbb. Default #ff8800.","type":"color","alpha":false,"default":"#ff8800"},{"id":"amount","description":"How far to mix towards the colour, 0–1. Default 0.5.","type":"number","default":0.5,"min":0,"max":1}],"values":{"color":"#102030","amount":0.42074976880077763},"presets":["Mine","Sepia","Cool"],"tracks":[{"control":"amount","keyframes":2},{"control":"color","keyframes":1}],"time":500,"duration":1000,"loop":false,"issues":[],"previewError":null}"##)
+        XCTAssertEqual(described.stringified(), ##"{"name":"Tint","kind":"shader","sourceLanguage":null,"controls":[{"id":"color","description":"Tint colour as #rrggbb. Default #ff8800.","type":"color","alpha":false,"default":"#ff8800"},{"id":"amount","description":"How far to mix towards the colour, 0–1. Default 0.5.","type":"number","default":0.5,"min":0,"max":1}],"values":{"color":"#102030","amount":0.42074976880077763},"presets":["Mine","Sepia","Cool"],"tracks":[{"control":"amount","keyframes":2},{"control":"color","keyframes":1}],"time":500,"duration":1000,"loop":false,"paint":null,"issues":[],"previewError":null}"##)
         let kf = try await h["effect_authoring_set_keyframe"]!(["control": "amount", "time": 500, "value": 0.5])
         XCTAssertEqual(kf.stringified(), ##"{"control":"amount","keyframes":[{"time":0,"value":0.2,"easing":"ease-in"},{"time":500,"value":0.5},{"time":1000,"value":0.9}]}"##)
         let doc = s.exportDocument()
@@ -463,7 +463,7 @@ final class EffectAuthoringTests: XCTestCase {
     func testToolsRefuseWithoutASession() async throws {
         let h = effectAuthoringToolHandlers(host: EffectAuthoringToolHost(session: { nil }))
         XCTAssertNil(h["effect_authoring_view"])
-        XCTAssertEqual(h.count, 14)
+        XCTAssertEqual(h.count, 15)
         for name in ["effect_authoring_describe", "effect_authoring_set_values", "effect_authoring_undo"] {
             let r = await call(h, name, ["values": ["amount": 0.5]])
             XCTAssertEqual(r.error, NO_EFFECT_AUTHORING_SESSION)
@@ -478,7 +478,7 @@ final class EffectAuthoringTests: XCTestCase {
     func testToolsEditTheOpenSession() async throws {
         let s = try await open(.effect("fake.invert"))
         let h = effectAuthoringToolHandlers(host: EffectAuthoringToolHost(session: { s }))
-        XCTAssertEqual(effectAuthoringToolNames(EffectAuthoringToolHost(session: { s })).count, 13)
+        XCTAssertEqual(effectAuthoringToolNames(EffectAuthoringToolHost(session: { s })).count, 14)
 
         let source = await call(h, "effect_authoring_get_source")
         XCTAssertEqual(source.error, "The currently open effect (Invert) does not use shader or script source code.")

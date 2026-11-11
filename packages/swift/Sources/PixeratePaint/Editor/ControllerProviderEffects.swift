@@ -29,10 +29,38 @@ private let PLACE_WORDS: [String: String] = [
     "paint": "effect paint takes generator, overlay or title effects",
 ]
 
-/// Refuses an effect that cannot go in `place`, saying what to use instead (`checkPaintEffectPlace`).
-func checkPaintEffectPlace(_ d: EffectDescription, _ place: String) throws {
+/// The places in order (the `place` argument of `search_effects`, `PAINT_EFFECT_PLACE_NAMES`).
+public let PAINT_EFFECT_PLACE_NAMES = ["paper", "layer", "fill", "light", "paint"]
+
+/// Whether an effect suits paint (`suitsEffectPaint`): authored effects always do; a provider's unless it declares `paintHints` and the effect has no hint.
+public func suitsEffectPaint(_ e: EffectDescription, capabilities: JSONObject?) -> Bool {
+    isAuthoredEffectId(e.id) || effectSuitsPaint(e, capabilities: capabilities)
+}
+
+/// Whether `place` takes the effect (`paintEffectOffered`): its uses fit, it draws pixels, and for `paint` it suits paint.
+public func paintEffectOffered(_ e: EffectDescription, _ place: String, capabilities: JSONObject?) -> Bool {
+    if e.kind == "motion" || e.kind == "vector" || !effectOffered(e, PAINT_EFFECT_PLACES[place] ?? []) { return false }
+    return place != "paint" || suitsEffectPaint(e, capabilities: capabilities)
+}
+
+/// Where effect paint starts from a paint hint (`effectPaintFromHint`): its map (a stroke strip mirrored unless it says otherwise), its values with the brush's colours in its colour controls, and live.
+public func effectPaintFromHint(_ hint: EffectPaintHint, color: String, secondaryColor: String) -> (map: JSONValue, values: JSONObject, live: Bool) {
+    var values = hint.values
+    let brush = [color, secondaryColor]
+    for (i, key) in hint.colors.enumerated() where i < brush.count { values[key] = .string(brush[i]) }
+    let map: JSONValue = hint.map == "stroke" ? ["by": "stroke", "repeat": .string(hint.repeat ?? "mirror")] : ["by": .string(hint.map)]
+    return (map, values, hint.live)
+}
+
+/// Refuses an effect that cannot go in `place`, saying what to use instead (`checkPaintEffectPlace`); with the provider's capabilities, paint also refuses an effect without a paint hint (`paintHints`).
+func checkPaintEffectPlace(_ d: EffectDescription, _ place: String, capabilities: JSONObject? = nil) throws {
     let allowed = PAINT_EFFECT_PLACES[place] ?? []
-    if d.kind != "motion" && d.kind != "vector" && d.uses.contains(where: allowed.contains) { return }
+    if d.kind != "motion" && d.kind != "vector" && d.uses.contains(where: allowed.contains) {
+        if place == "paint" && !suitsEffectPaint(d, capabilities: capabilities) {
+            throw EffectError.unsupported("\"\(d.id)\" (\(d.name)) doesn't work as paint: its provider marks the effects that do with a paint hint, and this one has none, so painting with it would only reveal a still frame of something meant to be seen whole. Add it as an effect layer (add_effect_layer) or fill a layer with it (fill_layer_with_effect) instead, or paint with an effect from search_effects with place \"paint\".", d.id)
+        }
+        return
+    }
     var instead = ""
     if d.uses.contains("filter") && place == "paint" { instead = "; paint with a generator, overlay or title effect, or run the filter on the painted layer with apply_effect" } else if d.uses.contains("filter") && place != "light" { instead = "; run it on a layer's dried paint with apply_effect instead" } else if place == "light" && d.uses.contains(where: PAINT_EFFECT_PLACES["layer"]!.contains) { instead = "; add it as an effect layer (add_effect_layer) or fill a layer with it (fill_layer_with_effect) instead" } else if place == "paper" && d.uses.contains(where: { $0 == "overlay" || $0 == "title" }) { instead = "; add it as an effect layer with add_effect_layer instead" }
     let what = d.uses.isEmpty ? d.kind : d.uses.joined(separator: " / ")
@@ -154,7 +182,7 @@ extension PaintEditorController {
         let d = try await providerFor(effect).describe(effect)
         let paths = pathControlsOf(d)
         if let first = paths.first { effectPathControls[d.id] = first }
-        if let place { try checkPaintEffectPlace(d, place) }
+        if let place { try checkPaintEffectPlace(d, place, capabilities: try providerFor(effect).capabilities) }
         return d
     }
 
@@ -415,17 +443,27 @@ extension PaintEditorController {
     public func setEffectPaint(_ effect: String, values: JSONObject? = nil, time: Double? = nil, map rawMap: JSONValue? = nil, live: Bool? = nil) async throws -> PaintEffectPaint {
         if effect.isEmpty { throw PaintEditorError("effect is missing; pass an effect id from search_effects (use generator, overlay or title).") }
         try checkTime(time)
-        let map = try readEffectStrokeMap(rawMap)
+        var map = try readEffectStrokeMap(rawMap)
         paintEpoch += 1
         let epoch = paintEpoch
         let d = try await describeEffect(effect, place: "paint")
+        // The provider's paint hint is where the paint starts; what the caller gives wins.
+        let hint = d.paint.map { effectPaintFromHint($0, color: color, secondaryColor: secondaryColor) }
+        if let hint, rawMap == nil { map = try readEffectStrokeMap(hint.map) }
         if map?.by == "path" && pathControlsOf(d).isEmpty {
             throw PaintEditorError("Effect \"\(d.id)\" has no path control (format \"svg-path\"); use by: \"stroke\" (bent along each stroke) or by: \"canvas\" (fixed to the canvas).")
         }
-        let vals = try effectValues(d, d.defaults, values)
+        var changes = values
+        if let hint {
+            var merged = hint.values
+            for (k, v) in values ?? [:] { merged[k] = v }
+            changes = merged
+        }
+        let vals = try effectValues(d, d.defaults, changes)
+        let live = live ?? hint?.live ?? false
         func changed() -> PaintEditorError { PaintEditorError("The paint changed while \"\(d.name)\" rendered (set_color, set_paint or another set_effect_paint); call set_effect_paint again to paint with it.") }
         if epoch != paintEpoch { throw changed() }
-        let paint = PaintEffectPaint(effect: d.id, provider: try providerFor(d.id).id, values: vals, time: time ?? 0, map: map, live: live == true)
+        let paint = PaintEffectPaint(effect: d.id, provider: try providerFor(d.id).id, values: vals, time: time ?? 0, map: map, live: live)
         effectPaintPending = paint
         emit()
         do { _ = try await renderEffectPaint(paint) } catch {

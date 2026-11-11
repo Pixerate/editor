@@ -78,6 +78,16 @@ export interface EffectToolHost {
 	readOnlyReason(): string | null;
 	/** Every target with effects, or one target (throws for an unknown id, naming valid ones). */
 	list(target?: string): EffectTargetEffects[];
+	/**
+	 * Places in this editor `search_effects` can narrow to (its `place` argument): each name, what
+	 * it is, and whether it takes an effect (the paint editor's `paint` honours provider paint hints).
+	 */
+	searchPlaces?: {
+		/** The `place` argument's description. */
+		description: string;
+		names: readonly string[];
+		offered(e: EffectSummary, place: string, provider: EffectProvider): boolean;
+	};
 	/** Arguments `apply_effect` takes on this editor besides the shared ones (name → schema); given ones reach `apply` in `args`. */
 	applyOptions?: Record<string, JsonSchema>;
 	/** Arguments `update_effect` takes on this editor besides the shared ones; given ones reach `update` in `changes`. */
@@ -148,7 +158,8 @@ const summaryOut = (e: EffectSummary) => ({
 	loop: e.loop,
 	...(e.duration !== undefined ? { duration: e.duration } : {}),
 	...(e.camera ? { camera: e.camera } : {}),
-	...(e.accepts?.length ? { accepts: e.accepts } : {})
+	...(e.accepts?.length ? { accepts: e.accepts } : {}),
+	...(e.paint ? { paint: e.paint } : {})
 });
 
 /** The agent tools for provider effects in one editor (see the module comment). */
@@ -220,7 +231,7 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		{
 			name: 'search_effects',
 			title: 'Search effects',
-			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera, timing), category, use (${EFFECT_USES.join(', ')}) or tags (effects carrying every one), and accepts ["path"] for effects that draw along a path you give. For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts }] (timing effects, kind timing, retime video footage and have no duration: their length depends on the footage), total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
+			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera, timing), category, use (${EFFECT_USES.join(', ')}) or tags (effects carrying every one), and accepts ["path"] for effects that draw along a path you give${host.searchPlaces ? ', and place for the effects one place in this editor takes' : ''}. For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts, paint: { map, colors, values, live, repeat, size } when the provider suggests how to paint with it }] (timing effects, kind timing, retime video footage and have no duration: their length depends on the footage), total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
 			inputSchema: object({
 				query: { type: 'string', description: 'Words to match (default: every effect).' },
 				kind: { type: 'string', enum: [...EFFECT_KINDS], description: 'shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene\'s camera; no pixels) or timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own).' },
@@ -228,7 +239,8 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 				use: { type: 'string', enum: [...EFFECT_USES], description: 'What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene\'s camera, timing retimes video footage.' },
 				tags: { type: 'array', items: { type: 'string', minLength: 1 }, description: 'Only effects carrying every one of these tags, as search_effects lists them (any case; spaces count as hyphens).' },
 				limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Most effects to return (default 20).' },
-				accepts: { type: 'array', items: { type: 'string', enum: [...EFFECT_ACCEPTS], description: 'path: the effect has a control that draws along a path given at run time.' }, description: 'Only effects that take every one of these (path: effects that draw along a path you give; describe_effect names the controls in pathControls).' }
+				accepts: { type: 'array', items: { type: 'string', enum: [...EFFECT_ACCEPTS], description: 'path: the effect has a control that draws along a path given at run time.' }, description: 'Only effects that take every one of these (path: effects that draw along a path you give; describe_effect names the controls in pathControls).' },
+				...(host.searchPlaces ? { place: { type: 'string', enum: [...host.searchPlaces.names], description: host.searchPlaces.description } } : {})
 			}),
 			annotations: { title: 'Search effects', ...ANNOTATIONS.read },
 			handler: async (args) => {
@@ -248,6 +260,8 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 					}
 					found = kept;
 				}
+				const place = args.place as string | undefined;
+				if (place && host.searchPlaces) found = found.filter((e) => host.searchPlaces!.offered(e, place, p));
 				const limit = (args.limit as number | undefined) ?? 20;
 				const out: Record<string, unknown> = { available: true, provider: { id: p.id, name: p.name, capabilities: p.capabilities }, effects: found.slice(0, limit).map(summaryOut), total: found.length, tags: countEffectTags(found).slice(0, TAG_LIMIT) };
 				if (tags?.length && !found.length) {
