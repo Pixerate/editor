@@ -35,6 +35,53 @@ public struct BrushHostProfile: Sendable {
     public var ferro: String? = nil
     /// Biopaint mycelial ink (`culture`); nil: `none`.
     public var culture: String? = nil
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(
+        id: String,
+        name: String,
+        kinds: [String],
+        tools: [String],
+        tipShapes: [String],
+        marks: [String],
+        surfaces: [String],
+        exchange: String,
+        reservoir: String,
+        grain: String,
+        light: String,
+        motion: String,
+        colours: [String],
+        velocity: String,
+        tilt: String,
+        tipGrain: String? = nil,
+        dabCount: String? = nil,
+        livePatterns: String? = nil,
+        iridescence: String? = nil,
+        ferro: String? = nil,
+        culture: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.kinds = kinds
+        self.tools = tools
+        self.tipShapes = tipShapes
+        self.marks = marks
+        self.surfaces = surfaces
+        self.exchange = exchange
+        self.reservoir = reservoir
+        self.grain = grain
+        self.light = light
+        self.motion = motion
+        self.colours = colours
+        self.velocity = velocity
+        self.tilt = tilt
+        self.tipGrain = tipGrain
+        self.dabCount = dabCount
+        self.livePatterns = livePatterns
+        self.iridescence = iridescence
+        self.ferro = ferro
+        self.culture = culture
+    }
 }
 
 private let ALL_COLOURS = ["solid", "dual", "gradient", "effect"]

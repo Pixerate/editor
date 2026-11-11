@@ -47,6 +47,14 @@ public struct ExchangeRates {
     public var mix: Double
     public var drain: Double
     public var mixing: String
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(pickup: Double, mix: Double, drain: Double, mixing: String) {
+        self.pickup = pickup
+        self.mix = mix
+        self.drain = drain
+        self.mixing = mixing
+    }
 }
 
 /// Per-dab rates from the ratios a user sets (see `paint/exchange.ts`).
@@ -343,6 +351,23 @@ public struct MixerSettings: Equatable, Sendable {
     public var loadEachStroke: Bool
     public var cleanEachStroke: Bool
     public var mixing: String
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(
+        wet: Double,
+        load: Double,
+        mix: Double,
+        loadEachStroke: Bool,
+        cleanEachStroke: Bool,
+        mixing: String
+    ) {
+        self.wet = wet
+        self.load = load
+        self.mix = mix
+        self.loadEachStroke = loadEachStroke
+        self.cleanEachStroke = cleanEachStroke
+        self.mixing = mixing
+    }
 }
 
 public let DEFAULT_MIXER = MixerSettings(wet: 0.5, load: 0.5, mix: 0.5, loadEachStroke: true, cleanEachStroke: true, mixing: "rgb")

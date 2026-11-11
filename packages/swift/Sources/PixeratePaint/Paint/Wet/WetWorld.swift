@@ -43,6 +43,21 @@ public struct WetPaperInput {
     /// Grain height 0..1 at a document position (the paper's wet height map).
     public var heightAt: (Double, Double) -> Double
     var paper: WetPaper { WetPaper(absorption: absorption, permeability: permeability, roughness: roughness) }
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(
+        absorption: Double,
+        permeability: Double,
+        roughness: Double,
+        color: [Int],
+        heightAt: @escaping (Double, Double) -> Double
+    ) {
+        self.absorption = absorption
+        self.permeability = permeability
+        self.roughness = roughness
+        self.color = color
+        self.heightAt = heightAt
+    }
 }
 
 /// The kernel in use, in the TS core's words (this port reports the TypeScript kernel on one thread, which recorded scenarios compare).

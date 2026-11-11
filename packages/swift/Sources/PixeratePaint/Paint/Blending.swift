@@ -18,6 +18,13 @@ public struct BlenderSettings: Equatable, Sendable {
     public var strength: Double
     public var distance: Double
     public var mixing: String
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(strength: Double, distance: Double, mixing: String) {
+        self.strength = strength
+        self.distance = distance
+        self.mixing = mixing
+    }
 }
 
 public let DEFAULT_BLENDER = BlenderSettings(strength: 0.5, distance: 0.35, mixing: "pigment")
@@ -27,6 +34,13 @@ public struct SmudgeSettings: Equatable, Sendable {
     public var strength: Double
     public var length: Double
     public var mixing: String
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(strength: Double, length: Double, mixing: String) {
+        self.strength = strength
+        self.length = length
+        self.mixing = mixing
+    }
 }
 
 public let DEFAULT_SMUDGE = SmudgeSettings(strength: 0.7, length: 0.85, mixing: "rgb")

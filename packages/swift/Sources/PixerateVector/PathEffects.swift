@@ -452,6 +452,27 @@ public struct VectorWiggleParams {
     public var phase: Double
     public var seed: Double
     public var time: Double
+
+    /// Public so hosts outside the module can build one (#747).
+    public init(
+        size: Double,
+        detail: Double,
+        smooth: Bool,
+        speed: Double,
+        correlation: Double,
+        phase: Double,
+        seed: Double,
+        time: Double
+    ) {
+        self.size = size
+        self.detail = detail
+        self.smooth = smooth
+        self.speed = speed
+        self.correlation = correlation
+        self.phase = phase
+        self.seed = seed
+        self.time = time
+    }
 }
 
 /// Wiggle Paths: subdivides the paths (`detail` points per segment) and moves every point by
