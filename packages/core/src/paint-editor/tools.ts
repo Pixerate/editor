@@ -859,7 +859,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'update_stroke',
     title: 'Change a stroke',
     description:
-      'Changes a stroke on a stroke layer after it was painted: another brush preset (brushId, keeping the stroke size), brush settings (as set_brush takes), colour (replaces gradient paint), paint, or seed, then redraws the layer exactly. Ids come from list_strokes {live: true}. Refuses brushes a stroke layer cannot redraw (wet, impasto, sticker, eraser, smudge, blender, pick-up). One undo step. Returns the stroke and the area that changed.',
+      'Changes a stroke on a stroke layer after it was painted: another brush preset (brushId, keeping the stroke size), brush settings (as set_brush takes), colour (replaces gradient paint), paint, or seed, then redraws the layer exactly. Ids come from list_strokes {live: true}. Refuses brushes a stroke layer cannot redraw (wet, impasto, sticker, smudge, blender, pick-up); erasers and light brushes are fine. One undo step. Returns the stroke and the area that changed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -940,7 +940,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'remove_strokes',
     title: 'Delete strokes',
-    description: 'Deletes strokes from their stroke layers (the eraser of a stroke layer) and redraws them. All checked first; one undo step. Returns the ids removed and the area that changed.',
+    description: 'Deletes whole strokes from their stroke layers and redraws them (to erase part of a stroke, paint an eraser stroke on the layer, which stays editable). All checked first; one undo step. Returns the ids removed and the area that changed.',
     inputSchema: {
       type: 'object',
       properties: { ids: { type: 'array', minItems: 1, items: { type: 'string', description: 'Stroke id.' }, description: 'Stroke ids from list_strokes {live: true}.' } },
@@ -965,7 +965,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'rasterize_stroke_layer',
     title: 'Rasterize a stroke layer',
-    description: 'Turns a stroke layer into a plain pixel layer with the same pixels: its strokes stop being editable, and erasers, smudges and fills work on it. One undo step. Returns the layer.',
+    description: 'Turns a stroke layer into a plain pixel layer with the same pixels: its strokes stop being editable, and smudges, blenders, wet paint and fills work on it. One undo step. Returns the layer.',
     inputSchema: { type: 'object', properties: { layerId: { type: 'string', description: 'Stroke layer id from list_layers (default the active layer).' } }, additionalProperties: false },
     annotations: { title: 'Rasterize a stroke layer', ...DESTRUCTIVE },
     coordinates: { out: ['bounds'] },
@@ -1131,7 +1131,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
 
   tools.push(...createPaintGuideTools(c));
   tools.push(...createPaintWetTools(c));
-  tools.push(...createPaintThickTools(c));
+  tools.push(...createPaintThickTools(c, { origin: options.origin }));
   tools.push(...createFerroTools(c));
   tools.push(...createTimeMachineTools(c));
   tools.push(...createCultureTools(c));

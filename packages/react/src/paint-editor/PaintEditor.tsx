@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { PaintPresence, documentToScreen, screenToDocument, type PaintEditorController, type PaintProposals, type PaintAgentStrokes, type PaintTool } from '@pixerate/editor/paint-editor';
+import React, { useRef, useState, useSyncExternalStore } from 'react';
+import { PaintPresence, documentToScreen, screenToDocument, specialtyInPlay, type PaintEditorController, type PaintProposals, type PaintAgentStrokes, type PaintTool } from '@pixerate/editor/paint-editor';
 import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
 import { useAgentPlayback } from '../playback/AgentPlaybackContext';
 import { usePlaybackSurface } from '../playback/usePlaybackSurface';
@@ -10,6 +10,7 @@ import { PaintCanvas } from './PaintCanvas';
 import { PaintLayersPanel } from './PaintLayersPanel';
 import { PaintToolbar, type PaintFillToolbarOptions } from './PaintToolbar';
 import { PaperPanel } from './PaperPanel';
+import { SpecialtyPanel } from './SpecialtyPanel';
 import { WetPanel } from './WetPanel';
 import { StickerPanel } from './StickerPanel';
 import { StrokePanel } from './StrokePanel';
@@ -52,12 +53,15 @@ const PAINT_CONTROLS: Record<string, string> = {
   symmetry: '[aria-label="Symmetry"]',
 };
 
-type SideTab = 'color' | 'wet' | 'paper' | 'layers' | 'effects';
+type SideTab = 'color' | 'wet' | 'paper' | 'specialty' | 'layers' | 'effects';
+
+const TAB_LABELS: Record<SideTab, string> = { color: 'Colour', wet: 'Wet', paper: 'Paper', specialty: 'Specialty', layers: 'Layers', effects: 'Effects' };
 
 /**
  * The paint editor: toolbar, brush library on the left, the canvas, and colour (wheel,
- * harmonies, swatches, mixing pad), wet media, paper and layers on the right, and provider effects
- * when an effects provider is registered.
+ * harmonies, swatches, mixing pad), wet media, paper, specialty paint (UV blacklight, heat,
+ * magnets, view tilt; marked while a specialty brush or effect is in play) and layers on the right,
+ * and provider effects when an effects provider is registered.
  */
 export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, proposals, agentStrokes, deviceTilt, className, playback, playbackId = 'paint', onPlaybackReveal }) => {
   const [tool, setTool] = useState<PaintTool>('brush');
@@ -129,13 +133,19 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
   };
   const [error, setError] = useState<string | null>(null);
   const effects = usePaintEffectsProvider(controller);
-  const tabs: SideTab[] = effects ? ['color', 'wet', 'paper', 'layers', 'effects'] : ['color', 'wet', 'paper', 'layers'];
+  const tabs: SideTab[] = effects ? ['color', 'wet', 'paper', 'specialty', 'layers', 'effects'] : ['color', 'wet', 'paper', 'specialty', 'layers'];
+  // Only the indicator's on / off re-renders the editor (a boolean snapshot).
+  const specialty = useSyncExternalStore(
+    (notify) => controller.subscribe(notify),
+    () => specialtyInPlay(controller.getState()),
+    () => specialtyInPlay(controller.getState()),
+  );
   return (
     <div ref={rootRef} className={`relative flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900 p-2 ${className ?? ''}`} style={{ height }} data-testid="paint-editor">
       {playing && <PresenceLayer presence={agentPresence} viewport={docToRoot} />}
       <PaintToolbar controller={controller} tool={tool} onToolChange={setTool} fillOptions={fillOptions} onFillOptionsChange={setFillOptions} fileName={fileName} />
       <div className="flex min-h-0 flex-1 gap-2">
-        <BrushPanel controller={controller} className="w-60 shrink-0 overflow-y-auto pr-1" />
+        <BrushPanel controller={controller} onOpenSpecialtyPanel={() => setTab('specialty')} className="w-60 shrink-0 overflow-y-auto pr-1" />
         <div className="flex min-w-0 flex-1 flex-col">
           {/* With playback the editor draws the cursor (over the panels too), so the canvas doesn't. */}
           <PaintCanvas controller={controller} tool={tool} fillOptions={fillOptions} onError={setError} presence={playing ? undefined : presence} proposals={proposals} agentStrokes={agentStrokes} deviceTilt={deviceTilt} className="flex-1 rounded-lg" />
@@ -148,8 +158,13 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
         <div className="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
           <div className="flex gap-1" role="tablist" aria-label="Paint panels">
             {tabs.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} data-paint-tab={t} className={chip(tab === t)} onClick={() => setTab(t)}>
-                {t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : t === 'layers' ? 'Layers' : 'Effects'}
+              <button key={t} type="button" role="tab" aria-selected={tab === t} data-paint-tab={t} className={chip(tab === t)} onClick={() => setTab(t)} {...(t === 'specialty' && specialty ? { 'data-active': '', title: 'Specialty paint is in play' } : {})}>
+                {TAB_LABELS[t]}
+                {t === 'specialty' && specialty && (
+                  <span aria-hidden="true" className="ml-1 text-indigo-300">
+                    •
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -157,6 +172,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
             {tab === 'color' && <ColorPanel controller={controller} />}
             {tab === 'wet' && <WetPanel controller={controller} />}
             {tab === 'paper' && <PaperPanel controller={controller} />}
+            {tab === 'specialty' && <SpecialtyPanel controller={controller} />}
             {tab === 'layers' && <PaintLayersPanel controller={controller} />}
             {tab === 'layers' && <StrokePanel controller={controller} />}
             {tab === 'layers' && <PathStrokePanel controller={controller} />}

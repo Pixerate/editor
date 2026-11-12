@@ -4,10 +4,12 @@
  * (`PaintEditorController.updateStroke` and the rest). The document keeps the strokes
  * (`liveStrokes`), and the layer's surface is a cache of them drawn bottom first.
  *
- * Only brushes whose result depends on the stroke itself can be redrawn exactly: dab, particle and
- * bristle brushes, and the Mixer Brush, none of them picking up paint. Wet paint needs the
- * simulation's history, thick paint has relief channels, stickers are their own objects, and
- * smudges, blenders, pick-up brushes and erasers read the paint under them.
+ * Only brushes whose result at a pixel depends on the stroke itself and the paint already at that
+ * pixel can be redrawn exactly: dab, particle and bristle brushes, the Mixer Brush (none of them
+ * picking up paint), and erasers, which only scale the alpha under their tip. Light is redrawn
+ * with them: each stroke's grey light twin paints the layer's light channel in the same order.
+ * Wet paint needs the simulation's history, thick paint has relief channels, stickers are their
+ * own objects, and smudges, blenders and pick-up brushes move paint between pixels.
  */
 
 import type { PaintBrush, PaintBrushEngine } from './brushes';
@@ -25,8 +27,6 @@ export function liveStrokeRefusal(brush: PaintBrush): string | null {
       return `The ${brush.name} brush paints thick paint with relief, which a stroke layer doesn't keep; paint it on a pixel layer (add_layer).`;
     case 'sticker':
       return `The ${brush.name} brush sprays stickers, which are their own objects; spray them on an empty pixel layer (add_layer).`;
-    case 'eraser':
-      return `Erasers don't paint on a stroke layer; delete strokes instead (remove_strokes), or rasterize the layer first (rasterize_stroke_layer).`;
     case 'scraper':
       return `The ${brush.name} brush scrapes through painted pixel layers, which a stroke layer can't redraw; rasterize the layer first (rasterize_stroke_layer) or scrape on a pixel layer.`;
     case 'blender':
@@ -37,7 +37,6 @@ export function liveStrokeRefusal(brush: PaintBrush): string | null {
       return `The ${brush.name} brush detonates existing paint across visible layers, so it can't be redrawn on a stroke layer; paint it on a pixel layer (add_layer) or rasterize the layer first (rasterize_stroke_layer).`;
   }
   if (brush.mutation) return `The ${brush.name} brush paints mutation strokes (which fade once an agent reads them), so it goes on a pixel layer (add_layer).`;
-  if (brush.light.amount > 0) return `The ${brush.name} brush lays light, which a stroke layer doesn't redraw yet; paint light on a pixel layer (add_layer), or set light.amount to 0 (set_brush).`;
   if (brush.fluorescence.amount > 0) return `The ${brush.name} brush lays UV-fluorescent ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or set fluorescence.amount to 0 (set_brush).`;
   if (brush.thermochromic.hotColor !== null) return `The ${brush.name} brush lays thermochromic ink, which a stroke layer doesn't redraw yet; paint it on a pixel layer (add_layer), or remove thermochromic (set_brush).`;
   if (brush.ferro.amount > 0) return `The ${brush.name} brush lays ferrofluid, which a stroke layer doesn't redraw; paint ferrofluid on a pixel layer (add_layer), or set ferro.amount to 0 (set_brush).`;

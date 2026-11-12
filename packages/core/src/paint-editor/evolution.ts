@@ -590,10 +590,20 @@ export function crossoverGenomes(
   return mutateGenome(crossed, rates, (variantSeed + 3571) | 0);
 }
 
-/** Checks that every stroke in a genome can be bred and previewed (refuses brushes `liveStrokeRefusal` rejects). */
+/**
+ * Why a stroke with `brush` can't be bred, or `null`: the brushes a stroke layer refuses
+ * (`liveStrokeRefusal`), and erasers, because a bred stroke is suggested as paint on a layer of
+ * its own, where an eraser has nothing to erase.
+ */
+export function evolutionStrokeRefusal(brush: PaintBrush): string | null {
+  if (brush.engine === 'eraser') return `The ${brush.name} brush erases, and a bred stroke is suggested on a layer of its own where there is nothing to erase; breed painted strokes instead.`;
+  return liveStrokeRefusal(brush);
+}
+
+/** Checks that every stroke in a genome can be bred and previewed (refuses brushes `evolutionStrokeRefusal` rejects). */
 export function checkEvolutionStrokes(strokes: readonly RecordedStroke[]): void {
   for (const s of strokes) {
-    const refusal = liveStrokeRefusal(s.brush);
+    const refusal = evolutionStrokeRefusal(s.brush);
     if (refusal) throw new Error(refusal);
   }
 }

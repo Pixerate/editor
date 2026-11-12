@@ -165,6 +165,16 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Light paint: the layer's light channel after the stroke, or nil when the stroke has no twin.
     var lightChannel: TiledSurface? { lightTwin?.surfaceAfter.map(shadowToLight) }
 
+    /// Whether the stroke paints the layer's light channel too (a light twin).
+    var hasLightTwin: Bool { lightTwin != nil }
+
+    /// Everywhere the stroke's marks and its light twin's reached, whether or not they changed a
+    /// pixel (`result.bounds` is nil when nothing changed): where a stroke layer redraws the stroke.
+    func reach() -> RasterRect? {
+        guard let twin = lightTwin?.reach() else { return bounds }
+        return unionRect(bounds, twin)
+    }
+
     /// UV-fluorescent ink: the layer's fluorescence surface after the stroke, or nil.
     var fluorChannel: TiledSurface? {
         guard let twin = fluorTwin else { return nil }

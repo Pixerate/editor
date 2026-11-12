@@ -239,18 +239,27 @@ public struct PaintBrushPanel: View {
     public var body: some View {
         let brush = model.brush
         let brushes = model.brushes
-        let categories = brushes.reduce(into: [String]()) { if !$0.contains($1.category) { $0.append($1.category) } }
+        // Specialty paint (ferrofluid, UV and thermochromic ink, iridescence, ghost, mutation, live patterns) is listed apart (`brushLibraryGroups`).
+        let special = Set(brushes.filter { model.isSpecialtyBrush($0.id) }.map(\.id))
+        let standard = brushes.filter { !special.contains($0.id) }
+        let categories = standard.reduce(into: [String]()) { if !$0.contains($1.category) { $0.append($1.category) } }
         VStack(alignment: .leading, spacing: 8) {
             PanelHeading("Brush")
             Picker("Brush", selection: Binding(get: { brush.id }, set: { model.selectBrush($0) })) {
                 if !brushes.contains(where: { $0.id == brush.id }) { Text(brush.name).tag(brush.id) }
                 ForEach(categories, id: \.self) { cat in
                     Section(cat.capitalized) {
-                        ForEach(brushes.filter { $0.category == cat }, id: \.id) { b in Text(b.name).tag(b.id) }
+                        ForEach(standard.filter { $0.category == cat }, id: \.id) { b in Text(b.name).tag(b.id) }
+                    }
+                }
+                if !special.isEmpty {
+                    Section("Specialty") {
+                        ForEach(brushes.filter { special.contains($0.id) }, id: \.id) { b in Text(b.name).tag(b.id) }
                     }
                 }
             }
             .labelsHidden()
+            PaintSpecialtyGuideCard(model: model, onOpenSpecialtyPanel: { model.tab = .specialty })
             ForEach(model.tables.brushOptions, id: \.id) { item in
                 PaintSliderRow(label: item.label, value: model.brushOption(item), range: item.min...item.max, step: item.step, displayScale: item.displayScale ?? 1, unit: item.unit) { model.setBrushOption(item, $0) }
             }
@@ -388,8 +397,6 @@ public struct PaintPaperPanel: View {
             Toggle("Mirror tiling", isOn: Binding(get: { paper.tiling == "mirror" }, set: { on in model.attempt { _ = try model.controller.setPaper(["tiling": .string(on ? "mirror" : "repeat")]) } }))
             Button("New sheet") { model.newSheet() }
             PaintLightPanel(model: model)
-            PaintUvHeatPanel(model: model)
-            PaintFerroPanel(model: model)
             PaintTimeMachinePanel(model: model)
             PaintCulturePanel(model: model)
         }
@@ -510,7 +517,7 @@ public struct PaintFerroPanel: View {
     }
 }
 
-/// The virtual UV blacklight and thermochromic heat controls (`PaperPanel`'s UV & heat section).
+/// The virtual UV blacklight and thermochromic heat controls (`SpecialtyPanel`'s UV & heat section).
 public struct PaintUvHeatPanel: View {
     let model: PaintEditorModel
     public init(model: PaintEditorModel) { self.model = model }
@@ -520,13 +527,20 @@ public struct PaintUvHeatPanel: View {
         let heat = model.heatSummary
         VStack(alignment: .leading, spacing: 8) {
             PanelHeading("UV blacklight & heat")
+            Text("UV-fluorescent ink (UV marker) glows in its own colour under the blacklight; invisible UV ink shows only under it. Thermochromic ink shifts toward its hot colour where the canvas is warm.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             Toggle("UV blacklight", isOn: Binding(get: { uv.on }, set: { model.setUvLight(on: $0) }))
+            Text(heat.hotCells > 0 ? "Canvas heat: \(Int((heat.max * 100).rounded()))% at its warmest" : "Canvas is cool")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             if uv.on {
                 PaintSliderRow(label: "UV strength", value: uv.strength, range: 0...2, step: 0.05, onChange: { model.setUvLight(strength: $0) })
                 PaintSliderRow(label: "UV ambient", value: uv.ambient, range: 0...1, step: 0.05, onChange: { model.setUvLight(ambient: $0) })
             }
             HStack(spacing: 4) {
-                Button("Spread & cool heat") { model.advanceHeat() }.disabled(heat.hotCells == 0)
+                Button("Warm canvas") { model.warmCanvas() }
+                Button("Step heat") { model.advanceHeat() }.disabled(heat.hotCells == 0)
                 Button("Cool canvas") { model.clearHeat() }.disabled(heat.hotCells == 0)
             }
             .controlSize(.small)
@@ -534,7 +548,7 @@ public struct PaintUvHeatPanel: View {
     }
 }
 
-/// The light for thick paint, thin-film iridescence and metallic paper (`PaintUITables.sliders.light`, `sliders.viewTilt`; not an undo step), and Flatten relief for the active layer.
+/// The light for thick paint, thin-film iridescence and metallic paper (`PaintUITables.sliders.light`; not an undo step), and Flatten relief for the active layer.
 public struct PaintLightPanel: View {
     let model: PaintEditorModel
     public init(model: PaintEditorModel) { self.model = model }
@@ -545,11 +559,106 @@ public struct PaintLightPanel: View {
             ForEach(model.lightSliders, id: \.path) { c in
                 PaintSliderRow(label: c.label, value: model.lightingValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setLighting(c.path, $0) })
             }
+            Button("Flatten relief") { model.flattenRelief() }
+        }
+    }
+}
+
+// MARK: - Specialty paint
+
+/// How to use the active brush's specialty paint (`SpecialtyGuideCard`): its how-to, the canvas's live status and one-click setups. Nothing for a standard brush.
+public struct PaintSpecialtyGuideCard: View {
+    let model: PaintEditorModel
+    let onOpenSpecialtyPanel: (() -> Void)?
+    public init(model: PaintEditorModel, onOpenSpecialtyPanel: (() -> Void)? = nil) {
+        self.model = model
+        self.onOpenSpecialtyPanel = onOpenSpecialtyPanel
+    }
+
+    public var body: some View {
+        let guides = model.specialtyGuides
+        if !guides.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(guides, id: \.kind) { g in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Text("SPECIALTY").font(.system(size: 9, weight: .semibold)).padding(.horizontal, 4).padding(.vertical, 1).background(Color.indigo, in: RoundedRectangle(cornerRadius: 3)).foregroundStyle(.white)
+                            Text(g.title).font(.caption).bold()
+                        }
+                        Text(g.howToUse).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Text((g.ready ? "● " : "○ ") + g.status)
+                            .font(.caption2)
+                            .foregroundStyle(g.ready ? Color.green : Color.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.updatesFrequently)
+                        if !g.actions.isEmpty {
+                            HStack(spacing: 4) {
+                                ForEach(g.actions, id: \.id) { a in
+                                    Button(a.label) { model.runSpecialtyAction(a) }.help(a.tool)
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+                if let onOpenSpecialtyPanel {
+                    Button("Open Specialty panel", action: onOpenSpecialtyPanel).controlSize(.small)
+                }
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 8).stroke(Color.indigo.opacity(0.5)))
+        }
+    }
+}
+
+/// Thin-film iridescence and the view tilt (`SpecialtyPanel`'s view tilt section): `PaintUITables.sliders.viewTilt`, Reset tilt and device tilt.
+public struct PaintViewTiltPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        let tilt = model.viewTilt
+        VStack(alignment: .leading, spacing: 8) {
+            PanelHeading("Thin-film iridescence & view tilt")
+            Text("Scarab lacquer, Soap film and Pearl glaze shift colour with the viewing angle.").font(.caption2).foregroundStyle(.secondary)
             ForEach(model.viewTiltSliders, id: \.path) { c in
                 PaintSliderRow(label: c.label, value: model.viewTiltValue(c.path), range: c.min...c.max, step: c.step, onChange: { model.setViewTilt(c.path, $0) })
             }
+            Button("Reset tilt") { model.setViewTilt("x", 0); model.setViewTilt("y", 0) }
+                .disabled(tilt.x == 0 && tilt.y == 0)
+                .controlSize(.small)
             Toggle("Device tilt", isOn: Binding(get: { model.deviceTiltEnabled }, set: { model.deviceTiltEnabled = $0 }))
-            Button("Flatten relief") { model.flattenRelief() }
+        }
+    }
+}
+
+/**
+ * The canvas environment for specialty paint (`SpecialtyPanel`): the active brush's guide (or a
+ * quick pick of specialty brushes while a standard one is active), the UV blacklight and heat,
+ * magnets for ferrofluid, and the view tilt for thin-film iridescence.
+ */
+public struct PaintSpecialtyPanel: View {
+    let model: PaintEditorModel
+    public init(model: PaintEditorModel) { self.model = model }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if model.specialtyGuides.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("The active brush is a standard one. Pick a specialty brush:").font(.caption).foregroundStyle(.secondary)
+                    ForEach(model.specialtyPicks, id: \.id) { b in
+                        Button(b.name) { model.selectBrush(b.id) }.controlSize(.small)
+                    }
+                }
+            } else {
+                PaintSpecialtyGuideCard(model: model)
+            }
+            PaintUvHeatPanel(model: model)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Ferrofluid and Ferro ink pool into liquid magnetic paint that magnets pull into 3D Rosensweig spikes.").font(.caption2).foregroundStyle(.secondary)
+                PaintFerroPanel(model: model)
+            }
+            PaintViewTiltPanel(model: model)
         }
     }
 }

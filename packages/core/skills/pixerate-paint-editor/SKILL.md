@@ -102,6 +102,7 @@ in wet paint and freeze when it dries; presets `turing-wash`, `coral-ink`):
 Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`, and `iridescence` (`scarab-lacquer`, `soap-film`, `pearl-glaze`) adds thin-film structural colour that shifts hue with light and `set_view_tilt`: load `pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint** (neon, glowing glass and watercolour: `light.amount`, the Light category; backlit paper): [references/light-paint.md](references/light-paint.md).
 **Smart inks** (`fluorescence` for UV/invisible ink under `set_uv_light`, `thermochromic` for heat-reactive ink with `paint_heat` / `advance_heat`; presets `uv-marker`, `thermo-ink`): [references/smart-inks.md](references/smart-inks.md).
 **Ferrofluid paint** (`ferro.amount`, presets `ferrofluid` and `ferro-ink`, pulled by dipole magnets into lit Rosensweig spikes until cured): [references/ferrofluid.md](references/ferrofluid.md).
+**Specialty paint needs the canvas set up.** Ferrofluid, UV-fluorescent and thermochromic ink, thin-film iridescence, ghost, mutation and live-pattern brushes (the brush library's Specialty group) only show their effect with magnets, the UV blacklight, heat, a tilted view, a mutation agent or running wet time. After `set_brush` with one, call `get_specialty_guides`: each guide says how the paint behaves, `status` / `ready` say whether the canvas is set up now, and `actions` are the quick setups that apply (the tool and its arguments, such as `set_uv_light` `{ on: true }` or `add_magnet` at the centre). Run an action's tool, paint, then read the guides again to check `ready`. A standard brush returns no guides.
 **Painting time machine** (non-destructive museum ageing preview `set_age` / `bake_age`, X-ray pentimento radiographs `render_xray` / `set_xray_view`, and the `paint-scraper` brush that excavates through layers): [references/time-machine.md](references/time-machine.md).
 **Biopaint (mycelial ink)** (`culture` facet, presets `mycelial-ink`, `rot`, `foxfire`: spores seeded along a stroke grow fine branching threads that seek out existing paint, digest it, carry its colour along the network, and fuse into loops; `grow_cultures` steps them): [references/culture.md](references/culture.md).
 
@@ -153,8 +154,14 @@ inner glow, shadows, stroke, bevel, satin and overlays, as in the image editor
   `update_sticker` take `frame` (0..frameCount-1; past the last, or above 0 on a static sticker,
   is refused), and restamping (`ref`) without `frame` goes back to frame 0.
 - **Stroke layers**: pixels drawn from the layer's strokes; they take `dab`, `particle`, `bristle`
-  and Mixer Brush strokes that pick up no paint. `list_strokes {live: true}` → `update_stroke` /
-  `edit_stroke_points` / `reorder_stroke` / `remove_strokes`; `rasterize_stroke_layer` once settled.
+  and Mixer Brush strokes that pick up no paint, erasers, and light (`light.amount`, e.g. the
+  highlighter's glow or `neon-marker`). An eraser stroke is a stroke like the others: it erases
+  what lies under it in the list, so editing, moving or removing the strokes under it (or the
+  eraser itself) redraws exactly, and a dual-colour stroke that was partly erased follows the
+  scheme with only what is left. Light comes and goes with the strokes that lay, cover or erase it.
+  Wet, thick, sticker, smudge, blender and pick-up strokes are refused (paint them on a pixel
+  layer). `list_strokes {live: true}` → `update_stroke` / `edit_stroke_points` / `reorder_stroke` /
+  `remove_strokes`; `rasterize_stroke_layer` once settled.
 - **Stencils**: `add_stencil` lays a `ruler` or `arc` (strokes that start within `snap` px follow
   it exactly: straight lines, circles, rainbows) or a `line` / `shape` mask (paint lands only on
   one side or inside a rect, ellipse or polygon; `invert` for outside). Stencils stay until
@@ -291,9 +298,9 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `update_stroke` | Change a stroke on a stroke layer: `brushId` (keeps its size), `brush` facets (as `set_brush` takes), `color`, `paint` (null drops a gradient), `seed`. Redraws exactly. One undo step. Returns the stroke and the changed `bounds`. |
 | `edit_stroke_points` | Replace a stroke's `points`, or `transform` it (`dx`, `dy`, `scale`, `rotate`, `flipX`, about its centre or `origin`). One undo step. Returns the stroke with its points and the changed `bounds`. |
 | `reorder_stroke` | Move a stroke to `index` in its stroke layer (0 = bottom). One undo step. Returns the order. |
-| `remove_strokes` | Delete strokes from stroke layers (their eraser). One undo step. Returns the ids and `bounds`. |
+| `remove_strokes` | Delete whole strokes from stroke layers. To erase part of one, paint an eraser stroke on the layer instead (it stays editable, and removing it brings the paint back). One undo step. Returns the ids and `bounds`. |
 | `convert_to_stroke_layer` | Make an empty pixel layer a stroke layer. Returns the layer. |
-| `rasterize_stroke_layer` | Turn a stroke layer into a plain pixel layer with the same pixels (strokes no longer editable). Do it before erasing, smudging or filling on it. |
+| `rasterize_stroke_layer` | Turn a stroke layer into a plain pixel layer with the same pixels (strokes no longer editable). Do it before smudging, blending, wet paint or filling on it (erasers and light paint on stroke layers). |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
 | `breed_strokes` | Breed `count` (2..12, default 4) mutated variants from recorded `strokeIds` (1..16) as ghost paint proposals: `mutation` (`geometry`, `color`, `brush`, `seed`, each 0..1), `seed`. Returns `proposalIds` and each variant's `diff` and `bounds`. Read [references/evolution.md](references/evolution.md). |
 | `breed_proposal` | Breed `count` (2..12, default 4) next-generation variants from `proposalIds` (1 id mutates it; 2 ids cross their points and brush facets over, then mutate), with `mutation` and `seed`. Returns `proposalIds` and `proposals`. |
@@ -337,6 +344,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `paint_heat` | Warm or cool the canvas heat field along `points` (`radius` px default 24, `temperature` 0..1 default 1): shifts `thermochromic` strokes (`thermo-ink`) toward their `hotColor` above `threshold` and dries wet paint under hot cells. One undo step. Returns heat stats and `dried`. |
 | `advance_heat` | Step thermal diffusion and Newtonian cooling by `steps` (1..200, default 10) so warm patches spread and fade. Not an undo step. Returns `steps`, heat stats and `dried`. |
 | `clear_heat` | Cool the entire canvas heat field back to 0 at once so thermochromic paint returns to its cold colour. One undo step when warm. Returns `{ cleared }`. |
+| `get_specialty_guides` | After `set_brush` with a specialty brush (ferrofluid, UV or thermochromic ink, iridescence, ghost, mutation, live patterns), before painting: one guide per specialty the brush has (`kind`, `title`, `howToUse`, `status`, `ready`) and `actions`, each the tool and `arguments` that set the canvas up now (`set_uv_light`, `paint_heat`, `advance_heat`, `clear_heat`, `add_magnet`, `cure_ferrofluid`, `set_view_tilt`, `seed_live_patterns`). Call that tool, then read the guides again to check `ready`. Empty for standard brushes. Changes nothing. |
 | `get_heat` | Read the canvas heat stats (`max`, `mean`, `hotCells`, `bounds`), optional temperature `samples` at `points`, and `thermochromicLayerIds`. Changes nothing. |
 | `add_magnet` | Place a dipole magnet at `x`, `y` (document px; `strength` -1..1 default 0.8, `radius` 4..2048 px default 80): liquid ferrofluid gathers toward it and rises into hexagonal Rosensweig spikes shaded by `set_lighting`. One undo step. Returns the magnet (`id`, `x`, `y`, `strength`, `radius`). |
 | `update_magnet` | Move or tune a magnet by `id` (`x`, `y`, `strength`, `radius`): liquid ferrofluid gathers and spikes update at once. One undo step. Returns the magnet. |
