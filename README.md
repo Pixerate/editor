@@ -617,7 +617,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Colour and gradients</strong> (12)</summary>
+<summary><strong>Colour and gradients</strong> (13)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -633,6 +633,7 @@ Every feature is available from core and from both framework packages, except wh
 | Gradient editor & fill picker (stops bar, drag, keyboard, angle dial, presets, CSS output) | `stopFromTrackPosition`, `gradientKeyStep`, `angleFromPointer`, `GRADIENT_PRESETS` (`/gradient`) | `<GradientEditor />`, `<FillPicker />` (`/gradient`) | `<GradientEditor />`, `<FillPicker />` (`/gradient`) | Planned (#533) |
 | Gradients from sampled colours (perceptual stop reduction in OKLab with noise smoothing, line sampling from any pixel reader, angle snapping; `set_gradient_from_samples` and image `sample_gradient` agent tools) | `simplifyGradientStops`, `fitGradientStops`, `sampleGradientFromLine` (`/gradient`) | Via core | Via core | Planned (#533) |
 | Colour & gradient agent tools (inspect, contrast, palette, harmony, blend, dual colours, gradient edits) | `createColorToolProvider`, `createGradientToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` | Planned (#533) |
+| Text Colour on a Fill (`contrast` for any colour the module reads, dual colours included; `ink` / `inkSide` pick the ink that reads on a fill by contrast or by a brightness threshold; the chart's label colour and the spreadsheet's conditional-format text use it; the house-style `min-contrast` check suggests the ink that passes; `pick_text_color` agent tool) | `contrast`, `ink`, `inkSide` (`/color`), `pick_text_color` | ✅ (`pick_text_color` in the colour agent tools) | ✅ (`pick_text_color` in the colour agent tools) | Planned (#533) |
 
 </details>
 

@@ -56,7 +56,10 @@ the palette and a theme), and a domain profile refines that field by field.
   `accent1`…`accent6`.
 - **`checks`** run in every domain that can be checked against the brand: `palette-only`
   (with `tolerance` and `allowNeutrals`), `min-contrast` (`ratio`, `largeRatio`),
-  `distinguishable` (`minDistance`) and `fonts-allowed` (`fonts`).
+  `distinguishable` (`minDistance`) and `fonts-allowed` (`fonts`). A `min-contrast` finding
+  carries `suggestion: { color, ratio }` when the brand's text or background colour (else
+  near-black or white) reads on that background; `ink` and `contrast` in
+  `@pixerate/editor/color` make the same choice for your own code.
 - Any value can be a design token: `{ "$token": "brand/primary", "mode": "Dark" }`.
 - `$schema` is ignored when the profile loads; it is there for your editor.
 

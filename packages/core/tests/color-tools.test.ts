@@ -3,7 +3,7 @@ import { ToolRegistry } from '../src/agent';
 import { createColorToolProvider } from '../src/color';
 
 describe('createColorToolProvider', () => {
-	it('registers with ToolRegistry and exposes all 8 tools with complete annotations', () => {
+	it('registers with ToolRegistry and exposes all 9 tools with complete annotations', () => {
 		const registry = new ToolRegistry();
 		registry.register(createColorToolProvider({ id: 'color', namespace: 'color' }));
 		const tools = registry.listTools().tools;
@@ -15,6 +15,7 @@ describe('createColorToolProvider', () => {
 			'color__derive_dual_color',
 			'color__export_dual_colors_css',
 			'color__inspect_color',
+			'color__pick_text_color',
 			'color__suggest_color_harmony'
 		]);
 

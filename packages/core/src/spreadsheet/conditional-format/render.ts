@@ -3,6 +3,7 @@
  * grids (React uses the objects, Svelte the `style` strings).
  */
 import type { ConditionalCellFormat } from './types';
+import { inkSide } from '../../color/ink';
 
 export interface ConditionalFormatCss {
   background?: string;
@@ -20,9 +21,8 @@ export function conditionalFormatContrastColor(fill: string): string | undefined
   let hex = fill.trim().replace(/^#/, '');
   if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) return undefined;
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-  // Perceived brightness (ITU-R BT.601 weights).
-  return 0.299 * r + 0.587 * g + 0.114 * b > 0.55 ? '#1f2328' : '#ffffff';
+  // Perceived brightness (ITU-R BT.601 weights) above 0.55: dark text.
+  return inkSide(`#${hex}`, { threshold: 0.55, luminance: 'bt601' }) === 'dark' ? '#1f2328' : '#ffffff';
 }
 
 /**
