@@ -3535,6 +3535,23 @@
             "idempotentHint": true,
             "openWorldHint": false
           }
+        },
+        {
+          "name": "apply_chart_style",
+          "title": "Apply the chart house style",
+          "description": "Starts the chart from the house style, as one undo step: sets the house palette and the spec defaults the style names (data labels, curve, stacking, orientation, label position). Use it on a new chart or when the user asks to bring a chart in line; it does not touch data, titles or series colours set by hand (check_chart_style reports those). Returns the patch applied and the new spec. Fails, changing nothing, when no house style applies to charts or the chart is read-only.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Apply the chart house style",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
         }
       ]
     },

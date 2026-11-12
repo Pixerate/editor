@@ -1,0 +1,420 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-apply",
+  "description": "apply_chart_style starts a chart from the house style: the palette and the spec defaults as one undo step, leaving data alone; check_chart_style then passes, and undo restores the chart.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "style": {
+      "palette": [
+        "#0b5fff",
+        "#ff6a00"
+      ],
+      "defaults": {
+        "dataLabels": true,
+        "curve": "smooth",
+        "stacking": "stacked"
+      },
+      "checks": [
+        "palette-only"
+      ]
+    },
+    "spec": {
+      "type": "bar",
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "Plan",
+          "values": [
+            100,
+            120
+          ]
+        },
+        {
+          "id": "s2",
+          "name": "Actual",
+          "values": [
+            95,
+            125
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "apply_chart_style",
+      "arguments": {},
+      "document": true,
+      "expect": {
+        "result": {
+          "applied": {
+            "curve": "smooth",
+            "dataLabels": true,
+            "palette": [
+              "#0b5fff",
+              "#ff6a00"
+            ],
+            "stacking": "stacked"
+          },
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "smooth",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#0b5fff",
+              "#ff6a00"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "s1",
+                "name": "Plan",
+                "values": [
+                  100,
+                  120
+                ]
+              },
+              {
+                "id": "s2",
+                "name": "Actual",
+                "values": [
+                  95,
+                  125
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "stacked",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "smooth",
+            "dataLabels": true,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#0b5fff",
+              "#ff6a00"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "s1",
+                "name": "Plan",
+                "values": [
+                  100,
+                  120
+                ]
+              },
+              {
+                "id": "s2",
+                "name": "Actual",
+                "values": [
+                  95,
+                  125
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "stacked",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
+    },
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "ok": true,
+          "ran": [
+            "palette-only"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "apply_chart_style",
+      "arguments": {
+        "palette": [
+          "#000000"
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Unknown property \"palette\".",
+                "path": "/palette"
+              }
+            ],
+            "message": "Invalid arguments for tool \"apply_chart_style\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "undo_chart",
+      "arguments": {},
+      "document": true,
+      "expect": {
+        "result": {
+          "label": "Apply house style",
+          "next": null,
+          "undone": true
+        },
+        "document": {
+          "document": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "s1",
+                "name": "Plan",
+                "values": [
+                  100,
+                  120
+                ]
+              },
+              {
+                "id": "s2",
+                "name": "Actual",
+                "values": [
+                  95,
+                  125
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "chart"
+        }
+      }
+    }
+  ]
+}

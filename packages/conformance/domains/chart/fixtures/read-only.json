@@ -253,6 +253,19 @@
           "files": []
         }
       }
+    },
+    {
+      "tool": "apply_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "error": {
+            "code": "unknown_tool",
+            "message": "Unknown tool \"apply_chart_style\". List the tools again; the editor that had it may have closed or become read-only."
+          }
+        },
+        "isError": true
+      }
     }
   ]
 }

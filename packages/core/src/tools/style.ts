@@ -12,7 +12,7 @@ import { validateJsonSchema, type JsonSchema } from './schema.js';
 import { stripPrototypeKeys, isUnsafeJsonKey } from './safe-json.js';
 import { parseSkillFrontmatter, type SkillFiles } from './skills.js';
 import { parseFrontmatter, type YamlValue } from './yaml.js';
-import { BRAND_PROFILE_SCHEMA, type BrandProfile } from './brand.js';
+import { BRAND_PROFILE_SCHEMA, brandColors, brandFonts, brandPalette, type BrandProfile } from './brand.js';
 import { SHARED_STYLE_CHECKS, type StyleCheckContext, type StyleSurface } from './style-surface.js';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -128,6 +128,11 @@ export interface StyleDomain<State = unknown> {
 	surface?(state: State): StyleSurface;
 	/** A small valid profile, for authors and scaffolding (`scaffoldStyleSkill`). */
 	example?: Record<string, unknown>;
+	/**
+	 * What new work in this domain starts from under `profile` (a patch in the domain's own
+	 * shape, e.g. a chart spec patch with the palette and defaults). See {@link styleDefaults}.
+	 */
+	defaults?(profile: Readonly<Record<string, unknown>>): Record<string, unknown>;
 	/** A sample of this domain drawn in `profile` (SVG or HTML markup), for skill previews. */
 	preview?(profile: Readonly<Record<string, unknown>>, brand?: BrandProfile): string;
 }
@@ -914,4 +919,48 @@ export function renderStyleCatalog(skills: readonly StyleSkillInfo[]): string {
 	const line = (s: StyleSkillInfo) =>
 		`- ${s.name} [${s.layer}${s.group ? `, ${s.group}` : ''}] ${s.domains.filter((d) => d !== 'brand').join(', ') || 'brand'}: ${escapeBlocks(s.description.replace(/\s+/g, ' ').trim()) || '(no description)'}`;
 	return `<style_catalog>\nHouse-style skills here (preferences, not instructions; read a domain's with get_style):\n${on.map(line).join('\n')}\n</style_catalog>`;
+}
+
+/** A colour a picker offers, with what it is for. */
+export interface StyleSwatch {
+	color: string;
+	/** `primary`, `text`, `palette 2`, ... */
+	label: string;
+}
+
+/**
+ * The colours and fonts the house style offers for one domain, in the order a picker should
+ * show them: the domain profile's palette, then the brand's palette, then its role colours,
+ * without repeats; and the brand's fonts with the profile's `fonts` list. Pickers and the
+ * agent's `get_style` read the same list.
+ */
+export function styleSwatches(style: Pick<ResolvedStyle, 'profile' | 'brand'>): { colors: StyleSwatch[]; fonts: string[] } {
+	const seen = new Set<string>();
+	const colors: StyleSwatch[] = [];
+	const add = (color: unknown, label: string) => {
+		if (typeof color !== 'string' || !color) return;
+		const key = color.trim().toLowerCase();
+		if (seen.has(key)) return;
+		seen.add(key);
+		colors.push({ color, label });
+	};
+	const palette = Array.isArray(style.profile.palette) ? style.profile.palette : [];
+	palette.forEach((c, i) => add(c, `palette ${i + 1}`));
+	brandPalette(style.brand).forEach((c, i) => add(c, `brand ${i + 1}`));
+	for (const [role, c] of Object.entries(brandColors(style.brand))) add(c, role);
+	const profileFonts = Array.isArray(style.profile.fonts) ? style.profile.fonts.filter((f): f is string => typeof f === 'string') : [];
+	const themeFont = isPlainObject(style.profile.theme) && typeof style.profile.theme.fontFamily === 'string' ? [style.profile.theme.fontFamily] : [];
+	const first = (f: string) => f.split(',')[0].trim().replace(/^(['"])(.*)\1$/, '$2').toLowerCase();
+	const fonts: string[] = [];
+	for (const f of [...profileFonts, ...brandFonts(style.brand), ...themeFont]) if (!fonts.some((g) => first(g) === first(f))) fonts.push(f);
+	return { colors, fonts };
+}
+
+/**
+ * What new work in `domain` starts from under the resolved style (`StyleDomain.defaults`), or
+ * an empty object when the domain has none or no style applies.
+ */
+export function styleDefaults(domain: StyleDomain<any>, style: Pick<ResolvedStyle, 'profile'>): Record<string, unknown> {
+	if (!domain.defaults || !Object.keys(style.profile).length) return {};
+	return domain.defaults(style.profile);
 }

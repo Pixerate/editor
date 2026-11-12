@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver } from '@pixerate/editor/tools';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { styleSwatches } from '@pixerate/editor/tools';
+import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver, StyleSwatch } from '@pixerate/editor/tools';
 
 export interface UseStyleResult {
   /** The resolved house style for the domain, or `null` before the first resolve (or without a resolver). */
@@ -125,4 +126,33 @@ export function useStyleChoices(styles: StyleResolver | null | undefined, scope?
     [styles, scope],
   );
   return { ...state, choose };
+}
+
+export interface UseStyleSwatchesResult {
+  /** The house colours, in picker order (feed `ColorPicker`'s `swatches` or `ChartEditor`'s). */
+  colors: string[];
+  /** The same colours with what each is for (`primary`, `palette 2`, ...). */
+  swatches: StyleSwatch[];
+  /** The house fonts (for a font picker's suggestions). */
+  fonts: string[];
+  /** Why the last resolve failed, or `null`. */
+  error: string | null;
+}
+
+/**
+ * The colours and fonts the house style offers for one domain, for pickers. The agent's
+ * `get_style` returns the same list, so people and agents choose from one set.
+ */
+export function useStyleSwatches(styles: StyleResolver | null | undefined, domain: string, scope?: string): UseStyleSwatchesResult {
+  const [state, setState] = useState<{ style: ResolvedStyle | null; error: string | null }>({ style: null, error: null });
+  useResolverTask(
+    styles,
+    (s) => s.resolve(domain, scope !== undefined ? { scope } : {}),
+    ({ value, error }) => setState({ style: value, error }),
+    [domain, scope],
+  );
+  return useMemo(() => {
+    const { colors, fonts } = state.style ? styleSwatches(state.style) : { colors: [], fonts: [] };
+    return { colors: colors.map((c) => c.color), swatches: colors, fonts, error: state.error };
+  }, [state]);
 }

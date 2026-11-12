@@ -13,6 +13,8 @@
   interface Props {
     controller: ChartController;
     /** The settings sidebar (default `true`). */
+    /** House colours the inspector offers beside each series colour (e.g. from `useStyleSwatches`). */
+    swatches?: readonly string[];
     showInspector?: boolean;
     /** The data grid under the chart (default `true`). */
     showDataGrid?: boolean;
@@ -36,7 +38,7 @@
     onplaybackreveal?: () => void | Promise<void>;
   }
 
-  let { controller, showInspector = true, showDataGrid = true, showToolbar = true, pngOptions, height = 380, canvasProps = {}, class: className = '', playback, playbackId = 'chart', onplaybackreveal }: Props = $props();
+  let { controller, swatches, showInspector = true, showDataGrid = true, showToolbar = true, pngOptions, height = 380, canvasProps = {}, class: className = '', playback, playbackId = 'chart', onplaybackreveal }: Props = $props();
 
   // Agent playback in the chart's scene coordinates, so a director's drags (in the same presence
   // store) and the editor's own controls share one cursor. Controls outside the chart are mapped
@@ -139,7 +141,7 @@
     {#if showInspector}
       <!-- Side by side, the canvas sets the row's height and the inspector scrolls within it. -->
       <div class="relative w-full shrink-0 md:w-64">
-        <ChartInspector {controller} class="overflow-y-auto rounded-md border border-border p-3 md:absolute md:inset-0" />
+        <ChartInspector {controller} {swatches} class="overflow-y-auto rounded-md border border-border p-3 md:absolute md:inset-0" />
       </div>
     {/if}
   </div>

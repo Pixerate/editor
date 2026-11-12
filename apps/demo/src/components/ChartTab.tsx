@@ -14,8 +14,8 @@ import {
   createChartEditorDocument,
   createChartStyleToolProvider,
 } from "@pixerate/editor/chart";
-import { StyleFindings, useAgentToolProvider, useStyleChoices, useStyleFindings } from "@pixerate/editor-react";
-import { registerChartMap, type ChartSelection } from "@pixerate/editor/chart";
+import { StyleFindings, useAgentToolProvider, useStyleChoices, useStyleFindings, useStyleSwatches } from "@pixerate/editor-react";
+import { chartStylePatch, registerChartMap, type ChartSelection } from "@pixerate/editor/chart";
 import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
 
 // The Europe outlines live in their own entry point; the demo registers them once.
@@ -294,6 +294,8 @@ function ChartEditorDemo() {
   const houseStyle = useStyleFindings(demoStyles, "chart", state.spec);
   // One-of-a-kind looks: the picker and the agent's choose_style write the same user-layer state.
   const looks = useStyleChoices(demoStyles);
+  // House colours in the series colour picker: the same list get_style gives the agent.
+  const houseSwatches = useStyleSwatches(demoStyles, "chart");
   // Office files the user opened: listed in the "Open an Office file" panel and readable by the agent.
   const [officeFiles, setOfficeFiles] = useState<OfficeChartFile[]>([]);
   const officeFilesRef = useRef(officeFiles);
@@ -359,7 +361,7 @@ function ChartEditorDemo() {
 
       <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3">
         {/* The director's presence is the editor's playback cursor too: value drags and inspector edits share it. */}
-        <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef, tooltip: 'category' }} playback={demoPlayback} />
+        <ChartEditor controller={controller} swatches={houseSwatches.colors} height={400} canvasProps={{ presence, sceneRef, tooltip: 'category' }} playback={demoPlayback} />
       </div>
       <EditorPanel id="house-style" label="House style" icon={ShieldCheck}>
         <div className="text-slate-200" data-testid="chart-house-style">
@@ -383,6 +385,14 @@ function ChartEditorDemo() {
             </label>
           ))}
           {looks.error && <p className="text-xs text-rose-400">{looks.error}</p>}
+          <button
+            type="button"
+            className="mt-2 rounded border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            data-testid="apply-house-style"
+            onClick={() => houseStyle.style && controller.update(chartStylePatch(houseStyle.style.profile), { label: "Apply house style" })}
+          >
+            Apply house style
+          </button>
         </div>
       </EditorPanel>
       <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place; every other call is acted out on the inspector, data grid and toolbar." />

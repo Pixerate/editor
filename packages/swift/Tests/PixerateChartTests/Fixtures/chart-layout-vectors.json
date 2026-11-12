@@ -10469,6 +10469,1112 @@
         "title": "",
         "subtitle": "",
         "categories": [
+          "Q1",
+          "Q2"
+        ],
+        "series": [
+          {
+            "id": "s1",
+            "name": "Plan",
+            "values": [
+              100,
+              120
+            ]
+          },
+          {
+            "id": "s2",
+            "name": "Actual",
+            "values": [
+              95,
+              125
+            ]
+          }
+        ],
+        "xAxis": {
+          "show": true,
+          "title": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "gridlines": false,
+          "format": {}
+        },
+        "yAxis": {
+          "show": true,
+          "title": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "gridlines": true,
+          "format": {}
+        },
+        "yAxis2": {
+          "show": true,
+          "title": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "gridlines": false,
+          "format": {}
+        },
+        "legend": {
+          "show": true,
+          "position": "bottom"
+        },
+        "stacking": "stacked",
+        "orientation": "vertical",
+        "curve": "smooth",
+        "points": true,
+        "dataLabels": true,
+        "labelPosition": "auto",
+        "palette": [
+          "#0b5fff",
+          "#ff6a00"
+        ],
+        "innerRadius": 0.55,
+        "gapWidth": 0.28,
+        "overlap": -0.12,
+        "bins": null,
+        "showTotal": true,
+        "radarTicks": null,
+        "radarGraticule": "polygon",
+        "note": "",
+        "highlight": [],
+        "referenceLines": [],
+        "referenceBands": [],
+        "varyColors": false,
+        "likertNeutral": "split",
+        "likertSort": "none",
+        "parliamentArc": 180,
+        "parliamentMajority": null,
+        "parliamentLabel": "",
+        "tree": [],
+        "sunburstLabel": "",
+        "links": [],
+        "sankeyNodes": [],
+        "sankeyLinkColor": "source",
+        "raceTopN": 10,
+        "map": "europe",
+        "mapSteps": 5,
+        "mapThresholds": []
+      },
+      "options": {
+        "width": 640,
+        "height": 400
+      },
+      "out": {
+        "width": 640,
+        "height": 400,
+        "plot": {
+          "x": 38.480000000000004,
+          "y": 19.5,
+          "width": 581.52,
+          "height": 326.2
+        },
+        "marks": [
+          {
+            "kind": "rect",
+            "key": "background",
+            "role": "background",
+            "x": 0,
+            "y": 0,
+            "width": 640,
+            "height": 400,
+            "fill": "#ffffff",
+            "target": {
+              "kind": "chart"
+            }
+          },
+          {
+            "kind": "rect",
+            "key": "legend-swatch-0",
+            "role": "legend-swatch",
+            "x": 266.2,
+            "y": 373.65000000000003,
+            "width": 10,
+            "height": 10,
+            "radius": 2,
+            "fill": "#0b5fff",
+            "target": {
+              "kind": "series",
+              "seriesId": "s1"
+            },
+            "selected": false
+          },
+          {
+            "kind": "text",
+            "key": "legend-label-0",
+            "role": "legend-label",
+            "x": 282.2,
+            "y": 378.65000000000003,
+            "text": "Plan",
+            "anchor": "start",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#0f172a",
+            "target": {
+              "kind": "series",
+              "seriesId": "s1"
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "legend-swatch-1",
+            "role": "legend-swatch",
+            "x": 320.84,
+            "y": 373.65000000000003,
+            "width": 10,
+            "height": 10,
+            "radius": 2,
+            "fill": "#ff6a00",
+            "target": {
+              "kind": "series",
+              "seriesId": "s2"
+            },
+            "selected": false
+          },
+          {
+            "kind": "text",
+            "key": "legend-label-1",
+            "role": "legend-label",
+            "x": 336.84,
+            "y": 378.65000000000003,
+            "text": "Actual",
+            "anchor": "start",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#0f172a",
+            "target": {
+              "kind": "series",
+              "seriesId": "s2"
+            },
+            "selected": false
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-0",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 345.7,
+            "x2": 620,
+            "y2": 345.7,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-1",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 280.46,
+            "x2": 620,
+            "y2": 280.46,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-2",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 215.22,
+            "x2": 620,
+            "y2": 215.22,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-3",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 149.98,
+            "x2": 620,
+            "y2": 149.98,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-4",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 84.74000000000001,
+            "x2": 620,
+            "y2": 84.74000000000001,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-5",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 19.5,
+            "x2": 620,
+            "y2": 19.5,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-0",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 345.7,
+            "text": "0",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-1",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 280.46,
+            "text": "50",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-2",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 215.22,
+            "text": "100",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-3",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 149.98,
+            "text": "150",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-4",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 84.74000000000001,
+            "text": "200",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-5",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 19.5,
+            "text": "250",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "line",
+            "key": "axis-x",
+            "role": "axis",
+            "x1": 38.480000000000004,
+            "y1": 345.7,
+            "x2": 620,
+            "y2": 345.7,
+            "stroke": "#94a3b8",
+            "strokeWidth": 1,
+            "target": {
+              "kind": "axis",
+              "axis": "x"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-x-0",
+            "role": "tick-label",
+            "x": 183.86,
+            "y": 351.7,
+            "text": "Q1",
+            "anchor": "middle",
+            "baseline": "top",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "category",
+              "index": 0
+            },
+            "selected": false
+          },
+          {
+            "kind": "text",
+            "key": "tick-x-1",
+            "role": "tick-label",
+            "x": 474.62,
+            "y": 351.7,
+            "text": "Q2",
+            "anchor": "middle",
+            "baseline": "top",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "category",
+              "index": 1
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s1-0",
+            "role": "bar",
+            "x": 79.18640000000002,
+            "y": 215.22,
+            "width": 209.3472,
+            "height": 130.48,
+            "fill": "#0b5fff",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s1",
+              "index": 0
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s1-1",
+            "role": "bar",
+            "x": 369.94640000000004,
+            "y": 189.124,
+            "width": 209.3472,
+            "height": 156.576,
+            "fill": "#0b5fff",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s1",
+              "index": 1
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s2-0",
+            "role": "bar",
+            "x": 79.18640000000002,
+            "y": 91.26399999999998,
+            "width": 209.3472,
+            "height": 123.95600000000002,
+            "fill": "#ff6a00",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s2",
+              "index": 0
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s2-1",
+            "role": "bar",
+            "x": 369.94640000000004,
+            "y": 26.024,
+            "width": 209.3472,
+            "height": 163.1,
+            "fill": "#ff6a00",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s2",
+              "index": 1
+            },
+            "selected": false
+          },
+          {
+            "kind": "text",
+            "key": "label-s1-0",
+            "role": "data-label",
+            "x": 183.86,
+            "y": 280.46,
+            "anchor": "middle",
+            "baseline": "middle",
+            "fill": "#ffffff",
+            "text": "100",
+            "size": 10,
+            "target": {
+              "kind": "point",
+              "seriesId": "s1",
+              "index": 0
+            }
+          },
+          {
+            "kind": "text",
+            "key": "label-s1-1",
+            "role": "data-label",
+            "x": 474.62,
+            "y": 267.412,
+            "anchor": "middle",
+            "baseline": "middle",
+            "fill": "#ffffff",
+            "text": "120",
+            "size": 10,
+            "target": {
+              "kind": "point",
+              "seriesId": "s1",
+              "index": 1
+            }
+          },
+          {
+            "kind": "text",
+            "key": "label-s2-0",
+            "role": "data-label",
+            "x": 183.86,
+            "y": 153.242,
+            "anchor": "middle",
+            "baseline": "middle",
+            "fill": "#0f172a",
+            "text": "95",
+            "size": 10,
+            "target": {
+              "kind": "point",
+              "seriesId": "s2",
+              "index": 0
+            }
+          },
+          {
+            "kind": "text",
+            "key": "label-s2-1",
+            "role": "data-label",
+            "x": 474.62,
+            "y": 107.574,
+            "anchor": "middle",
+            "baseline": "middle",
+            "fill": "#0f172a",
+            "text": "125",
+            "size": 10,
+            "target": {
+              "kind": "point",
+              "seriesId": "s2",
+              "index": 1
+            }
+          }
+        ],
+        "percent": false,
+        "theme": {
+          "background": "#ffffff",
+          "surface": "#ffffff",
+          "text": "#0f172a",
+          "mutedText": "#64748b",
+          "grid": "#e2e8f0",
+          "axis": "#94a3b8",
+          "selection": "#2563eb",
+          "positive": "#3ca951",
+          "negative": "#e5484d",
+          "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+          "fontSize": 11,
+          "titleSize": 15
+        },
+        "warnings": [],
+        "valueScale": {
+          "axis": "y",
+          "domain": [
+            0,
+            250
+          ],
+          "range": [
+            345.7,
+            19.5
+          ],
+          "ticks": [
+            0,
+            50,
+            100,
+            150,
+            200,
+            250
+          ]
+        },
+        "categoryScale": {
+          "axis": "x",
+          "start": 38.480000000000004,
+          "length": 581.52,
+          "count": 2,
+          "reverse": false
+        }
+      }
+    },
+    {
+      "fn": "layoutChart",
+      "trig": false,
+      "spec": {
+        "version": 1,
+        "type": "bar",
+        "title": "",
+        "subtitle": "",
+        "categories": [
+          "Q1",
+          "Q2"
+        ],
+        "series": [
+          {
+            "id": "s1",
+            "name": "Plan",
+            "values": [
+              100,
+              120
+            ]
+          },
+          {
+            "id": "s2",
+            "name": "Actual",
+            "values": [
+              95,
+              125
+            ]
+          }
+        ],
+        "xAxis": {
+          "show": true,
+          "title": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "gridlines": false,
+          "format": {}
+        },
+        "yAxis": {
+          "show": true,
+          "title": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "gridlines": true,
+          "format": {}
+        },
+        "yAxis2": {
+          "show": true,
+          "title": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "gridlines": false,
+          "format": {}
+        },
+        "legend": {
+          "show": true,
+          "position": "bottom"
+        },
+        "stacking": "none",
+        "orientation": "vertical",
+        "curve": "linear",
+        "points": true,
+        "dataLabels": false,
+        "labelPosition": "auto",
+        "palette": [
+          "#4269d0",
+          "#efb118",
+          "#ff725c",
+          "#6cc5b0",
+          "#3ca951",
+          "#ff8ab7",
+          "#a463f2",
+          "#97bbf5",
+          "#9c6b4e",
+          "#9498a0"
+        ],
+        "innerRadius": 0.55,
+        "gapWidth": 0.28,
+        "overlap": -0.12,
+        "bins": null,
+        "showTotal": true,
+        "radarTicks": null,
+        "radarGraticule": "polygon",
+        "note": "",
+        "highlight": [],
+        "referenceLines": [],
+        "referenceBands": [],
+        "varyColors": false,
+        "likertNeutral": "split",
+        "likertSort": "none",
+        "parliamentArc": 180,
+        "parliamentMajority": null,
+        "parliamentLabel": "",
+        "tree": [],
+        "sunburstLabel": "",
+        "links": [],
+        "sankeyNodes": [],
+        "sankeyLinkColor": "source",
+        "raceTopN": 10,
+        "map": "europe",
+        "mapSteps": 5,
+        "mapThresholds": []
+      },
+      "options": {
+        "width": 640,
+        "height": 400
+      },
+      "out": {
+        "width": 640,
+        "height": 400,
+        "plot": {
+          "x": 38.480000000000004,
+          "y": 19.5,
+          "width": 581.52,
+          "height": 326.2
+        },
+        "marks": [
+          {
+            "kind": "rect",
+            "key": "background",
+            "role": "background",
+            "x": 0,
+            "y": 0,
+            "width": 640,
+            "height": 400,
+            "fill": "#ffffff",
+            "target": {
+              "kind": "chart"
+            }
+          },
+          {
+            "kind": "rect",
+            "key": "legend-swatch-0",
+            "role": "legend-swatch",
+            "x": 266.2,
+            "y": 373.65000000000003,
+            "width": 10,
+            "height": 10,
+            "radius": 2,
+            "fill": "#4269d0",
+            "target": {
+              "kind": "series",
+              "seriesId": "s1"
+            },
+            "selected": false
+          },
+          {
+            "kind": "text",
+            "key": "legend-label-0",
+            "role": "legend-label",
+            "x": 282.2,
+            "y": 378.65000000000003,
+            "text": "Plan",
+            "anchor": "start",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#0f172a",
+            "target": {
+              "kind": "series",
+              "seriesId": "s1"
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "legend-swatch-1",
+            "role": "legend-swatch",
+            "x": 320.84,
+            "y": 373.65000000000003,
+            "width": 10,
+            "height": 10,
+            "radius": 2,
+            "fill": "#efb118",
+            "target": {
+              "kind": "series",
+              "seriesId": "s2"
+            },
+            "selected": false
+          },
+          {
+            "kind": "text",
+            "key": "legend-label-1",
+            "role": "legend-label",
+            "x": 336.84,
+            "y": 378.65000000000003,
+            "text": "Actual",
+            "anchor": "start",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#0f172a",
+            "target": {
+              "kind": "series",
+              "seriesId": "s2"
+            },
+            "selected": false
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-0",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 345.7,
+            "x2": 620,
+            "y2": 345.7,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-1",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 280.46,
+            "x2": 620,
+            "y2": 280.46,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-2",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 215.22,
+            "x2": 620,
+            "y2": 215.22,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-3",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 149.98,
+            "x2": 620,
+            "y2": 149.98,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-4",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 84.74000000000001,
+            "x2": 620,
+            "y2": 84.74000000000001,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "line",
+            "key": "grid-y-5",
+            "role": "grid",
+            "x1": 38.480000000000004,
+            "y1": 19.5,
+            "x2": 620,
+            "y2": 19.5,
+            "stroke": "#e2e8f0",
+            "strokeWidth": 1
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-0",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 345.7,
+            "text": "0",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-1",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 280.46,
+            "text": "25",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-2",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 215.22,
+            "text": "50",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-3",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 149.98,
+            "text": "75",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-4",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 84.74000000000001,
+            "text": "100",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-y-5",
+            "role": "tick-label",
+            "x": 30.480000000000004,
+            "y": 19.5,
+            "text": "125",
+            "anchor": "end",
+            "baseline": "middle",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "axis",
+              "axis": "y"
+            }
+          },
+          {
+            "kind": "line",
+            "key": "axis-x",
+            "role": "axis",
+            "x1": 38.480000000000004,
+            "y1": 345.7,
+            "x2": 620,
+            "y2": 345.7,
+            "stroke": "#94a3b8",
+            "strokeWidth": 1,
+            "target": {
+              "kind": "axis",
+              "axis": "x"
+            }
+          },
+          {
+            "kind": "text",
+            "key": "tick-x-0",
+            "role": "tick-label",
+            "x": 183.86,
+            "y": 351.7,
+            "text": "Q1",
+            "anchor": "middle",
+            "baseline": "top",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "category",
+              "index": 0
+            },
+            "selected": false
+          },
+          {
+            "kind": "text",
+            "key": "tick-x-1",
+            "role": "tick-label",
+            "x": 474.62,
+            "y": 351.7,
+            "text": "Q2",
+            "anchor": "middle",
+            "baseline": "top",
+            "size": 11,
+            "fill": "#64748b",
+            "target": {
+              "kind": "category",
+              "index": 1
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s1-0",
+            "role": "bar",
+            "x": 79.18640000000002,
+            "y": 84.74000000000001,
+            "width": 98.74867924528301,
+            "height": 260.96,
+            "fill": "#4269d0",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s1",
+              "index": 0
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s1-1",
+            "role": "bar",
+            "x": 369.94640000000004,
+            "y": 32.548,
+            "width": 98.74867924528301,
+            "height": 313.152,
+            "fill": "#4269d0",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s1",
+              "index": 1
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s2-0",
+            "role": "bar",
+            "x": 189.784920754717,
+            "y": 97.78799999999998,
+            "width": 98.74867924528301,
+            "height": 247.912,
+            "fill": "#efb118",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s2",
+              "index": 0
+            },
+            "selected": false
+          },
+          {
+            "kind": "rect",
+            "key": "bar-s2-1",
+            "role": "bar",
+            "x": 480.54492075471705,
+            "y": 19.5,
+            "width": 98.74867924528301,
+            "height": 326.2,
+            "fill": "#efb118",
+            "radius": 2,
+            "target": {
+              "kind": "point",
+              "seriesId": "s2",
+              "index": 1
+            },
+            "selected": false
+          }
+        ],
+        "percent": false,
+        "theme": {
+          "background": "#ffffff",
+          "surface": "#ffffff",
+          "text": "#0f172a",
+          "mutedText": "#64748b",
+          "grid": "#e2e8f0",
+          "axis": "#94a3b8",
+          "selection": "#2563eb",
+          "positive": "#3ca951",
+          "negative": "#e5484d",
+          "fontFamily": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+          "fontSize": 11,
+          "titleSize": 15
+        },
+        "warnings": [],
+        "valueScale": {
+          "axis": "y",
+          "domain": [
+            0,
+            125
+          ],
+          "range": [
+            345.7,
+            19.5
+          ],
+          "ticks": [
+            0,
+            25,
+            50,
+            75,
+            100,
+            125
+          ]
+        },
+        "categoryScale": {
+          "axis": "x",
+          "start": 38.480000000000004,
+          "length": 581.52,
+          "count": 2,
+          "reverse": false
+        }
+      }
+    },
+    {
+      "fn": "layoutChart",
+      "trig": false,
+      "spec": {
+        "version": 1,
+        "type": "bar",
+        "title": "",
+        "subtitle": "",
+        "categories": [
           "Europe",
           "Asia"
         ],

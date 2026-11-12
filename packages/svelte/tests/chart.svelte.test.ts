@@ -210,6 +210,18 @@ describe("ChartInspector", () => {
     expect(controller.getSpec().xAxis.gridlines).toBe(true);
   });
 
+  it("offers house swatches beside the series colour", () => {
+    const controller = new ChartController({ spec: sales });
+    const el = render(ChartInspector, { controller, swatches: ["#0b5fff", "#ff6a00"] });
+    controller.select({ kind: "series", seriesId: "south" });
+    flushSync();
+    const buttons = [...el.querySelectorAll('[data-option="series.swatches"] button')] as HTMLButtonElement[];
+    expect(buttons.map((b) => b.title)).toEqual(["#0b5fff", "#ff6a00"]);
+    click(buttons[1]);
+    expect(controller.getSeries("south")!.color).toBe("#ff6a00");
+    expect(buttons[1].getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("shows pie options without axes, and the selected series", () => {
     const controller = new ChartController({ spec: { ...sales, type: "donut" } });
     const el = render(ChartInspector, { controller });

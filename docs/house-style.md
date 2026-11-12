@@ -119,6 +119,19 @@ apply only when the resolver is asked for that scope (`resolve(domain, { scope }
 `scope` option of the tool providers); unscoped skills apply everywhere. Each scope keeps its own
 choice.
 
+## In the editors
+
+- **Pickers offer the house colours.** `styleSwatches(style)` lists the profile palette, the
+  brand palette and its role colours, and the fonts. React and Svelte have
+  `useStyleSwatches(styles, domain)`; pass `colors` to `ColorPicker`'s `swatches` or
+  `ChartEditor`'s `swatches`. `get_style` returns the same list, so agents and people pick from
+  one set.
+- **New work starts in the house style.** `styleDefaults(domain, style)` is a domain's starting
+  patch (`StyleDomain.defaults`; charts: palette and defaults, `chartStylePatch`). Agents call
+  `apply_chart_style`.
+- **Instructions for the agent.** Add `STYLE_AGENT_INSTRUCTIONS` to the system prompt while a
+  house style is active, then your own conventions after it. It is domain-neutral on purpose.
+
 ## Writing and checking a skill
 
 ```bash

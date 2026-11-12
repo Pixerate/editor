@@ -13,6 +13,8 @@ import { chartButtonClass } from './styles';
 export interface ChartEditorProps {
   controller: ChartController;
   /** The settings sidebar (default `true`). */
+  /** House colours the inspector offers beside each series colour (e.g. from `useStyleSwatches`). */
+  swatches?: readonly string[];
   showInspector?: boolean;
   /** The data grid under the chart (default `true`). */
   showDataGrid?: boolean;
@@ -37,7 +39,7 @@ export interface ChartEditorProps {
 }
 
 /** Toolbar, chart, settings sidebar and data grid for a `ChartController`. */
-export function ChartEditor({ controller, showInspector = true, showDataGrid = true, showToolbar = true, pngOptions, height = 380, canvasProps, className, playback, playbackId = 'chart', onPlaybackReveal }: ChartEditorProps) {
+export function ChartEditor({ controller, swatches, showInspector = true, showDataGrid = true, showToolbar = true, pngOptions, height = 380, canvasProps, className, playback, playbackId = 'chart', onPlaybackReveal }: ChartEditorProps) {
   const state = useChartState(controller);
 
   // Agent playback in the chart's scene coordinates, so a director's drags (in the same presence
@@ -145,7 +147,7 @@ export function ChartEditor({ controller, showInspector = true, showDataGrid = t
         {showInspector && (
           // Side by side, the canvas sets the row's height and the inspector scrolls within it.
           <div className="relative w-full shrink-0 md:w-64">
-            <ChartInspector controller={controller} className="overflow-y-auto rounded-md border border-border p-3 md:absolute md:inset-0" />
+            <ChartInspector controller={controller} swatches={swatches} className="overflow-y-auto rounded-md border border-border p-3 md:absolute md:inset-0" />
           </div>
         )}
       </div>

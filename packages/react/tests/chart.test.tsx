@@ -244,6 +244,17 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("offers house swatches beside the series colour", async () => {
+    const controller = new ChartController({ spec: sales });
+    await render(<ChartInspector controller={controller} swatches={["#0b5fff", "#ff6a00"]} />);
+    await act(async () => controller.select({ kind: "series", seriesId: "south" }));
+    const buttons = [...document.querySelectorAll('[data-option="series.swatches"] button')] as HTMLButtonElement[];
+    expect(buttons.map((b) => b.title)).toEqual(["#0b5fff", "#ff6a00"]);
+    await act(async () => buttons[1].click());
+    expect(controller.getSeries("south")!.color).toBe("#ff6a00");
+    expect(buttons[1].getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("edits the note, highlight, reference lines and bands, callouts and colour by category", async () => {
     const controller = new ChartController({ spec: sales });
     await render(<ChartInspector controller={controller} />);

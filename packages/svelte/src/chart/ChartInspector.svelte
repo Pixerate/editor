@@ -64,9 +64,11 @@
     /** Prefix for the inspector's element ids. */
     idPrefix?: string;
     class?: string;
+    /** House colours offered beside the series colour (e.g. from `useStyleSwatches`). */
+    swatches?: readonly string[];
   }
 
-  let { controller, sections, idPrefix = `pixerate-chart-${++nextId}`, class: className = '' }: Props = $props();
+  let { controller, sections, idPrefix = `pixerate-chart-${++nextId}`, class: className = '', swatches }: Props = $props();
 
   const view = chartStateOf(() => controller);
   const spec = $derived(view.current.spec);
@@ -689,6 +691,21 @@
           {/if}
         </div>
       </div>
+      {#if swatches && swatches.length > 0}
+        <div class="flex flex-wrap gap-1 pl-[5.5rem]" role="group" aria-label="House colours" data-option="series.swatches">
+          {#each swatches as color (color)}
+            <button
+              type="button"
+              title={color}
+              aria-label="Use {color}"
+              aria-pressed={chartColorInputValue(chartSeriesColor(spec, seriesIndex)) === chartColorInputValue(color)}
+              class="h-5 w-5 rounded border border-border"
+              style:background={color}
+              onclick={() => controller.updateSeries(series.id, { color })}
+            ></button>
+          {/each}
+        </div>
+      {/if}
       {#if cartesian}
         <div class="flex items-center gap-2">
           <label for="{idPrefix}-series-type" class="{chartLabelClass} w-20 shrink-0">Draw as</label>

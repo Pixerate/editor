@@ -198,6 +198,7 @@ export const chartStyleDomain: StyleDomain<ChartSpec> = {
 		checks: ['palette-only', 'distinguishable', { id: 'min-contrast', ratio: 4.5 }, { id: 'allowed-type', types: ['bar', 'line', 'area'] }]
 	},
 	preview: (profile) => chartStylePreview(profile),
+	defaults: (profile) => ({ ...chartStylePatch(profile) }),
 	surface: (spec) => ({ colors: chartColors(spec).map((c) => ({ ...c, use: 'series' as const })) })
 };
 
@@ -254,6 +255,11 @@ export interface ChartStyleToolProviderOptions {
 	namespace?: string;
 	/** Where the tool works (`report`, ...): skills scoped elsewhere do not apply. Set by the host. */
 	scope?: string;
+	/**
+	 * When the chart cannot be changed (as for `createChartToolProvider`): `apply_chart_style` is
+	 * hidden, and refuses with this reason if called anyway; `check_chart_style` keeps working.
+	 */
+	readOnly?: boolean | string | (() => boolean | string);
 }
 
 /** `check_chart_style`: runs the chart house-style checks against a chart. */
@@ -276,12 +282,47 @@ export function createChartStyleToolProvider(controller: ChartController, styles
 			};
 		}
 	};
+	const readOnlyReason = (): string | null => {
+		const r = typeof options.readOnly === 'function' ? options.readOnly() : options.readOnly;
+		if (!r) return null;
+		return typeof r === 'string' ? r : 'This chart is read-only.';
+	};
+
+	const apply: AgentTool = {
+		name: 'apply_chart_style',
+		title: 'Apply the chart house style',
+		description:
+			'Starts the chart from the house style, as one undo step: sets the house palette and the spec defaults the style names (data labels, curve, stacking, orientation, label position). Use it on a new chart or when the user asks to bring a chart in line; it does not touch data, titles or series colours set by hand (check_chart_style reports those). Returns the patch applied and the new spec. Fails, changing nothing, when no house style applies to charts or the chart is read-only.',
+		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+		annotations: { title: 'Apply the chart house style', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+		handler: async () => {
+			const reason = readOnlyReason();
+			if (reason) throw new Error(reason);
+			const style = await styles.resolve('chart', options.scope !== undefined ? { scope: options.scope } : {});
+			const patch = chartStylePatch(style.profile);
+			if (!Object.keys(patch).length) throw new Error(style.skills.length ? 'The house style sets no chart palette or defaults, so there is nothing to apply; check_chart_style checks the chart against it.' : 'No house style applies to charts, so there is nothing to apply.');
+			const result = controller.update(patch, { label: 'Apply house style' });
+			if (!result.ok) throw new Error(`The house style could not be applied: ${result.message}`);
+			return { applied: patch, spec: controller.toJSON() };
+		}
+	};
+
 	return {
 		id: options.id ?? 'chart-style',
 		namespace: options.namespace ?? 'chart',
 		title: 'Chart house style',
 		description: 'Check a chart against the house style.',
 		skill: 'pixerate-chart',
-		tools: [check]
+		tools: () => (readOnlyReason() ? [check] : [check, apply]),
+		subscribe: (notify) => {
+			let last = readOnlyReason();
+			return controller.subscribe(() => {
+				const now = readOnlyReason();
+				if (now !== last) {
+					last = now;
+					notify();
+				}
+			});
+		}
 	};
 }

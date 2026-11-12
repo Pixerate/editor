@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vite
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createStyleResolver, memoryStyleStore, type StyleDomain, type StyleCheckReport, type StyleResolver } from "@pixerate/editor/tools";
-import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, type UseStyleChoicesResult, type UseStyleFindingsResult, type UseStyleResult } from "../src/style";
+import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, useStyleSwatches, type UseStyleSwatchesResult, type UseStyleChoicesResult, type UseStyleFindingsResult, type UseStyleResult } from "../src/style";
 
 let container: HTMLDivElement;
 let root: any;
@@ -218,5 +218,26 @@ describe("useStyleChoices", () => {
       await expect(result.choose("nope")).rejects.toThrow(/no house-style skill "nope"/);
     });
     expect(result.error).toMatch(/no house-style skill "nope"/);
+  });
+});
+
+describe("useStyleSwatches", () => {
+  it("offers the brand's colours and fonts, and follows the store", async () => {
+    const store = memoryStyleStore({});
+    store.set("acme", { "SKILL.md": "---\nname: acme\ndescription: Acme.\n---\nUse it.", "brand.json": JSON.stringify({ colors: { primary: "#0b5fff", text: "#111111" }, fonts: { body: "Inter" } }) });
+    const styles = createStyleResolver({ layers: [{ id: "org", store }], domains: [listDomain] });
+    let result!: UseStyleSwatchesResult;
+    function Probe() {
+      result = useStyleSwatches(styles, "list");
+      return null;
+    }
+    await act(async () => root.render(<Probe />));
+    await flush();
+    expect(result.colors).toEqual(["#0b5fff", "#111111"]);
+    expect(result.swatches[1]).toEqual({ color: "#111111", label: "text" });
+    expect(result.fonts).toEqual(["Inter"]);
+    await act(async () => store.set("acme", { "SKILL.md": "---\nname: acme\ndescription: Acme.\n---\nUse it.", "brand.json": JSON.stringify({ colors: { primary: "#e4002b" } }) }));
+    await flush();
+    expect(result.colors).toEqual(["#e4002b"]);
   });
 });

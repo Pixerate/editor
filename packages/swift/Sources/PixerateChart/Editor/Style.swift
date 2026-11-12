@@ -413,13 +413,17 @@ public func chartStylePatch(_ profile: JSONObject) -> JSONObject {
     return out
 }
 
-public struct ChartStyleToolProviderOptions: Sendable {
+public struct ChartStyleToolProviderOptions: @unchecked Sendable {
     public var id: String
     public var namespace: String
+    /// As for `createChartToolProvider`: a read-only chart hides `apply_chart_style` (a `String`
+    /// reason or `true`); `check_chart_style` keeps working.
+    public var readOnly: (() -> Any)?
 
-    public init(id: String = "chart-style", namespace: String = "chart") {
+    public init(id: String = "chart-style", namespace: String = "chart", readOnly: (() -> Any)? = nil) {
         self.id = id
         self.namespace = namespace
+        self.readOnly = readOnly
     }
 }
 
@@ -459,12 +463,56 @@ public func createChartStyleToolProvider(
             return .value(.object(out))
         }
     )
+    let readOnlyReason: () -> String? = {
+        guard let ro = options.readOnly?() else { return nil }
+        if let b = ro as? Bool { return b ? "This chart is read-only." : nil }
+        if let s = ro as? String, !s.isEmpty { return s }
+        return nil
+    }
+    let applyDef = (try? ChartContracts.tools())?.first(where: { $0.name == "apply_chart_style" })
+    let applyTool = AgentTool(
+        name: "apply_chart_style",
+        title: applyDef?.title ?? "Apply the chart house style",
+        description: applyDef?.description ?? "Starts the chart from the house style, as one undo step.",
+        inputSchema: applyDef?.inputSchema ?? ["type": .string("object"), "properties": .object(JSONObject()), "additionalProperties": .bool(false)],
+        outputSchema: applyDef?.outputSchema,
+        annotations: applyDef?.annotations ?? ToolAnnotations(
+            title: "Apply the chart house style",
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false
+        ),
+        handler: { _, _ in
+            if let reason = readOnlyReason() { throw ToolExecutionError(reason) }
+            let patch = chartStylePatch(style.profile)
+            if patch.isEmpty {
+                throw ToolExecutionError(style.hasSkills
+                    ? "The house style sets no chart palette or defaults, so there is nothing to apply; check_chart_style checks the chart against it."
+                    : "No house style applies to charts, so there is nothing to apply.")
+            }
+            let result = controller.update(patch, options: ChartEditOptions(label: "Apply house style"))
+            if !result.ok { throw ToolExecutionError("The house style could not be applied: \(result.message ?? "")") }
+            return .value(.object(JSONObject([("applied", .object(patch)), ("spec", controller.toJSON().toJSON())])))
+        }
+    )
     return AgentToolProvider(
         id: options.id,
         namespace: options.namespace,
         title: "Chart house style",
         description: "Check a chart against the house style.",
         skill: "pixerate-chart",
-        tools: [checkTool]
+        // As in TS: a read-only chart lists only the check, so an apply call is an unknown tool.
+        tools: { readOnlyReason() != nil ? [checkTool] : [checkTool, applyTool] },
+        subscribe: { notify in
+            var last = readOnlyReason()
+            return controller.subscribe { _ in
+                let now = readOnlyReason()
+                if now != last {
+                    last = now
+                    notify()
+                }
+            }
+        }
     )
 }

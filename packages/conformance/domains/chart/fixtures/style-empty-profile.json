@@ -36,6 +36,19 @@
           "skipped": []
         }
       }
+    },
+    {
+      "tool": "apply_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "The house style sets no chart palette or defaults, so there is nothing to apply; check_chart_style checks the chart against it."
+          }
+        },
+        "isError": true
+      }
     }
   ]
 }
