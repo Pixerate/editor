@@ -47,7 +47,11 @@ particle ones are tuned in [particle-brushes.md](particle-brushes.md)).
   paper reads as its colour, glowing; a plain glaze there only darkens. Plain wet paint over
   glowing paint dims it by how much light the new film lets through. Add water and the other
   wet tools lay no light. Paint glowing washes on dark paper (`set_paper` `color`).
-- **Not yet:** sticker sprays and stroke layers refuse light above 0, with the alternatives.
+- **Stroke layers** take light: each stroke's twin is redrawn with it, so editing, moving,
+  reordering or removing a glowing stroke moves its light, a stroke or eraser over it dims or
+  erases it, and the layer has no light once no stroke lays any. A dual-colour highlighter or neon
+  stroke there glows (and spills) in the side the viewer's scheme shows.
+- **Not yet:** sticker sprays refuse light above 0, with the alternatives.
 - **Backlit paper** (`set_paper` `backlight` 0..1 and `backlightColor`, or the `stained-glass`
   preset): light from behind the paper, like a lightbox. It is a paper setting, not light paint:
   nothing is repainted, and each pixel lets the light through by how transparent its paint is.

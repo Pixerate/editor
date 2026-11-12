@@ -23,6 +23,14 @@ public struct ResolvedMutationRates: Equatable, Sendable {
 
 public let DEFAULT_MUTATION_RATES = ResolvedMutationRates()
 
+/// Why a stroke with `brush` can't be bred, or nil: the brushes a stroke layer refuses
+/// (`liveStrokeRefusal`), and erasers, because a bred stroke is suggested as paint on a layer of
+/// its own, where an eraser has nothing to erase.
+public func evolutionStrokeRefusal(_ brush: PaintBrush) -> String? {
+    if brush.engine == "eraser" { return "The \(brush.name) brush erases, and a bred stroke is suggested on a layer of its own where there is nothing to erase; breed painted strokes instead." }
+    return liveStrokeRefusal(brush)
+}
+
 public func normalizeMutationRates(_ raw: JSONObject?) throws -> ResolvedMutationRates {
     var out = DEFAULT_MUTATION_RATES
     guard let raw else { return out }
@@ -672,7 +680,7 @@ extension PaintEditorController {
             guard let st = doc.strokes.first(where: { $0.id == id }) else {
                 throw PaintEditorError("Unknown stroke \"\(id)\". Call list_strokes for the ids.")
             }
-            if let refusal = liveStrokeRefusal(st.brush) {
+            if let refusal = evolutionStrokeRefusal(st.brush) {
                 throw PaintEditorError(refusal)
             }
             return st
@@ -730,7 +738,7 @@ extension PaintEditorController {
                 throw PaintEditorError("Proposal \"\(p.id)\" has no stroke genome to breed from.")
             }
             for st in strokes {
-                if let refusal = liveStrokeRefusal(st.brush) {
+                if let refusal = evolutionStrokeRefusal(st.brush) {
                     throw PaintEditorError(refusal)
                 }
             }

@@ -2135,7 +2135,7 @@
           "swift": "✅ `UvLightSettings`, `HeatField`, `UvCache`, `ThermoCache`, `PaintEditorController` `setUvLight`, `getUvLight`, `paintHeat`, `advanceHeat`, `clearHeat`, `getHeat`, `PaintUvHeatPanel` (in `PaintSpecialtyPanel`)"
         },
         {
-          "feature": "Live stroke layers (a layer drawn from its strokes, so each stroke's brush, settings, colour, paint, seed and points stay editable; redraws exactly and only where an edit changes; reorder, delete, rasterize; select and drag on the canvas; saved, undone and replayed; `stroke_at`, `update_stroke`, `edit_stroke_points`, `reorder_stroke`, `remove_strokes`, `convert_to_stroke_layer`, `rasterize_stroke_layer`, `list_strokes {live}`, `add_layer {type: strokes}` agent tools)",
+          "feature": "Live stroke layers (a layer drawn from its strokes, so each stroke's brush, settings, colour, paint, seed and points stay editable; takes erasers and light paint, redrawn with the strokes; redraws exactly and only where an edit changes; reorder, delete, rasterize; select and drag on the canvas; saved, undone and replayed; `stroke_at`, `update_stroke`, `edit_stroke_points`, `reorder_stroke`, `remove_strokes`, `convert_to_stroke_layer`, `rasterize_stroke_layer`, `list_strokes {live}`, `add_layer {type: strokes}` agent tools)",
           "core": "`addLayer({ type: 'strokes' })`, `updateStroke`, `editStrokePoints`, `removeStrokes`, `reorderStroke`, `rasterizeLiveStrokes`, `liveStrokeAt`, `liveStrokeRefusal`",
           "react": "`<StrokePanel>`, New stroke layer in `<PaintLayersPanel>`, the Select stroke tool in `<PaintToolbar>` / `<PaintCanvas>`",
           "svelte": "`<StrokePanel>`, New stroke layer in `<PaintLayersPanel>`, the Select stroke tool in `<PaintToolbar>` / `<PaintCanvas>`",

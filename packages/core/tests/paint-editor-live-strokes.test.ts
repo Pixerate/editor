@@ -64,14 +64,13 @@ describe('live stroke layers', () => {
 
   it('refuses brushes it cannot redraw, and layer operations that would bake pixels, with the way out', () => {
     const { c } = painted();
-    expect(() => c.paintStroke({ points: wave(80), brushId: 'eraser-soft' })).toThrow(/stroke layer.*remove_strokes/);
     expect(() => c.paintStroke({ points: wave(80), brushId: 'smudge' })).toThrow(/stroke layer.*rasterize_stroke_layer/);
     expect(() => c.paintStroke({ points: wave(80), brushId: 'watercolor-round' })).toThrow(/stroke layer.*wet media/);
     expect(() => c.paintStroke({ points: wave(80), brushId: 'sticker-stars' })).toThrow(/stroke layer.*stickers/);
     expect(() => c.paintStroke({ points: wave(80), brushId: 'impasto-brush' })).toThrow(/stroke layer.*thick paint/);
     expect(() => c.fillLayer({ color: '#000000' })).toThrow(/stroke layer.*rasterize_stroke_layer/);
     const id = c.listLiveStrokes()[0].id;
-    expect(() => c.updateStroke(id, { brushId: 'eraser-soft' })).toThrow(/Erasers/);
+    expect(() => c.updateStroke(id, { brushId: 'smudge' })).toThrow(/moves the paint under it/);
     expect(() => c.updateStroke(id, { seed: -1 })).toThrow(/seed -1/);
     expect(() => c.updateStroke('nope', { seed: 1 })).toThrow(/Unknown stroke "nope".*list_strokes/);
     expect(() => c.editStrokePoints(id, {})).toThrow(/either points .* or transform/);
@@ -188,8 +187,8 @@ describe('live stroke agent tools', () => {
     expect(r.data.bounds.width).toBeGreaterThan(0);
     r = await call('update_stroke', { id: a.id, brush: { particle: { count: 5 } } });
     expect(r.error).toMatch(/particle/);
-    r = await call('update_stroke', { id: a.id, brushId: 'eraser-soft' });
-    expect(r.error).toMatch(/Erasers/);
+    r = await call('update_stroke', { id: a.id, brushId: 'smudge' });
+    expect(r.error).toMatch(/moves the paint under it/);
     r = await call('update_stroke', { id: a.id });
     expect(r.error).toMatch(/Pass at least one change/);
     r = await call('edit_stroke_points', { id: b.id, transform: { dx: 15, scale: 1.2 } });
