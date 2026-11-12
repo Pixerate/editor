@@ -93,7 +93,7 @@ the pitfalls, and uses the tools below.
 | `find_mermaid_diagrams` | Find every Mermaid diagram in a piece of `text` (fenced ```mermaid blocks, a chat reply or a bare diagram). Returns each source, family and title; pass one source to `load_diagram_mermaid`. Changes nothing. |
 | `check_diagram_style` | Check the diagram against the house style: direction, label case and length, node count, shapes, and the brand's colours and fonts in node styles. Returns findings with a `target` (`{ node | edge | group: id }` with the `label` when certain, or `{ diagram: true }` with the `direction`), `fixable`, and the checks that `ran` and were `skipped`. |
 | `fix_diagram_style` | Apply every certain house-style fix (label case, direction) as one undo step. Returns `fixed` and the findings `left`. Hidden when the diagram cannot be edited. |
-| `render_diagram` | Draw the diagram without changing it: SVG text by default, `format: "png"` when the host can rasterize; `maxWidth` / `maxHeight` fit it in px. Only listed when the host can render. Refuses text-only families. Render after a batch of edits, not after each one. |
+| `render_diagram` | Draw the diagram without changing it: SVG text by default, `format: "png"` when the host can rasterize; `maxWidth` / `maxHeight` fit it in px; `projection: "isometric"` draws it in 2.5D (nodes as blocks, groups as floor tiles, edges on the floor) for architecture overviews and slides. Only listed when the host can render. Refuses text-only families. Render after a batch of edits, not after each one. |
 
 ### Write
 

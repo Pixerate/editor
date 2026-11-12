@@ -1243,6 +1243,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "`<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools`",
         "svelte": "`<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools`",
         "swift": "✅ headless (`addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups`, `createVectorEffectsToolProvider`); the views: Planned (#533)"
+      },
+      {
+        "feature": "Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: \"isometric\"` draws a diagram as blocks on group tiles with edges on the floor)",
+        "core": "`isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `mermaidToSvg` `projection`",
+        "react": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection)",
+        "svelte": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection)",
+        "swift": "✅ (`IsoProjector` in PixerateGeometry, `vector.addIsoBoxes`); the isometric diagram export: Planned (#533)"
       }
     ]
   },

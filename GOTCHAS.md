@@ -4606,3 +4606,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: With `night` extending `paper`, a field `night` did not set (`palette.ground`) reported its source as the variant's layer instead of `<layer> (from paper)`, whenever `night` set a sibling in the same object (`palette.sky`).
 - **Root Cause**: The merge cleared the recorded origin of every path under a key before merging into it. That is right when a value replaces an object, but an object merging into an object must keep the origins of the fields it does not touch.
 - **Solution / Workaround**: Clear origins below a key only when a leaf value replaces it; when an object replaces a leaf, clear only that leaf's origin. `tests/style-extends-versions.test.ts` checks the sources of untouched siblings.
+
+### [swift] `PixerateVector` Has Its Own `Vec2`, Separate From `PixerateRaster.Vec2`
+
+- **Issue / Symptom**: Calling a `PixerateGeometry` or `PixerateRaster` helper (such as `IsoProjector`) from the vector editor fails to compile with "cannot convert value of type 'PixerateVector.Vec2' to expected argument type 'PixerateRaster.Vec2'".
+- **Root Cause**: The vector module declares its own `Vec2` (the TS `canvas/types` point) while the raster and geometry modules use `PixerateRaster.Vec2`; both are in scope in vector files, and the unqualified name means the vector one.
+- **Solution / Workaround**: Write `PixerateRaster.Vec2(x:y:)` where a raster or geometry API takes a point, and convert at the boundary (`VectorAnchor(x: p.x, y: p.y)` for anchors), as `addIsoBoxes` in `ControllerTransform.swift` does.

@@ -13412,6 +13412,163 @@
     "readOnly": false
   },
   {
+    "id": "vector.addIsoBoxes",
+    "label": "Add Isometric Blocks…",
+    "group": "Vector",
+    "keywords": [
+      "isometric",
+      "2.5d",
+      "3d",
+      "block",
+      "cube",
+      "stack",
+      "axonometric",
+      "architecture",
+      "infographic"
+    ],
+    "description": "Adds isometric (2.5D) blocks: each box in grid units (i runs down-right, j down-left, k up; each axis from low to high, k0 = k1 for a flat tile) becomes a group of editable face paths (Left, Right, Top), shaded from one `fill` (the top as given, the sides darker) or given per face, with optional `grid` lines on the faces at whole multiples of the step. All boxes go in one group, drawn back to front. `scale` is document units per grid unit (default 20), `angle` the axes' slope (default 30), `origin` where (0, 0, 0) lands (default: the blocks centred on the artboard). One undo step. Returns the group `id` and, per box in input order, its group id, face ids, grid id and `outline` (its six-sided silhouette in document units, e.g. for vector.placeCallouts anchors). Refuses, adding nothing, a box whose axes do not run low to high, an angle outside 1 to 89 or a scale that is not positive.",
+    "params": {
+      "type": "object",
+      "properties": {
+        "boxes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "description": "The blocks, in grid units.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "i0": {
+                "type": "number",
+                "description": "Start along i (down and to the right), grid units."
+              },
+              "i1": {
+                "type": "number",
+                "description": "End along i, more than i0."
+              },
+              "j0": {
+                "type": "number",
+                "description": "Start along j (down and to the left), grid units."
+              },
+              "j1": {
+                "type": "number",
+                "description": "End along j, more than j0."
+              },
+              "k0": {
+                "type": "number",
+                "description": "Bottom (k is up), grid units."
+              },
+              "k1": {
+                "type": "number",
+                "description": "Top, at least k0 (equal: a flat tile)."
+              },
+              "fill": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "description": "A colour: the top as given, the left face 15% darker, the right 30% (hex colours; others are used on every face)."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "top": {
+                        "type": "string",
+                        "description": "Top face colour."
+                      },
+                      "left": {
+                        "type": "string",
+                        "description": "Left face colour."
+                      },
+                      "right": {
+                        "type": "string",
+                        "description": "Right face colour."
+                      }
+                    },
+                    "required": [
+                      "top",
+                      "left",
+                      "right"
+                    ],
+                    "additionalProperties": false,
+                    "description": "A colour per face."
+                  }
+                ],
+                "description": "Face colours (default a light grey)."
+              },
+              "stroke": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Edge colour (default a shade of each face; null for none)."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Layer name (default \"Block <n>\")."
+              }
+            },
+            "required": [
+              "i0",
+              "i1",
+              "j0",
+              "j1",
+              "k0",
+              "k1"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "angle": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 89,
+          "description": "Slope of the i and j axes, degrees (default 30: true isometric)."
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Document units per grid unit (default 20)."
+        },
+        "origin": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Document units."
+            },
+            "y": {
+              "type": "number",
+              "description": "Document units."
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "description": "Where grid point (0, 0, 0) lands (default: the blocks centred on the artboard)."
+        },
+        "grid": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Draw grid lines on the faces every this many grid units (default none)."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the group (default \"Isometric\")."
+        }
+      },
+      "required": [
+        "boxes"
+      ],
+      "additionalProperties": false
+    },
+    "undoable": true,
+    "readOnly": false
+  },
+  {
     "id": "vector.arrange",
     "label": "Arrange…",
     "group": "Vector",

@@ -169,6 +169,7 @@
                   "vector.fillRegion",
                   "vector.align",
                   "vector.distribute",
+                  "vector.addIsoBoxes",
                   "vector.arrange",
                   "vector.moveLayer",
                   "vector.group",

@@ -28,7 +28,7 @@ export interface DiagramToolProviderOptions {
 	 * Draws the diagram as standalone SVG (e.g. `(o) => mermaidToSvg(controller.getDocument(), o)`
 	 * from `@pixerate/editor/canvas`). Enables `render_diagram`.
 	 */
-	renderSvg?: (options: { maxWidth?: number; maxHeight?: number }) => { svg: string; width: number; height: number };
+	renderSvg?: (options: { maxWidth?: number; maxHeight?: number; projection?: 'flat' | 'isometric' }) => { svg: string; width: number; height: number };
 	/** Turns that SVG into PNG (e.g. `rasterizeSvg`), so `render_diagram` can return an image. */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
 	/**
@@ -565,16 +565,17 @@ export function createDiagramToolProvider(controller: DiagramController, options
 		name: 'render_diagram',
 		title: 'Render the diagram',
 		description:
-			'Draws the diagram without changing it, to check it visually: standalone SVG text by default, or a PNG image (format "png") when the host can rasterize. Positions match the canvas.',
+			'Draws the diagram without changing it, to check it visually or to hand over: standalone SVG text by default, or a PNG image (format "png") when the host can rasterize. Positions match the canvas. projection "isometric" draws it in 2.5D: nodes as blocks, groups as floor tiles and edges along the floor (families without node positions are drawn flat).',
 		inputSchema: object({
 			format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default) or png (only when the host supports it).' },
 			maxWidth: { type: 'number', minimum: 16, description: 'Fit within this width in px (default: natural size).' },
-			maxHeight: { type: 'number', minimum: 16, description: 'Fit within this height in px (default: natural size).' }
+			maxHeight: { type: 'number', minimum: 16, description: 'Fit within this height in px (default: natural size).' },
+			projection: { type: 'string', enum: ['flat', 'isometric'], description: 'flat (default) or isometric (2.5D blocks).' }
 		}),
 		annotations: { title: 'Render the diagram', ...READ },
-		handler: async ({ format = 'svg', maxWidth, maxHeight }) => {
+		handler: async ({ format = 'svg', maxWidth, maxHeight, projection }) => {
 			if (doc().tier !== 'editable') throw new Error(`A ${doc().family} diagram is kept as Mermaid text and cannot be drawn here; use export_diagram_mermaid.`);
-			const drawn = options.renderSvg!({ maxWidth, maxHeight });
+			const drawn = options.renderSvg!({ maxWidth, maxHeight, ...(projection ? { projection } : {}) });
 			if (format === 'png') {
 				if (!options.rasterize) throw new Error('This host cannot make PNG images; call render_diagram with format "svg".');
 				const image = await options.rasterize(drawn.svg, { width: drawn.width, height: drawn.height });

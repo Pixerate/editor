@@ -344,6 +344,22 @@ func vectorCommandRuns() -> [String: VectorCommandRun] {
         return ok()
     }
 
+    r["vector.addIsoBoxes"] = { c, params in
+        let p = VectorParams(params)
+        let boxes = (params["boxes"]?.arrayValue ?? []).map { v -> VectorIsoBoxRequest in
+            let o = v.objectValue ?? JSONObject()
+            func num(_ k: String) -> Double { o[k]?.numberValue ?? .nan }
+            let box = IsoBox(i0: num("i0"), i1: num("i1"), j0: num("j0"), j1: num("j1"), k0: num("k0"), k1: num("k1"))
+            var faces: (top: String, left: String, right: String)?
+            if let f = o["fill"]?.objectValue { faces = (f["top"]?.stringValue ?? "", f["left"]?.stringValue ?? "", f["right"]?.stringValue ?? "") }
+            let stroke: String?? = o["stroke"] == nil ? nil : .some(o["stroke"]?.stringValue)
+            return VectorIsoBoxRequest(box: box, fill: o["fill"]?.stringValue, faces: faces, stroke: stroke, name: o["name"]?.stringValue)
+        }
+        let (result, json) = try c.addIsoBoxes(boxes, angle: p.num("angle"), scale: p.num("scale"), origin: p.point("origin"), grid: p.num("grid"), name: p.str("name"))
+        try check(result)
+        return json ?? .null
+    }
+
     // Structure
 
     r["vector.arrange"] = { c, params in

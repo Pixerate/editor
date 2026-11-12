@@ -33,3 +33,4 @@ export * from './style-tools.js';
 export * from './origin.js';
 export * from './conformance.js';
 export * from './style-storage.js';
+export * from '../geom/iso.js';
