@@ -812,12 +812,15 @@ public final class PaintEditorModel {
     }
 
     /**
-     * Grows living biopaint colonies live with the clock (`playCultures`) about 60 times a second
-     * until the task is cancelled (the editor view runs it). Growth follows the culture pause and
-     * speed, waits during strokes, and commits each uninterrupted run as one undo step ("Culture
-     * growth"), flushed before any other command, undo, redo or save, and when the task ends.
+     * Grows living biopaint colonies live with the clock (`playCultures`) every `frameInterval`
+     * seconds (default 60 times a second) until the task is cancelled (the editor view runs it).
+     * Growth follows the culture pause and speed whatever the interval (a longer one grows more per
+     * frame and redraws less often, which leaves a slower device's main thread more room), waits
+     * during strokes, and commits each uninterrupted run as one undo step ("Culture growth"),
+     * flushed before any other command, undo, redo or save, and when the task ends.
      */
-    public func runCultureClock() async {
+    public func runCultureClock(frameInterval: Double = 1.0 / 60.0) async {
+        let sleepNs = UInt64(Swift.min(1, Swift.max(1.0 / 120.0, frameInterval)) * 1_000_000_000)
         func nowMs() -> Double { Date().timeIntervalSinceReferenceDate * 1000 }
         let player = controller.playCultures(now: nowMs())
         var growing = false
@@ -836,7 +839,7 @@ public final class PaintEditorModel {
                 panelsAt = now
                 stateRevision &+= 1
             }
-            try? await Task.sleep(nanoseconds: 16_000_000)
+            try? await Task.sleep(nanoseconds: sleepNs)
         }
         player.stop()
     }

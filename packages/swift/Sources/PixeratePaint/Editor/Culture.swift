@@ -1328,6 +1328,32 @@ public func applyCultureGrowReplay(
     return (layer.commit(), light?.commit() ?? lightSurface, occ?.commit())
 }
 
+/**
+ * The layer-space tiles a culture step drew on (its segments, with their width and glow) or faded,
+ * as tile rects: growth happens at the colony's frontier, so these are far fewer than the tiles
+ * the whole colony covers.
+ */
+func cultureStepTiles(_ data: CultureGrowEventData) -> [RasterRect] {
+    var keys = Set<Int64>()
+    func mark(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int) {
+        for ty in (y0 >> 8)...(y1 >> 8) {
+            for tx in (x0 >> 8)...(x1 >> 8) { keys.insert(Int64(tx) << 32 | Int64(UInt32(bitPattern: Int32(truncatingIfNeeded: ty)))) }
+        }
+    }
+    for s in data.segments {
+        let pad = Swift.max(0, (s.widthFp - 128) >> 8) + 3
+        mark((Swift.min(s.x0, s.x1) >> 8) - pad, (Swift.min(s.y0, s.y1) >> 8) - pad, (Swift.max(s.x0, s.x1) >> 8) + pad, (Swift.max(s.y0, s.y1) >> 8) + pad)
+    }
+    for f in data.fades {
+        let pad = f.radius + 2
+        mark(f.x - pad, f.y - pad, f.x + pad, f.y + pad)
+    }
+    return keys.sorted().map { k in
+        let tx = Int(k >> 32), ty = Int(Int32(truncatingIfNeeded: k))
+        return RasterRect(x: tx * 256, y: ty * 256, width: 256, height: 256)
+    }
+}
+
 public func layerCultureSummary(_ layerId: String, _ culture: LayerCultureState?) -> LayerCultureSummary {
     guard let culture else {
         return LayerCultureSummary(layerId: layerId, tick: 0, tips: 0, segments: 0, bounds: nil, status: "extinct")
@@ -1706,7 +1732,9 @@ extension PaintEditorController {
         )
     }
 
-    func stepCulturesInternal(_ targetLayerIds: [String], _ steps: Int) -> (
+    /// `summaries: false` (live growth) leaves `layerResults[].bounds` nil instead of scanning each
+    /// colony's occupancy; `dirty` is always just what these steps drew or faded.
+    func stepCulturesInternal(_ targetLayerIds: [String], _ steps: Int, summaries: Bool = true) -> (
         nextDoc: PaintDocumentState,
         layerResults: [GrowCulturesLayerResult],
         events: [(String, CultureGrowEventData)],
@@ -1780,9 +1808,13 @@ extension PaintEditorController {
                     events.append((layerId, stepped.eventData))
                 }
             }
-            let sum = layerCultureSummary(layerId, stepped.culture)
-            let bounds = sum.bounds.map { RasterRect(x: $0.x + ox, y: $0.y + oy, width: $0.width, height: $0.height) }
-            if let bounds { dirty.append(bounds) }
+            let bounds = summaries
+                ? layerCultureSummary(layerId, stepped.culture).bounds.map { RasterRect(x: $0.x + ox, y: $0.y + oy, width: $0.width, height: $0.height) }
+                : nil
+            // Redraw only what these steps changed, not the whole colony.
+            for t in cultureStepTiles(stepped.eventData) {
+                dirty.append(RasterRect(x: t.x + ox, y: t.y + oy, width: t.width, height: t.height))
+            }
             layerResults.append(GrowCulturesLayerResult(
                 layerId: layerId,
                 segmentsAdded: stepped.segmentsAdded,

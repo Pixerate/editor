@@ -219,4 +219,33 @@ final class PaintCultureLiveTests: XCTestCase {
         XCTAssertEqual(ev.count, 1)
         XCTAssertGreaterThan(ev.first?.data?["steps"]?.numberValue ?? 0, 6)
     }
+
+    // Live growth redraws only the tiles each step drew or faded on: every pixel a step changes
+    // lies in its dirty rects, which cover fewer tiles than the colony once it has spread.
+    func testLiveStepDirtyCoversJustTheChange() throws {
+        let c = try PaintEditorController(width: 1200, height: 200)
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "mycelial-ink", seed: 7), points: pts([(40, 100), (1160, 100)]))
+        let layerId = try XCTUnwrap(c.doc.activeLayerId)
+        var now = 1000.0
+        let player = c.playCultures(now: now)
+        run(player, &now, frames: 20)
+        let before = try XCTUnwrap(findLayer(c.doc.layers, layerId)?.layer.pixelSurface)
+        let (next, results, _, dirty) = c.stepCulturesInternal([layerId], 1, summaries: false)
+        XCTAssertNil(results.first?.bounds, "live steps skip the colony scan")
+        let after = try XCTUnwrap(findLayer(next.layers, layerId)?.layer.pixelSurface)
+        func inDirty(_ x: Int, _ y: Int) -> Bool {
+            dirty.contains { x >= $0.x && y >= $0.y && x < $0.x + $0.width && y < $0.y + $0.height }
+        }
+        var changed = 0
+        for y in 0..<200 {
+            for x in 0..<1200 where readPixel(before, x, y) != readPixel(after, x, y) {
+                changed += 1
+                XCTAssertTrue(inDirty(x, y), "changed pixel \(x),\(y) outside the dirty rects")
+            }
+        }
+        XCTAssertGreaterThan(changed, 0)
+        let colony = try XCTUnwrap(c.stepCulturesInternal([layerId], 1).layerResults.first?.bounds)
+        let colonyTiles = ((colony.x + colony.width - 1) / 256 - colony.x / 256 + 1) * ((colony.y + colony.height - 1) / 256 - colony.y / 256 + 1)
+        XCTAssertLessThanOrEqual(dirty.count, colonyTiles)
+    }
 }
