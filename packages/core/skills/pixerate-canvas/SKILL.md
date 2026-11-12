@@ -50,6 +50,9 @@ the pitfalls, and uses the tools below.
 5. **Look.** `view_editor` (default viewport, JPEG, 1024 px) once a batch is done; use
    `scope: "canvas"` for the whole drawing. Fix overlaps, misalignment and clipped text, then show
    the user with `canvas_select` or `canvas_highlight`.
+6. **House style.** When the host has one (`get_style` with `domain: "canvas"`), run
+   `check_canvas_style`. `fix_canvas_style` snaps corner radii, stroke widths, font sizes and
+   positions to the house values as one undo step; change colours and fonts it reports yourself.
 
 **Working alongside the user** (they are building and you add to it unasked): suggest instead of
 editing. `propose_nodes` shows ghosts the user accepts or dismisses, and nothing reaches the canvas
@@ -131,6 +134,8 @@ you to. Withdraw stale ones with `reject_proposal`: when the user changes what a
 
 | Tool | Use it to |
 | --- | --- |
+| `check_canvas_style` | Check the canvas against the house style: corner radii, stroke widths, font sizes, the position grid, and the brand's colours and fonts on fills, strokes and text. Returns findings with a `target` `{ node, property, value? }` (the value to set when certain), `fixable`, and the checks that `ran` and were `skipped`. |
+| `fix_canvas_style` | Snap every certain finding (radii, stroke widths, font sizes, grid positions) to the house value as one undo step. Returns `fixed` and the findings `left`. Hidden on a read-only canvas. |
 | `get_editor_state` | Read the canvas graph (`canvas.nodes`, `canvas.edges`) and, by default, the prompt document too. Pass `includeDocument: false` on a canvas-only task to keep the result small, `includeCanvas: false` for only the prompt. Call it first and again after edits made by the user. |
 | `view_editor` | Get an image of the editor: `scope` `viewport` (default) or `canvas` (the whole drawing's bounds), `format` `jpeg` (default) or `png`, `maxEdge` in pixels (default 1024). Use it after a batch to judge overlap, balance and legibility; agent cursors are left out. |
 | `capture_view` | Screenshot part of the canvas to check a result: `region` `viewport` (default, as on screen), `content` (every node), `selection`, `nodes` (with `ids` from `get_editor_state`) or `rect` (canvas units); `padding` (default 16), `maxEdge` (default 1024), `format` `png` (default) or `jpeg`. The result gives the captured `rect` and `scale`, so image pixel (px, py) is canvas point (rect.x + px / scale, rect.y + py / scale). Prefer `nodes` to inspect what you just added at full detail. Selection boxes and agent cursors are left out unless `includeOverlays`. |

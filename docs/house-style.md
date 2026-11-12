@@ -152,6 +152,23 @@ nodes, edges and groups by id (with the `label` to set), or the diagram (with th
 React and Svelte, `useStyleFindings(styles, "spreadsheet", document)` and `useStyleFindings(styles,
 "diagram", graph)` show the findings; pass a new value after each change.
 
+### `canvas.json` and `typography.json`
+
+```json
+{ "cornerRadii": [0, 4, 8], "strokeWidths": [1, 2], "fontSizes": [12, 14, 16, 20, 24, 32], "grid": 8,
+  "checks": ["corner-radii", "stroke-widths", "font-sizes", "grid", "palette-only", "fonts-allowed"] }
+```
+
+```json
+{ "weights": [400, 600], "sizes": [12, 14, 16, 20, 25, 31], "lineHeight": { "min": 1.3, "max": 1.7 },
+  "checks": ["weights", "sizes", "line-height", "letter-spacing", "fonts-allowed"] }
+```
+
+Canvas findings target `{ node, property, value }` and read node styles as strings (SvelteFlow),
+objects (React Flow) or shape paints; `createCanvasStyleToolProvider({ getNodes, setNodes,
+history })` records `fix_canvas_style` as one undoable command. Typography checks the font
+picker's selection; `fix_typography_style` snaps it to the house type in one change.
+
 ## Layers
 
 A host stacks stores from general to specific, for example `org`, `workspace`, `user`,

@@ -28,6 +28,8 @@ import {
 import { createRichTextStyleToolProvider, richTextStyleDomain } from '../src/richTextStyle';
 import { createSpreadsheetStyleToolProvider, spreadsheetStyleDomain } from '../src/spreadsheet/style';
 import { createDiagramStyleToolProvider, diagramStyleDomain } from '../src/diagram/style';
+import { canvasStyleDomain, createCanvasStyleToolProvider } from '../src/canvas/style';
+import { createTypographyStyleToolProvider, typographyStyleDomain } from '../src/typography/style';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -107,7 +109,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -142,6 +144,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createCanvasExplosionToolProvider(canvasExplosionToolTarget(createCanvasExplosionStateController(), { getNodes: () => [] }))),
 			...toolNames(createCanvasProposalToolProvider(createCanvasProposals({ getNodes: () => [], getEdges: () => [], setNodes: () => {}, setEdges: () => {} }))),
 			...toolNames(createCanvasEdgeAnimationToolProvider({ getEdges: () => [], setEdges: () => {} })),
+			...toolNames(createCanvasStyleToolProvider(styles, { getNodes: () => [], setNodes: () => {} })),
 			...commandIds(createArrangeCommands(stub)),
 			...commandIds(createShapeCommands(stub)),
 			...commandIds(createDrawCommands(stub)),
@@ -248,7 +251,7 @@ function expectedBySkill(): Record<string, string[]> {
 			return [...new Set([...toolNames(authoringProvider), ...toolNames(createPaintEffectAuthoringToolProvider(new PaintEditorController({ width: 64, height: 64 })))])];
 		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
-		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))],
+		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel())), ...toolNames(createTypographyStyleToolProvider(new FontPickerModel(), styles))],
 		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) })),
 		// preview_brush registers only with a host renderer.
 		'pixerate-brushes': toolNames(createBrushLibraryToolProvider(createBrushLibrary(), { renderPreview: () => ({ data: '', mimeType: 'image/png' }) }))
@@ -272,6 +275,7 @@ const FACTORIES: Record<string, string> = {
 	createSpreadsheetStyleToolProvider: 'pixerate-spreadsheet',
 	createSpreadsheetCommands: 'pixerate-spreadsheet',
 	createCanvasComponentToolProvider: 'pixerate-canvas',
+	createCanvasStyleToolProvider: 'pixerate-canvas',
 	createArrangeCommands: 'pixerate-canvas',
 	createShapeCommands: 'pixerate-canvas',
 	createDrawCommands: 'pixerate-canvas',
@@ -318,6 +322,7 @@ const FACTORIES: Record<string, string> = {
 	createColorToolProvider: 'pixerate-color',
 	createGradientToolProvider: 'pixerate-color',
 	createTypographyToolProvider: 'pixerate-typography',
+	createTypographyStyleToolProvider: 'pixerate-typography',
 	createFontPickerToolProvider: 'pixerate-typography',
 	createEffectAuthoringToolProvider: 'pixerate-effect-authoring',
 	createPaintEffectAuthoringToolProvider: 'pixerate-effect-authoring',

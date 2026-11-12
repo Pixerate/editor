@@ -14,6 +14,8 @@ import { tokensStyleDomain } from '../src/tokens';
 import { richTextStyleDomain } from '../src/richTextStyle';
 import { spreadsheetStyleDomain } from '../src/spreadsheet/style';
 import { diagramStyleDomain } from '../src/diagram/style';
+import { canvasStyleDomain } from '../src/canvas/style';
+import { typographyStyleDomain } from '../src/typography/style';
 
 type Coverage = StyleDomain<any> | { pending: `#${number}` } | { none: string };
 
@@ -24,7 +26,7 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-tokens': tokensStyleDomain,
 	'pixerate-rich-text': richTextStyleDomain,
 	'pixerate-spreadsheet': spreadsheetStyleDomain,
-	'pixerate-canvas': { pending: '#779' },
+	'pixerate-canvas': canvasStyleDomain,
 	'pixerate-vector': { pending: '#779' },
 	'pixerate-diagram': diagramStyleDomain,
 	'pixerate-image-editor': { pending: '#779' },
@@ -34,7 +36,7 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-generation': { pending: '#779' },
 	'pixerate-parameters': { pending: '#779' },
 	'pixerate-effect-authoring': { pending: '#779' },
-	'pixerate-typography': { pending: '#779' },
+	'pixerate-typography': typographyStyleDomain,
 	'pixerate-stickers': { pending: '#779' },
 	'pixerate-brushes': { pending: '#779' }
 };

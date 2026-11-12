@@ -16,3 +16,4 @@ export * from './stack.js';
 export * from './accessibility.js';
 export * from './picker.js';
 export * from './tools.js';
+export * from './style.js';

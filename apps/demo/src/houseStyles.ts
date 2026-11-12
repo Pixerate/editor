@@ -2,6 +2,8 @@ import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from "
 import { chartStyleDomain } from "@pixerate/editor/chart";
 import { spreadsheetStyleDomain } from "@pixerate/editor/spreadsheet";
 import { diagramStyleDomain } from "@pixerate/editor/diagram";
+import { canvasStyleDomain } from "@pixerate/editor/canvas";
+import { typographyStyleDomain } from "@pixerate/editor/typography";
 import { TokenStore, createTokenStyleSource, tokensStyleDomain } from "@pixerate/editor/tokens";
 import { richTextStyleDomain } from "@pixerate/editor";
 import { demoToolRegistry } from "./agentTools";
@@ -43,6 +45,17 @@ Headers and labels in sentence case. Money with two decimals. Diagrams flow left
     null,
     2,
   ),
+  // The org's rules for boards and type (check_canvas_style, check_typography_style).
+  "acme-design/SKILL.md": `---
+name: acme-design
+description: Acme's rules for canvas boards and type.
+domains: [canvas, typography]
+---
+
+Corners 0, 4 or 8. Strokes 1 or 2. Everything on the 8-unit grid. Type from the house scale.
+`,
+  "acme-design/canvas.json": JSON.stringify({ cornerRadii: [0, 4, 8], strokeWidths: [1, 2], fontSizes: [12, 14, 16, 20, 24, 32], grid: 8, checks: ["corner-radii", "stroke-widths", "font-sizes", "grid"] }, null, 2),
+  "acme-design/typography.json": JSON.stringify({ weights: [400, 600, 700], sizes: [12, 14, 16, 20, 24, 32], lineHeight: { min: 1.3, max: 1.7 }, checks: ["weights", "sizes", "line-height"] }, null, 2),
   // The org's writing style for documents (the Documents tab): checked by check_rich_text_style.
   "acme-writing/SKILL.md": `---
 name: acme-writing
@@ -129,7 +142,7 @@ export const demoStyles = createStyleResolver({
     { id: "org", store: demoOrgStyles, locked: true },
     { id: "user", store: demoUserStyles },
   ],
-  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain],
+  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain],
   tokens: createTokenStyleSource(demoBrandTokens),
 });
 
