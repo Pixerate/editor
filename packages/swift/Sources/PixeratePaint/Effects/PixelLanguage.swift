@@ -41,7 +41,7 @@ public struct EffectAuthoringIssue: Equatable, Sendable {
 public struct PixelLimits: Equatable, Sendable {
     /// Longest source in UTF-16 code units (default 65536).
     public var maxSourceLength: Int?
-    /// Most work per pixel, in expression steps (`noise` counts 4; default 1024).
+    /// Most work per pixel, in expression steps (`noise` and `sample` count 4; default 1024).
     public var maxCost: Int?
     public init(maxSourceLength: Int? = nil, maxCost: Int? = nil) {
         self.maxSourceLength = maxSourceLength
@@ -188,6 +188,10 @@ public let PIXEL_FUNCTIONS: [PixelFunction] = [
     PixelFunction(name: "normalize", min: 1, max: 1, result: "each", description: "The vector at length 1 (0 stays 0)."),
     PixelFunction(name: "hash", min: 1, max: 1, result: "scalar", description: "hash(p): a random 0..1 for each whole-number cell of a vec2."),
     PixelFunction(name: "noise", min: 1, max: 1, result: "scalar", description: "noise(p): smooth value noise 0..1 over a vec2."),
+    PixelFunction(
+        name: "sample", min: 1, max: 1, result: "vec4",
+        description: "sample(p): the input picture (source) at p, a vec2 in uv, as a vec4 with straight alpha (bilinear, clamped to the edge). An effect that calls it is a filter."
+    ),
     PixelFunction(name: "vec2", min: 1, max: 2, result: "vec2", description: "A vec2 from parts (or one number for both)."),
     PixelFunction(name: "vec3", min: 1, max: 3, result: "vec3", description: "A vec3 from parts (or one number for all)."),
     PixelFunction(name: "vec4", min: 1, max: 4, result: "vec4", description: "A vec4 from parts (or one number for all)."),
@@ -538,6 +542,10 @@ private final class PixelParser {
             let want = spec.min == spec.max ? "\(spec.min)" : "\(spec.min) to \(spec.max)"
             throw PixelSyntaxError("\(fn) takes \(want) argument\(spec.max == 1 ? "" : "s"), not \(args.count)", line)
         }
+        if fn == "sample" {
+            if args[0].size != 2 { throw PixelSyntaxError("sample takes a vec2 in uv (e.g. sample(uv) or sample(uv + vec2(1, 0) / size)), not a \(sizeName(args[0].size))", line) }
+            return .call(fn, args, size: 4, line: line)
+        }
         if spec.result.hasPrefix("vec") {
             let n = Int(String(spec.result.last!))!
             let total = args.reduce(0) { $0 + $1.size }
@@ -699,14 +707,31 @@ public func compilePixelSource(_ source: String, limits: PixelLimits = PixelLimi
     return PixelParser(toks, comments).run(lines, lim.maxCost)
 }
 
-/// Steps an expression takes per pixel (`exprCost`; `noise` counts 4).
+/// Steps an expression takes per pixel (`exprCost`; `noise` and `sample` count 4).
 public func exprCost(_ e: PixelExpr) -> Int {
     switch e {
     case .num, .const, .variable: return 0
     case .neg(let a, _), .swizzle(let a, _, _): return 1 + exprCost(a)
     case .bin(_, let a, let b, _, _): return 1 + exprCost(a) + exprCost(b)
-    case .call(let fn, let args, _, _): return (fn == "noise" ? 4 : 1) + args.reduce(0) { $0 + exprCost($1) }
+    case .call(let fn, let args, _, _):
+        let own: Int = fn == "noise" || fn == "sample" ? 4 : 1
+        return own + args.reduce(0) { (sum: Int, a: PixelExpr) -> Int in sum + exprCost(a) }
     }
+}
+
+/// Whether an expression calls `sample` (reads the input picture).
+private func exprSamples(_ e: PixelExpr) -> Bool {
+    switch e {
+    case .num, .const, .variable: return false
+    case .neg(let a, _), .swizzle(let a, _, _): return exprSamples(a)
+    case .bin(_, let a, let b, _, _): return exprSamples(a) || exprSamples(b)
+    case .call(let fn, let args, _, _): return fn == "sample" || args.contains(where: exprSamples)
+    }
+}
+
+/// Whether a program reads an input picture (calls `sample`): such an effect is a filter with an image input `source` (`pixelProgramSamples`).
+public func pixelProgramSamples(_ program: PixelProgram) -> Bool {
+    program.lets.contains { exprSamples($0.expr) } || exprSamples(program.out)
 }
 
 // MARK: - Controls as an effect description
@@ -765,6 +790,65 @@ public func pixelNoise(_ x: Double, _ y: Double) -> Double {
     let top = a + (b - a) * ux
     let bottom = c + (d - c) * ux
     return top + (bottom - top) * uy
+}
+
+/**
+ * `sample(p)` (`pixelSample`): the picture at `p` (a vec2 in uv, so pixel centres are at
+ * (x + 0.5) / width), as straight-alpha RGBA 0..1. Bilinear between the four nearest pixels,
+ * clamped to the edge, with colour weighted by alpha; colour where all four are transparent is 0.
+ * A coordinate that is not a number reads the left or top edge. No picture (or an empty one) reads
+ * as transparent. Writes the four numbers at `into[at...]`.
+ */
+public func pixelSample(_ src: EffectPixels?, _ x: Double, _ y: Double, into: UnsafeMutablePointer<Double>, at: Int = 0) {
+    guard let src, src.width >= 1, src.height >= 1, src.data.count >= src.width * src.height * 4 else {
+        for k in 0..<4 { into[at + k] = 0 }
+        return
+    }
+    src.data.withUnsafeBufferPointer { (d: UnsafeBufferPointer<UInt8>) in
+        pixelSampleBytes(d, src.width, src.height, x, y, into: into, at: at)
+    }
+}
+
+/// `pixelSample` over raw bytes (`d` holds w × h × 4).
+@inline(__always)
+func pixelSampleBytes(_ d: UnsafeBufferPointer<UInt8>, _ w: Int, _ h: Int, _ x: Double, _ y: Double, into: UnsafeMutablePointer<Double>, at: Int) {
+    let W = Double(w), H = Double(h)
+    var tx: Double = x * W - 0.5
+    var ty: Double = y * H - 0.5
+    if !(tx > -1) { tx = -1 } else if tx > W { tx = W }
+    if !(ty > -1) { ty = -1 } else if ty > H { ty = H }
+    let fx0: Double = JS.floor(tx)
+    let fy0: Double = JS.floor(ty)
+    let fx: Double = tx - fx0
+    let fy: Double = ty - fy0
+    let ix: Int = Int(fx0), iy: Int = Int(fy0)
+    let x0: Int = Swift.min(Swift.max(ix, 0), w - 1)
+    let x1: Int = Swift.min(Swift.max(ix + 1, 0), w - 1)
+    let y0: Int = Swift.min(Swift.max(iy, 0), h - 1)
+    let y1: Int = Swift.min(Swift.max(iy + 1, 0), h - 1)
+    let i00: Int = (y0 * w + x0) * 4
+    let i10: Int = (y0 * w + x1) * 4
+    let i01: Int = (y1 * w + x0) * 4
+    let i11: Int = (y1 * w + x1) * 4
+    let w00: Double = (1 - fx) * (1 - fy) * Double(d[i00 + 3])
+    let w10: Double = fx * (1 - fy) * Double(d[i10 + 3])
+    let w01: Double = (1 - fx) * fy * Double(d[i01 + 3])
+    let w11: Double = fx * fy * Double(d[i11 + 3])
+    let a: Double = w00 + w10 + w01 + w11
+    if a > 0 {
+        for c in 0..<3 {
+            var sum: Double = w00 * Double(d[i00 + c])
+            sum += w10 * Double(d[i10 + c])
+            sum += w01 * Double(d[i01 + c])
+            sum += w11 * Double(d[i11 + c])
+            into[at + c] = sum / (a * 255)
+        }
+    } else {
+        into[at] = 0
+        into[at + 1] = 0
+        into[at + 2] = 0
+    }
+    into[at + 3] = a / 255
 }
 
 private func pixelUnary(_ fn: String) -> ((Double) -> Double)? {
@@ -864,6 +948,10 @@ public final class PixelEvaluator: @unchecked Sendable {
     private var controlSlots: [Int] = []
     private var outAt = 0
     private let lock = NSLock()
+    /// The picture `sample` reads during a `render` (its bytes, width and height).
+    private var sampleBytes: UnsafeBufferPointer<UInt8>? = nil
+    private var sampleWidth = 0
+    private var sampleHeight = 0
 
     /**
      * Compiles a checked program into register operations: every expression node writes its result
@@ -995,6 +1083,14 @@ public final class PixelEvaluator: @unchecked Sendable {
             ops.append { r in r[at] = pixelHash(r[a], r[a + 1]) }
         case "noise":
             ops.append { r in r[at] = pixelNoise(r[a], r[a + 1]) }
+        case "sample":
+            ops.append { [unowned self] (r: UnsafeMutablePointer<Double>) in
+                if let d = self.sampleBytes {
+                    pixelSampleBytes(d, self.sampleWidth, self.sampleHeight, r[a], r[a + 1], into: r, at: at)
+                } else {
+                    for k in 0..<4 { r[at + k] = 0 }
+                }
+            }
         case "vec2", "vec3", "vec4":
             if args.count == 1 && sizes[0] == 1 {
                 ops.append { r in for i in 0..<n { r[at + i] = r[a] } }
@@ -1016,10 +1112,28 @@ public final class PixelEvaluator: @unchecked Sendable {
         return at
     }
 
-    /// Draws the program into straight-alpha RGBA8 (`out` must hold width × height × 4 bytes).
-    public func render(width: Int, height: Int, timeMs: Double, values: JSONObject, into out: inout [UInt8]) {
+    /**
+     * Draws the program into straight-alpha RGBA8 (`out` must hold width × height × 4 bytes).
+     * `source` is the picture `sample` reads (any size; none reads as transparent).
+     */
+    public func render(width: Int, height: Int, timeMs: Double, values: JSONObject, into out: inout [UInt8], source: EffectPixels? = nil) {
         lock.lock()
         defer { lock.unlock() }
+        if let source, source.width >= 1, source.height >= 1, source.data.count >= source.width * source.height * 4 {
+            source.data.withUnsafeBufferPointer { (d: UnsafeBufferPointer<UInt8>) in
+                sampleBytes = d
+                sampleWidth = source.width
+                sampleHeight = source.height
+                defer { sampleBytes = nil }
+                draw(width: width, height: height, timeMs: timeMs, values: values, into: &out)
+            }
+        } else {
+            sampleBytes = nil
+            draw(width: width, height: height, timeMs: timeMs, values: values, into: &out)
+        }
+    }
+
+    private func draw(width: Int, height: Int, timeMs: Double, values: JSONObject, into out: inout [UInt8]) {
         let regs = UnsafeMutablePointer<Double>.allocate(capacity: Swift.max(1, top))
         regs.initialize(repeating: 0, count: Swift.max(1, top))
         defer { regs.deallocate() }

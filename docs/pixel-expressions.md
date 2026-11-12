@@ -2,8 +2,8 @@
 
 A small language for effects written at run time, by a person or an agent. A program runs once
 for every pixel and says what colour that pixel is. It has no loops, no functions of its own, no
-memory and no access to anything but the pixel's position, the time and the effect's controls, so
-every program finishes in a fixed number of steps. The TypeScript core
+memory and no access to anything but the pixel's position, the time, the effect's controls and
+(for a filter) the input picture, so every program finishes in a fixed number of steps. The TypeScript core
 (`packages/core/src/effects/pixel-language.ts`) is the specification. The Swift package ports the
 CPU evaluator and also generates Metal Shading Language from the same program
 (`PixelLanguage.swift`, `PixelMSL.swift`).
@@ -65,7 +65,37 @@ several lines. `//` starts a comment.
 | `normalize`                                                    | Length 1 (a zero vector stays zero)                                                              |
 | `hash(p)`                                                      | A random 0..1 for each whole-number cell of a vec2 (an integer hash, the same on every platform) |
 | `noise(p)`                                                     | Smooth value noise 0..1 over a vec2 (counts 4 steps)                                             |
+| `sample(p)`                                                    | The input picture at `p` (a vec2 in uv) as a vec4, straight alpha (counts 4 steps; see Filters)  |
 | `vec2() vec3() vec4()`                                         | From parts (`vec4(color, 1)`), or one number for every part                                      |
+
+## Filters
+
+A program that calls `sample` reads an input picture, so the effect is a **filter**: its
+description has `uses: ["filter"]` and an image input `source`. Any other program is a generator
+(`uses: ["generator"]`, no inputs). In the paint editor a filter runs on a layer's dried paint
+(`apply_effect`, `PAINT_EFFECT_PLACES.light`), like light or a colour grade from a provider.
+
+```
+// Lights the edges of the paint from one side.
+control light: color = #fff2c4 // Colour of the light.
+control angle: number = 135 range 0 360 // Where it comes from, in degrees.
+let dir = vec2(cos(angle / 180 * PI), sin(angle / 180 * PI)) * 1.5 / size
+let c = sample(uv)
+let edge = clamp(sample(uv - dir).a - sample(uv + dir).a + 0.5, 0, 1)
+out = vec4(mix(c.rgb * 0.6, mix(c.rgb, light, 0.5), edge), c.a)
+```
+
+- `p` is in uv, as `uv` is: 0..1 across and down from the top left, with pixel centres at
+  `(x + 0.5) / width`. `sample(uv)` is the pixel itself; a neighbour `dx, dy` pixels away is
+  `sample(uv + vec2(dx, dy) / size)`. The input can be a different size from the output; uv spans
+  each.
+- The result is the picture's straight-alpha RGBA, 0..1. Between pixel centres it is bilinear over
+  the four nearest pixels with colour weighted by alpha (transparent pixels add no colour, so the
+  edges of paint don't darken); where all four are transparent the colour is 0. Outside 0..1 it
+  clamps to the edge; a coordinate that is not a number reads the left or top edge.
+- With no input picture, `sample` reads transparent (0, 0, 0, 0). An authoring preview has none.
+- The TypeScript evaluator, the Swift one and the Metal kernel compute this with the same
+  arithmetic (`pixelSample`; the kernel does its own four reads rather than use a hardware sampler).
 
 ## Output
 
@@ -74,10 +104,10 @@ a number (`log(-1)`, `0 / 0`) becomes 0. Colours are sRGB values, not linear lig
 
 ## Limits
 
-| Limit                                                                 | Default           |
-| :-------------------------------------------------------------------- | :---------------- |
-| Source length                                                         | 65,536 characters |
-| Steps per pixel (each operator or function call is one; `noise` is 4) | 1,024             |
+| Limit                                                               | Default           |
+| :------------------------------------------------------------------ | :---------------- |
+| Source length                                                       | 65,536 characters |
+| Steps per pixel (each operator or call is one; `noise`, `sample` 4) | 1,024             |
 
 Errors and warnings come back as issues with a 1-based line and a message that says what to
 change. After an error the compiler goes on to the next line, so every bad line is reported once;

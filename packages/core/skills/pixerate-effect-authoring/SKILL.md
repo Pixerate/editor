@@ -50,10 +50,37 @@ out = vec4(ink, smoothstep(0.4, 0.6, wave))
 - **Functions:** `sin cos tan asin acos atan(x)` / `atan(y, x)`, `sqrt exp log abs sign floor ceil
   fract pow mod min max clamp mix step smoothstep`, `select(c, a, b)` (a where c > 0.5),
   `length distance dot normalize`, `hash(p)` and `noise(p)` (value noise 0..1 over a vec2),
-  `vec2() vec3() vec4()`.
+  `sample(p)` (the input picture, see below), `vec2() vec3() vec4()`.
 - **`out`** is the last line: a number (grey), a vec3 (opaque colour) or a vec4 (straight alpha).
-- **Budgets:** at most 64 KB of source and 1024 steps per pixel (`noise` counts 4); a save needs a
-  64×64 trial render within 100 ms. Share work with `let` rather than repeating expressions.
+- **Budgets:** at most 64 KB of source and 1024 steps per pixel (`noise` and `sample` count 4); a
+  save needs a 64×64 trial render within 100 ms. Share work with `let` rather than repeating
+  expressions (read each neighbour once with `let n = sample(...)`, then use its parts).
+
+### Filters: `sample(p)`
+
+An effect whose program calls `sample` is a **filter**: its description has `uses: ["filter"]`
+and an image input `source`, and in the paint editor it runs on a layer's dried paint with
+`apply_effect` (it is not offered for paint, paper, effect layers or fills). Without `sample` an
+effect is a generator.
+
+```
+// Lights the edges of the paint from one side.
+control light: color = #fff2c4 // Colour of the light.
+control angle: number = 135 range 0 360 // Where it comes from, in degrees.
+let dir = vec2(cos(angle / 180 * PI), sin(angle / 180 * PI)) * 1.5 / size
+let c = sample(uv)
+let edge = clamp(sample(uv - dir).a - sample(uv + dir).a + 0.5, 0, 1)
+out = vec4(mix(c.rgb * 0.6, mix(c.rgb, light, 0.5), edge), c.a)
+```
+
+- `p` is a vec2 in **uv** (the same space as `uv`: 0..1, y down, pixel centres), so `sample(uv)`
+  is the pixel itself and a neighbour is `sample(uv + vec2(dx, dy) / size)` with offsets in pixels.
+- It returns a vec4 with **straight alpha**, filtered bilinearly (colour weighted by alpha, so
+  transparent pixels don't darken edges) and clamped to the edge outside 0..1.
+- **Keep `c.a` in `out`** (`out = vec4(…, c.a)`) unless the filter is meant to change where there
+  is paint: `out` replaces the layer's pixels, and a vec3 `out` makes the whole layer opaque.
+- With no input (a preview in the authoring session) `sample` reads transparent, so judge a filter
+  by applying it, and undo to try other values.
 
 Errors come back from `effect_authoring_set_source` as `issues` with a line and a message that
 says what to change; warnings (an unused control or let) don't stop it compiling. While the source
@@ -73,7 +100,9 @@ doesn't compile, the session keeps the last controls that did, and `compiled` is
    `effect_authoring_set_paint_hint` (the templates come with one): which colour controls take the
    brush's colours, whether it follows the stroke (`map`), and whether it plays live.
 4. Use the id like any effect id: `set_effect_paint` (strokes), `set_paper_effect`,
-   `add_effect_layer`, `fill_layer_with_effect`. `search_effects` and `describe_effect` find it too.
+   `add_effect_layer`, `fill_layer_with_effect`. A filter (it calls `sample`) runs with
+   `apply_effect` on a painted layer instead (`search_effects` with `place: "light"` lists it).
+   `search_effects` and `describe_effect` find it too.
 5. `list_authored_effects` shows where each is used and anything stopping it drawing;
    `remove_authored_effect` removes one nothing uses; `close_effect_authoring` closes the session.
 
@@ -131,7 +160,7 @@ machine with no session or provider. Authoring needs the editor's `authoredEffec
 | Tool | Description and usage |
 | --- | --- |
 | `open_effect_authoring` | Paint editor: opens a pixel expression template (`pixel.blank`, `pixel.rings`, `pixel.clouds`), an authored effect (`authored.<name>`) or a provider effect for authoring; returns source, controls, values and issues. One at a time: save or close first. Call before the `effect_authoring_*` tools. |
-| `save_authored_effect` | Paint editor: trial-renders the open effect and saves it into the painting; returns its `authored.<name>` id, controls, keyframed controls and the trial ms. Then use the id with `set_effect_paint`, `set_paper_effect`, `add_effect_layer` or `fill_layer_with_effect`. Saving again makes a new id. |
+| `save_authored_effect` | Paint editor: trial-renders the open effect and saves it into the painting; returns its `authored.<name>` id, controls, keyframed controls and the trial ms. Then use the id with `set_effect_paint`, `set_paper_effect`, `add_effect_layer` or `fill_layer_with_effect`, or, for a filter (its source calls `sample`), with `apply_effect`. Saving again makes a new id. |
 | `list_authored_effects` | Paint editor: the painting's authored effects with language, controls, animated controls, where each is used and any problem drawing it, plus the policy and the open session. |
 | `remove_authored_effect` | Paint editor: removes an authored effect nothing uses (refused, saying where, while one is used). One undo step. |
 | `close_effect_authoring` | Paint editor: closes the session without saving; returns the closed effect's name or null. |

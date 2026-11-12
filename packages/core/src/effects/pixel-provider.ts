@@ -16,7 +16,11 @@ import type {
   EffectAuthoringIssue,
   EffectAuthoringSource,
 } from "./authoring.js";
-import { EffectDisposedError, UnknownEffectError } from "./errors.js";
+import {
+  EffectDisposedError,
+  EffectUnsupportedError,
+  UnknownEffectError,
+} from "./errors.js";
 import {
   createEffectPixels,
   resolveEffectValues,
@@ -28,6 +32,7 @@ import {
   PIXEL_DEFAULT_LIMITS,
   PIXEL_LANGUAGE,
   pixelControlSchema,
+  pixelProgramSamples,
   type PixelLimits,
   type PixelProgram,
 } from "./pixel-language.js";
@@ -142,6 +147,7 @@ export function pixelDescription(
     paint?: EffectPaintHint;
   },
 ): EffectDescription {
+  const filter = pixelProgramSamples(program);
   const properties: Record<string, Record<string, unknown>> = {};
   const defaults: Record<string, EffectValues[string]> = {};
   for (const c of program.controls) {
@@ -153,13 +159,13 @@ export function pixelDescription(
     name: meta.name,
     kind: "shader",
     category: "authored",
-    uses: ["generator"],
+    uses: [filter ? "filter" : "generator"],
     description: meta.description ?? "An effect written in pixel expressions.",
     tags: ["authored", "pixel"],
     transparent: program.out.size === 4,
     loop: meta.loop ?? false,
     ...(meta.duration ? { duration: meta.duration } : {}),
-    ...(meta.paint ? { paint: meta.paint } : {}),
+    ...(meta.paint && !filter ? { paint: meta.paint } : {}),
     controls: {
       type: "object",
       properties,
@@ -167,9 +173,18 @@ export function pixelDescription(
     } as EffectDescription["controls"],
     defaults,
     presets: [],
-    inputs: [],
+    inputs: filter ? [PIXEL_SOURCE_INPUT] : [],
   };
 }
+
+/** The input of a program that calls `sample`. */
+export const PIXEL_SOURCE_INPUT = {
+  name: "source",
+  kind: "image",
+  description:
+    "The picture sample(p) reads (straight-alpha RGBA8, any size; p is in uv). Without one, sample reads transparent.",
+  required: true,
+} as const;
 
 /** A CPU renderer for a compiled program (it has `renderSync`). */
 export function createPixelRenderer(
@@ -183,8 +198,21 @@ export function createPixelRenderer(
   const renderSync = (req: EffectRenderRequest): EffectPixels => {
     if (disposed) throw new EffectDisposedError(description.id);
     const values = resolveEffectValues(description, req.values ?? {});
+    const src = req.inputs?.source;
+    if (src && !(src as EffectPixels).data)
+      throw new EffectUnsupportedError(
+        `"${description.id}" takes its source as EffectPixels ({ width, height, data }), not a host image (supportsHostImages is false).`,
+        description.id,
+      );
     const out = createEffectPixels(width, height);
-    evaluator.render(width, height, req.time ?? 0, values, out.data);
+    evaluator.render(
+      width,
+      height,
+      req.time ?? 0,
+      values,
+      out.data,
+      (src as EffectPixels | undefined) ?? null,
+    );
     return out;
   };
   return {
@@ -287,7 +315,13 @@ export function createPixelEffectProvider(
       const t = templates.get(id);
       const r = describePixelSource(
         src,
-        { id, name: t?.name ?? id, loop: t?.loop, duration: t?.duration, paint: t?.paint },
+        {
+          id,
+          name: t?.name ?? id,
+          loop: t?.loop,
+          duration: t?.duration,
+          paint: t?.paint,
+        },
         limits,
       );
       return { description: r.description, issues: r.issues };
