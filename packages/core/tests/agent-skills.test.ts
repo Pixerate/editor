@@ -30,6 +30,8 @@ import { createSpreadsheetStyleToolProvider, spreadsheetStyleDomain } from '../s
 import { createDiagramStyleToolProvider, diagramStyleDomain } from '../src/diagram/style';
 import { canvasStyleDomain, createCanvasStyleToolProvider } from '../src/canvas/style';
 import { createTypographyStyleToolProvider, typographyStyleDomain } from '../src/typography/style';
+import { createImageStyleToolProvider, imageStyleDomain } from '../src/image-editor/style';
+import { createPaintStyleToolProvider, paintStyleDomain } from '../src/paint-editor/style';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -109,7 +111,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -168,6 +170,7 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-image-editor': [
 			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
+			...toolNames(createImageStyleToolProvider(new ImageEditorController(), styles)),
 			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' })),
 			// Its tools are listed only while a segmentation provider is set.
 			...toolNames(createImageSegmentationToolProvider(new ImageEditorController({ segmentation: { segment: async () => [] } }), { id: 'img-segmentation' })),
@@ -175,6 +178,7 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-paint-editor': [
 			...toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
+			...toolNames(createPaintStyleToolProvider(new PaintEditorController({ width: 64, height: 64 }), styles)),
 			...toolNames(createPaintEffectsToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-effects' })),
 			...toolNames(createPaintProposalToolProvider(createPaintProposals({ controller: new PaintEditorController({ width: 64, height: 64 }) }))),
 			...toolNames(createDocumentToolProvider(createPaintEditorDocument(new PaintEditorController({ width: 64, height: 64 })), { history: false, store: documentStore() }))
@@ -297,9 +301,11 @@ const FACTORIES: Record<string, string> = {
 	createDocumentToolProvider:
 		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens, pixerate-canvas, pixerate-image-editor, pixerate-paint-editor',
 	createImageEditorToolProvider: 'pixerate-image-editor',
+	createImageStyleToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createImageSegmentationToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
+	createPaintStyleToolProvider: 'pixerate-paint-editor',
 	createFerroTools: 'pixerate-paint-editor',
 	createTimeMachineTools: 'pixerate-paint-editor',
 	createPaintEffectsToolProvider: 'pixerate-paint-editor',

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
 import { PaintEditor, useMutationRequests, usePaintDirector, usePaintEditor, usePaintEffectsTools, usePaintProposals } from '@pixerate/editor-react/paint-editor';
-import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, createPaintProposalToolProvider } from '@pixerate/editor/paint-editor';
+import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, createPaintProposalToolProvider, createPaintStyleToolProvider } from '@pixerate/editor/paint-editor';
+import { demoStyles } from '../houseStyles';
 import { createOriginMiddleware } from '@pixerate/editor/tools';
 import { demoBrushLibrary } from '../demoBrushes';
 import { demoStickers } from '../demoStickers';
@@ -29,6 +30,9 @@ function PaintView() {
     [editor.controller, director]
   );
   useAgentToolProvider(demoToolRegistry, provider);
+  // House style: check_paint_style / fix_paint_style join the paint toolset.
+  const styleProvider = useMemo(() => createPaintStyleToolProvider(editor.controller, demoStyles, { namespace: 'paint' }), [editor.controller]);
+  useAgentToolProvider(demoToolRegistry, styleProvider);
   // The brush library the editor paints from (brushes__* tools): find, create, check and share
   // facet brushes, then paint__set_brush picks one; previews are test strokes on the current paper.
   const brushTools = useMemo(() => createPaintBrushLibraryToolProvider(editor.controller), [editor.controller]);

@@ -169,6 +169,23 @@ objects (React Flow) or shape paints; `createCanvasStyleToolProvider({ getNodes,
 history })` records `fix_canvas_style` as one undoable command. Typography checks the font
 picker's selection; `fix_typography_style` snaps it to the house type in one change.
 
+### `image-editor.json` and `paint-editor.json`
+
+```json
+{ "aspectRatios": ["1:1", "4:5", "16:9"], "minSize": { "width": 1080 },
+  "adjustments": { "saturation": { "min": -20, "max": 20 } }, "checks": ["aspect-ratio", "min-size", "adjustment-ranges"] }
+```
+
+```json
+{ "papers": ["cold-pressed", "hot-pressed"], "brushes": ["watercolor-round", "pencil-hb"], "maxLayers": 12,
+  "checks": ["paper", "brushes", "max-layers", "palette-only"] }
+```
+
+An aspect-ratio finding carries the centred crop that reaches the nearest house ratio, for
+`set_crop`; `fix_image_style` clamps the base adjustments. `fix_paint_style` switches to the house
+paper and brush; strokes already painted stay as they are. The Swift paint editor does not read
+house styles yet.
+
 ## Layers
 
 A host stacks stores from general to specific, for example `org`, `workspace`, `user`,

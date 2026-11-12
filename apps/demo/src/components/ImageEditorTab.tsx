@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import SelectionWorker from '@pixerate/editor/image-editor/selection-worker?worker';
 import { ImageEditor, ImageEditorCanvas, useAgentToolProvider, useImageEditor, type ImageEditorCanvasMode } from '@pixerate/editor-react';
-import { createImageEditorToolProvider, createImageEffectsToolProvider, createImageStickerHost } from '@pixerate/editor/image-editor';
+import { createImageEditorToolProvider, createImageEffectsToolProvider, createImageStickerHost, createImageStyleToolProvider } from '@pixerate/editor/image-editor';
+import { demoStyles } from '../houseStyles';
 import { createStickerToolProvider } from '@pixerate/editor/stickers';
 import { StickerInsertPanel } from '@pixerate/editor-react/stickers';
 import { demoStickers } from '../demoStickers';
@@ -126,6 +127,9 @@ function ImageEditorView({ image, onPickImage }: { image: string; onPickImage: (
   // Agents get the image__* tools (adjustments, layers, selections, previews).
   const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, provider);
+  // House style: check_image_style / fix_image_style join the image toolset.
+  const styleProvider = useMemo(() => createImageStyleToolProvider(editor.controller, demoStyles, { namespace: 'image' }), [editor.controller]);
+  useAgentToolProvider(demoToolRegistry, styleProvider);
   // Save / load (the editor's own tools have undo), with layer pixels kept as assets; and autosave.
   useDemoDocumentTools(editor.editorDocument, { namespace: 'image', skill: 'pixerate-image-editor', history: false });
   // The demo-wide effects provider (the built-in test effects, or Flair once it is published).

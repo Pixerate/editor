@@ -16,6 +16,8 @@ import { spreadsheetStyleDomain } from '../src/spreadsheet/style';
 import { diagramStyleDomain } from '../src/diagram/style';
 import { canvasStyleDomain } from '../src/canvas/style';
 import { typographyStyleDomain } from '../src/typography/style';
+import { imageStyleDomain } from '../src/image-editor/style';
+import { paintStyleDomain } from '../src/paint-editor/style';
 
 type Coverage = StyleDomain<any> | { pending: `#${number}` } | { none: string };
 
@@ -29,8 +31,8 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-canvas': canvasStyleDomain,
 	'pixerate-vector': { pending: '#779' },
 	'pixerate-diagram': diagramStyleDomain,
-	'pixerate-image-editor': { pending: '#779' },
-	'pixerate-paint-editor': { pending: '#779' },
+	'pixerate-image-editor': imageStyleDomain,
+	'pixerate-paint-editor': paintStyleDomain,
 	'pixerate-animation-editor': { pending: '#779' },
 	'pixerate-video-editor': { pending: '#779' },
 	'pixerate-generation': { pending: '#779' },

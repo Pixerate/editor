@@ -4,6 +4,8 @@ import { spreadsheetStyleDomain } from "@pixerate/editor/spreadsheet";
 import { diagramStyleDomain } from "@pixerate/editor/diagram";
 import { canvasStyleDomain } from "@pixerate/editor/canvas";
 import { typographyStyleDomain } from "@pixerate/editor/typography";
+import { imageStyleDomain } from "@pixerate/editor/image-editor";
+import { paintStyleDomain } from "@pixerate/editor/paint-editor";
 import { TokenStore, createTokenStyleSource, tokensStyleDomain } from "@pixerate/editor/tokens";
 import { richTextStyleDomain } from "@pixerate/editor";
 import { demoToolRegistry } from "./agentTools";
@@ -56,6 +58,17 @@ Corners 0, 4 or 8. Strokes 1 or 2. Everything on the 8-unit grid. Type from the 
 `,
   "acme-design/canvas.json": JSON.stringify({ cornerRadii: [0, 4, 8], strokeWidths: [1, 2], fontSizes: [12, 14, 16, 20, 24, 32], grid: 8, checks: ["corner-radii", "stroke-widths", "font-sizes", "grid"] }, null, 2),
   "acme-design/typography.json": JSON.stringify({ weights: [400, 600, 700], sizes: [12, 14, 16, 20, 24, 32], lineHeight: { min: 1.3, max: 1.7 }, checks: ["weights", "sizes", "line-height"] }, null, 2),
+  // The org's rules for photos and paintings (check_image_style, check_paint_style).
+  "acme-pictures/SKILL.md": `---
+name: acme-pictures
+description: Acme's rules for photos and paintings.
+domains: [image-editor, paint-editor]
+---
+
+Photos ship square or 4:5 with a natural look. Paintings on watercolour paper.
+`,
+  "acme-pictures/image-editor.json": JSON.stringify({ aspectRatios: ["1:1", "4:5", "16:9"], adjustments: { saturation: { min: -30, max: 30 } }, checks: ["aspect-ratio", "adjustment-ranges"] }, null, 2),
+  "acme-pictures/paint-editor.json": JSON.stringify({ papers: ["cold-pressed", "hot-pressed", "rough-watercolor"], maxLayers: 20, checks: ["paper", "max-layers"] }, null, 2),
   // The org's writing style for documents (the Documents tab): checked by check_rich_text_style.
   "acme-writing/SKILL.md": `---
 name: acme-writing
@@ -142,7 +155,7 @@ export const demoStyles = createStyleResolver({
     { id: "org", store: demoOrgStyles, locked: true },
     { id: "user", store: demoUserStyles },
   ],
-  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain],
+  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain],
   tokens: createTokenStyleSource(demoBrandTokens),
 });
 
