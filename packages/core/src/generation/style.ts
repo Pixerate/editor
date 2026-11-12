@@ -173,7 +173,7 @@ export function createGenerationStyleToolProvider(styles: StyleResolver, options
 		description:
 			'Checks a generation request before anything is spent (see get_style with domain "generation"): models, aspect-ratios, qualities, limits (count, duration), prompt-suffix (the house look), negative-terms and banned-terms. Returns findings with a severity, a sentence saying how to fix it and a target { field, value? } (the house value when certain); the checks that ran and those skipped. Generates nothing.',
 		inputSchema: { type: 'object', properties: { request: REQUEST_SCHEMA }, required: ['request'], additionalProperties: false },
-		annotations: { title: 'Check a generation request', ...READ },
+		annotations: { title: 'Check a generation request against the house style', ...READ },
 		handler: async ({ request }) => {
 			const { style, ...report } = await run(request as GenerationRequest);
 			return {

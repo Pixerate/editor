@@ -36,6 +36,10 @@ import { animationStyleDomain, createAnimationStyleToolProvider } from '../src/a
 import { createVideoStyleToolProvider, videoStyleDomain } from '../src/video-editor/style';
 import { createGenerationStyleToolProvider, generationStyleDomain } from '../src/generation/style';
 import { createParametersStyleToolProvider, parametersStyleDomain } from '../src/parameters/style';
+import { createVectorStyleToolProvider, vectorStyleDomain } from '../src/vector/style';
+import { createEffectAuthoringStyleToolProvider, effectAuthoringStyleDomain } from '../src/effects/authoring-style';
+import { createStickerStyleToolProvider, stickerStyleDomain } from '../src/stickers/style';
+import { brushStyleDomain, createBrushStyleToolProvider } from '../src/brushes/style';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -115,7 +119,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain, vectorStyleDomain, effectAuthoringStyleDomain, stickerStyleDomain, brushStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -158,7 +162,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createCanvasAnimationCommands(stub)),
 			...toolNames(createDocumentToolProvider(createCanvasEditorDocument({ getNodes: () => [], setNodes: () => {}, getEdges: () => [], setEdges: () => {}, history: new HistoryManager() }), { store: documentStore() }))
 		],
-		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) })), ...toolNames(createDocumentToolProvider(createVectorEditorDocument(new VectorEditorController()), { store: documentStore() }))],
+		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) })), ...toolNames(createDocumentToolProvider(createVectorEditorDocument(new VectorEditorController()), { store: documentStore() })), ...toolNames(createVectorStyleToolProvider(new VectorEditorController(), styles))],
 		'pixerate-chart': [
 			...toolNames(createChartToolProvider(new ChartController(), { id: 'chart' })),
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
@@ -260,13 +264,13 @@ function expectedBySkill(): Record<string, string[]> {
 				capture: async () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 			});
 			// The paint editor's authoring tools (its own five plus the shared ones above).
-			return [...new Set([...toolNames(authoringProvider), ...toolNames(createPaintEffectAuthoringToolProvider(new PaintEditorController({ width: 64, height: 64 })))])];
+			return [...new Set([...toolNames(authoringProvider), ...toolNames(createPaintEffectAuthoringToolProvider(new PaintEditorController({ width: 64, height: 64 }))), ...toolNames(createEffectAuthoringStyleToolProvider({ session: () => authoringSession }, styles))])];
 		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
 		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel())), ...toolNames(createTypographyStyleToolProvider(new FontPickerModel(), styles))],
-		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) })),
+		'pixerate-stickers': [...toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) })), ...toolNames(createStickerStyleToolProvider(styles, { provider: () => editorStickers() }))],
 		// preview_brush registers only with a host renderer.
-		'pixerate-brushes': toolNames(createBrushLibraryToolProvider(createBrushLibrary(), { renderPreview: () => ({ data: '', mimeType: 'image/png' }) }))
+		'pixerate-brushes': [...toolNames(createBrushLibraryToolProvider(createBrushLibrary(), { renderPreview: () => ({ data: '', mimeType: 'image/png' }) })), ...toolNames(createBrushStyleToolProvider(createBrushLibrary(), styles))]
 	};
 	doc.destroy();
 	return result;
@@ -341,6 +345,10 @@ const FACTORIES: Record<string, string> = {
 	createGradientToolProvider: 'pixerate-color',
 	createTypographyToolProvider: 'pixerate-typography',
 	createTypographyStyleToolProvider: 'pixerate-typography',
+	createVectorStyleToolProvider: 'pixerate-vector',
+	createEffectAuthoringStyleToolProvider: 'pixerate-effect-authoring',
+	createStickerStyleToolProvider: 'pixerate-stickers',
+	createBrushStyleToolProvider: 'pixerate-brushes',
 	createFontPickerToolProvider: 'pixerate-typography',
 	createEffectAuthoringToolProvider: 'pixerate-effect-authoring',
 	createPaintEffectAuthoringToolProvider: 'pixerate-effect-authoring',

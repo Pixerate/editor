@@ -22,6 +22,10 @@ import { animationStyleDomain } from '../src/animation-editor/style';
 import { videoStyleDomain } from '../src/video-editor/style';
 import { generationStyleDomain } from '../src/generation/style';
 import { parametersStyleDomain } from '../src/parameters/style';
+import { vectorStyleDomain } from '../src/vector/style';
+import { effectAuthoringStyleDomain } from '../src/effects/authoring-style';
+import { stickerStyleDomain } from '../src/stickers/style';
+import { brushStyleDomain } from '../src/brushes/style';
 
 type Coverage = StyleDomain<any> | { pending: `#${number}` } | { none: string };
 
@@ -33,7 +37,7 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-rich-text': richTextStyleDomain,
 	'pixerate-spreadsheet': spreadsheetStyleDomain,
 	'pixerate-canvas': canvasStyleDomain,
-	'pixerate-vector': { pending: '#779' },
+	'pixerate-vector': vectorStyleDomain,
 	'pixerate-diagram': diagramStyleDomain,
 	'pixerate-image-editor': imageStyleDomain,
 	'pixerate-paint-editor': paintStyleDomain,
@@ -41,10 +45,10 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-video-editor': videoStyleDomain,
 	'pixerate-generation': generationStyleDomain,
 	'pixerate-parameters': parametersStyleDomain,
-	'pixerate-effect-authoring': { pending: '#779' },
+	'pixerate-effect-authoring': effectAuthoringStyleDomain,
 	'pixerate-typography': typographyStyleDomain,
-	'pixerate-stickers': { pending: '#779' },
-	'pixerate-brushes': { pending: '#779' }
+	'pixerate-stickers': stickerStyleDomain,
+	'pixerate-brushes': brushStyleDomain
 };
 
 /** The reference skills: the first table of skills/README.md, before "## Workflow skills". */

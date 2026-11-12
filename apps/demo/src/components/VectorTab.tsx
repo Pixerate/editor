@@ -11,7 +11,8 @@ import { createGenerationStyleToolProvider } from "@pixerate/editor/generation";
 import { demoStyles } from "../houseStyles";
 import { StickerInsertPanel } from "@pixerate/editor-react/stickers";
 import { createStickerToolProvider } from "@pixerate/editor/stickers";
-import { createVectorStickerHost } from "@pixerate/editor/vector";
+import { createVectorStickerHost, createVectorStyleToolProvider } from "@pixerate/editor/vector";
+import { createStickerStyleToolProvider } from "@pixerate/editor/stickers";
 import { demoStickers } from "../demoStickers";
 import { EditorPage, EditorPanel } from "./EditorPage";
 import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
@@ -343,6 +344,9 @@ function VectorDemo() {
   const stickerHost = useMemo(() => createVectorStickerHost(controller), [controller]);
   const stickerTools = useMemo(() => createStickerToolProvider({ provider: () => demoStickers, insert: stickerHost, id: "vector-stickers", namespace: "vectorstickers" }), [stickerHost]);
   useAgentToolProvider(demoToolRegistry, stickerTools);
+  // House style: check_vector_style / fix_vector_style (vectorstyle__*) and check_sticker_style before placing stickers (stickerstyle__*).
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createVectorStyleToolProvider(controller, demoStyles, { namespace: "vectorstyle" }), [controller]));
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createStickerStyleToolProvider(demoStyles, { provider: () => demoStickers, namespace: "stickerstyle" }), []));
   const editorDocument = useDemoEditorDocument(controller, createVectorEditorDocument, { namespace: "vector", skill: "pixerate-vector", history: true });
   const [svg, setSvg] = useState<string | null>(null);
   // Fonts read from files make text draw as glyph outlines (Create Outlines, effects on text).

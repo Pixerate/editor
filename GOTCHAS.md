@@ -4588,3 +4588,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A style skill with `color: #0b5fff` (or `primary: #0b5fff` under a frontmatter `brand:` profile) loads with that value `null`, so the profile fails its schema or the colour is missing.
 - **Root Cause**: Style frontmatter is YAML (`parseFrontmatter`), where ` #` starts a comment. Inside a flow list (`[#0b5fff]`) the `#` follows `[`, not a space, so it is kept, which makes the mistake easy to miss.
 - **Solution / Workaround**: Quote colours in frontmatter (`"#0b5fff"`), or keep profiles in `<domain>.json` files. `checkStyleSkill` / `pixerate-style check` report the resulting schema error with the field.
+
+### [core/style] A Style Fix Tool Missing From the Annotations Conformance Test Ships Mismatched Titles
+
+- **Issue / Symptom**: `check_generation_style` shipped with `annotations.title` "Check a generation request" while its tool title said "... against the house style". Nothing failed until the provider was added to `tests/command-tools.test.ts`.
+- **Root Cause**: `agent-skills.test.ts` only checks that a skill documents each tool; the title and annotation checks run only on the providers `command-tools.test.ts` registers, and the #779 domain providers were never added there.
+- **Solution / Workaround**: Register every new `create<Domain>StyleToolProvider` in the house-style block of `command-tools.test.ts` (it now holds all fifteen), and keep `annotations.title` equal to the tool `title`.
+
+### [core/vector] `setDocument` Clears the Selection, So a One-Step Fix Must Restore It
+
+- **Issue / Symptom**: Applying many node edits with `setDocument` (as `fix_vector_style` does) drops the user's selection, so the next `vector.setStyle` with no `ids` is refused with "Nothing is selected."
+- **Root Cause**: `VectorEditorController.setDocument` is the only public way to apply many node edits as one undo step, and it resets the selection, anchors, pen and editing path as it would for a new document.
+- **Solution / Workaround**: Read `getState().selection` before `setDocument(next, { label })` and `select()` it again after (ids that survive the edit stay valid). The selection is not part of history, so this adds no undo step.

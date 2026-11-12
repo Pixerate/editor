@@ -37,6 +37,21 @@ import { renderCanvasBrushPreview } from '../src/canvas/brushstroke';
 import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
 import { chartStyleDomain, createChartStyleToolProvider } from '../src/chart';
 import { createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
+import { createSpreadsheetStyleToolProvider, spreadsheetStyleDomain } from '../src/spreadsheet/style';
+import { createDiagramStyleToolProvider, diagramStyleDomain } from '../src/diagram/style';
+import { canvasStyleDomain, createCanvasStyleToolProvider } from '../src/canvas/style';
+import { createTypographyStyleToolProvider, typographyStyleDomain } from '../src/typography/style';
+import { createImageStyleToolProvider, imageStyleDomain } from '../src/image-editor/style';
+import { createPaintStyleToolProvider, paintStyleDomain } from '../src/paint-editor/style';
+import { animationStyleDomain, createAnimationStyleToolProvider } from '../src/animation-editor/style';
+import { createVideoStyleToolProvider, videoStyleDomain } from '../src/video-editor/style';
+import { createGenerationStyleToolProvider, generationStyleDomain } from '../src/generation/style';
+import { createParametersStyleToolProvider, parametersStyleDomain } from '../src/parameters/style';
+import { createVectorStyleToolProvider, vectorStyleDomain } from '../src/vector/style';
+import { createEffectAuthoringStyleToolProvider, effectAuthoringStyleDomain } from '../src/effects/authoring-style';
+import { createStickerStyleToolProvider, stickerStyleDomain } from '../src/stickers/style';
+import { brushStyleDomain, createBrushStyleToolProvider } from '../src/brushes/style';
+import { richTextStyleDomain, createRichTextStyleToolProvider } from '../src/richTextStyle';
 import { createTypographyToolProvider, createFontPickerToolProvider, FontPickerModel } from '../src/typography';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { baseToolName } from '../src/tools';
@@ -277,6 +292,30 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			registry.register(createStyleToolProvider(styles));
 			registry.register(createChartStyleToolProvider(new ChartController(), styles, { namespace: 'chartstyle' }));
 			registry.register(createTokensStyleToolProvider(new TokenStore(), styles, { namespace: 'tokenstyle' }));
+		}
+		{
+			// The house-style check and fix tools of every other editor (#779).
+			const styles = createStyleResolver({
+				layers: [{ id: 'org', store: memoryStyleStore() }],
+				domains: [richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain, vectorStyleDomain, effectAuthoringStyleDomain, stickerStyleDomain, brushStyleDomain]
+			});
+			const styleDoc = new Editor({ extensions: createRichTextPreset(), content: '<p>x</p>' });
+			registry.register(createRichTextStyleToolProvider(styleDoc, styles, { namespace: 'richtextstyle' }));
+			registry.register(createSpreadsheetStyleToolProvider(new SpreadsheetController({ document: { columns: [{ id: 'c0', key: 'A', title: 'A', type: 'freeform' as const }], rows: [{ id: 'r0', index: 0, type: 'freeform' as const }] } }), styles, { namespace: 'sheetstyle' }));
+			registry.register(createDiagramStyleToolProvider(new DiagramController(), styles, { namespace: 'diagramstyle' }));
+			registry.register(createCanvasStyleToolProvider(styles, { getNodes: () => [], setNodes: () => {}, namespace: 'canvasstyle' }));
+			registry.register(createTypographyStyleToolProvider(new FontPickerModel(), styles, { namespace: 'typestyle' }));
+			registry.register(createImageStyleToolProvider(new ImageEditorController(), styles, { namespace: 'imagestyle' }));
+			registry.register(createPaintStyleToolProvider(new PaintEditorController({ width: 64, height: 64 }), styles, { namespace: 'paintstyle' }));
+			registry.register(createAnimationStyleToolProvider(new AnimationEditorController(), styles, { namespace: 'animstyle' }));
+			registry.register(createVideoStyleToolProvider(new VideoEditorController(), styles, { namespace: 'videostyle' }));
+			registry.register(createGenerationStyleToolProvider(styles, { namespace: 'genstyle' }));
+			registry.register(createParametersStyleToolProvider(new ParametersController({ schema: { fields: [] } }), styles, { namespace: 'paramstyle' }));
+			registry.register(createVectorStyleToolProvider(new VectorEditorController(), styles, { namespace: 'vectorstyle' }));
+			const styleSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;
+			registry.register(createEffectAuthoringStyleToolProvider({ session: () => styleSession }, styles, { namespace: 'effectstyle' }));
+			registry.register(createStickerStyleToolProvider(styles, { namespace: 'stickerstyle', provider: () => editorStickers() }));
+			registry.register(createBrushStyleToolProvider(createBrushLibrary(), styles, { namespace: 'brushstyle' }));
 		}
 		{
 			// Commands listed as tools of their own (the canvas gestures and listBrushes).

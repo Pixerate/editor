@@ -218,6 +218,39 @@ Generation is checked before anything is spent: `check_generation_style` and
 `apply_generation_style` take the request (as `plan_generation` does) and the second returns it
 in the house style, without generating. `fix_parameters_style` sets the house values in one step.
 
+### `vector.json` and `effect-authoring.json`
+
+```json
+{ "strokeWidths": [1, 2, 4], "cornerRadii": [4, 8], "checks": ["stroke-widths", "corner-radii", "palette-only", "fonts-allowed"] }
+```
+
+```json
+{ "languages": ["pixel"], "maxDuration": 4000, "loop": true, "presets": ["Subtle", "Strong"],
+  "checks": ["languages", "timing", "presets", "palette-only"] }
+```
+
+`fix_vector_style` snaps stroke widths and live corner radii to the nearest house value in one
+undo step; the brand checks run on solid fills, strokes, text and the artboard. Effect authoring
+checks the effect open in a session (`createEffectAuthoringStyleToolProvider({ session })`):
+`fix_effect_authoring_style` sets the house timing in one step, and the house presets and colour
+controls are left to the agent. The Swift vector editor does not read house styles yet.
+
+### `stickers.json` and `brushes.json`
+
+```json
+{ "libraries": ["acme-brand"], "commercialOnly": true, "allowAiGenerated": false, "bannedTags": ["food"],
+  "checks": ["libraries", "commercial", "ai-art", "banned-tags", "palette-only"] }
+```
+
+```json
+{ "media": ["paint", "dry"], "requireSourceLicence": true, "checks": ["media", "source-licences", "palette-only"] }
+```
+
+These are about which assets the house uses, so their checks only read: `check_sticker_style`
+checks stickers by ref before they are placed and returns the `find_stickers` filters that keep a
+search in the house style; `check_brush_style` checks the user's saved brushes, or any brushes by
+id before painting with them.
+
 ## Layers
 
 A host stacks stores from general to specific, for example `org`, `workspace`, `user`,

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Paintbrush } from "lucide-react";
-import { BRUSH_HOST_PROFILES, checkBrush, createBrushLibraryToolProvider, importBrushFile, type BrushPreviewRenderer } from "@pixerate/editor/brushes";
+import { BRUSH_HOST_PROFILES, checkBrush, createBrushLibraryToolProvider, createBrushStyleToolProvider, importBrushFile, type BrushPreviewRenderer } from "@pixerate/editor/brushes";
+import { demoStyles } from "../houseStyles";
 import { BrushLibraryBrowser, BrushLibraryEditor, useBrushLibrary } from "@pixerate/editor-react/brushes";
 import { useAgentToolProvider } from "@pixerate/editor-react";
 import { renderCanvasBrushPreview } from "@pixerate/editor/canvas";
@@ -44,6 +45,8 @@ function BrushesView() {
   // Agents get the same library, for the host chosen here (brushes__*).
   const tools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile, renderPreview: PREVIEWS[host] }), [profile, host]);
   useAgentToolProvider(demoToolRegistry, tools);
+  // House style: check_brush_style on the saved brushes, or any by id (brushstyle__*).
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createBrushStyleToolProvider(demoBrushLibrary, demoStyles, { namespace: "brushstyle" }), []));
 
   const attempt = async (fn: () => Promise<string>) => {
     try {

@@ -26,9 +26,43 @@ import {
 } from '../tools/index.js';
 import { chartStyleDomain } from '../chart/style.js';
 import { tokensStyleDomain } from '../tokens/style.js';
+import { richTextStyleDomain } from '../richTextStyle.js';
+import { spreadsheetStyleDomain } from '../spreadsheet/style.js';
+import { diagramStyleDomain } from '../diagram/style.js';
+import { canvasStyleDomain } from '../canvas/style.js';
+import { typographyStyleDomain } from '../typography/style.js';
+import { imageStyleDomain } from '../image-editor/style.js';
+import { paintStyleDomain } from '../paint-editor/style.js';
+import { animationStyleDomain } from '../animation-editor/style.js';
+import { videoStyleDomain } from '../video-editor/style.js';
+import { generationStyleDomain } from '../generation/style.js';
+import { parametersStyleDomain } from '../parameters/style.js';
+import { vectorStyleDomain } from '../vector/style.js';
+import { effectAuthoringStyleDomain } from '../effects/authoring-style.js';
+import { stickerStyleDomain } from '../stickers/style.js';
+import { brushStyleDomain } from '../brushes/style.js';
 
-/** The domains the command knows. */
-export const STYLE_CLI_DOMAINS: readonly StyleDomain<any>[] = [chartStyleDomain, tokensStyleDomain, brandStyleDomain];
+/** The domains the command knows: every editor domain this package ships, and the brand. */
+export const STYLE_CLI_DOMAINS: readonly StyleDomain<any>[] = [
+	chartStyleDomain,
+	tokensStyleDomain,
+	richTextStyleDomain,
+	spreadsheetStyleDomain,
+	diagramStyleDomain,
+	canvasStyleDomain,
+	typographyStyleDomain,
+	imageStyleDomain,
+	paintStyleDomain,
+	animationStyleDomain,
+	videoStyleDomain,
+	generationStyleDomain,
+	parametersStyleDomain,
+	vectorStyleDomain,
+	effectAuthoringStyleDomain,
+	stickerStyleDomain,
+	brushStyleDomain,
+	brandStyleDomain
+];
 
 
 /** A skill folder's text files keyed by relative path, and what was left out. */

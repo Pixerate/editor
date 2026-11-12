@@ -20,6 +20,9 @@ none, it is the editor's own stamps (`editorStickers()`: `editor:dot`, `editor:s
    be sold or used in marketing.
 2. **Check.** `describe_sticker` when the choice matters: its licence (and the attribution line
    it asks for), whether the art is `aiGenerated`, its `variants`, dominant colours and outline.
+   When the host has a house style for stickers (`get_style` with `domain: "stickers"`), run
+   `check_sticker_style` on your picks (with the tint you will use) before placing them, and
+   search with the `filters` it returns (`commercial`, `collection`).
 3. **Use.** Pass refs to the editor that places them: in the paint editor, a sticker brush
    (`set_brush` `tip.stamps`, then `paint_stroke`) sprays them and `add_stickers` places
    them exactly. In the vector, image and canvas editors, `insert_sticker` puts one in (`x`,
@@ -68,6 +71,7 @@ none, it is the editor's own stamps (`editorStickers()`: `editor:dot`, `editor:s
 
 | Tool | Use |
 | --- | --- |
+| `check_sticker_style` | Check stickers by `ref` (with the `color` they will be tinted) against the house style before placing them: libraries, collections, commercial licence, AI art, banned tags, and the brand's colours on tints. Returns findings with a `target` `{ ref }`, the checks that `ran` and were `skipped`, and `filters` for `find_stickers` that keep a search in the house style. Unknown refs are refused with the closest ones. Read-only. |
 | `find_stickers` | Search or list the library: `query`, `category`, `collection`, `tags`, `commercial`, `limit`, `after`. Returns `items` (each `ref`, name, category, collection, tags, width, height, formats, tintable, aiGenerated, variants, animated, frameCount, frameDelay, licence), `total`, `next`, `categories`, `collections`. Changes nothing. |
 | `insert_sticker` | Put one sticker (`ref`) into the vector, image or canvas editor, centred at `x`, `y` (default the middle), `width` wide (default natural), tinted with `color` when tintable, in its dark `variant` on a dark background (or the one passed). One undo step. Returns the new group, layer or node `id`, the size, the `variant` used and the licence. |
 | `describe_sticker` | One sticker by `ref`: everything `find_stickers` returns plus `silhouette` (SVG path data) and `colours`. Unknown refs are refused with the closest ones. Changes nothing. |

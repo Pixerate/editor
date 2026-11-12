@@ -47,6 +47,8 @@ This skill is the method. `pixerate-effect-authoring` has the full tool referenc
    `effect_authoring_set_keyframe` per control at the times that matter, with `easing` into the
    next keyframe. For a loop, the last keyframe's value equals the first's.
    **Check:** `tracks` list the control with the keyframe count you meant.
+   With a house style, `check_effect_authoring_style` before you hand it over: it names any
+   missing house preset and fixes the timing with `fix_effect_authoring_style`.
 6. **Preview** with `effect_authoring_seek` to key times and `effect_authoring_view`.
 7. **Source last.** `effect_authoring_get_source` / `effect_authoring_set_source` only when no
    control can produce the look; read the returned issues and fix them.
@@ -94,3 +96,4 @@ at 0 (0), 1500 (1, `ease-in-out`) and 3000 (0, `ease-in-out`).
 - `effect_authoring_set_timing`, `effect_authoring_set_keyframe`, `effect_authoring_remove_keyframe`, `effect_authoring_clear_track`: animate
 - `effect_authoring_get_source`, `effect_authoring_set_source`: edit the shader when needed
 - `effect_authoring_undo`, `effect_authoring_redo`: take back a step
+- `check_effect_authoring_style`, `fix_effect_authoring_style`: hold the look to the house timing, presets and colours

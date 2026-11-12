@@ -82,6 +82,10 @@ the pitfalls, and uses the commands below.
 5. **Check.** `vector.list` again: bounds where you meant them, no stray nodes, sensible names.
    `vector.exportSvg` gives the final markup; review it, or render it if you can, before handing
    it over.
+6. **House style.** When the host has one (`get_style` with `domain: "vector"`), run
+   `check_vector_style`. `fix_vector_style` snaps stroke widths and corner radii to the house
+   values in one step; recolour what `palette-only` flags with `vector.setStyle` and change fonts
+   `fonts-allowed` flags with `vector.setTextStyle`.
 
 ## Best practices
 
@@ -150,6 +154,8 @@ the pitfalls, and uses the commands below.
 | --- | --- |
 | `vector.setStyle` | Set `fill`, `stroke`, `strokeWidth`, `strokeLinecap` (butt, round, square), `strokeLinejoin` (miter, round, bevel), `strokeDasharray`, `fillRule` (nonzero, evenodd), `strokeAlign` (center, inside, outside; closed shapes only), `startArrow` / `endArrow` (triangle, arrow, open, circle, square, bar, or null), `arrowAlign` (extend, tip), `startArrowScale` / `endArrowScale` (multiples of stroke width, default 1), `strokeWidthProfile` on `ids`. Groups apply to every path inside. Pass at least one field. |
 | `vector.setGradient` | Edit the gradient of the fill (`target` default) or stroke of `ids`: `type` (linear, radial, conic, reflected, diamond), `stops`, `angle` (degrees, 0 up, clockwise), `cx` / `cy` / `r`, explicit `start` / `end` / `width` / `focal`, `units`, `spread`, `interpolation` (srgb default, linear, oklab), `smoothness`, `strokeMode`, `aspect`, `reverse`. Missing fields keep their value; a solid colour becomes a gradient from it to white. Returns the gradient. |
+| `check_vector_style` | Check the drawing against the house style: stroke widths, corner radii, and the brand's colours (solid fills, strokes, text, the artboard) and fonts. Returns findings with a `target` (`{ node, property, value? }`, `property` one of `strokeWidth`, `corner` with `subpath` and `anchor`, `fill`, `stroke`, `fontFamily`; or `{ background: true }`) and the checks that `ran` and were `skipped`. |
+| `fix_vector_style` | Snap every stroke width and live corner radius to its house value as one undo step (the selection is kept). Returns the `strokeWidths` and `corners` it set and the findings `left` (colours, fonts). Hidden when read-only. |
 | `vector.setCorners` | Set live corner `radius` (0 makes them sharp) and / or `kind` (round, inverted, chamfer) on `anchors`, else the selected points, else every corner of `ids`. |
 | `vector.setWidthProfile` | Give strokes a variable width: a `preset` (uniform, taperStart, taperEnd, taperBoth, bulge, pinch, teardrop, wave, pressure; `uniform` removes it), explicit `points`, or a parametric `taper` and / or `wave`. Returns the profile points. |
 | `vector.setWidthPoint` | Set one width point of path `id`: `index` of an existing point (from the profile `vector.setWidthProfile` returns) or none to add one at `t` (0 to 1); `left` / `right` are side widths in document units. Returns the profile. |

@@ -54,6 +54,8 @@ with `run_command`, or several as one undo step with `run_commands` and `atomic:
 4. **Match the set.** `vector.setStyle` on all the set's paths at once (`ids` from `vector.list`)
    for stroke width, caps and joins; `vector.setCorners` for one radius.
    **Check:** every path's `strokeWidth` is the set's; caps and joins in `vector.getAppearance`.
+   With a house style for vector, `check_vector_style` then `fix_vector_style` puts every
+   stroke width and corner radius on the house values in one step.
 5. **Balance.** Compare the icons' bounds: a circle about 10 % larger than a square of the same
    weight looks the same size; centre shapes optically (a play triangle shifts right).
    **Check:** each icon's bounds centre is within half a unit of the artboard centre (or its
@@ -105,6 +107,7 @@ instance), `vector.delete` the other copies, `vector.placeSymbol` at their centr
 - `vector.list`, `vector.getAppearance`: bounds, stroke widths, `d`, caps and joins
 - `vector.addShape`, `vector.addPath`: draw on the grid
 - `vector.setStyle`, `vector.setCorners`: one stroke, cap, join and radius across the set
+- `check_vector_style`, `fix_vector_style`: hold the set to the house stroke widths, radii and palette
 - `vector.boolean`, `vector.outlineStroke`, `vector.removeRedundantPoints`: combine and clean paths
 - `vector.transform`, `vector.align`: position and centre
 - `vector.makeSymbol`, `vector.placeSymbol`, `vector.delete`: repeats as symbols

@@ -252,6 +252,16 @@ describe('pixerate-style', () => {
 		expect(a.err.join('')).toMatch(/Unknown domain "video"[\s\S]*missing is not a folder[\s\S]*Unknown command "frobnicate"/);
 	});
 
+	it('knows every editor domain the package ships', async () => {
+		dir = mkdtempSync(path.join(os.tmpdir(), 'pixerate-style-'));
+		const a = io();
+		for (const domain of ['rich-text', 'spreadsheet', 'diagram', 'canvas', 'typography', 'image-editor', 'paint-editor', 'animation-editor', 'video-editor', 'generation', 'parameters', 'vector', 'effect-authoring', 'stickers', 'brushes']) {
+			expect((await runStyleCli(['schema', domain], a.io)).code, domain).toBe(0);
+		}
+		expect((await runStyleCli(['init', 'acme', '--profiles', 'brand,vector,brushes'], a.io)).code).toBe(0);
+		expect((await runStyleCli(['check', 'acme'], a.io)).code).toBe(0);
+	});
+
 	it('check resolves $token references from a tokens file', async () => {
 		dir = mkdtempSync(path.join(os.tmpdir(), 'pixerate-style-'));
 		mkdirSync(path.join(dir, 'acme'));

@@ -10,6 +10,10 @@ import { animationStyleDomain } from "@pixerate/editor/animation-editor";
 import { videoStyleDomain } from "@pixerate/editor/video-editor";
 import { generationStyleDomain } from "@pixerate/editor/generation";
 import { parametersStyleDomain } from "@pixerate/editor/parameters";
+import { vectorStyleDomain } from "@pixerate/editor/vector";
+import { effectAuthoringStyleDomain } from "@pixerate/editor/effects";
+import { stickerStyleDomain } from "@pixerate/editor/stickers";
+import { brushStyleDomain } from "@pixerate/editor/brushes";
 import { TokenStore, createTokenStyleSource, tokensStyleDomain } from "@pixerate/editor/tokens";
 import { richTextStyleDomain } from "@pixerate/editor";
 import { demoToolRegistry } from "./agentTools";
@@ -73,6 +77,20 @@ Photos ship square or 4:5 with a natural look. Paintings on watercolour paper.
 `,
   "acme-pictures/image-editor.json": JSON.stringify({ aspectRatios: ["1:1", "4:5", "16:9"], adjustments: { saturation: { min: -30, max: 30 } }, checks: ["aspect-ratio", "adjustment-ranges"] }, null, 2),
   "acme-pictures/paint-editor.json": JSON.stringify({ papers: ["cold-pressed", "hot-pressed", "rough-watercolor"], maxLayers: 20, checks: ["paper", "max-layers"] }, null, 2),
+  // The org's rules for vector art, effects, stickers and brushes (check_vector_style, check_effect_authoring_style,
+  // check_sticker_style, check_brush_style).
+  "acme-assets/SKILL.md": `---
+name: acme-assets
+description: Acme's rules for vector art, authored effects, stickers and brushes.
+domains: [vector, effect-authoring, stickers, brushes]
+---
+
+Strokes 1, 2 or 4; corners 4 or 8. Effects loop within four seconds. Stickers and brushes only with licences we can sell under.
+`,
+  "acme-assets/vector.json": JSON.stringify({ strokeWidths: [1, 2, 4], cornerRadii: [4, 8], checks: ["stroke-widths", "corner-radii"] }, null, 2),
+  "acme-assets/effect-authoring.json": JSON.stringify({ maxDuration: 4000, loop: true, checks: ["timing"] }, null, 2),
+  "acme-assets/stickers.json": JSON.stringify({ commercialOnly: true, checks: ["commercial"] }, null, 2),
+  "acme-assets/brushes.json": JSON.stringify({ requireSourceLicence: true, checks: ["source-licences"] }, null, 2),
   // The org's rules for motion (check_animation_style, check_video_style).
   "acme-motion/SKILL.md": `---
 name: acme-motion
@@ -180,7 +198,7 @@ export const demoStyles = createStyleResolver({
     { id: "org", store: demoOrgStyles, locked: true },
     { id: "user", store: demoUserStyles },
   ],
-  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain],
+  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain, vectorStyleDomain, effectAuthoringStyleDomain, stickerStyleDomain, brushStyleDomain],
   tokens: createTokenStyleSource(demoBrandTokens),
 });
 

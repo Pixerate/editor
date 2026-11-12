@@ -93,6 +93,10 @@ drawn.
 8. **Share it.** `export_brushes` writes a library file; `import_brushes` adds one (version 1
    files of the paint editor's older brushes are migrated). `check_brush` with `host` before
    handing a brush to another editor.
+9. **House style.** When the host has one (`get_style` with `domain: "brushes"`), run
+   `check_brush_style` on the user's saved brushes, or with `ids` on the brushes you are about to
+   paint with. Fix a saved brush's colours or medium with `update_brush`; re-add an image source
+   with its `licence` (`add_brush_source`); built-ins outside the house set are simply not used.
 
 ## Best practices
 
@@ -164,6 +168,7 @@ drawn.
 
 | Tool | Use |
 | --- | --- |
+| `check_brush_style` | Check brushes against the house style: the brushes and media allowed, licences on the image sources they use, and the brand's colours on their default and palette. Default: the user's saved brushes; `ids` checks any (built-ins included). Returns findings with a `target` (`{ brush, colour? }` or `{ source }`), the checks that `ran` and were `skipped`, and the ids `checked`. Read-only. |
 | `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `family`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, family, engine, tip, size, marks, surface, light) and `total`. Call first. |
 | `describe_brush` | One brush by `id`: its full facet `brush` (with its `colour`: default, palette, own), `builtin`, `engine`, `category`, `family` (marks) and `check` for this host (stamp stickers included). Unknown ids are refused with the closest ones. |
 | `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets, `colour` included (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host (and its sticker library, for stamp tips); refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |

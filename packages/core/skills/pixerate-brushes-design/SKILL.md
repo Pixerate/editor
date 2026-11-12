@@ -44,7 +44,8 @@ Ask when you cannot tell from the request; say what you assumed when you can.
    **Check:** `problems` is empty or understood; nothing refused.
 3. **Check it for the host.** `check_brush` with `id` and `host`. A refusal names the facet and
    fix; its `degraded` brush is a good next spec.
-   **Check:** `ok: true`.
+   **Check:** `ok: true`. With a house style, `check_brush_style` with `ids: [id]` too: the
+   medium, colours and image-source licences are the house's.
 4. **Look at it.** `preview_brush` when available; then `update_brush` to tune (each call
    returns the paths `changed`).
    **Check:** `describe_brush` shows the intended facets.
@@ -100,6 +101,7 @@ channel: "darkness" }` → `create_brush` `{ id: "scan-charcoal", name: "Scan ch
 - `list_brush_presets`, `describe_brush`: find the base preset and read its facets.
 - `create_brush`, `update_brush`, `duplicate_brush`: make and tune the brush.
 - `check_brush`: prove it works for the host, and get a degraded spec when it doesn't.
+- `check_brush_style`: hold the brush to the house media, colours and source licences.
 - `preview_brush`: look at a sample stroke when the host renders previews.
 - `add_brush_source`, `list_brush_sources`: images for image tips and grain.
 - `import_brush_pack`: tips and grain from a Photoshop or Procreate pack.
