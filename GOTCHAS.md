@@ -4600,3 +4600,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Applying many node edits with `setDocument` (as `fix_vector_style` does) drops the user's selection, so the next `vector.setStyle` with no `ids` is refused with "Nothing is selected."
 - **Root Cause**: `VectorEditorController.setDocument` is the only public way to apply many node edits as one undo step, and it resets the selection, anchors, pen and editing path as it would for a new document.
 - **Solution / Workaround**: Read `getState().selection` before `setDocument(next, { label })` and `select()` it again after (ids that survive the edit stay valid). The selection is not part of history, so this adds no undo step.
+
+### [core/style] Merging a Variant Over Its Base Lost the Base's Sources for Sibling Fields
+
+- **Issue / Symptom**: With `night` extending `paper`, a field `night` did not set (`palette.ground`) reported its source as the variant's layer instead of `<layer> (from paper)`, whenever `night` set a sibling in the same object (`palette.sky`).
+- **Root Cause**: The merge cleared the recorded origin of every path under a key before merging into it. That is right when a value replaces an object, but an object merging into an object must keep the origins of the fields it does not touch.
+- **Solution / Workaround**: Clear origins below a key only when a leaf value replaces it; when an object replaces a leaf, clear only that leaf's origin. `tests/style-extends-versions.test.ts` checks the sources of untouched siblings.

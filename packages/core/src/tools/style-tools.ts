@@ -49,7 +49,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'list_styles',
 		title: 'List house styles',
 		description:
-			'Lists the house-style skills here, general layer first: name, description, layer (org, workspace, user, ...), the domains it applies to, which domains it has a profile for, whether it is on, and issues that leave all or part of it out. Read one domain with get_style.',
+			'Lists the house-style skills here, general layer first: name, description, layer (org, workspace, user, ...), the domains it applies to, which domains it has a profile for, whether it is on, inherits (the skills its profiles extend, nearest first), migrations (profiles in an older format, upgraded when read: save their profile to keep the upgrade) and issues that leave all or part of it out. Read one domain with get_style.',
 		inputSchema: {
 			type: 'object',
 			properties: { domain: { ...DOMAIN, description: `Only skills that apply to this domain (default: all). ${DOMAIN.description}` } },
@@ -66,14 +66,14 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'get_style',
 		title: 'Get house style',
 		description:
-			"Returns the house style for one editor domain: each applicable skill's preferences as a <style_skill> block naming its layer, the merged profile (structured rules such as the palette, with design-token references already resolved; fields derived from the brand say \"(brand)\" in sources), which layer set each profile field, the brand (brand.json: colour roles, palette, fonts, logo) when one applies, swatches (the colours and fonts the house style offers, in the order the user's pickers show them: pick from these), and issues. Domain \"brand\" returns the brand alone. Call it before you make or change work in that domain, then check the result with the domain's check_<domain>_style tool. House style is a preference: the user's instructions and the domain skill come first.",
+			"Returns the house style for one editor domain: each applicable skill's preferences as a <style_skill> block naming its layer, the merged profile (structured rules such as the palette, with design-token references already resolved; fields derived from the brand say \"(brand)\" and fields a skill inherits through extends say \"(from <base>)\" in sources), which layer set each profile field, the brand (brand.json: colour roles, palette, fonts, logo) when one applies, swatches (the colours and fonts the house style offers, in the order the user's pickers show them: pick from these), and issues. Domain \"brand\" returns the brand alone. Call it before you make or change work in that domain, then check the result with the domain's check_<domain>_style tool. House style is a preference: the user's instructions and the domain skill come first.",
 		inputSchema: { type: 'object', properties: { domain: DOMAIN }, required: ['domain'], additionalProperties: false },
 		annotations: { title: 'Get house style', ...READ },
 		handler: async ({ domain }) => {
 			const style = await styles.resolve(domain, scope);
 			return {
 				content: [{ type: 'text', text: renderStyle(style) }],
-				structuredContent: { domain, skills: style.skills.map(({ name, description, layer }) => ({ name, description, layer })), profile: style.profile, sources: style.sources, swatches: styleSwatches(style), issues: style.issues, ...(style.brand ? { brand: style.brand } : {}) }
+				structuredContent: { domain, skills: style.skills.map(({ name, description, layer, inherits }) => ({ name, description, layer, ...(inherits ? { inherits } : {}) })), profile: style.profile, sources: style.sources, swatches: styleSwatches(style), issues: style.issues, ...(style.brand ? { brand: style.brand } : {}) }
 			};
 		}
 	};
@@ -109,7 +109,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'get_style_schema',
 		title: 'Get a style profile schema',
 		description:
-			'Returns what a house-style profile for a domain can hold: its JSON Schema, the checks it can turn on in its "checks" list with each check\'s options schema (shared checks included), and a small valid example when the domain has one. Domain "brand" describes brand.json, which every domain reads. Use it to explain or write a profile, then check_style_skill on the draft.',
+			'Returns what a house-style profile for a domain can hold: its JSON Schema, the checks it can turn on in its "checks" list with each check\'s options schema (shared checks included), a small valid example when the domain has one, and version: the current version of the profile format, when the domain versions its profiles (write it as a top-level "version"). Domain "brand" describes brand.json, which every domain reads. Use it to explain or write a profile, then check_style_skill on the draft.',
 		inputSchema: { type: 'object', properties: { domain: DOMAIN }, required: ['domain'], additionalProperties: false },
 		annotations: { title: 'Get a style profile schema', ...READ },
 		handler: ({ domain }) => {
@@ -120,7 +120,8 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 				description: d.description,
 				schema: d.profileSchema,
 				checks: styleChecksOf(d).map((c) => ({ id: c.id, description: c.description, ...(c.optionsSchema ? { options: c.optionsSchema } : {}) })),
-				...(d.example ? { example: d.example } : {})
+				...(d.example ? { example: d.profileVersion !== undefined ? { version: d.profileVersion, ...d.example } : d.example } : {}),
+				...(d.profileVersion !== undefined ? { version: d.profileVersion } : {})
 			};
 		}
 	};
@@ -129,7 +130,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'check_style_skill',
 		title: 'Check a draft house-style skill',
 		description:
-			'Checks a draft house-style skill before anyone installs it, reading it exactly as this host would: its SKILL.md frontmatter, each profile (brand.json, chart.json, ...) against get_style_schema, check options and $token references. Returns ok, errors (what would be left out and why), warnings (loads, but probably a mistake), the domains it applies to, the profile each domain would get from it (brand-derived fields included), the brand, and each file\'s role. Nothing is saved. Use it while writing a style with the user, and fix every error before handing the files over.',
+			'Checks a draft house-style skill before anyone installs it, reading it exactly as this host would: its SKILL.md frontmatter, each profile (brand.json, chart.json, ...) against get_style_schema, check options and $token references. A draft with extends: <skill> in its frontmatter is checked over that installed base: its profiles may be partial, and the result is the merged profile. Returns ok, errors (what would be left out and why), warnings (loads, but probably a mistake, such as a profile in an older format), the domains it applies to, the profile each domain would get from it (brand-derived and inherited fields included), the brand, inherits, migrations, and each file\'s role. Nothing is saved. Use it while writing a style with the user, and fix every error before handing the files over.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -147,7 +148,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		handler: async ({ name, files }) => {
 			const total = Object.values(files as Record<string, string>).reduce((n, t) => n + t.length, 0);
 			if (total > 4 * 1024 * 1024) throw new Error(`The files hold ${total} characters; a style skill holds at most 4 MB. Move long references out or shorten them.`);
-			return checkStyleSkill(name, files, { domains: styles.domains, ...(styles.tokens ? { tokens: styles.tokens } : {}) });
+			return checkStyleSkill(name, files, { domains: styles.domains, limits: styles.limits, bases: styles, ...(styles.tokens ? { tokens: styles.tokens } : {}) });
 		}
 	};
 
@@ -189,7 +190,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'save_style',
 		title: 'Save a house-style skill',
 		description:
-			'Saves a house-style skill to a writable layer, checked exactly as it will load (as check_style_skill does): files are merged over the layer\'s copy, or with replace: true become the whole skill. Fails, saving nothing, with every error when the skill would not load cleanly, the layer is read-only, or an earlier locked layer holds the name. Returns the layer, the files, whether it was created, the domains and profiles it gives, and warnings. Save only what the user asked for; read it back with get_style.',
+			'Saves a house-style skill to a writable layer, checked exactly as it will load (as check_style_skill does): files are merged over the layer\'s copy, or with replace: true become the whole skill. Fails, saving nothing, with every error when the skill would not load cleanly, the layer is read-only, or an earlier locked layer holds the name. A skill may build on another with extends: <skill> in its frontmatter and give only the fields that differ; the base must be installed. Returns the layer, the files, whether it was created, the domains and profiles it gives (merged over its base), inherits, and warnings. Save only what the user asked for; read it back with get_style.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -209,7 +210,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'remove_style',
 		title: 'Remove a house-style skill',
 		description:
-			'Removes a house-style skill\'s copy from a writable layer (default: the most specific writable layer that holds it). Copies in other layers stay and apply again (stillProvidedBy names the layer). To stop a skill applying without deleting it, switch it off instead. Only when the user asks.',
+			'Removes a house-style skill\'s copy from a writable layer (default: the most specific writable layer that holds it). Copies in other layers stay and apply again (stillProvidedBy names the layer). When no copy is left, extendedBy names the skills that extend it, which lose their profiles until they extend another or it comes back. To stop a skill applying without deleting it, switch it off instead. Only when the user asks.',
 		inputSchema: {
 			type: 'object',
 			properties: {

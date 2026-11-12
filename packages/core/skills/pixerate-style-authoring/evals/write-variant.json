@@ -1,0 +1,103 @@
+{
+	"prompt": "Make a night version of our paper chart look: the palette #f5c542 and #42a5f5, and everything else the same as paper. Switch to it.",
+	"fixture": {
+		"editor": "style",
+		"layers": [
+			{
+				"id": "org",
+				"readOnly": true,
+				"files": {
+					"paper/SKILL.md": "---\nname: paper\ndescription: The paper chart look.\ndomains: [chart]\ngroup: look\n---\n\nCalm charts on paper.\n",
+					"paper/chart.json": "{\"palette\": [\"#1f2937\", \"#6b7280\"], \"theme\": {\"fontFamily\": \"Georgia\", \"fontSize\": 13}, \"defaults\": {\"curve\": \"smooth\"}}"
+				}
+			},
+			{
+				"id": "user"
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the night look is the one that applies",
+			"tool": "list_style_choices",
+			"expect": {
+				"groups": [
+					{
+						"group": "look",
+						"chosen": "night"
+					}
+				]
+			}
+		},
+		{
+			"why": "charts get the night palette and keep everything else from paper",
+			"tool": "get_style",
+			"args": {
+				"domain": "chart"
+			},
+			"expect": {
+				"profile": {
+					"palette": ["#f5c542", "#42a5f5"],
+					"theme": {
+						"fontFamily": "Georgia",
+						"fontSize": 13
+					},
+					"defaults": {
+						"curve": "smooth"
+					}
+				}
+			}
+		},
+		{
+			"why": "night builds on paper, so later changes to paper reach it",
+			"tool": "list_styles",
+			"expect": {
+				"skills": {
+					"$some": {
+						"name": "night",
+						"inherits": ["paper"],
+						"issues": []
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "list_style_choices"
+		},
+		{
+			"tool": "get_style_file",
+			"args": {
+				"name": "paper",
+				"file": "chart.json"
+			}
+		},
+		{
+			"tool": "check_style_skill",
+			"args": {
+				"name": "night",
+				"files": {
+					"SKILL.md": "---\nname: night\ndescription: The night chart look, built on paper.\ndomains: [chart]\ngroup: look\nextends: paper\n---\n\nPaper's look with a night palette.\n",
+					"chart.json": "{\"palette\": [\"#f5c542\", \"#42a5f5\"]}"
+				}
+			}
+		},
+		{
+			"tool": "save_style",
+			"args": {
+				"name": "night",
+				"files": {
+					"SKILL.md": "---\nname: night\ndescription: The night chart look, built on paper.\ndomains: [chart]\ngroup: look\nextends: paper\n---\n\nPaper's look with a night palette.\n",
+					"chart.json": "{\"palette\": [\"#f5c542\", \"#42a5f5\"]}"
+				}
+			}
+		},
+		{
+			"tool": "choose_style",
+			"args": {
+				"name": "night"
+			}
+		}
+	]
+}

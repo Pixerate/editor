@@ -15,10 +15,12 @@ import { parseFrontmatter } from './yaml.js';
 import { brandColors, brandPalette, brandFonts, type BrandProfile } from './brand.js';
 import {
 	DEFAULT_STYLE_LIMITS,
+	MAX_STYLE_INHERITANCE_DEPTH,
 	STYLE_SKILL_NAME,
 	brandStyleDomain,
 	styleFilePathProblem,
 	type StyleLimits,
+	type StyleProfileMigration,
 	createStyleResolver,
 	memoryStyleStore,
 	parseStyleDomains,
@@ -58,6 +60,10 @@ export interface StyleSkillReport {
 	errors: string[];
 	/** What loads but is probably a mistake. */
 	warnings: string[];
+	/** The skills its profiles build on (`extends`), nearest first. */
+	inherits?: string[];
+	/** Profiles in an older format, as they read after upgrading (save these to stop upgrading on every read). */
+	migrations?: StyleProfileMigration[];
 }
 
 export interface CheckStyleSkillOptions {
@@ -67,9 +73,21 @@ export interface CheckStyleSkillOptions {
 	tokens?: StyleTokenSource;
 	/** The host's file limits (default {@link DEFAULT_STYLE_LIMITS}). */
 	limits?: Partial<StyleLimits>;
+	/**
+	 * Where the skills a draft `extends` are read from (a host's resolver). Without it, a draft with
+	 * a base is checked as if the base were missing.
+	 */
+	bases?: Pick<StyleResolver, 'files' | 'readFile'>;
 }
 
 const byteLength = (text: string) => new TextEncoder().encode(text).length;
+
+/** A SKILL.md's `extends` base, if it names one. */
+function extendsOf(skillText: string): string | undefined {
+	const fm = parseFrontmatter(skillText);
+	const value = fm.error ? undefined : fm.data.extends;
+	return typeof value === 'string' && STYLE_SKILL_NAME.test(value) ? value : undefined;
+}
 const normalize = (path: string) => path.replace(/\\/g, '/').replace(/^\.?\//, '');
 
 /**
@@ -118,8 +136,25 @@ export async function checkStyleSkill(name: string, files: Readonly<Record<strin
 	if (!STYLE_SKILL_NAME.test(name)) return report;
 
 	const store = memoryStyleStore(Object.fromEntries(entries.map(([path, text]) => [`${name}/${path}`, text])));
-	const resolver = createStyleResolver({ layers: [{ id: 'draft', store }], domains, limits, ...(options.tokens ? { tokens: options.tokens } : {}) });
-	const [info] = await resolver.list();
+	// The draft's bases, switched off so they serve as bases only and the profiles stay this skill's.
+	const baseFiles: Record<string, string> = {};
+	const baseState: Record<string, { enabled: false }> = {};
+	for (let base = extendsOf(skillText), depth = 0; base && options.bases && depth <= MAX_STYLE_INHERITANCE_DEPTH && base !== name && !baseState[base]; depth++) {
+		const paths = await options.bases.files(base);
+		if (!paths) break;
+		let baseSkill = '';
+		for (const path of paths) {
+			const text = await options.bases.readFile(base, path);
+			if (text === undefined) continue;
+			baseFiles[`${base}/${path}`] = text;
+			if (path === 'SKILL.md') baseSkill = text;
+		}
+		baseState[base] = { enabled: false };
+		base = extendsOf(baseSkill);
+	}
+	const draftLayers = Object.keys(baseState).length ? [{ id: 'bases', store: memoryStyleStore(baseFiles, baseState) }, { id: 'draft', store }] : [{ id: 'draft', store }];
+	const resolver = createStyleResolver({ layers: draftLayers, domains, limits, ...(options.tokens ? { tokens: options.tokens } : {}) });
+	const info = (await resolver.list()).find((s) => s.name === name);
 	if (!info) {
 		for (const issue of (await resolver.resolve(brandStyleDomain.id)).issues) report.errors.push(issue.message);
 		if (!report.errors.length) report.errors.push('A store would not offer this skill.');
@@ -127,13 +162,18 @@ export async function checkStyleSkill(name: string, files: Readonly<Record<strin
 	}
 	report.domains = info.domains;
 	report.errors.push(...info.issues);
+	if (info.inherits) report.inherits = info.inherits;
+	if (info.migrations) {
+		report.migrations = info.migrations;
+		for (const m of info.migrations) report.warnings.push(`${m.file === 'frontmatter' ? `The frontmatter "${m.domain}" profile` : m.file} is version ${m.from} and is upgraded to version ${m.to} each time it is read; save the upgraded profile (in migrations) to stop that.`);
+	}
 	for (const domain of info.domains) {
 		const style = await resolver.resolve(domain);
 		if (domain === brandStyleDomain.id) {
 			if (Object.keys(style.profile).length) report.brand = style.profile as BrandProfile;
 			continue;
 		}
-		for (const issue of style.issues) if (!issue.skill && !report.errors.includes(issue.message)) report.errors.push(issue.message);
+		for (const issue of style.issues) if ((!issue.skill || issue.skill === name) && !report.errors.includes(issue.message) && !info.issues.includes(issue.message)) report.errors.push(issue.message);
 		if (Object.keys(style.profile).length) report.profiles[domain] = style.profile;
 	}
 	if (!info.profiles.length && !front.body.trim()) report.warnings.push('The skill has neither preferences nor a profile, so it changes nothing.');
@@ -155,6 +195,7 @@ export function styleProfileSchema(domain: StyleDomain<any>): JsonSchema & Recor
 		type: 'object',
 		properties: {
 			$schema: { type: 'string', description: 'Path or URL of this schema, for editors. Ignored when the profile loads.' },
+			...(domain.profileVersion !== undefined ? { version: { type: 'integer', minimum: 1, maximum: domain.profileVersion, description: `The profile format this file is written for (current: ${domain.profileVersion}; missing means 1). Older ones are upgraded when read.` } } : {}),
 			...properties,
 			...(checks.length
 				? {
@@ -203,7 +244,7 @@ export function scaffoldStyleSkill(options: ScaffoldStyleSkillOptions): Record<s
 		const domain = domains.find((d) => d.id === id);
 		if (!domain) throw new Error(`There is no domain "${id}"; the domains here are ${domains.map((d) => `"${d.id}"`).join(', ')}.`);
 		if (!domain.example) throw new Error(`The ${id} domain has no example profile to start from; write ${id}.json from get_style_schema.`);
-		files[`${id}.json`] = `${JSON.stringify(domain.example, null, 2)}\n`;
+		files[`${id}.json`] = `${JSON.stringify(domain.profileVersion !== undefined ? { version: domain.profileVersion, ...domain.example } : domain.example, null, 2)}\n`;
 	}
 	const listed = options.limitDomains ? options.profiles.filter((d) => d !== brandStyleDomain.id) : [];
 	const description = options.description ?? `${options.name} house style. Use when making or changing ${listed.length ? listed.join(' and ') : 'anything'}.`;
@@ -292,6 +333,8 @@ export interface SavedStyleSkill {
 	profiles: Record<string, Record<string, unknown>>;
 	/** Loads, but probably a mistake. */
 	warnings: string[];
+	/** The skills its profiles build on (`extends`), nearest first. */
+	inherits?: string[];
 }
 
 const writableLayer = (styles: StyleResolver, verb: 'save' | 'remove', layer?: string) => {
@@ -326,17 +369,17 @@ export async function saveStyleSkill(styles: StyleResolver, name: string, files:
 	const merged: Record<string, string> = {};
 	if (existing && !options.replace) for (const f of await target.store.files(name)) merged[f] = (await target.store.read(name, f)) ?? '';
 	for (const [f, text] of Object.entries(files)) merged[normalize(f)] = text;
-	const report = await checkStyleSkill(name, merged, { domains: styles.domains, limits: styles.limits, ...(styles.tokens ? { tokens: styles.tokens } : {}) });
+	const report = await checkStyleSkill(name, merged, { domains: styles.domains, limits: styles.limits, bases: styles, ...(styles.tokens ? { tokens: styles.tokens } : {}) });
 	if (!report.ok) throw new Error(`"${name}" was not saved: ${report.errors.join(' ')}`);
 	await target.store.save!(name, merged, { replace: true });
-	return { name, layer: target.id, files: report.files.filter((f) => f.role !== 'left-out').map((f) => f.path), created: !existing, domains: report.domains, profiles: report.profiles, warnings: report.warnings };
+	return { name, layer: target.id, files: report.files.filter((f) => f.role !== 'left-out').map((f) => f.path), created: !existing, domains: report.domains, profiles: report.profiles, warnings: report.warnings, ...(report.inherits ? { inherits: report.inherits } : {}) };
 }
 
 /**
  * Removes a skill's copy from a writable layer (default: the most specific writable layer that
  * holds it). Copies in other layers stay, and apply again if this one was in front of them.
  */
-export async function removeStyleSkill(styles: StyleResolver, name: string, options: { layer?: string } = {}): Promise<{ name: string; layer: string; stillProvidedBy?: string }> {
+export async function removeStyleSkill(styles: StyleResolver, name: string, options: { layer?: string } = {}): Promise<{ name: string; layer: string; stillProvidedBy?: string; extendedBy?: string[] }> {
 	let target;
 	if (options.layer !== undefined) target = writableLayer(styles, 'remove', options.layer);
 	else {
@@ -350,8 +393,10 @@ export async function removeStyleSkill(styles: StyleResolver, name: string, opti
 		}
 	}
 	if ((await target.store.read(name, 'SKILL.md')) === undefined) throw new Error(`The ${target.id} layer has no "${name}" to remove.`);
+	const children = (await styles.list()).filter((s) => s.inherits?.includes(name)).map((s) => s.name);
 	await target.store.remove!(name);
 	let stillProvidedBy: string | undefined;
 	for (const l of styles.layers) if ((await l.store.read(name, 'SKILL.md')) !== undefined) stillProvidedBy = l.id;
-	return { name, layer: target.id, ...(stillProvidedBy ? { stillProvidedBy } : {}) };
+	// Skills built on it lose their profiles when no copy is left.
+	return { name, layer: target.id, ...(stillProvidedBy ? { stillProvidedBy } : {}), ...(!stillProvidedBy && children.length ? { extendedBy: children } : {}) };
 }

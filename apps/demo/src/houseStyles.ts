@@ -136,6 +136,9 @@ Write plainly: short sentences, the finding first. Headings in sentence case.
   ),
   ...look("look-calm", "Calm charts: smooth lines, no stacking.", { curve: "smooth", stacking: "none" }),
   ...look("look-dense", "Dense charts: stacked bars and step lines for dashboards.", { curve: "step", stacking: "stacked" }),
+  // A variant: it extends look-calm and changes only the curve, so it follows any change to look-calm.
+  "look-calm-straight/SKILL.md": `---\nname: look-calm-straight\ndescription: Calm charts with straight lines (built on look-calm).\ndomains: [chart]\ngroup: look\nextends: look-calm\n---\n\nLike look-calm, with straight lines.\n`,
+  "look-calm-straight/chart.json": JSON.stringify({ defaults: { curve: "linear" } }, null, 2),
   "acme-brand/SKILL.md": `---
 name: acme-brand
 description: Acme's house style for charts and design tokens.
