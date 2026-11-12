@@ -615,7 +615,8 @@ describe('stroke layers', () => {
     expect(target.querySelectorAll('svg line[stroke="#818cf8"]').length).toBe(4);
     setValue(target.querySelector('select[aria-label="Stroke brush"]') as HTMLSelectElement, 'pencil-hb');
     expect(c.listLiveStrokes()[0].brush.id).toBe('pencil-hb');
-    expect(target.querySelector('select[aria-label="Stroke brush"] option[value="eraser-soft"]')).toBeNull();
+    expect(target.querySelector('select[aria-label="Stroke brush"] option[value="eraser-soft"]')).not.toBeNull();
+    expect(target.querySelector('select[aria-label="Stroke brush"] option[value="smudge"]')).toBeNull();
     click(byText('New seed'));
     expect(c.listLiveStrokes()[0].seed).toBe(a.seed + 1);
     click(target.querySelector('[aria-label="Move stroke up"]'));

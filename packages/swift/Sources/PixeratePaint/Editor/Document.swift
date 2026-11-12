@@ -34,10 +34,21 @@ public struct PaintEvent: Equatable {
     public var data: JSONObject?
     /// A `live-strokes` event's strokes as painted (in memory only; saved, they are `data.strokes`).
     var strokes: [RecordedStroke]?
+    /// The object a saved event was read from: TS keeps saved events verbatim (other fields, a
+    /// `data` that is not an object), so it is written back with only the fields changed since set over it.
+    var saved: JSONObject?
 
     public static func == (a: PaintEvent, b: PaintEvent) -> Bool { a.at == b.at && a.kind == b.kind && a.layerId == b.layerId && a.data == b.data }
 
     public var json: JSONValue {
+        if let saved {
+            var o = saved
+            if at != savedWholeNumber(saved["at"]) { o["at"] = .number(Double(at)) }
+            if kind != saved["kind"]?.stringValue { o["kind"] = .string(kind) }
+            if layerId != saved["layerId"]?.stringValue { o["layerId"] = .string(layerId) }
+            if data != saved["data"]?.objectValue { o["data"] = data.map { .object($0) } ?? Optional<JSONValue>.none }
+            return .object(o)
+        }
         var o: JSONObject = ["at": .number(Double(at)), "kind": .string(kind), "layerId": .string(layerId)]
         if let data { o["data"] = .object(data) }
         return .object(o)
@@ -51,11 +62,12 @@ extension PaintEvent {
     /// A saved paint event as `readDocument` keeps it: an integer `at`, a string `layerId` and a known
     /// `kind`; nil otherwise. A `live-strokes` event's strokes are read from `data.strokes`, which replays paint.
     public init?(json raw: JSONValue) {
-        guard let r = raw.objectValue, let at = savedInteger(r["at"]), let layerId = r["layerId"]?.stringValue,
+        guard let r = raw.objectValue, let at = savedWholeNumber(r["at"]), let layerId = r["layerId"]?.stringValue,
               let kind = r["kind"]?.stringValue, PAINT_EVENT_KINDS.contains(kind) else { return nil }
         let data = r["data"]?.objectValue
         let strokes = kind == "live-strokes" ? data?["strokes"]?.arrayValue?.compactMap(normalizeBrushStroke) : nil
         self.init(at: at, kind: kind, layerId: layerId, data: data, strokes: strokes)
+        saved = r
     }
 }
 
@@ -205,7 +217,7 @@ extension RasterLayer {
         RasterLayer(
             id: id ?? self.id, name: name ?? self.name, visible: visible ?? self.visible, opacity: opacity ?? self.opacity, blend: blend ?? self.blend,
             clipped: clipped ?? self.clipped, mask: mask ?? self.mask, locks: locks ?? self.locks, effects: effects ?? self.effects, edge: edge,
-            temporary: temporary ?? self.temporary,
+            temporary: temporary ?? self.temporary, generator: generator,
             content: content ?? self.content
         )
     }

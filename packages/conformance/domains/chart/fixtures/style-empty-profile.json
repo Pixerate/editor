@@ -1,0 +1,41 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-empty-profile",
+  "description": "An empty house-style chart.json still makes a style skill apply (no 'No house style' note) but turns on no checks.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "style": {},
+    "spec": {
+      "type": "bar",
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "Revenue",
+          "values": [
+            100,
+            120
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    }
+  ]
+}

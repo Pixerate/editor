@@ -2,7 +2,7 @@ import React, { useState, useSyncExternalStore } from 'react';
 import {
   EVOLUTION_SLIDERS,
   exportProposalContactSheetPng,
-  liveStrokeRefusal,
+  evolutionStrokeRefusal,
   normalizeMutationRates,
   paintProposalGhost,
   proposalGenomeStrokes,
@@ -39,7 +39,7 @@ export const EvolutionPanel: React.FC<EvolutionPanelProps> = ({ controller, prop
   const [mutation, setMutation] = useState<Required<EvolutionMutationRates>>(() => normalizeMutationRates());
   const [contactSheetUrl, setContactSheetUrl] = useState<string | null>(null);
 
-  const eligibleStrokes = state.document.strokes.filter((s) => !liveStrokeRefusal(s.brush));
+  const eligibleStrokes = state.document.strokes.filter((s) => !evolutionStrokeRefusal(s.brush));
   const activeStrokeIds = selectedStrokes.filter((id) => eligibleStrokes.some((s) => s.id === id));
   const effectiveStrokeIds =
     activeStrokeIds.length > 0

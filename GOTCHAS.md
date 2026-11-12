@@ -33,6 +33,54 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The person and the agent share one `EffectAuthoringSession` (the controller's `authoringSession`), and either can open, change, save or close it.
 - **Solution / Workaround**: `EffectAuthoringModel` subscribes to the session and replaces its `state` on every change; the typed source (`sourceDraft`) follows the session's source except while an edit waits to be applied (`sourceDelay`, 0.3 s), and Save to painting commits the typed source first. `PaintEditorModel.authoringEditor` returns the same model while `controller.authoringSession` is the same object and drops it (`detach()`, which also cancels the `Cancellable`: it does not cancel on release) when the session closes; the sheet shows only while `authoringPresented` and a session is open, so a session an agent opens doesn't pop up over the person's work. The Metal preview draws only sources that compile (`compiled != false`) with the state's values at the playhead; while the source has errors the session's CPU preview keeps drawing the last source that compiled.
 
+### [core|swift/chart] The Chart's Fallback XML Parser Decodes `&toString;` and Throws on `&#x110000;`
+
+- **Issue / Symptom**: In the fallback `DOMParser` the chart contracts and conformance host use in Node (`FallbackXmlDomParser` in `chart/contract.ts`), `&toString;` in chart XML decodes to `function toString() { [native code] }`, and a character reference past U+10FFFF makes `parseFromString` throw `RangeError: Invalid code point 1114112`. `chartFromOoxml` catches it (`The chart XML could not be read: Invalid code point 1114112`), but in a drawing, slide or rels part it escapes `extractOfficeCharts` unwrapped, not as an `OfficeChartsError`. The Swift port left both entities as text.
+- **Root Cause**: `XML_ENTITIES[code] ?? match` looks the name up in a plain object, which finds `Object.prototype` members (`constructor`, `toString`, `valueOf`, …), and `String.fromCodePoint` throws for code points out of range. A lone surrogate reference (`&#xD800;`) gives a JS string Swift cannot hold.
+- **Solution / Workaround**: The Swift port matches TS (`decodeXmlEntities` in `OoxmlRead.swift` lists the seven inherited names and throws `ChartXmlRangeError` with the V8 message, numbers written with `JSONValue.jsString`); a lone surrogate becomes U+FFFD. Fixing the TS (an own-property lookup, a range check that leaves the reference as text) needs the vectors in `swift-chart-office-vectors.test.ts` and the Swift port changed with it.
+
+### [core|swift] `validateJsonSchema` Lets `Object.prototype` Names Through `additionalProperties: false`
+
+- **Issue / Symptom**: A tool argument or style profile with a `toString`, `valueOf`, `hasOwnProperty` or `__defineGetter__` key passes a schema with `additionalProperties: false`; Swift reported `Unknown property "toString"`.
+- **Root Cause**: `tools/schema.ts` tests `key in properties`, and `properties` is a plain object, so inherited names count as declared; it then validates the value against a function, which checks nothing. (`required: ["toString"]` is likewise always met.)
+- **Solution / Workaround**: Swift's `validateJSONSchema` skips those twelve names (`OBJECT_PROTOTYPE_NAMES` in `Schema.swift`) to match. The `required` case is not mirrored (no schema requires such a name). A TS fix (`Object.hasOwn(properties, key)`) must change both.
+
+### [core|swift/chart] A House-Style Profile That Is Itself a `$token` Reference Throws While Loading
+
+- **Issue / Symptom**: With `chart.json` set to `{ "$token": "…" }`, every `createStyleResolver` call (`check_chart_style`, `get_style`) fails with `Cannot destructure property 'checks' of 'resolved' as it is undefined.`
+- **Root Cause**: `resolveTokens` turns a root token reference into `undefined`, and `const { checks, ...rest } = resolved` cannot destructure it, so the profile is never left out with an issue like other bad profiles.
+- **Solution / Workaround**: The Swift `ChartStyleResolver(skill:layer:chartJson:)` records the same message as `loadFailure` and `check_chart_style` throws it (`style-token-root` scenario). A TS fix would report it as `chart.json is left out: profile: …` instead.
+
+### [swift] Two ZIP Readers: `readZip` (`import/zip.ts`) and `readBrushZip` (`brushes/import/zip.ts`)
+
+- **Issue / Symptom**: The Swift chart port read Office files with a ZIP reader whose messages, limits and rules (last duplicate wins, `./` stripped, control characters refused, the size limit summed over declared sizes) were not the TS core's, so `This is not an Office file: …` errors differed and a deck with a large video failed.
+- **Root Cause**: The TS core has two readers with different contracts: `import/zip.ts` (async, ZIP64, `unsafePaths: "error" | "skip"`, the size limit counted on bytes actually read, first duplicate wins) for DOCX / Office files, and `brushes/import/zip.ts` (sync, no ZIP64, per-entry limits) for brush packs. The Swift file mixed them.
+- **Solution / Workaround**: `PixerateCore/Zip.swift` is a line-by-line port of `import/zip.ts` (`readZip`, `ZipArchive`, `ZipEntry`, `ZipUnsafePaths.error/.skip`), and `PixeratePaint/Brushes/Import/Zip.swift` ports the brush reader as `readBrushZip` / `BrushZipEntry` / `BrushZipError`. `swift-chart-office-vectors.test.ts` covers the first, including malformed and ZIP64 archives, with stored blocks and fixed deflate bytes written out so Node's zlib version cannot change the fixture.
+
+### [swift] Swift `String` Keys Merge NFC and NFD Spellings That JS Keeps Apart
+
+- **Issue / Symptom**: An archive with both `é.txt` (NFC) and `é.txt` (NFD) had one entry in Swift's lookup; `uniqueStrings` dropped one of two unsupported-feature names that differ only by normalisation.
+- **Root Cause**: Swift `String` equality and hashing use canonical equivalence; a JS `Map` or `Set` compares UTF-16 code units. See also "`String.contains`, `hasPrefix` and `replacingOccurrences` Compare Characters".
+- **Solution / Workaround**: Key ported `Map`s and `Set`s of text that comes from files or users by `JSKey` (`PixerateCore/JSString.swift`), which hashes code units: ZIP `byName`, the Office reader's relationships and seen parts, `uniqueStrings`, open-file names. Other chart sets (link node names, tree names, map regions) still use `String` keys.
+
+### [swift] `JSONValue.jsNumber` Writes Non-Finite Numbers as `null`; Template Text Needs `jsString`
+
+- **Issue / Symptom**: A NaN or infinite value reached SVG and OOXML text as `null`, where TS writes `NaN` / `Infinity`; `chartRasterSize` trapped on `Int(NaN)`; a NaN `rotate` produced `rotate(null …)` instead of no transform.
+- **Root Cause**: `jsNumber` is `JSON.stringify`'s number format. `${n}` and `String(n)` are `Number.prototype.toString`, which spells out non-finite numbers; `mark.rotate ? … : undefined` treats NaN as false; `Math.min` / `Math.max` return NaN when either argument is NaN, where `Swift.min` / `Swift.max` do not.
+- **Solution / Workaround**: Use `JSONValue.jsString(n)` for numbers interpolated into text (all of `PixerateChart` now does). `ChartRasterSize` holds JS numbers (`Double`), computed with NaN-propagating min/max, and `rasterizeChartScene` refuses a non-finite size with an error instead of trapping.
+
+### [swift] `Data(base64Encoded:)` Rejects Unpadded Base64 That `atob` Accepts
+
+- **Issue / Symptom**: The Swift chart conformance host silently dropped setup files whose base64 had a `data:` prefix, line breaks or no `=` padding; the TS host decodes them.
+- **Root Cause**: `atob` is the forgiving-base64 decode (white space ignored, padding optional); Foundation requires padding.
+- **Solution / Workaround**: `jsAtob` and `jsDecodeBase64DataUrl` (`PixerateCore/JSString.swift`) implement it; the conformance host and the Office chart tools use them, and the host throws `The string to be decoded is not correctly encoded.` where `atob` throws (`office-base64-forms` scenario).
+
+### [swift/chart] SVG's `opacity` Composites Fill and Stroke Together
+
+- **Issue / Symptom**: The CoreGraphics PNG and SwiftUI canvas drew a half-transparent mark's fill and stroke each at the mark's opacity, so where the stroke overlaps the fill it was darker than in the SVG export; `#rrggbbaa` and `rgb(… / a)` alpha was ignored.
+- **Root Cause**: The SVG writer sets `opacity` on the element, which renders fill and stroke into one group and fades the group. `parseChartColor` deliberately drops alpha (it compares colours).
+- **Solution / Workaround**: Both renderers draw a mark with opacity < 1 into a transparency layer (`beginTransparencyLayer` / `GraphicsContext.drawLayer`) composited at that opacity (`chartMarkGroupOpacity`), and `parseChartRGBA` reads `#rgba`, `#rrggbbaa` and `rgb()` alpha.
+
 ### [core|swift/paint-editor] Specialty Guide Actions: Hosted Coordinates and Wet Mutation Brushes
 
 - **Issue / Symptom**: (1) On a paint document hosted as a canvas layer (`origin`), `get_specialty_guides` returned `add_magnet` / `paint_heat` arguments in document pixels, so an agent replaying them put magnets and heat in the wrong place; declaring `coordinates.out: ['guides[].actions[].arguments']` instead would also shift the view tilt action's `{ x: 0.6, y: -0.4 }`. (2) A wet mutation brush (`mutation-wash`) showed both a ghost and a mutation guide.
@@ -50,6 +98,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Large sticker brushes (200 px) landed stickers ~140 px apart and up to ~120 px off the stroke, so they no longer traced the path.
 - **Root Cause**: The spray's spacing and scatter were fractions of the sticker's diameter, so both grew without limit with the size.
 - **Solution / Workaround**: Both scale with `min(diameter, STICKER_REACH)` (64 px), and `PenDabWalker.layEnd` lays a last sticker at the stroke's end. Keep any change to these in step in `paint-editor/stickers.ts` and `Stickers/Stickers.swift`: the conformance scenario `sticker-large-sizes` records the positions.
+
+### [swift] CI Fails With "Unable to Type-Check This Expression in Reasonable Time" When Local Builds Pass
+
+- **Issue / Symptom**: `swift build` passes locally, but a CI job (Swift macOS, iOS simulator or the demo app) fails with `error: the compiler is unable to type-check this expression in reasonable time`. Seen on a one-line `PenPoint(...)` map in a test, a byte-assembly `|`/`<<` chain in `Deserialize.swift`, and a ternary of two `map`s in `ChartRasterizer.swift`.
+- **Root Cause**: CI's `macos-latest` image builds with an older Swift (6.3.x in November 2026) than a current developer Mac (6.4.x). The older solver gives up on long untyped closures mixing integer literals, `Double(...)`, `sin`, `.pi`, several `|`/`<<` operators, or a ternary between two closures. The newer one type-checks the same code in milliseconds, so `-warn-long-expression-type-checking` on a newer local toolchain does not find them.
+- **Solution / Workaround**: Break such expressions into `let` steps with explicit types, and give closures explicit parameter and return types, especially in new Swift code. Check `swift --version` in the CI log; to reproduce locally, build with the same Xcode version as the runner (`xcrun --toolchain` / `DEVELOPER_DIR`).
 
 ### [swift] A `nil` in a Ternary Becomes `JSONValue.null`
 
@@ -96,8 +150,20 @@ All contributors and AI assistants should check this file before starting work a
 ### [swift/paint] Save → Load Conformance: Clocks, Asset Hashes and Fields Swift Doesn't Model
 
 - **Issue / Symptom**: Adding a `reload` step to every paint scenario (save, then `loadJSON`, then compare the document) failed in three ways that were not loader bugs. (1) `culture` was not deterministic between two TS runs. (2) `culture-replay` matched pixels within tolerance but its document differed in one asset reference. (3) A hand-written wet event with a field outside `data` came back in TS but not in Swift.
-- **Root Cause**: (1) `cultures.lastGrownAt` is wall-clock time, written on save when `growWhileClosed` is on. (2) Editor-document asset references are content hashes of the PNG bytes (`pixerate-asset:<len>-<hash>`), so a layer one level off anywhere changes the reference even though pixel comparison tolerates it. (3) TS keeps a saved event object verbatim; Swift's `WetEvent` / `PaintEvent` keep only the fields they model (`clock`, `at`, `kind`, `layerId`, `data`).
+- **Root Cause**: (1) `cultures.lastGrownAt` is wall-clock time, written on save when `growWhileClosed` is on. (2) Editor-document asset references are content hashes of the PNG bytes (`pixerate-asset:<len>-<hash>`), so a layer one level off anywhere changes the reference even though pixel comparison tolerates it. (3) TS keeps a saved event object verbatim; Swift's `WetEvent` / `PaintEvent` kept only the fields they model (`clock`, `at`, `kind`, `layerId`, `data`). They now keep the object they were read from (`saved`) and write it back with only changed fields set over it, as `{ ...e, data }` does (#742).
 - **Solution / Workaround**: Leave `document` off a reload step whose document carries a clock (`culture`) or whose pixels already differ within tolerance (`culture-replay`); keep `pixels` and `expect.loaded` on it. Write test documents in the schema's shape (event payloads under `data`). Any other document difference after a reload is a real loader gap. The cross-implementation comparison only proves a feature survives saving because each side also checks its own save → load → save at every reload step (the save after reopening equals the save opened, same pixels; `lastGrownAt` aside): `reopens what it saved unchanged` in `paint-conformance.test.ts` and `RoundTripHost` in `PaintConformanceTests.swift`. Those also cover the two reload steps without a document comparison.
+
+### [swift/paint] Saved Channel Rects Are Read Unchecked: `"1" + 2` Is `"12"`
+
+- **Issue / Symptom**: A saved `light` / `fluor` / `thermo` / `layerChannels` / `ferro` channel whose `rect` had a missing, `null`, boolean, fractional or text coordinate (or was not an object at all) loaded in TS but was refused in Swift ("not a saved light channel").
+- **Root Cause**: TS checks only that `rect` is truthy and passes `rect.x` / `rect.y` straight to `surfaceFromPixels`, so `writeRegion` runs in JavaScript arithmetic: a missing coordinate takes the parameter default 0, `null` is 0, `true` is 1, a string concatenates in `rect.x + width` (`"1" + 2` is `"12"`, so the rows run 11 pixels wide and read past each source row), a fractional one writes where typed-array `subarray` / `set` truncate their indices, and `set` can throw "offset is out of bounds".
+- **Solution / Workaround**: `surfaceAtSavedRect` (`Editor/Thick.swift`) runs `writeRegion` in doubles with those rules (`surfaceAtCoordinates`; culture occupancy uses it with `Math.round`ed coordinates, where NaN writes nothing). Tile coordinates past ±10¹⁰ are still refused: TS goes on there with rounded tile keys. `document-load-readers` records the cases.
+
+### [swift] A Paint Document Can Hold NaN in Memory; Compare It as JSON
+
+- **Issue / Symptom**: After a culture tip with a field that is not a number loaded, Swift's save → load → save check failed (`null` came back as 0), and the recorded document compared unequal although both printed `null`.
+- **Root Cause**: TS reads the field as NaN (`Math.round(undefined)`) and keeps it; `toJSON()` returns an object, so a reload in the same session sees NaN again, and only `JSON.stringify` prints it as `null`. `JSONValue.number(.nan)` is not equal to itself or to `.null`.
+- **Solution / Workaround**: `CultureTip.nonFinite` keeps the NaN / ±Infinity bit patterns and `json` writes them as numbers (which print as `null`). Conformance values are compared as `JSON.parse(JSON.stringify(v))` would give them: `normalizeConformanceValue` and the round-trip host use `JSONValue.asJSON` (non-finite numbers become `null`).
 
 ### [swift/paint] `loadJSON` Pairs With `toJSON`, Not `editorDocument()`
 
@@ -187,7 +253,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: Laying light by each engine's coverage meant special code in every engine, and smudges, blenders, the knife, the Mixer Brush and pick-up brushes left light where it was laid, so a smeared neon line looked like lit paper, not paint.
 - **Root Cause**: Every engine moves colour its own way (coverage maps, the paint exchange, smudge tips, impasto drivers).
-- **Solution / Workaround**: On a layer with light (or with a brush that lays it), `PaintStrokeSession` runs a twin of the stroke over the light channel drawn as grey paint (`lightToShadow`: white, alpha = light). It uses the same engine, seed and points, the brush's light amount as its grey, a normal blend and RGB mixing (`lightTwinBrush`). Effect alpha and gradient opacity are kept in grey so light lands where colour does. `shadowToLight` turns the twin's result back into light (grey × alpha). Points are forwarded already filtered (the twin has no `inputFilter`, so stateful snappers run once). Wet and sticker strokes have no twin and refuse light above 0; stroke layers refuse it (their redraw doesn't carry light yet).
+- **Solution / Workaround**: On a layer with light (or with a brush that lays it), `PaintStrokeSession` runs a twin of the stroke over the light channel drawn as grey paint (`lightToShadow`: white, alpha = light). It uses the same engine, seed and points, the brush's light amount as its grey, a normal blend and RGB mixing (`lightTwinBrush`). Effect alpha and gradient opacity are kept in grey so light lands where colour does. `shadowToLight` turns the twin's result back into light (grey × alpha). Points are forwarded already filtered (the twin has no `inputFilter`, so stateful snappers run once). Wet and sticker strokes have no twin and refuse light above 0. Stroke layers redraw light by running every stroke's twin again over the layer's light channel (see "Erasers and Light on Stroke Layers").
 
 ### [core/paint-editor] Impasto Material A Is Clarity's Opacity, and 0 Means Solid
 
@@ -228,8 +294,14 @@ All contributors and AI assistants should check this file before starting work a
 ### [core/paint-editor] A Stroke Layer Redraws Only Where an Edit Changes, From the Strokes' Painted Areas
 
 - **Issue / Symptom**: Redrawing a stroke layer from all of its strokes after every edit took over a second with a few dozen particle strokes, and a prefix cache (redraw from the edited stroke up) was just as slow for edits near the bottom.
-- **Root Cause**: A full redraw repaints every stroke, and particle strokes cost tens of milliseconds each. But with the engines a stroke layer allows (no pick-up, smudge, blender, eraser, wet or impasto), a pixel depends only on the strokes that painted it, in order.
+- **Root Cause**: A full redraw repaints every stroke, and particle strokes cost tens of milliseconds each. But with the engines a stroke layer allows (no pick-up, smudge, blender, wet or impasto; erasers only scale the alpha under their tip), a pixel depends only on the strokes that reached it, in order.
 - **Solution / Workaround**: `drawLiveStrokes(layer, list, dirty)` keeps the layer's pixels outside `dirty` (the area the old stroke painted), draws any stroke whose area isn't known yet alone once to learn it, then redraws only the strokes whose painted area overlaps, and copies just those rectangles in. Painted areas come from each stroke's `PaintStrokeResult.bounds`, kept in a `WeakMap` keyed by the stroke object (edits make new objects; a load, canvas move or replay starts with none, so the first edit after them redraws everything). This is only exact because of the engine rule: if a new engine is allowed on stroke layers, it must not read paint it did not lay. Measured: about 20 ms per edit on a 4K canvas with 200 spread-out particle strokes; overlapping strokes add their own cost.
+
+### [core|swift/paint-editor] Erasers and Light on Stroke Layers: Redraw Where a Stroke Reached, Not Where It Changed Pixels
+
+- **Issue / Symptom**: With erasers allowed on stroke layers, editing an eraser stroke (new points, size or seed) brought back the paint it had erased, and a later edit of a stroke under an eraser could leave that stroke unerased.
+- **Root Cause**: A stroke layer learns each stroke's area by drawing it alone on an empty surface, and `PaintStrokeResult.bounds` is `null` when a stroke changed no pixel. An eraser drawn alone erases nothing, so its area was `null` and the region redraw (`drawLiveStrokes`) never drew it again. Light has the same problem one level down: the light twin can reach where the colour stroke did not change anything.
+- **Solution / Workaround**: `PaintStrokeSession.reach()` is everywhere the stroke's marks and its light twin's reached, changed or not. `redrawArea(session)` uses it for erasers and strokes with a light twin, and the stroke layer keeps that as the stroke's painted area (`paintedBounds`). Light is redrawn with the strokes while any of them lays it (`drawLiveLayer` threads the light channel through every stroke's twin in list order, in the same dirty rectangles as the colour); with no light stroke left the layer's light is removed. The scheme view only redraws colour (light is grey, the same in both schemes), but a stroke layer's spill is taken from the view's colours, not the document's light side. Stroke-layer erasers are not breedable (`evolutionStrokeRefusal`): a bred stroke is suggested on a layer of its own. The dirty rectangles are not clipped to the canvas either: strokes paint past its edges, a full redraw draws those pixels (and the Swift port always redraws fully), so a clipped region redraw left a removed stroke's off-canvas paint and light behind (it showed in the layer's bounds and in light spilling back onto the canvas).
 
 ### [core/paint-editor] A Rotation's Determinant Isn't Exactly 1
 

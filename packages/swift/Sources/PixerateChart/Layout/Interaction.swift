@@ -149,9 +149,9 @@ public func describeChartSelection(_ spec: ChartSpec, _ selection: ChartSelectio
         let series = spec.series.first(where: { $0.id == seriesId })
         let value: Double? = (series != nil && index >= 0 && index < series!.values.count) ? series!.values[index] : nil
         let x: Double? = (series?.x != nil && index >= 0 && index < series!.x!.count) ? series!.x![index] : nil
-        let valText = value.map(JSONValue.jsNumber) ?? "blank"
+        let valText = value.map(JSONValue.jsString) ?? "blank"
         if let x, chartFamily(spec) == .xy {
-            return "\(series?.name ?? seriesId): (\(JSONValue.jsNumber(x)), \(valText))"
+            return "\(series?.name ?? seriesId): (\(JSONValue.jsString(x)), \(valText))"
         }
         let cat = (index >= 0 && index < spec.categories.count) ? spec.categories[index] : String(index)
         return "\(series?.name ?? seriesId) · \(cat): \(valText)"

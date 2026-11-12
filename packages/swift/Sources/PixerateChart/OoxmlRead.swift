@@ -161,8 +161,37 @@ private let xmlPiRegex = try! NSRegularExpression(pattern: #"<\?[\s\S]*?\?>"#)
 private let xmlCommentRegex = try! NSRegularExpression(pattern: #"<!--[\s\S]*?-->"#)
 private let xmlDoctypeRegex = try! NSRegularExpression(pattern: #"<!DOCTYPE[^>]*>"#, options: [.caseInsensitive])
 
-internal func decodeXmlEntities(_ input: String) -> String {
-    guard input.contains("&") else { return input }
+/// The error `String.fromCodePoint` throws for a character reference past U+10FFFF
+/// (`RangeError: Invalid code point 1114112`). The TS fallback parser lets it escape `parseFromString`.
+internal struct ChartXmlRangeError: Error, LocalizedError, CustomStringConvertible, Sendable {
+    let message: String
+    var errorDescription: String? { message }
+    var description: String { message }
+}
+
+/// `XML_ENTITIES[code]`: a plain object, so `&toString;` finds `Object.prototype.toString` and the
+/// replacement is the function's source text (see GOTCHAS, "Name Lookups in Plain Objects").
+private let XML_ENTITIES: [String: String] = [
+    "lt": "<", "gt": ">", "amp": "&", "quot": "\"", "apos": "'",
+    "constructor": "function Object() { [native code] }",
+    "hasOwnProperty": "function hasOwnProperty() { [native code] }",
+    "isPrototypeOf": "function isPrototypeOf() { [native code] }",
+    "propertyIsEnumerable": "function propertyIsEnumerable() { [native code] }",
+    "toLocaleString": "function toLocaleString() { [native code] }",
+    "toString": "function toString() { [native code] }",
+    "valueOf": "function valueOf() { [native code] }",
+]
+
+/// `String.fromCodePoint(n)`. A lone surrogate (U+D800–U+DFFF) is a valid JS string but not a Swift
+/// one; it becomes U+FFFD.
+private func fromCodePoint(_ n: Double) throws -> String {
+    guard n >= 0, n <= 0x10FFFF else { throw ChartXmlRangeError(message: "Invalid code point \(JSONValue.jsString(n))") }
+    return String(Unicode.Scalar(UInt32(n)) ?? "\u{FFFD}")
+}
+
+/// `decodeXmlEntities` in `chart/contract.ts` (the fallback DOMParser): throws like `String.fromCodePoint`.
+internal func decodeXmlEntities(_ input: String) throws -> String {
+    guard input.jsIncludes("&") else { return input }
     let ns = input as NSString
     let matches = xmlEntityRegex.matches(in: input, range: NSRange(location: 0, length: ns.length))
     if matches.isEmpty { return input }
@@ -173,29 +202,14 @@ internal func decodeXmlEntities(_ input: String) -> String {
         if range.location > lastPos {
             out += ns.substring(with: NSRange(location: lastPos, length: range.location - lastPos))
         }
-        let ent = ns.substring(with: m.range(at: 1))
-        switch ent {
-        case "lt": out += "<"
-        case "gt": out += ">"
-        case "amp": out += "&"
-        case "quot": out += "\""
-        case "apos": out += "'"
-        default:
-            if ent.hasPrefix("#x") || ent.hasPrefix("#X") {
-                if let code = UInt32(ent.dropFirst(2), radix: 16), let scalar = UnicodeScalar(code) {
-                    out.unicodeScalars.append(scalar)
-                } else {
-                    out += ns.substring(with: range)
-                }
-            } else if ent.hasPrefix("#") {
-                if let code = UInt32(ent.dropFirst(1), radix: 10), let scalar = UnicodeScalar(code) {
-                    out.unicodeScalars.append(scalar)
-                } else {
-                    out += ns.substring(with: range)
-                }
-            } else {
-                out += ns.substring(with: range)
-            }
+        let code = ns.substring(with: m.range(at: 1))
+        if code.hasPrefix("#x") {
+            // parseInt(code.slice(2), 16): strtod rounds a long hex literal correctly, as V8 does.
+            out += try fromCodePoint(Double("0x" + code.dropFirst(2)) ?? .nan)
+        } else if code.hasPrefix("#") {
+            out += try fromCodePoint(Double(code.dropFirst(1)) ?? .nan)
+        } else {
+            out += XML_ENTITIES[code] ?? ns.substring(with: range)
         }
         lastPos = range.location + range.length
     }
@@ -205,9 +219,8 @@ internal func decodeXmlEntities(_ input: String) -> String {
     return out
 }
 
-internal func parseChartXml(_ xml: String) -> MiniXmlDocument {
-    var src = xml
-    if src.hasPrefix("\u{FEFF}") { src.removeFirst() }
+internal func parseChartXml(_ xml: String) throws -> MiniXmlDocument {
+    var src = xml.utf16.first == 0xFEFF ? String(decoding: xml.utf16.dropFirst(), as: UTF16.self) : xml
     src = xmlPiRegex.stringByReplacingMatches(in: src, range: NSRange(src.startIndex..., in: src), withTemplate: "")
     src = xmlCommentRegex.stringByReplacingMatches(in: src, range: NSRange(src.startIndex..., in: src), withTemplate: "")
     src = xmlDoctypeRegex.stringByReplacingMatches(in: src, range: NSRange(src.startIndex..., in: src), withTemplate: "")
@@ -276,7 +289,7 @@ internal func parseChartXml(_ xml: String) -> MiniXmlDocument {
                 } else {
                     rawVal = ""
                 }
-                let aVal = decodeXmlEntities(rawVal)
+                let aVal = try decodeXmlEntities(rawVal)
                 rawAttrs.append((name: aName, value: aVal))
                 if aName == "xmlns" {
                     nsScope[""] = aVal
@@ -334,7 +347,7 @@ internal func parseChartXml(_ xml: String) -> MiniXmlDocument {
             let endPos = nextLt.location == NSNotFound ? len : nextLt.location
             let rawText = nsSrc.substring(with: NSRange(location: pos, length: endPos - pos))
             if let top = stack.last {
-                top.el.childNodes.append(.text(decodeXmlEntities(rawText)))
+                top.el.childNodes.append(.text(try decodeXmlEntities(rawText)))
             } else if !rawText.jsTrimmed.isEmpty {
                 hasError = true
                 break
@@ -536,9 +549,10 @@ internal func readErrorBars(_ e: MiniXmlElement) -> ChartErrorBars? {
 }
 
 internal func uniqueStrings(_ list: [String]) -> [String] {
-    var seen = Set<String>()
+    // `[...new Set(list)]`: JS compares code units, so NFC and NFD spellings stay apart.
+    var seen = Set<JSKey>()
     var out: [String] = []
-    for item in list where seen.insert(item).inserted {
+    for item in list where seen.insert(JSKey(item)).inserted {
         out.append(item)
     }
     return out
@@ -550,7 +564,17 @@ internal func uniqueStrings(_ list: [String]) -> [String] {
 public func chartFromOoxml(_ xml: String) -> ChartOoxmlReadResult {
     var issues: [ChartIssue] = []
     var unsupported: [String] = []
-    let doc = parseChartXml(xml)
+    let doc: MiniXmlDocument
+    do {
+        doc = try parseChartXml(xml)
+    } catch {
+        return ChartOoxmlReadResult(
+            spec: normalizeChartSpec(.object(JSONObject())).spec,
+            issues: [ChartIssue(path: "", message: "The chart XML could not be read: \(error.localizedDescription)")],
+            unsupported: unsupported,
+            lossless: false
+        )
+    }
     guard let root = doc.documentElement,
           root.localName == "chartSpace",
           doc.getElementsByTagName("parsererror").isEmpty else {

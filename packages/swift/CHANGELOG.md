@@ -1,5 +1,17 @@
 # @pixerate/swift
 
+## 0.47.0
+
+### Minor Changes
+
+- 0b737c4: Swift `PaintEditorController.loadJSON` reads more of a paint document the way the TypeScript core does (#742): dual-colour stroke sides in any CSS colour (named, `rgb()`, `hsl()`, `oklab()`, `oklch()`, `color()`, normalised to hex by the new `parseCssColor` / `normalizeCssColor` / `normalizeCssDualColor` in `PixerateRaster`); saved wet and paint events kept verbatim; culture tips whose fields are not numbers kept as NaN; saved channel rects (light, fluorescence, thermochromic, thick paint, ferrofluid) read unchecked; deep 16- and 32-bit pixels and masks decoded and saved again; pixel-layer effect generators kept (`RasterLayer.generator`); and image editor smart objects, unknown adjustment kinds and annotation layers without an annotation reported with the image editor's messages. Conformance values are compared as JSON (`JSONValue.asJSON`).
+
+## 0.46.0
+
+### Minor Changes
+
+- e9a5463: Stroke layers take erasers and light paint (#720, part 1). An eraser stroke is recorded with the layer's other strokes and redrawn with them, so editing, moving or removing the strokes under it (or the eraser itself) redraws exactly, and a partly erased dual-colour pen or highlighter stroke follows the colour scheme with only what is left. Light (the highlighter's glow, neon and other `light.amount` brushes) is redrawn with the strokes through each stroke's grey light twin, so it moves, dims and disappears with them; a stroke layer's spill takes the colours the scheme shows. Region redraws are no longer clipped to the canvas, so paint and light a stroke laid past the canvas edge go when the stroke does. Wet paint is still refused on stroke layers. `evolutionStrokeRefusal` refuses breeding eraser strokes (the evolution panels use it). The Swift paint editor does the same.
+
 ## 0.45.0
 
 ### Minor Changes

@@ -87,11 +87,14 @@ public final class ChartConformanceHost: ConformanceHost {
             )
         )
 
-        let styleProfile = setup["style"]?.objectValue ?? JSONObject()
-        let style = ChartStyleResolver(
-            profile: styleProfile,
-            layer: styleProfile.isEmpty ? nil : "org"
-        )
+        // `setup.style ? { 'house/SKILL.md', 'house/chart.json': JSON.stringify(setup.style) } : {}` in one
+        // `org` layer: a truthy style is a skill, and its profile is validated as `createStyleResolver` does.
+        let style: ChartStyleResolver
+        switch setup["style"] {
+        case nil, .null?, .bool(false)?, .string("")?: style = ChartStyleResolver()
+        case .number(let n)? where n == 0 || n.isNaN: style = ChartStyleResolver()
+        case let raw?: style = ChartStyleResolver(skill: "house", layer: "org", chartJson: raw)
+        }
 
         self.commands = CommandRegistry(context: controller, history: controller.history)
         try commands.register(createChartCommands(controller))
@@ -107,6 +110,14 @@ public final class ChartConformanceHost: ConformanceHost {
             }
         }
 
+        // `decodeBase64Bytes` in `chart/contract.ts`: a `data:` prefix and white space are stripped, and
+        // `atob` throws on anything else that is not base64.
+        func decode(_ b64: String) throws -> [UInt8] {
+            guard let bytes = jsDecodeBase64DataUrl(b64) else {
+                throw ToolExecutionError("The string to be decoded is not correctly encoded.")
+            }
+            return bytes
+        }
         var openFiles: [OfficeChartFile] = []
         if let rawFiles = setup["files"] {
             switch rawFiles {
@@ -114,15 +125,13 @@ public final class ChartConformanceHost: ConformanceHost {
                 for item in arr {
                     guard let obj = item.objectValue,
                           let name = obj["name"]?.stringValue,
-                          let b64 = obj["data"]?.stringValue,
-                          let data = Data(base64Encoded: b64) else { continue }
-                    openFiles.append(OfficeChartFile(name: name, data: [UInt8](data)))
+                          let b64 = obj["data"]?.stringValue else { continue }
+                    openFiles.append(OfficeChartFile(name: name, data: try decode(b64)))
                 }
             case .object(let obj):
                 for (name, val) in obj {
-                    guard let b64 = val.stringValue,
-                          let data = Data(base64Encoded: b64) else { continue }
-                    openFiles.append(OfficeChartFile(name: name, data: [UInt8](data)))
+                    guard let b64 = val.stringValue else { continue }
+                    openFiles.append(OfficeChartFile(name: name, data: try decode(b64)))
                 }
             default:
                 break

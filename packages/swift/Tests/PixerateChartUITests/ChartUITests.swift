@@ -87,6 +87,33 @@ final class ChartUITests: XCTestCase {
         XCTAssertEqual(named.b, 1, accuracy: 1e-9)
     }
 
+    /// Paints read like SVG reads them: `#rgba` / `#rrggbbaa` and `rgb(… / a)` carry alpha.
+    func testParseChartRGBAReadsAlpha() throws {
+        XCTAssertEqual(try XCTUnwrap(parseChartRGBA("#ff000080")).a, 128.0 / 255.0, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(parseChartRGBA("#F008", opacity: 0.5)).a, (136.0 / 255.0) * 0.5, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(parseChartRGBA("#F008")).r, 1, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(parseChartRGBA("rgb(0 0 255 / 25%)")).a, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(parseChartRGBA("rgba(0, 0, 255, 0.4)")).b, 1, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(parseChartRGBA("rgba(0, 0, 255, 0.4)")).a, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(parseChartRGBA("#ff0000", opacity: .nan)).a, 1, accuracy: 1e-9)
+        XCTAssertNil(parseChartRGBA("none"))
+    }
+
+    /// A mark's `opacity` applies to its fill and stroke together (SVG group opacity): where the
+    /// stroke covers the fill, the pixel is the colour at that opacity, not the two layered.
+    func testMarkOpacityCompositesFillAndStrokeAsOneGroup() throws {
+        let mark = ChartMark.rect(ChartRectMark(key: "r", role: .bar, x: 2, y: 2, width: 12, height: 12, fill: "#ff0000", stroke: "#ff0000", strokeWidth: 4, opacity: 0.5))
+        let scene = ChartScene(width: 16, height: 16, plot: ChartRect(x: 0, y: 0, width: 16, height: 16), marks: [mark])
+        var pixels = [UInt8](repeating: 0, count: 16 * 16 * 4)
+        pixels.withUnsafeMutableBytes { buf in
+            let ctx = CGContext(data: buf.baseAddress, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 64, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            drawChartSceneInCGContext(scene, context: ctx)
+        }
+        // (3, 3) lies under both the fill and the stroke; row 3 from the top.
+        let alpha = pixels[(3 * 16 + 3) * 4 + 3]
+        XCTAssertEqual(Double(alpha), 127.5, accuracy: 1.5, "fill and stroke at 0.5 each would give 191")
+    }
+
     func testRenderChartPngUsesTheRequestedRaceFrame() async throws {
         let model = try ChartEditorModel(width: 320, height: 200)
         let data = await model.registry.callTool("set_chart_data", [

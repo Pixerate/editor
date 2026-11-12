@@ -342,3 +342,73 @@ extension String {
         return String(decoding: out, as: UTF16.self)
     }
 }
+
+// MARK: - Code-unit keys (JS `Map` / `Set` string keys)
+
+/// A string compared and hashed by its UTF-16 code units, as JS `Map` and `Set` compare string keys.
+///
+/// Swift's `String` equality is canonical equivalence, so `"é"` (NFC) and `"e\u{301}"` (NFD) are the same
+/// `Dictionary` / `Set` key. In JS they are two different keys. Use `JSKey` where a ported `Map` or `Set`
+/// is keyed by text that came from a file or a user.
+public struct JSKey: Hashable, Sendable {
+    public let units: [UInt16]
+    public init(_ string: String) { units = Array(string.utf16) }
+    public var string: String { String(decoding: units, as: UTF16.self) }
+}
+
+/// `new TextDecoder("utf-8").decode(bytes)`: invalid sequences become U+FFFD and a leading BOM is dropped.
+public func jsDecodeUtf8<C: Collection>(_ bytes: C) -> String where C.Element == UInt8 {
+    if bytes.count >= 3 {
+        var i = bytes.startIndex
+        let b0 = bytes[i]; i = bytes.index(after: i)
+        let b1 = bytes[i]; i = bytes.index(after: i)
+        let b2 = bytes[i]; i = bytes.index(after: i)
+        if b0 == 0xEF && b1 == 0xBB && b2 == 0xBF { return String(decoding: bytes[i...], as: UTF8.self) }
+    }
+    return String(decoding: bytes, as: UTF8.self)
+}
+
+// MARK: - Base64 (`atob`)
+
+/// `atob(text)` (the forgiving-base64 decode of the HTML spec): ASCII white space is ignored, padding
+/// may be left out, and `nil` stands for the `InvalidCharacterError` it throws. Foundation's
+/// `Data(base64Encoded:)` instead requires the padding.
+public func jsAtob(_ text: String) -> [UInt8]? {
+    var units = text.utf16.filter { !($0 == 0x09 || $0 == 0x0A || $0 == 0x0C || $0 == 0x0D || $0 == 0x20) }
+    if units.count % 4 == 0 {
+        if units.last == 0x3D { units.removeLast() }
+        if units.last == 0x3D { units.removeLast() }
+    }
+    if units.count % 4 == 1 { return nil }
+    var out: [UInt8] = []
+    out.reserveCapacity(units.count * 3 / 4)
+    var buffer: UInt32 = 0
+    var bits = 0
+    for u in units {
+        let v: UInt32
+        switch u {
+        case 0x41...0x5A: v = UInt32(u - 0x41)
+        case 0x61...0x7A: v = UInt32(u - 0x61 + 26)
+        case 0x30...0x39: v = UInt32(u - 0x30 + 52)
+        case 0x2B: v = 62
+        case 0x2F: v = 63
+        default: return nil
+        }
+        buffer = (buffer << 6) | v
+        bits += 6
+        if bits >= 8 {
+            bits -= 8
+            out.append(UInt8((buffer >> UInt32(bits)) & 0xFF))
+        }
+    }
+    return out
+}
+
+/// `atob(data.replace(/^data:[^,]*,/, '').replace(/\s+/g, ''))`: base64 file data with an optional
+/// `data:` URL prefix and any JavaScript white space, as the chart file tools and conformance host take it.
+public func jsDecodeBase64DataUrl(_ data: String) -> [UInt8]? {
+    var units = Array(data.utf16)
+    if units.starts(with: Array("data:".utf16)), let comma = units.firstIndex(of: 0x2C) { units.removeSubrange(0...comma) }
+    let clean = String(decoding: units, as: UTF16.self).unicodeScalars.filter { !isJSWhitespace($0) }
+    return jsAtob(String(String.UnicodeScalarView(clean)))
+}

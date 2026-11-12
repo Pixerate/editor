@@ -73,6 +73,72 @@ final class PaintStrokeCultureReadersTests: XCTestCase {
         XCTAssertEqual(normalizeBrushStroke(.object(o))?.dualColor, PaintDualColor(light: "#ffffff", dark: "#000000"))
         o["dualColor"] = ["light": "#ffffff80", "dark": "#000"]
         XCTAssertNil(normalizeBrushStroke(.object(o))?.dualColor)
+        // Any CSS colour the TS core reads, normalised as `normalizeDualColor` does (values from the TS core).
+        let cases: [(JSONValue, String, String)] = [
+            (["light": "rebeccapurple", "dark": "Gold"], "#663399", "#ffd700"),
+            (["light": "rgb(255 0 128)", "dark": "rgba(10, 20, 30, 1)"], "#ff0080", "#0a141e"),
+            (["light": "hsl(210 50% 40%)", "dark": "hsl(0.5turn 100% 25%)"], "#336699", "#008080"),
+            (["light": "oklch(70% 0.1 200)", "dark": "oklch(0.3 0.4 30deg)"], "#40b1b7", "#630000"),
+            ("light-dark(oklab(0.6 0.1 -0.1), color(display-p3 1 0 0))", "#9f63ba", "#ff0b0c"),
+            ("Navy", "#000080", "#000080"),
+        ]
+        for (raw, light, dark) in cases {
+            o["dualColor"] = raw
+            XCTAssertEqual(normalizeBrushStroke(.object(o))?.dualColor, PaintDualColor(light: light, dark: dark), "\(raw.stringified())")
+        }
+        for bad: JSONValue in ["not a colour", "light-dark(red, blue, green)", "rgb(1 2)", ["light": "red", "dark": 3]] {
+            o["dualColor"] = bad
+            XCTAssertNil(normalizeBrushStroke(.object(o))?.dualColor, "\(bad.stringified())")
+        }
+        XCTAssertEqual(normalizeCssColor("transparent"), "#00000000")
+        XCTAssertEqual(normalizeCssColor("rgb(% 0 0)"), "#000000")
+        XCTAssertNil(normalizeCssColor("hsl(1e999 0% 0%)"))
+    }
+
+    /// A tip field that is not a number is NaN in TS (`Math.round(undefined)`), kept in memory and saved as null.
+    func testCultureTipFieldsThatAreNotNumbers() throws {
+        let tip: JSONObject = ["id": 2, "x": "abc", "y": 2048, "angle": "nope", "energy": .null, "r": "300", "g": [7], "b": true, "age": [:], "seed": "0x10", "reachPx": [], "branchPermille": "x", "wanderPermille": 350, "appetitePermille": 500, "digestPermille": 250, "fusePermille": [[5]], "glowPermille": "12"]
+        let c = try cultureFromJSON(["tick": 1, "nextId": 3, "tips": [.object(tip)], "segmentsTotal": 0, "status": "growing"])
+        let saved = try XCTUnwrap(c.tips.first?.json)
+        // Values from the TS core (`cultureFromJSON` then `JSON.stringify`).
+        XCTAssertEqual(saved.asJSON.stringified(), #"{"id":2,"x":null,"y":2048,"angle":0,"energy":0,"widthFp":null,"r":255,"g":7,"b":1,"age":null,"seed":16,"reachPx":1,"branchPermille":null,"wanderPermille":350,"appetitePermille":500,"digestPermille":250,"fusePermille":5,"glowPermille":12}"#)
+        // Reopened from memory, the NaN fields stay NaN (not 0), as the TS object keeps them.
+        let again = try cultureFromJSON(["tips": [saved]])
+        XCTAssertEqual(again.tips.first?.json.asJSON, saved.asJSON)
+        XCTAssertEqual(c.tips.first, c.tips.first)
+    }
+
+    /// Saved events come back verbatim (TS keeps the object), with only changed fields written over them.
+    func testSavedEventsAreKeptVerbatim() throws {
+        let wet = try XCTUnwrap(WetEvent(json: ["note": "kept", "clock": 1e20, "kind": "dry", "at": 1.5, "layerId": 7, "data": "text"]))
+        XCTAssertEqual(wet.json.stringified(), #"{"note":"kept","clock":100000000000000000000,"kind":"dry","at":1.5,"layerId":7,"data":"text"}"#)
+        var moved = wet
+        moved.data = ["x": 1]
+        XCTAssertEqual(moved.json.stringified(), #"{"note":"kept","clock":100000000000000000000,"kind":"dry","at":1.5,"layerId":7,"data":{"x":1}}"#)
+        let paint = try XCTUnwrap(PaintEvent(json: ["why": "kept", "at": 1e18, "kind": "clear", "layerId": "base", "data": 5]))
+        XCTAssertEqual(paint.json.stringified(), #"{"why":"kept","at":1000000000000000000,"kind":"clear","layerId":"base","data":5}"#)
+        XCTAssertNil(PaintEvent(json: ["at": 1.5, "kind": "clear", "layerId": "base"]))
+        XCTAssertNil(WetEvent(json: ["clock": "x", "kind": "tilt"]))
+    }
+
+    /// Saved channel rects are read unchecked, as `surfaceFromPixels(…, rect.x, rect.y)` reads them in TS.
+    func testSavedRectsReadUnchecked() throws {
+        let px: [UInt8] = [10, 20, 30, 40]
+        func bounds(_ rect: JSONValue?) throws -> RasterRect? { contentBounds(try surfaceAtSavedRect(rect, width: 2, height: 2, data: px, channels: 1)) }
+        XCTAssertEqual(try bounds(["x": 3, "y": 4]), RasterRect(x: 3, y: 4, width: 2, height: 2))
+        XCTAssertEqual(try bounds([:]), RasterRect(x: 0, y: 0, width: 2, height: 2))
+        XCTAssertEqual(try bounds(["x": .null, "y": true]), RasterRect(x: 0, y: 1, width: 2, height: 2))
+        XCTAssertEqual(try bounds(true), RasterRect(x: 0, y: 0, width: 2, height: 2))
+        // `"1" + 2` is `"12"`: the rows run 11 pixels wide, reading past each source row (values from the TS core).
+        XCTAssertEqual(try bounds(["x": "1", "y": 0]), RasterRect(x: 1, y: 0, width: 4, height: 2))
+        XCTAssertNil(try bounds(["x": "abc", "y": 0]))
+        // A fractional x writes at the offset typed-array `set` truncates to.
+        XCTAssertEqual(try bounds(["x": 2.5, "y": 0]), RasterRect(x: 2, y: 0, width: 2, height: 2))
+        let rgba = px + px + px + px
+        XCTAssertEqual(contentBounds(try surfaceAtSavedRect(["x": 255.5, "y": 0], width: 2, height: 2, data: rgba, channels: 4)), RasterRect(x: 255, y: 0, width: 3, height: 2))
+        XCTAssertThrowsError(try surfaceAtSavedRect(["x": 254.5, "y": 255.5], width: 2, height: 2, data: rgba, channels: 4)) {
+            XCTAssertEqual(errorMessage($0), "offset is out of bounds")
+        }
     }
 
     /// A version 1 stroke (flat engine brush) reads and saves its brush as a facet brush.

@@ -91,6 +91,20 @@ extension JSONValue {
 
     /// The member `key` of an object, or `nil`.
     public subscript(key: String) -> JSONValue? { objectValue?[key] }
+
+    /// The value as `JSON.parse(JSON.stringify(value))` gives it back: NaN and ±Infinity (which a
+    /// document may hold in memory, as TS objects do) become `null`; everything else is unchanged.
+    public var asJSON: JSONValue {
+        switch self {
+        case .number(let n): return n.isFinite ? self : .null
+        case .array(let a): return .array(a.map(\.asJSON))
+        case .object(let o):
+            var out = JSONObject()
+            for (k, v) in o { out[k] = v.asJSON }
+            return .object(out)
+        default: return self
+        }
+    }
 }
 
 // MARK: - Parsing
@@ -319,8 +333,17 @@ extension JSONValue {
         return out + "\""
     }
 
+    /// `String(n)` / `${n}` in JavaScript: `jsNumber`, but `NaN`, `Infinity` and `-Infinity` for the
+    /// numbers JSON writes as `null`. Use it for text built with template literals (SVG, XML, messages).
+    public static func jsString(_ n: Double) -> String {
+        if n.isNaN { return "NaN" }
+        if n.isInfinite { return n < 0 ? "-Infinity" : "Infinity" }
+        return jsNumber(n)
+    }
+
     /// A number as JavaScript prints it (`Number.prototype.toString`): shortest round trip,
-    /// plain digits from 1e-6 up to 1e21, exponents (`1e+21`, `1e-7`) outside.
+    /// plain digits from 1e-6 up to 1e21, exponents (`1e+21`, `1e-7`) outside. Non-finite numbers are
+    /// `null`, as `JSON.stringify` writes them; `jsString` gives `String(n)`.
     public static func jsNumber(_ n: Double) -> String {
         guard n.isFinite else { return "null" }
         if n == 0 { return "0" }

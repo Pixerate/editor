@@ -1,0 +1,2889 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "document-load-readers",
+  "description": "Opening documents whose parts the TS core reads leniently, read the same way: dual-colour stroke sides in any CSS colour (named, rgb(), hsl(), oklab(), oklch(), color()) normalised to hex; saved wet and paint events kept verbatim (extra fields, a non-integer at, integers past 64 bits, data that is not an object); culture tips with fields that are not numbers kept as NaN (saved as null); saved channel rects (light, fluor, thermo, layerChannels, ferro) read unchecked (missing, null, boolean, fractional and text coordinates, rects that are not objects); deep 16- and 32-bit pixels and masks decoded and saved again, with unreadable samples reported; pixel-layer effect generators kept; and image editor smart objects, unknown adjustment kinds and annotation layers without an annotation reported as the image editor reports them. The result saves and reopens cleanly.",
+  "setup": {
+    "width": 24,
+    "height": 20
+  },
+  "steps": [
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 24,
+        "height": 20,
+        "paper": {
+          "color": "#ffffff"
+        },
+        "layers": [
+          {
+            "id": "base",
+            "name": "Base",
+            "type": "pixel",
+            "asset": "a",
+            "x": 2,
+            "y": 2,
+            "generator": {
+              "effect": "plasma",
+              "provider": "flair",
+              "name": "Plasma",
+              "values": {
+                "speed": 2,
+                "bad": {
+                  "no": 1
+                },
+                "list": [
+                  1,
+                  2
+                ],
+                "flag": true,
+                "word": "x",
+                "nan": [
+                  1,
+                  "a"
+                ]
+              },
+              "time": 1.5,
+              "animate": {
+                "duration": 90000
+              },
+              "extra": 1
+            }
+          },
+          {
+            "id": "gen2",
+            "name": "Generated",
+            "type": "pixel",
+            "generator": {
+              "effect": "noise",
+              "values": [
+                "a",
+                3
+              ],
+              "time": -1,
+              "animate": {
+                "duration": 0
+              }
+            }
+          },
+          {
+            "id": "nogen",
+            "name": "Not generated",
+            "type": "pixel",
+            "generator": {
+              "effect": ""
+            }
+          },
+          {
+            "id": "deep16",
+            "name": "Deep",
+            "type": "pixel",
+            "asset": "a",
+            "x": 6,
+            "y": 6,
+            "deep": {
+              "depth": 16,
+              "x": 6,
+              "y": 6,
+              "width": 2,
+              "height": 2,
+              "data": "eAEtxTENADAIBdGf1EgltCMbCtCEEGQhAhdACDfcy0Q31xVxrtD7DrAVt4gKHg=="
+            },
+            "mask": {
+              "defaultValue": 0,
+              "asset": "m",
+              "x": 6,
+              "y": 6,
+              "deep": {
+                "depth": 32,
+                "x": 6,
+                "y": 6,
+                "width": 2,
+                "height": 2,
+                "data": "eAEFwEkBAAAERNFfzBJgQknjIAudPKiADPX4rewBIYMFOw=="
+              }
+            }
+          },
+          {
+            "id": "deep32",
+            "name": "Deep float",
+            "type": "pixel",
+            "asset": "a",
+            "x": 10,
+            "y": 3,
+            "deep": {
+              "depth": 32,
+              "x": 10,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "data": "eAENwzEBAAAIArAlE6MRXY/RQdjXHBBnAjw="
+            }
+          },
+          {
+            "id": "deepbad",
+            "name": "Deep broken",
+            "type": "pixel",
+            "asset": "a",
+            "x": 14,
+            "y": 3,
+            "deep": {
+              "depth": 16,
+              "x": 14,
+              "y": 3,
+              "width": 2,
+              "height": 2,
+              "data": "AAAA"
+            }
+          },
+          {
+            "id": "deepshort",
+            "name": "Deep short",
+            "type": "pixel",
+            "asset": "a",
+            "x": 14,
+            "y": 8,
+            "deep": {
+              "depth": 16,
+              "x": 14,
+              "y": 8,
+              "width": 1,
+              "height": 1,
+              "data": "eAEFwAEBAAAAQCD8Hy2JAQAMAAQ="
+            }
+          },
+          {
+            "id": "deepodd",
+            "name": "Deep odd",
+            "type": "pixel",
+            "asset": "a",
+            "x": 14,
+            "y": 12,
+            "deep": {
+              "depth": 24,
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "data": ""
+            },
+            "mask": {
+              "defaultValue": 255,
+              "asset": "m",
+              "x": 14,
+              "y": 12,
+              "deep": {
+                "depth": 16,
+                "x": 1.5,
+                "y": 0,
+                "width": 1,
+                "height": 1,
+                "data": ""
+              }
+            }
+          },
+          {
+            "id": "placed",
+            "name": "Placed",
+            "type": "smart",
+            "contents": "c1"
+          },
+          {
+            "id": "placed2",
+            "name": "Placed again",
+            "type": "smart",
+            "contents": "c1"
+          },
+          {
+            "id": "placed3",
+            "name": "",
+            "type": "smart"
+          },
+          {
+            "id": "tone",
+            "name": "Tone",
+            "type": "adjustment",
+            "kind": "sepia"
+          },
+          {
+            "id": "tone2",
+            "name": "Curves",
+            "type": "adjustment",
+            "kind": "curves"
+          },
+          {
+            "id": "tone3",
+            "name": "",
+            "type": "adjustment"
+          },
+          {
+            "id": "note",
+            "name": "Note",
+            "type": "annotation"
+          },
+          {
+            "id": "note2",
+            "name": "Note 2",
+            "type": "annotation",
+            "annotation": {
+              "id": "n2",
+              "text": "hi"
+            }
+          }
+        ],
+        "assets": {
+          "a": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC",
+          "m": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+        },
+        "activeLayerId": "base",
+        "strokes": [
+          {
+            "id": "s1",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "rebeccapurple",
+              "dark": "gold"
+            }
+          },
+          {
+            "id": "s2",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "rgb(255 0 128)",
+              "dark": "rgba(10, 20, 30, 1)"
+            }
+          },
+          {
+            "id": "s3",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "hsl(210 50% 40%)",
+              "dark": "hsl(0.5turn 100% 25%)"
+            }
+          },
+          {
+            "id": "s4",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "oklch(70% 0.1 200)",
+              "dark": "oklch(0.3 0.4 30deg)"
+            }
+          },
+          {
+            "id": "s5",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": "light-dark(oklab(0.6 0.1 -0.1), color(display-p3 1 0 0))"
+          },
+          {
+            "id": "s6",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": "Navy"
+          },
+          {
+            "id": "s7",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "color(srgb-linear 0.2 0.4 0.6)",
+              "dark": "TRANSPARENT"
+            }
+          },
+          {
+            "id": "s8",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "hsl(120 100% 50% / 50%)",
+              "dark": "#000"
+            }
+          },
+          {
+            "id": "s9",
+            "layerId": "base",
+            "brush": {
+              "dynamics": {
+                "minSize": 0.4,
+                "smoothing": 0.25
+              },
+              "id": "ink",
+              "kind": "dab",
+              "name": "Ink",
+              "tip": {
+                "hardness": 0.75,
+                "shape": "round",
+                "size": 6,
+                "spacing": 0.12
+              }
+            },
+            "color": "#336699",
+            "points": [
+              {
+                "x": 4,
+                "y": 4,
+                "pressure": 0.6
+              },
+              {
+                "x": 12,
+                "y": 8,
+                "pressure": 0.6
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "not a colour",
+              "dark": "#fff"
+            }
+          }
+        ],
+        "wetEvents": [
+          {
+            "clock": 2,
+            "kind": "tilt",
+            "data": {
+              "angle": 5,
+              "direction": 0
+            },
+            "note": "kept",
+            "at": 1.5
+          },
+          {
+            "kind": "dry",
+            "clock": 100000000000000000000,
+            "layerId": 7,
+            "data": "text"
+          },
+          {
+            "clock": 3,
+            "kind": "tilt",
+            "extra": {
+              "nested": [
+                1,
+                2
+              ]
+            }
+          }
+        ],
+        "paintEvents": [
+          {
+            "at": 0,
+            "kind": "clear",
+            "layerId": "base",
+            "data": 5,
+            "why": "kept"
+          },
+          {
+            "layerId": "base",
+            "kind": "fill",
+            "at": 1000000000000000000,
+            "data": {
+              "color": "#ff0000"
+            }
+          }
+        ],
+        "cultures": {
+          "layers": {
+            "base": {
+              "tick": 2,
+              "nextId": 9,
+              "segmentsTotal": 1,
+              "status": "growing",
+              "tips": [
+                {
+                  "id": 1,
+                  "x": 1024,
+                  "y": 2048,
+                  "angle": 100,
+                  "energy": 500,
+                  "widthFp": 64,
+                  "r": 200,
+                  "g": 100,
+                  "b": 50,
+                  "age": 3,
+                  "seed": 42,
+                  "reachPx": 32,
+                  "branchPermille": 400,
+                  "wanderPermille": 350,
+                  "appetitePermille": 500,
+                  "digestPermille": 250,
+                  "fusePermille": 700,
+                  "glowPermille": 0
+                },
+                {
+                  "id": 2,
+                  "x": "abc",
+                  "y": 2048,
+                  "angle": 100,
+                  "energy": null,
+                  "r": "300",
+                  "g": [
+                    7
+                  ],
+                  "b": true,
+                  "age": {},
+                  "seed": 42,
+                  "reachPx": [],
+                  "branchPermille": "x",
+                  "wanderPermille": 350,
+                  "appetitePermille": 500,
+                  "digestPermille": 250,
+                  "fusePermille": 700,
+                  "glowPermille": "12"
+                },
+                {
+                  "id": 3,
+                  "x": 1024,
+                  "y": 2048,
+                  "angle": "nope",
+                  "energy": 500,
+                  "widthFp": 64,
+                  "r": 200,
+                  "g": 100,
+                  "b": 50,
+                  "age": 3,
+                  "seed": "0x10",
+                  "reachPx": 32,
+                  "branchPermille": 400,
+                  "wanderPermille": 350,
+                  "appetitePermille": 500,
+                  "digestPermille": 250,
+                  "fusePermille": [
+                    [
+                      5
+                    ]
+                  ],
+                  "glowPermille": 0
+                }
+              ]
+            }
+          }
+        },
+        "light": {
+          "base": {
+            "rect": {
+              "x": 2.5,
+              "y": 1
+            },
+            "light": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+          },
+          "deep16": {
+            "rect": {
+              "y": true
+            },
+            "light": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+          }
+        },
+        "fluor": {
+          "base": {
+            "rect": {
+              "x": "1",
+              "y": 2
+            },
+            "fluor": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          },
+          "deep32": {
+            "rect": [],
+            "fluor": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          }
+        },
+        "thermo": {
+          "base": {
+            "rect": {
+              "x": null,
+              "y": -1.5
+            },
+            "thermo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          },
+          "deep32": {
+            "rect": {
+              "x": 255.5,
+              "y": 0
+            },
+            "thermo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          }
+        },
+        "layerChannels": {
+          "base": {
+            "rect": true,
+            "height": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII=",
+            "material": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          },
+          "deep16": {
+            "rect": {
+              "x": "abc",
+              "y": 0
+            },
+            "height": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII=",
+            "material": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          }
+        },
+        "ferro": {
+          "base": {
+            "rect": {
+              "x": -3,
+              "y": 2.25
+            },
+            "ferro": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+          }
+        }
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "base",
+          "layers": [
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 14,
+                "y": 12
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deepodd",
+              "locks": {},
+              "name": "Deep odd",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 14,
+                "y": 8
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deepshort",
+              "locks": {},
+              "name": "Deep short",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 14,
+                "y": 3
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deepbad",
+              "locks": {},
+              "name": "Deep broken",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 5,
+                "width": 12,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deep32",
+              "locks": {},
+              "name": "Deep float",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 6,
+                "y": 6
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deep16",
+              "locks": {},
+              "name": "Deep",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "nogen",
+              "locks": {},
+              "name": "Not generated",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "gen2",
+              "locks": {},
+              "name": "Generated",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 256,
+                "width": 261,
+                "x": -256,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "base",
+              "locks": {},
+              "name": "Base",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [
+          "Layer \"Deep broken\": its 16-bit samples could not be read, so it was opened at 8 bits",
+          "Layer \"Deep short\": its 16-bit samples could not be read, so it was opened at 8 bits",
+          "Layer \"Deep odd\" mask: its 16-bit samples could not be read, so it was opened at 8 bits",
+          "Layer \"Deep odd\": its 24-bit samples could not be read, so it was opened at 8 bits",
+          "Smart object contents \"c1\" are missing",
+          "Layer \"Placed\": its smart object contents are missing; the layer was dropped",
+          "Smart object contents \"c1\" are missing",
+          "Layer \"Placed again\": its smart object contents are missing; the layer was dropped",
+          "Layer \"placed3\": its smart object contents are missing; the layer was dropped",
+          "Layer \"Tone\": unknown adjustment kind \"sepia\"",
+          "Layer \"tone3\": unknown adjustment kind \"undefined\"",
+          "Layer \"Note\": annotation is missing",
+          "Layer \"Note 2\": annotation is missing",
+          "Layer \"Curves\" is an image editor adjustment layer, which the paint editor does not have; it was left out."
+        ],
+        "document": {
+          "document": {
+            "activeLayerId": "base",
+            "assets": {
+              "base": "<binary>",
+              "deep16": "<binary>",
+              "deep16-mask": "<binary>",
+              "deep32": "<binary>",
+              "deepbad": "<binary>",
+              "deepodd": "<binary>",
+              "deepodd-mask": "<binary>",
+              "deepshort": "<binary>"
+            },
+            "cultures": {
+              "layers": {
+                "base": {
+                  "nextId": 9,
+                  "segmentsTotal": 1,
+                  "status": "growing",
+                  "tick": 2,
+                  "tips": [
+                    {
+                      "age": 3,
+                      "angle": 100,
+                      "appetitePermille": 500,
+                      "b": 50,
+                      "branchPermille": 400,
+                      "digestPermille": 250,
+                      "energy": 500,
+                      "fusePermille": 700,
+                      "g": 100,
+                      "glowPermille": 0,
+                      "id": 1,
+                      "r": 200,
+                      "reachPx": 32,
+                      "seed": 42,
+                      "wanderPermille": 350,
+                      "widthFp": 64,
+                      "x": 1024,
+                      "y": 2048
+                    },
+                    {
+                      "age": null,
+                      "angle": 100,
+                      "appetitePermille": 500,
+                      "b": 1,
+                      "branchPermille": null,
+                      "digestPermille": 250,
+                      "energy": 0,
+                      "fusePermille": 700,
+                      "g": 7,
+                      "glowPermille": 12,
+                      "id": 2,
+                      "r": 255,
+                      "reachPx": 1,
+                      "seed": 42,
+                      "wanderPermille": 350,
+                      "widthFp": null,
+                      "x": null,
+                      "y": 2048
+                    },
+                    {
+                      "age": 3,
+                      "angle": 0,
+                      "appetitePermille": 500,
+                      "b": 50,
+                      "branchPermille": 400,
+                      "digestPermille": 250,
+                      "energy": 500,
+                      "fusePermille": 5,
+                      "g": 100,
+                      "glowPermille": 0,
+                      "id": 3,
+                      "r": 200,
+                      "reachPx": 32,
+                      "seed": 16,
+                      "wanderPermille": 350,
+                      "widthFp": 64,
+                      "x": 1024,
+                      "y": 2048
+                    }
+                  ]
+                }
+              }
+            },
+            "dpi": 300,
+            "ferro": {
+              "base": {
+                "ferro": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": -256,
+                  "y": 0
+                }
+              }
+            },
+            "fluor": {
+              "base": {
+                "fluor": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              },
+              "deep32": {
+                "fluor": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 12,
+                  "y": 10
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 20,
+            "layerChannels": {
+              "base": {
+                "height": "<binary>",
+                "material": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "base",
+                "blend": "normal",
+                "generator": {
+                  "animate": {
+                    "duration": 60000
+                  },
+                  "effect": "plasma",
+                  "name": "Plasma",
+                  "provider": "flair",
+                  "time": 1.5,
+                  "values": {
+                    "flag": true,
+                    "list": [
+                      1,
+                      2
+                    ],
+                    "speed": 2,
+                    "word": "x"
+                  }
+                },
+                "id": "base",
+                "name": "Base",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 2,
+                "y": 2
+              },
+              {
+                "blend": "normal",
+                "generator": {
+                  "effect": "noise",
+                  "values": {
+                    "0": "a",
+                    "1": 3
+                  }
+                },
+                "id": "gen2",
+                "name": "Generated",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "nogen",
+                "name": "Not generated",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "deep16",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEtxTENADAIBdGf1EgltCMbCtCEEGQhAhdACDfcy0Q31xVxrtD7DrAVt4gKHg==",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 6,
+                  "y": 6
+                },
+                "id": "deep16",
+                "mask": {
+                  "asset": "deep16-mask",
+                  "deep": {
+                    "data": "eAEFwEkBAAAERNFfzBJgQknjIAudPKiADPX4rewBIYMFOw==",
+                    "depth": 32,
+                    "height": 2,
+                    "width": 2,
+                    "x": 6,
+                    "y": 6
+                  },
+                  "defaultValue": 0,
+                  "x": 6,
+                  "y": 6
+                },
+                "name": "Deep",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 6,
+                "y": 6
+              },
+              {
+                "asset": "deep32",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAFViDENACAMwOoBO4QhAUMkM4QaXsSwLdmxo2la0AEITENl39PXa+HsfN4V+FciEdc=",
+                  "depth": 32,
+                  "height": 2,
+                  "width": 2,
+                  "x": 10,
+                  "y": 3
+                },
+                "id": "deep32",
+                "name": "Deep float",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 10,
+                "y": 3
+              },
+              {
+                "asset": "deepbad",
+                "blend": "normal",
+                "id": "deepbad",
+                "name": "Deep broken",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 14,
+                "y": 3
+              },
+              {
+                "asset": "deepshort",
+                "blend": "normal",
+                "id": "deepshort",
+                "name": "Deep short",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 14,
+                "y": 8
+              },
+              {
+                "asset": "deepodd",
+                "blend": "normal",
+                "id": "deepodd",
+                "mask": {
+                  "asset": "deepodd-mask",
+                  "defaultValue": 255,
+                  "x": 14,
+                  "y": 12
+                },
+                "name": "Deep odd",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 14,
+                "y": 12
+              }
+            ],
+            "light": {
+              "base": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              },
+              "deep16": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": 5,
+                "kind": "clear",
+                "layerId": "base",
+                "why": "kept"
+              },
+              {
+                "at": 1000000000000000000,
+                "data": {
+                  "color": "#ff0000"
+                },
+                "kind": "fill",
+                "layerId": "base"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#ffffff",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#ffd700",
+                  "light": "#663399"
+                },
+                "id": "s1",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#0a141e",
+                  "light": "#ff0080"
+                },
+                "id": "s2",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#008080",
+                  "light": "#336699"
+                },
+                "id": "s3",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#630000",
+                  "light": "#40b1b7"
+                },
+                "id": "s4",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#ff0b0c",
+                  "light": "#9f63ba"
+                },
+                "id": "s5",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#000080",
+                  "light": "#000080"
+                },
+                "id": "s6",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "id": "s7",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "id": "s8",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "id": "s9",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "thermo": {
+              "base": {
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": -256
+                },
+                "thermo": "<binary>"
+              },
+              "deep32": {
+                "rect": {
+                  "height": 256,
+                  "width": 512,
+                  "x": 0,
+                  "y": 0
+                },
+                "thermo": "pixerate-asset:n6-20kasoikuyu"
+              }
+            },
+            "version": 2,
+            "wetEvents": [
+              {
+                "at": 1.5,
+                "clock": 2,
+                "data": {
+                  "angle": 5,
+                  "direction": 0
+                },
+                "kind": "tilt",
+                "note": "kept"
+              },
+              {
+                "clock": 100000000000000000000,
+                "data": "text",
+                "kind": "dry",
+                "layerId": 7
+              },
+              {
+                "clock": 3,
+                "extra": {
+                  "nested": [
+                    1,
+                    2
+                  ]
+                },
+                "kind": "tilt"
+              }
+            ],
+            "width": 24
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-load-readers.1.png",
+          "width": 24,
+          "height": 20,
+          "sha256": "9a480b5f25abb70a659b311fdeddb11c1a1690b206a665ec19932399593b457e",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_strokes",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "strokes": [
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s1",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s2",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s3",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s4",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s5",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s6",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s7",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s8",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            },
+            {
+              "bounds": {
+                "height": 10,
+                "width": 14,
+                "x": 1,
+                "y": 1
+              },
+              "brushId": "ink",
+              "brushName": "Ink",
+              "color": "#336699",
+              "copies": 0,
+              "id": "s9",
+              "layerId": "base",
+              "live": false,
+              "points": 2,
+              "seed": 3
+            }
+          ],
+          "total": 9
+        }
+      }
+    },
+    {
+      "tool": "get_cultures",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "growWhileClosed": false,
+          "growing": true,
+          "layers": [
+            {
+              "bounds": null,
+              "layerId": "base",
+              "segments": 1,
+              "status": "growing",
+              "tick": 2,
+              "tips": 3
+            }
+          ],
+          "paused": false,
+          "pendingCatchUpTicks": 0,
+          "speed": 1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "base",
+          "layers": [
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 14,
+                "y": 12
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deepodd",
+              "locks": {},
+              "name": "Deep odd",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 14,
+                "y": 8
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deepshort",
+              "locks": {},
+              "name": "Deep short",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 14,
+                "y": 3
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deepbad",
+              "locks": {},
+              "name": "Deep broken",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 5,
+                "width": 12,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deep32",
+              "locks": {},
+              "name": "Deep float",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 6,
+                "y": 6
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "deep16",
+              "locks": {},
+              "name": "Deep",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "nogen",
+              "locks": {},
+              "name": "Not generated",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "gen2",
+              "locks": {},
+              "name": "Generated",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 256,
+                "width": 261,
+                "x": -256,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "base",
+              "locks": {},
+              "name": "Base",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "base",
+            "assets": {
+              "base": "<binary>",
+              "deep16": "<binary>",
+              "deep16-mask": "<binary>",
+              "deep32": "<binary>",
+              "deepbad": "<binary>",
+              "deepodd": "<binary>",
+              "deepodd-mask": "<binary>",
+              "deepshort": "<binary>"
+            },
+            "cultures": {
+              "layers": {
+                "base": {
+                  "nextId": 9,
+                  "segmentsTotal": 1,
+                  "status": "growing",
+                  "tick": 2,
+                  "tips": [
+                    {
+                      "age": 3,
+                      "angle": 100,
+                      "appetitePermille": 500,
+                      "b": 50,
+                      "branchPermille": 400,
+                      "digestPermille": 250,
+                      "energy": 500,
+                      "fusePermille": 700,
+                      "g": 100,
+                      "glowPermille": 0,
+                      "id": 1,
+                      "r": 200,
+                      "reachPx": 32,
+                      "seed": 42,
+                      "wanderPermille": 350,
+                      "widthFp": 64,
+                      "x": 1024,
+                      "y": 2048
+                    },
+                    {
+                      "age": null,
+                      "angle": 100,
+                      "appetitePermille": 500,
+                      "b": 1,
+                      "branchPermille": null,
+                      "digestPermille": 250,
+                      "energy": 0,
+                      "fusePermille": 700,
+                      "g": 7,
+                      "glowPermille": 12,
+                      "id": 2,
+                      "r": 255,
+                      "reachPx": 1,
+                      "seed": 42,
+                      "wanderPermille": 350,
+                      "widthFp": null,
+                      "x": null,
+                      "y": 2048
+                    },
+                    {
+                      "age": 3,
+                      "angle": 0,
+                      "appetitePermille": 500,
+                      "b": 50,
+                      "branchPermille": 400,
+                      "digestPermille": 250,
+                      "energy": 500,
+                      "fusePermille": 5,
+                      "g": 100,
+                      "glowPermille": 0,
+                      "id": 3,
+                      "r": 200,
+                      "reachPx": 32,
+                      "seed": 16,
+                      "wanderPermille": 350,
+                      "widthFp": 64,
+                      "x": 1024,
+                      "y": 2048
+                    }
+                  ]
+                }
+              }
+            },
+            "dpi": 300,
+            "ferro": {
+              "base": {
+                "ferro": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": -256,
+                  "y": 0
+                }
+              }
+            },
+            "fluor": {
+              "base": {
+                "fluor": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              },
+              "deep32": {
+                "fluor": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 12,
+                  "y": 10
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 20,
+            "layerChannels": {
+              "base": {
+                "height": "<binary>",
+                "material": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "layers": [
+              {
+                "asset": "base",
+                "blend": "normal",
+                "generator": {
+                  "animate": {
+                    "duration": 60000
+                  },
+                  "effect": "plasma",
+                  "name": "Plasma",
+                  "provider": "flair",
+                  "time": 1.5,
+                  "values": {
+                    "flag": true,
+                    "list": [
+                      1,
+                      2
+                    ],
+                    "speed": 2,
+                    "word": "x"
+                  }
+                },
+                "id": "base",
+                "name": "Base",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 2,
+                "y": 2
+              },
+              {
+                "blend": "normal",
+                "generator": {
+                  "effect": "noise",
+                  "values": {
+                    "0": "a",
+                    "1": 3
+                  }
+                },
+                "id": "gen2",
+                "name": "Generated",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "blend": "normal",
+                "id": "nogen",
+                "name": "Not generated",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "deep16",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEtxTENADAIBdGf1EgltCMbCtCEEGQhAhdACDfcy0Q31xVxrtD7DrAVt4gKHg==",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 6,
+                  "y": 6
+                },
+                "id": "deep16",
+                "mask": {
+                  "asset": "deep16-mask",
+                  "deep": {
+                    "data": "eAEFwEkBAAAERNFfzBJgQknjIAudPKiADPX4rewBIYMFOw==",
+                    "depth": 32,
+                    "height": 2,
+                    "width": 2,
+                    "x": 6,
+                    "y": 6
+                  },
+                  "defaultValue": 0,
+                  "x": 6,
+                  "y": 6
+                },
+                "name": "Deep",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 6,
+                "y": 6
+              },
+              {
+                "asset": "deep32",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAFViDENACAMwOoBO4QhAUMkM4QaXsSwLdmxo2la0AEITENl39PXa+HsfN4V+FciEdc=",
+                  "depth": 32,
+                  "height": 2,
+                  "width": 2,
+                  "x": 10,
+                  "y": 3
+                },
+                "id": "deep32",
+                "name": "Deep float",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 10,
+                "y": 3
+              },
+              {
+                "asset": "deepbad",
+                "blend": "normal",
+                "id": "deepbad",
+                "name": "Deep broken",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 14,
+                "y": 3
+              },
+              {
+                "asset": "deepshort",
+                "blend": "normal",
+                "id": "deepshort",
+                "name": "Deep short",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 14,
+                "y": 8
+              },
+              {
+                "asset": "deepodd",
+                "blend": "normal",
+                "id": "deepodd",
+                "mask": {
+                  "asset": "deepodd-mask",
+                  "defaultValue": 255,
+                  "x": 14,
+                  "y": 12
+                },
+                "name": "Deep odd",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 14,
+                "y": 12
+              }
+            ],
+            "light": {
+              "base": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              },
+              "deep16": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 0
+                }
+              }
+            },
+            "paintEvents": [
+              {
+                "at": 0,
+                "data": 5,
+                "kind": "clear",
+                "layerId": "base",
+                "why": "kept"
+              },
+              {
+                "at": 1000000000000000000,
+                "data": {
+                  "color": "#ff0000"
+                },
+                "kind": "fill",
+                "layerId": "base"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#ffffff",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#ffd700",
+                  "light": "#663399"
+                },
+                "id": "s1",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#0a141e",
+                  "light": "#ff0080"
+                },
+                "id": "s2",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#008080",
+                  "light": "#336699"
+                },
+                "id": "s3",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#630000",
+                  "light": "#40b1b7"
+                },
+                "id": "s4",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#ff0b0c",
+                  "light": "#9f63ba"
+                },
+                "id": "s5",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "dualColor": {
+                  "dark": "#000080",
+                  "light": "#000080"
+                },
+                "id": "s6",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "id": "s7",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "id": "s8",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.4
+                  },
+                  "id": "ink",
+                  "kind": "mark",
+                  "name": "Ink",
+                  "tip": {
+                    "hardness": 0.75,
+                    "shape": "round",
+                    "size": 6,
+                    "spacing": 0.12
+                  }
+                },
+                "color": "#336699",
+                "id": "s9",
+                "layerId": "base",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 4,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.6,
+                    "x": 12,
+                    "y": 8
+                  }
+                ],
+                "seed": 3
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "thermo": {
+              "base": {
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": -256
+                },
+                "thermo": "<binary>"
+              },
+              "deep32": {
+                "rect": {
+                  "height": 256,
+                  "width": 512,
+                  "x": 0,
+                  "y": 0
+                },
+                "thermo": "pixerate-asset:n6-20kasoikuyu"
+              }
+            },
+            "version": 2,
+            "wetEvents": [
+              {
+                "at": 1.5,
+                "clock": 2,
+                "data": {
+                  "angle": 5,
+                  "direction": 0
+                },
+                "kind": "tilt",
+                "note": "kept"
+              },
+              {
+                "clock": 100000000000000000000,
+                "data": "text",
+                "kind": "dry",
+                "layerId": 7
+              },
+              {
+                "clock": 3,
+                "extra": {
+                  "nested": [
+                    1,
+                    2
+                  ]
+                },
+                "kind": "tilt"
+              }
+            ],
+            "width": 24
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-load-readers.4.png",
+          "width": 24,
+          "height": 20,
+          "sha256": "9a480b5f25abb70a659b311fdeddb11c1a1690b206a665ec19932399593b457e",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

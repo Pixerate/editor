@@ -82,7 +82,8 @@ private final class RoundTripHost: ConformanceHost {
 
     /// `lastGrownAt` is the clock at save time (growWhileClosed); everything else must come back.
     private func comparable(_ doc: JSONValue?) -> JSONValue {
-        guard var o = doc?.objectValue else { return doc ?? .null }
+        // Compared as JSON, as the TS check does (`JSON.parse(JSON.stringify(doc))`): NaN reads as null.
+        guard var o = doc?.asJSON.objectValue else { return doc?.asJSON ?? .null }
         if var c = o["cultures"]?.objectValue {
             c["lastGrownAt"] = nil
             o["cultures"] = .object(c)

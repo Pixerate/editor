@@ -17,6 +17,12 @@ public struct SchemaValidationError: Equatable, Sendable {
 /// Most `$ref` hops followed before a reference cycle is reported.
 private let maxRefDepth = 32
 
+/// Names every plain JS object inherits from `Object.prototype` (`"toString" in {}` is true).
+private let OBJECT_PROTOTYPE_NAMES: Set<String> = [
+    "constructor", "__defineGetter__", "__defineSetter__", "hasOwnProperty", "__lookupGetter__", "__lookupSetter__",
+    "isPrototypeOf", "propertyIsEnumerable", "toString", "valueOf", "__proto__", "toLocaleString",
+]
+
 /// The JSON-Schema-lite type of a value: `integer` for whole numbers, as `tools/schema.ts` reads them.
 private func typeOf(_ value: JSONValue) -> String {
     switch value {
@@ -172,6 +178,10 @@ private func validate(_ value: JSONValue, _ schemaValue: JSONValue?, path: Strin
         for (key, child) in obj {
             if properties.contains(key) {
                 errors += recurse(child, properties[key], "\(path)/\(key)")
+            } else if OBJECT_PROTOTYPE_NAMES.contains(key) {
+                // `key in properties` is true for names `properties` inherits from `Object.prototype`;
+                // the TS validator then validates against a function, which checks nothing.
+                continue
             } else if schema["additionalProperties"] == .bool(false) {
                 let known = properties.keys
                 errors.append(.init(path: "\(path)/\(key)", message: "Unknown property \"\(key)\".\(closestName(key, known))\(known.isEmpty ? "" : " Allowed: \(known.joined(separator: ", ")).")"))

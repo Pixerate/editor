@@ -125,7 +125,7 @@ internal func drawReferences(
             guard inside(p) else {
                 ctx.warn(
                     .annotationsSkipped,
-                    "The reference line at \(JSONValue.jsNumber(item.value)) is outside the \(axKey == .x ? "x" : "value") axis range and is not drawn."
+                    "The reference line at \(JSONValue.jsString(item.value)) is outside the \(axKey == .x ? "x" : "value") axis range and is not drawn."
                 )
                 continue
             }
