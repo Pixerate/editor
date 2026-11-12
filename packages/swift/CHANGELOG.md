@@ -1,5 +1,17 @@
 # @pixerate/swift
 
+## 0.50.1
+
+### Patch Changes
+
+- 6be3243: Large sticker brushes spread out, and thick paint that also paints light works in Swift.
+
+  - **Stickers at large sizes.** Past `STICKER_REACH` (64 px) a sticker brush's spacing now eases from its density toward `STICKER_LARGE_SPACING` (0.9 diameters) by `STICKER_SPREAD_SIZE` (256 px), so big stickers lie side by side along the path instead of piling onto one another. Scatter still stops at the reach, so they keep tracing the stroke. `stickerSpacing(density, size)` gives the spacing.
+  - **Swift: thick paint with light.** A stroke whose light twin paints with an engine other than dab, particle, bristle and the exchange engines (the glow gel, or any impasto brush on a layer that already holds light) now lays plain dabs as in `stroke.ts`, instead of failing with "…which the Swift paint editor does not paint with yet".
+
+- 763779b: Live biopaint growth is lighter on the main thread. Each growth frame now redraws only the tiles its new threads and digested paint touched, instead of the whole colony, and it no longer rescans each colony's occupancy for bounds it doesn't use. `runCultureClock(frameInterval:)` lets a host grow at a lower frame rate; growth speed stays the same.
+- 5978a5c: The Metal-vs-CPU pixel expression tests no longer fail on a cold iOS simulator. They compare pixels, so they now allow the GPU compile up to 120 s instead of the 2 s production budget. Metal's first compile on a fresh CI simulator could take longer than that. Renderer behaviour is unchanged.
+
 ## 0.50.0
 
 ### Minor Changes
