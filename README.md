@@ -462,7 +462,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Chart editor</strong> (26)</summary>
+<summary><strong>Chart editor</strong> (27)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -492,6 +492,7 @@ Every feature is available from core and from both framework packages, except wh
 | Charts in Office Files (every chart in an `.xlsx` with sheet and anchor cell, `.pptx` with slide number, or `.docx`; DrawingML and chartex; `list_open_files`, `list_file_charts`, `get_file_chart`, `load_file_chart` agent tools) | `extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `createOfficeChartToolProvider` | `useOfficeChartToolProvider` | `useOfficeChartToolProvider` | `extractOfficeCharts`, `extractXlsxCharts`, `extractPptxCharts`, `extractDocxCharts` & `createOfficeChartToolProvider` |
 | Chart Streaming, Presence & Sparklines (lenient partial Mermaid / JSON, steady axes, tweened scenes; agent cursors that act out edits as one undo step; word-sized line / column / win-loss charts) | `ChartStream`, `blendChartScenes`, `ChartDirector`, `ChartPresence`, `layoutSparkline` | `<ChartStreamingView>`, `useChartDirector`, `<ChartSparkline>` | `<ChartStreamingView>`, `createChartDirector`, `<ChartSparkline>` | `ChartStream`, `blendChartScenes`, `planChartCommand`, `chartPointAnchor`, `layoutSparkline` |
 | Chart Summaries & Accessibility (per-series min / max / mean / trend, layout warnings, plain-language description, SVG `<title>` and `<desc>`, recommendations from table shape) | `summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable` | Via core | Via core | `summarizeChart`, `describeChart`, `recommendChartTypes` & `chartFromTable` |
+| 3-D View (`view3d`: azimuth, elevation and depth as Office's view3D; set, merged and cleared through `update_chart`; Office 3-D bar, line and area charts import with their view instead of being drawn flat, and are written back flat with a note; drawing in 3-D comes with `@pixerate/editor/three`) | `ChartView3d`, `CHART_VIEW3D_DEFAULTS` (`/chart`), `update_chart` `view3d` | ✅ (`update_chart` and `ChartController.update`) | ✅ (`update_chart` and `ChartController.update`) | ✅ (`ChartView3d`, `update_chart`, Office import); drawing in 3-D: Planned (#533) |
 
 </details>
 

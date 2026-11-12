@@ -28,8 +28,12 @@ import type {
 	ChartTrendline,
 	ChartTrendlineType,
 	ChartType,
-	ChartValue
+	ChartValue,
+	ChartView3d
 } from './types.js';
+
+/** The 3-D view's defaults, as Office draws a new 3-D chart (#795). */
+export const CHART_VIEW3D_DEFAULTS: Readonly<ChartView3d> = Object.freeze({ azimuth: 20, elevation: 15, depth: 1 });
 
 export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'sankey', 'streamgraph', 'slope', 'likert', 'parliament', 'barrace', 'choropleth'];
 export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
@@ -702,6 +706,22 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		if (value.raceTopN !== null && Number.isInteger(n) && n >= 1 && n <= 30) raceTopN = n;
 		else issues.push({ path: 'raceTopN', message: 'raceTopN must be a whole number of bars from 1 to 30.' });
 	}
+	let view3d: ChartView3d | undefined;
+	if (value.view3d !== undefined && value.view3d !== null) {
+		const v = value.view3d;
+		if (!isRecord(v)) issues.push({ path: 'view3d', message: 'view3d must be { azimuth, elevation, depth } or null for a flat chart.' });
+		else {
+			const angle = (key: 'azimuth' | 'elevation' | 'depth', lo: number, hi: number, what: string) => {
+				if (v[key] === undefined) return CHART_VIEW3D_DEFAULTS[key];
+				const n = Number(v[key]);
+				if (v[key] !== null && Number.isFinite(n) && n >= lo && n <= hi) return n;
+				issues.push({ path: `view3d.${key}`, message: `view3d.${key} must be ${what}.` });
+				return CHART_VIEW3D_DEFAULTS[key];
+			};
+			for (const k of Object.keys(v)) if (!['azimuth', 'elevation', 'depth'].includes(k)) issues.push({ path: `view3d.${k}`, message: `view3d has no "${k}"; it takes azimuth, elevation and depth.` });
+			view3d = { azimuth: angle('azimuth', 0, 360, 'a turn from 0 to 360 degrees'), elevation: angle('elevation', 0, 90, 'an angle from 0 to 90 degrees'), depth: angle('depth', 0.2, 20, 'a multiple of the bar width from 0.2 to 20') };
+		}
+	}
 	let radarTicks: number | null = null;
 	if (value.radarTicks !== undefined && value.radarTicks !== null) {
 		const t = Number(value.radarTicks);
@@ -752,7 +772,8 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		raceTopN,
 		map: text(value.map, 'europe', 'map', issues).trim() || 'europe',
 		mapSteps,
-		mapThresholds
+		mapThresholds,
+		...(view3d ? { view3d } : {})
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {

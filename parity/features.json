@@ -1724,6 +1724,13 @@
           "react": "Via core",
           "svelte": "Via core",
           "swift": "`summarizeChart`, `describeChart`, `recommendChartTypes` & `chartFromTable`"
+        },
+        {
+          "feature": "3-D View (`view3d`: azimuth, elevation and depth as Office's view3D; set, merged and cleared through `update_chart`; Office 3-D bar, line and area charts import with their view instead of being drawn flat, and are written back flat with a note; drawing in 3-D comes with `@pixerate/editor/three`)",
+          "core": "`ChartView3d`, `CHART_VIEW3D_DEFAULTS` (`/chart`), `update_chart` `view3d`",
+          "react": "✅ (`update_chart` and `ChartController.update`)",
+          "svelte": "✅ (`update_chart` and `ChartController.update`)",
+          "swift": "✅ (`ChartView3d`, `update_chart`, Office import); drawing in 3-D: Planned (#533)"
         }
       ]
     },

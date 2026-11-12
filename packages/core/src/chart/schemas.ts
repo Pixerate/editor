@@ -222,5 +222,15 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				mapSteps: { type: 'integer', minimum: 2, maximum: 9, description: 'Choropleth: number of equal colour classes between the smallest and largest value (default 5).' },
 				mapThresholds: { type: 'array', items: { type: 'number' }, maxItems: 8, description: 'Choropleth: class breaks in ascending order, e.g. [100, 250, 500], used instead of mapSteps; [] goes back to equal classes.' },
 				raceTopN: { type: 'integer', minimum: 1, maximum: 30, description: 'Bar race: how many bars each moment shows (default 10).' },
+				view3d: {
+					type: ['object', 'null'],
+					properties: {
+						azimuth: { type: 'number', minimum: 0, maximum: 360, description: 'Turn around the vertical axis, in degrees.' },
+						elevation: { type: 'number', minimum: 0, maximum: 90, description: 'Height of the eye above the floor, in degrees.' },
+						depth: { type: 'number', minimum: 0.2, maximum: 20, description: 'Depth of the bars and ribbons, in bar widths.' }
+					},
+					additionalProperties: false,
+					description: 'Bar, line and area drawn in 3-D, seen at these angles; missing fields keep their value or take Office\'s defaults. null goes back to flat. Rendered in 3-D by hosts using @pixerate/editor/three, else flat.'
+				},
 				sankeyNodes: { type: 'array', items: { type: 'string' }, description: 'Sankey: node names in the order to stack them within their columns (reorder to untangle crossing flows); nodes left out follow in the order the flows name them.' }
 			};

@@ -703,6 +703,8 @@ public struct ChartSpec: Sendable, Equatable {
     public var map: String
     public var mapSteps: Int
     public var mapThresholds: [Double]
+    /// Draw the chart in 3-D from this angle (#795); `nil` is a flat chart.
+    public var view3d: ChartView3d?
 
     public init(
         version: Int = 1,
@@ -747,7 +749,8 @@ public struct ChartSpec: Sendable, Equatable {
         raceTopN: Int = 10,
         map: String = "europe",
         mapSteps: Int = 5,
-        mapThresholds: [Double] = []
+        mapThresholds: [Double] = [],
+        view3d: ChartView3d? = nil
     ) {
         self.version = version
         self.type = type
@@ -792,6 +795,7 @@ public struct ChartSpec: Sendable, Equatable {
         self.map = map
         self.mapSteps = mapSteps
         self.mapThresholds = mapThresholds
+        self.view3d = view3d
     }
 
     public func toJSON() -> JSONValue {
@@ -839,13 +843,32 @@ public struct ChartSpec: Sendable, Equatable {
             ("map", .string(map)),
             ("mapSteps", .number(Double(mapSteps))),
             ("mapThresholds", .array(mapThresholds.map(JSONValue.number)))
-        ]))
+        ] + (view3d.map { [("view3d", $0.toJSON())] } ?? [])))
     }
 
     public init(json: JSONValue) {
         self = normalizeChartSpec(json).spec
     }
 }
+
+/// How a 3-D chart is seen (Office's `view3D`: `rotY`, `rotX`, `depthPercent`).
+public struct ChartView3d: Sendable, Equatable {
+    /// Turn around the vertical axis, degrees 0–360.
+    public var azimuth: Double
+    /// Height of the eye above the floor, degrees 0–90.
+    public var elevation: Double
+    /// Depth of the bars and ribbons as a multiple of the bar width, 0.2–20.
+    public var depth: Double
+    public init(azimuth: Double = 20, elevation: Double = 15, depth: Double = 1) {
+        self.azimuth = azimuth; self.elevation = elevation; self.depth = depth
+    }
+    public func toJSON() -> JSONValue {
+        .object(JSONObject([("azimuth", .number(azimuth)), ("elevation", .number(elevation)), ("depth", .number(depth))]))
+    }
+}
+
+/// The 3-D view's defaults, as Office draws a new 3-D chart.
+public let CHART_VIEW3D_DEFAULTS = ChartView3d()
 
 public struct ChartIssue: Sendable, Equatable {
     public var path: String

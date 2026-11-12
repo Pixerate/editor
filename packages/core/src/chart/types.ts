@@ -353,6 +353,22 @@ export interface ChartSpec {
 	mapSteps: number;
 	/** Choropleth: class breaks in ascending order, instead of `mapSteps` ([] for none). */
 	mapThresholds: number[];
+	/**
+	 * Draw the chart in 3-D (#795): bar, line and area charts as solid bars and ribbons seen from
+	 * this angle, by a renderer that draws 3-D (`@pixerate/editor/three`); others draw it flat.
+	 * Absent: a flat chart. Office 3-D charts import with it.
+	 */
+	view3d?: ChartView3d;
+}
+
+/** How a 3-D chart is seen (Office's `view3D`: `rotY`, `rotX`, `depthPercent`). */
+export interface ChartView3d {
+	/** Turn around the vertical axis, degrees 0–360 (default 20). */
+	azimuth: number;
+	/** Height of the eye above the floor, degrees 0–90 (default 15). */
+	elevation: number;
+	/** Depth of the bars and ribbons as a multiple of the bar width, 0.2–20 (default 1). */
+	depth: number;
 }
 
 /** What a click selects. */
