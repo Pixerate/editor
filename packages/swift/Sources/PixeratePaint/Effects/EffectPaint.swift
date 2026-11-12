@@ -16,17 +16,22 @@ public struct PaintEffectStrokeMap: Equatable, Sendable {
     public var length: Int
     /// `repeat`, `mirror` or `clamp` (used when `by == "stroke"`).
     public var repeatMode: String
+    /// The strip's rendered width in px, 16..4096 (nil: `length`). A host keeps the effect's
+    /// proportions across the tip by setting `length` to `width × tip size / EFFECT_STRIP_HEIGHT`.
+    public var width: Int?
 
-    public init(by: String = "stroke", length: Int = 300, repeatMode: String = "repeat") {
+    public init(by: String = "stroke", length: Int = 300, repeatMode: String = "repeat", width: Int? = nil) {
         self.by = by
         self.length = length
         self.repeatMode = repeatMode
+        self.width = width
     }
 
     public var json: JSONValue {
-        by == "path"
-            ? ["by": "path"]
-            : ["by": "stroke", "length": .number(Double(length)), "repeat": .string(repeatMode)]
+        if by == "path" { return ["by": "path"] }
+        var o: JSONObject = ["by": "stroke", "length": .number(Double(length)), "repeat": .string(repeatMode)]
+        if let width { o["width"] = .number(Double(width)) }
+        return .object(o)
     }
 }
 
@@ -136,7 +141,7 @@ public struct PaintEffectPaint: Equatable, Sendable {
     }
 
     /// The size its pixels are rendered at (`effectPaintSize`).
-    func size(_ canvas: PaintCanvas) -> (width: Int, height: Int) { map?.by == "stroke" ? (map!.length, EFFECT_STRIP_HEIGHT) : (canvas.width, canvas.height) }
+    func size(_ canvas: PaintCanvas) -> (width: Int, height: Int) { map?.by == "stroke" ? (map!.width ?? map!.length, EFFECT_STRIP_HEIGHT) : (canvas.width, canvas.height) }
 }
 
 /// Reads a `map` argument (`readEffectStrokeMap`); throws saying what is wrong.
@@ -151,7 +156,13 @@ func readEffectStrokeMap(_ raw: JSONValue?) throws -> PaintEffectStrokeMap? {
     if !(length.isFinite && length >= 16 && length <= 4096) { throw PaintEditorError("map.length \((r["length"] ?? .null).stringified()) is out of range; use 16..4096 px of stroke per repeat.") }
     let rep = r["repeat"] ?? .string("repeat")
     guard let s = rep.stringValue, EFFECT_MAP_REPEATS.contains(s) else { throw PaintEditorError("map.repeat \(rep.stringified()) is not a repeat mode; use \(EFFECT_MAP_REPEATS.joined(separator: ", ")).") }
-    return PaintEffectStrokeMap(by: "stroke", length: Int(JS.round(length)), repeatMode: s)
+    var width: Int?
+    if let w = r["width"], w != .null {
+        let n = w.numberValue ?? .nan
+        if !(n.isFinite && n >= 16 && n <= 4096) { throw PaintEditorError("map.width \(w.stringified()) is out of range; use 16..4096 px of rendered strip.") }
+        width = Int(JS.round(n))
+    }
+    return PaintEffectStrokeMap(by: "stroke", length: Int(JS.round(length)), repeatMode: s, width: width)
 }
 
 /// Whether a paint value is effect paint (`type: "effect"`).
@@ -194,8 +205,10 @@ private func stripIndex(_ img: EffectPaintPixels, _ map: PaintEffectStrokeMap, _
     return (py * img.width + px) * 4
 }
 
-/// Each covered pixel's colour from the effect (3 per pixel into `field`), its alpha into the coverage (`sampleEffectField`).
-func sampleEffectField(_ img: EffectPaintPixels, _ rect: RasterRect, _ vals: inout [Float], _ field: inout [Float], _ dab: EffectDabPlace?) {
+/// Each covered pixel's colour from the effect (3 per pixel into `field`) and its alpha: into `limits` when given (a
+/// per-pixel ceiling for `CoverageBuffer.accumulate`, so overlapping dabs build up to the effect's alpha and no
+/// further), else into the coverage (`sampleEffectField`).
+func sampleEffectField(_ img: EffectPaintPixels, _ rect: RasterRect, _ vals: inout [Float], _ field: inout [Float], _ dab: EffectDabPlace?, limits: UnsafeMutablePointer<Float>? = nil) {
     let data = img.data
     if let map = img.map, let dab {
         var k = 0
@@ -204,7 +217,7 @@ func sampleEffectField(_ img: EffectPaintPixels, _ rect: RasterRect, _ vals: ino
                 let i = stripIndex(img, map, dab, Double(rect.x + xx) + 0.5, Double(rect.y + yy) + 0.5)
                 let f = k * 3
                 let a = data[i + 3]
-                if a < 255 { vals[k] = Float(Double(vals[k]) * (Double(a) / 255)) }
+                if let limits { limits[k] = Float(Double(a) / 255) } else if a < 255 { vals[k] = Float(Double(vals[k]) * (Double(a) / 255)) }
                 field[f] = Float(Double(data[i]) / 255)
                 field[f + 1] = Float(Double(data[i + 1]) / 255)
                 field[f + 2] = Float(Double(data[i + 2]) / 255)
@@ -222,13 +235,14 @@ func sampleEffectField(_ img: EffectPaintPixels, _ rect: RasterRect, _ vals: ino
             let f = k * 3
             if !inY || x < 0 || x >= img.width {
                 vals[k] = 0
+                limits?[k] = 0
                 field[f] = 0; field[f + 1] = 0; field[f + 2] = 0
                 k += 1
                 continue
             }
             let i = (y * img.width + x) * 4
             let a = data[i + 3]
-            if a < 255 { vals[k] = Float(Double(vals[k]) * (Double(a) / 255)) }
+            if let limits { limits[k] = Float(Double(a) / 255) } else if a < 255 { vals[k] = Float(Double(vals[k]) * (Double(a) / 255)) }
             field[f] = Float(Double(data[i]) / 255)
             field[f + 1] = Float(Double(data[i + 1]) / 255)
             field[f + 2] = Float(Double(data[i + 2]) / 255)

@@ -396,6 +396,7 @@ final class DryStroke {
     /// Effect paint: each pixel's colour (and alpha) from these pixels.
     private let effect: EffectPaintPixels?
     private var field: [Float] = []
+    private var limits: [Float] = []
     /// The stamp tip's shape, or nil for the round computed tip.
     private let stamp: StampSampler?
     /// The tip's own grain, or nil.
@@ -474,12 +475,17 @@ final class DryStroke {
             }
         }
         var fieldArg: [Float]? = nil
+        var limitsArg: [Float]? = nil
         if let effect {
             if field.count < n * 3 { field = [Float](repeating: 0, count: n * 3) }
-            sampleEffectField(effect, rect, &buf, &field, EffectDabPlace(d))
+            if limits.count < n { limits = [Float](repeating: 0, count: n) }
+            limits.withUnsafeMutableBufferPointer { l in
+                sampleEffectField(effect, rect, &buf, &field, EffectDabPlace(d), limits: l.baseAddress)
+            }
             fieldArg = field
+            limitsArg = limits
         }
-        coverage.accumulate(rect, buf, m.opacity, field: fieldArg)
+        coverage.accumulate(rect, buf, m.opacity, field: fieldArg, limits: limitsArg)
         if let film {
             if brush.engine == "eraser" {
                 film.erase(rect, buf, m.opacity * brush.tip.opacity)

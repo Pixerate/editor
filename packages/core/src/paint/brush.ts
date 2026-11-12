@@ -388,7 +388,7 @@ export class CoverageMap {
    * (one sRGB colour for the dab) or `field` (sRGB per pixel of `rect`, 3 each), the pixels' colours
    * move towards it by the share of coverage this dab adds (gradient paint).
    */
-  accumulate(rect: CropBox, vals: Float32Array, ceil: number, color: readonly number[] | null = null, field: Float32Array | null = null): void {
+  accumulate(rect: CropBox, vals: Float32Array, ceil: number, color: readonly number[] | null = null, field: Float32Array | null = null, limits: Float32Array | null = null): void {
     if (rect.width <= 0 || rect.height <= 0) return;
     const w = rect.width;
     const tx0 = Math.floor(rect.x / TILE);
@@ -421,8 +421,9 @@ export class CoverageMap {
             }
             const ti = trow + (x - tx * TILE);
             const c = tile[ti];
-            if (ceil > c) {
-              const next = c + v * (ceil - c);
+            const cap = limits ? ceil * limits[row + (x - rect.x)] : ceil;
+            if (cap > c) {
+              const next = c + v * (cap - c);
               tile[ti] = next;
               if (color || field) {
                 const key = tileKey(tx, ty);

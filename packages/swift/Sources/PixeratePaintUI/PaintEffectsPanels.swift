@@ -209,10 +209,10 @@ private struct EffectPaintSection: View {
                         .frame(width: 60)
                         .accessibilityLabel("Effect length along the stroke")
                         .onSubmit {
-                            if let n = Int(length), n != map.length { Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: n, repeatMode: map.repeatMode).json) } }
+                            if let n = Int(length), n != map.length { Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: n, repeatMode: map.repeatMode, width: map.width).json) } }
                         }
                     Picker("Repeat", selection: Binding(get: { map.repeatMode }, set: { r in
-                        Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: map.length, repeatMode: r).json) }
+                        Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: map.length, repeatMode: r, width: map.width).json) }
                     })) {
                         Text("Repeat").tag("repeat")
                         Text("Mirror").tag("mirror")

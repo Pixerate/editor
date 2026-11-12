@@ -226,7 +226,8 @@ public final class CoverageMap {
      * (one sRGB colour for the dab) or `field` (sRGB per pixel of `rect`, 3 each), the pixels' colours
      * move towards it by the share of coverage this dab adds (gradient paint).
      */
-    public func accumulate(_ rect: RasterRect, _ vals: [Float], _ ceil: Double, color: [Double]? = nil, field: [Float]? = nil) {
+    /// `limits`, when given, caps each pixel at `ceil × limits[i]` (effect paint's alpha, `sampleEffectField`).
+    public func accumulate(_ rect: RasterRect, _ vals: [Float], _ ceil: Double, color: [Double]? = nil, field: [Float]? = nil, limits: [Float]? = nil) {
         if rect.width <= 0 || rect.height <= 0 { return }
         let w = rect.width
         let tx0 = floorTile(rect.x), ty0 = floorTile(rect.y)
@@ -257,8 +258,9 @@ public final class CoverageMap {
                         }
                         let ti = trow + (x - tx * TILE)
                         let c = Double(tile!.data[ti])
-                        if ceil > c {
-                            let next = c + v * (ceil - c)
+                        let cap = limits.map { ceil * Double($0[row + (x - rect.x)]) } ?? ceil
+                        if cap > c {
+                            let next = c + v * (cap - c)
                             tile!.data[ti] = Float(next)
                             if color != nil || field != nil {
                                 let ct: FloatTile

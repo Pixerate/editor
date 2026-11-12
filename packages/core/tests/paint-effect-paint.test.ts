@@ -280,6 +280,28 @@ describe('effect paint', () => {
   });
 });
 
+describe('effect paint: translucent effects and strip width', () => {
+  it('keeps a translucent effect at its own alpha however many dabs overlap', async () => {
+    const c = editor();
+    await c.setEffectPaint({ effect: 'fake.gradient', values: { ...RED_TO_BLUE, opacity: 0.25 } });
+    const layer = c.getActiveLayer()!.id;
+    // Spacing 0.05: each pixel inside the stroke is covered by ~20 dabs.
+    c.paintStroke({ brushId: 'ink-pen', brush: HARD, points: LINE });
+    for (const x of [8, 16, 24]) {
+      const a = layerPx(c, layer, x, 8)[3];
+      expect(a, `alpha at ${x}`).toBeGreaterThan(50);
+      expect(a, `alpha at ${x}`).toBeLessThanOrEqual(66);
+    }
+  });
+
+  it('renders a stroke strip at map.width when given, separate from its length on the stroke', async () => {
+    const c = editor();
+    const p = await c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE, map: { by: 'stroke', length: 40, repeat: 'repeat', width: 320 } });
+    expect(p.map).toEqual({ by: 'stroke', length: 40, repeat: 'repeat', width: 320 });
+    await expect(c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE, map: { by: 'stroke', length: 40, width: 8 } as never })).rejects.toThrow(/map.width/);
+  });
+});
+
 describe('effect paint: agent tools', () => {
   const setup = (provider = true) => {
     const c = editor(provider);
