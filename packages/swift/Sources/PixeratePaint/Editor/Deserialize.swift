@@ -232,10 +232,19 @@ func decodeDeepSurface(_ surface: TiledSurface, _ raw: JSONValue?, _ problems: i
         if bytes.count != n * size { throw PaintEditorError("wrong length") }
         let samples: DeepSamples
         if size == 2 {
-            samples = .u16((0 ..< n).map { UInt16(bytes[2 * $0]) | UInt16(bytes[2 * $0 + 1]) << 8 })
+            samples = .u16((0 ..< n).map { (i: Int) -> UInt16 in
+                let lo: UInt16 = UInt16(bytes[2 * i])
+                let hi: UInt16 = UInt16(bytes[2 * i + 1])
+                return lo | (hi << 8)
+            })
         } else {
-            samples = .f32((0 ..< n).map { i in
-                Float(bitPattern: UInt32(bytes[4 * i]) | UInt32(bytes[4 * i + 1]) << 8 | UInt32(bytes[4 * i + 2]) << 16 | UInt32(bytes[4 * i + 3]) << 24)
+            // Typed steps: one long `|`/`<<` chain hits the type-checker time limit on CI.
+            samples = .f32((0 ..< n).map { (i: Int) -> Float in
+                let b0: UInt32 = UInt32(bytes[4 * i])
+                let b1: UInt32 = UInt32(bytes[4 * i + 1]) << 8
+                let b2: UInt32 = UInt32(bytes[4 * i + 2]) << 16
+                let b3: UInt32 = UInt32(bytes[4 * i + 3]) << 24
+                return Float(bitPattern: b0 | b1 | b2 | b3)
             })
         }
         return writeDeepRegion(surface, RasterRect(x: x, y: y, width: Int(width), height: Int(height)), samples)

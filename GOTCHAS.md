@@ -39,6 +39,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The spray's spacing and scatter were fractions of the sticker's diameter, so both grew without limit with the size.
 - **Solution / Workaround**: Both scale with `min(diameter, STICKER_REACH)` (64 px), and `PenDabWalker.layEnd` lays a last sticker at the stroke's end. Keep any change to these in step in `paint-editor/stickers.ts` and `Stickers/Stickers.swift`: the conformance scenario `sticker-large-sizes` records the positions.
 
+### [swift] CI Fails With "Unable to Type-Check This Expression in Reasonable Time" When Local Builds Pass
+
+- **Issue / Symptom**: `swift build` passes locally, but a CI job (Swift macOS tests or the demo app) fails with `error: the compiler is unable to type-check this expression in reasonable time`. Seen on a one-line `PenPoint(...)` map in a test and on a byte-assembly `|`/`<<` chain in `Deserialize.swift`.
+- **Root Cause**: The type checker's time limit is wall-clock, and the CI runners are slower than a developer Mac. Long untyped closures mixing integer literals, `Double(...)`, `sin`, `.pi` or several `|`/`<<` operators sit just under the limit locally and over it on CI.
+- **Solution / Workaround**: Break such expressions into `let` steps with explicit types, and give closures explicit parameter and return types. To find them before pushing, build with `-Xswiftc -Xfrontend -Xswiftc -warn-long-expression-type-checking=1000` and fix any expression it reports.
+
 ### [swift] A `nil` in a Ternary Becomes `JSONValue.null`
 
 - **Issue / Symptom**: After a source edit dropped an authored effect's paint hint, the exported Swift document had `"paint": null`, and reopening it was refused (`/paint: must be an object`); TS left the field out.
