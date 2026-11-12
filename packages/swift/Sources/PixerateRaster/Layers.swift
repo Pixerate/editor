@@ -159,9 +159,12 @@ public final class RasterLayer: RasterNode, @unchecked Sendable {
     public let edge: LayerEdgeColor?
     /// Temporary dry mutation layer (editor state, merged down on save or patience expiry).
     public let temporary: Bool?
+    /// An image editor pixel layer's effect generator (`{ effect, provider?, name?, values, time?, animate? }`):
+    /// carried and saved, not drawn by the paint editor.
+    public let generator: JSONObject?
     public let content: Content
 
-    public init(id: String, name: String = "", visible: Bool = true, opacity: Double = 1, blend: GroupBlendMode = .mode(.normal), clipped: Bool = false, mask: RasterMask? = nil, locks: LayerLocks? = nil, effects: LayerEffects? = nil, edge: LayerEdgeColor? = nil, temporary: Bool? = nil, content: Content) {
+    public init(id: String, name: String = "", visible: Bool = true, opacity: Double = 1, blend: GroupBlendMode = .mode(.normal), clipped: Bool = false, mask: RasterMask? = nil, locks: LayerLocks? = nil, effects: LayerEffects? = nil, edge: LayerEdgeColor? = nil, temporary: Bool? = nil, generator: JSONObject? = nil, content: Content) {
         self.id = id
         self.name = name
         self.visible = visible
@@ -173,6 +176,7 @@ public final class RasterLayer: RasterNode, @unchecked Sendable {
         self.effects = effects
         self.edge = edge
         self.temporary = temporary
+        self.generator = generator
         self.content = content
     }
 
@@ -191,7 +195,7 @@ public final class RasterLayer: RasterNode, @unchecked Sendable {
         RasterLayer(
             id: id, name: name, visible: visible ?? self.visible, opacity: opacity ?? self.opacity, blend: blend ?? self.blend,
             clipped: clipped ?? self.clipped, mask: mask ?? self.mask, locks: locks, effects: effects ?? self.effects,
-            edge: edge ?? self.edge, temporary: temporary, content: content ?? self.content
+            edge: edge ?? self.edge, temporary: temporary, generator: generator, content: content ?? self.content
         )
     }
 

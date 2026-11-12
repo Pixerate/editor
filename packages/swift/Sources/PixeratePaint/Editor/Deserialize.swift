@@ -141,7 +141,7 @@ private func readMask(_ raw: JSONValue?, _ ctx: inout LayerReadContext, _ what: 
     if case .number(let f)? = r["feather"], f > 0 { mask.feather = num(r["feather"], 0, 1000, 0) }
     if r["enabled"] == .bool(false) { mask.enabled = false }
     if r["linked"] == .bool(false) { mask.linked = false }
-    if jsTruthy(r["deep"]) && source == nil { ctx.problems.append("\(what) mask: its deep (16- or 32-bit) pixels are not read by the Swift paint editor; it loads at 8 bits") }
+    if jsTruthy(r["deep"]) && source == nil { mask.surface = decodeDeepSurface(mask.surface, r["deep"], &ctx.problems, "\(what) mask") }
     if let s = source?.objectValue {
         var merged = DEFAULT_DEPTH_MASK_VALUES
         for (k, v) in s { merged[k] = v }
@@ -180,6 +180,80 @@ private func deserializeEffects(_ raw: JSONValue?) -> LayerEffects? {
 /// The image editor's layer kinds the paint editor does not have.
 private let IMAGE_ONLY_TYPES: Set<String> = ["adjustment", "annotation", "shape", "type", "smart"]
 
+/// The adjustment layer kinds the image editor reads (`ADJUSTMENT_KINDS`).
+private let ADJUSTMENT_KINDS: Set<String> = ["curves", "levels", "hueSaturation", "vibrance", "colorBalance", "blackWhite", "photoFilter", "invert", "posterize", "threshold"]
+
+/// The longest effect animation a layer keeps, in milliseconds (`MAX_EFFECT_ANIMATION_MS`).
+private let MAX_EFFECT_ANIMATION_MS = 60_000.0
+
+/// A value an effect takes (`isEffectValue`): a string, boolean, finite number or list of finite numbers.
+private func isEffectValue(_ v: JSONValue) -> Bool {
+    switch v {
+    case .string, .bool: return true
+    case .number(let n): return n.isFinite
+    case .array(let a): return a.allSatisfy { ($0.numberValue ?? .nan).isFinite }
+    default: return false
+    }
+}
+
+/// A pixel layer's effect generator as the image editor reads it (`readEffectRef` plus `time` and `animate`), or nil.
+func readGenerator(_ raw: JSONValue?) -> JSONObject? {
+    guard let r = raw?.objectValue, case .string(let effect)? = r["effect"], !effect.isEmpty else { return nil }
+    var values = JSONObject()
+    if let v = r["values"]?.objectValue { for (k, x) in v where isEffectValue(x) { values[k] = x } }
+    // `Object.entries` of an array: its indices.
+    if let list = r["values"]?.arrayValue { for (i, x) in list.enumerated() where isEffectValue(x) { values[String(i)] = x } }
+    var out: JSONObject = ["effect": .string(effect)]
+    if case .string? = r["provider"] { out["provider"] = r["provider"] }
+    if case .string? = r["name"] { out["name"] = r["name"] }
+    out["values"] = .object(values)
+    if case .number(let t)? = r["time"], t > 0 { out["time"] = .number(t) }
+    if case .number(let d)? = r["animate"]?.objectValue?["duration"], d.isFinite, d > 0 { out["animate"] = ["duration": .number(Swift.min(d, MAX_EFFECT_ANIMATION_MS))] }
+    return out
+}
+
+/**
+ * Puts saved deep (16- or 32-bit) samples into `surface`, the 8-bit rendering read from the PNG
+ * (`decodeDeepSurface`): `{ depth, x, y, width, height, data }`, little-endian samples deflated
+ * and base64-encoded. Data that cannot be read leaves the surface 8-bit and is reported.
+ */
+func decodeDeepSurface(_ surface: TiledSurface, _ raw: JSONValue?, _ problems: inout [String], _ label: String) -> TiledSurface {
+    guard let d = raw?.objectValue else { return surface }
+    do {
+        guard case .number(let depthValue)? = d["depth"], depthValue == 16 || depthValue == 32,
+              case .number(let width)? = d["width"], case .number(let height)? = d["height"], width > 0, height > 0,
+              // A fractional or text size could only match a crafted sample count; TS would write it at fractional offsets.
+              width.rounded(.towardZero) == width, height.rounded(.towardZero) == height, width * height <= 1e9,
+              let x = savedInteger(d["x"]), let y = savedInteger(d["y"]), case .string(let text)? = d["data"]
+        else { throw PaintEditorError("malformed") }
+        let n = Int(width) * Int(height) * surface.channels
+        let size = depthValue == 16 ? 2 : 4
+        let bytes = try inflate(try base64ToBytes(text), maxOutput: n * size)
+        if bytes.count != n * size { throw PaintEditorError("wrong length") }
+        let samples: DeepSamples
+        if size == 2 {
+            samples = .u16((0 ..< n).map { (i: Int) -> UInt16 in
+                let lo: UInt16 = UInt16(bytes[2 * i])
+                let hi: UInt16 = UInt16(bytes[2 * i + 1])
+                return lo | (hi << 8)
+            })
+        } else {
+            // Typed steps: one long `|`/`<<` chain hits the type-checker time limit on CI.
+            samples = .f32((0 ..< n).map { (i: Int) -> Float in
+                let b0: UInt32 = UInt32(bytes[4 * i])
+                let b1: UInt32 = UInt32(bytes[4 * i + 1]) << 8
+                let b2: UInt32 = UInt32(bytes[4 * i + 2]) << 16
+                let b3: UInt32 = UInt32(bytes[4 * i + 3]) << 24
+                return Float(bitPattern: b0 | b1 | b2 | b3)
+            })
+        }
+        return writeDeepRegion(surface, RasterRect(x: x, y: y, width: Int(width), height: Int(height)), samples)
+    } catch {
+        problems.append("\(label): its \(jsTemplate(d["depth"]))-bit samples could not be read, so it was opened at 8 bits")
+        return surface
+    }
+}
+
 /// A stored layer (`deserializeLayer`), keeping the paint editor's kinds (`paintLayersOnly`).
 private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -> PaintLayer? {
     guard let r = raw.objectValue else { return nil }
@@ -205,8 +279,8 @@ private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -
     switch type {
     case "pixel":
         let isDocumentSource = r["source"] == .string("document")
-        let surface = isDocumentSource ? emptySurface(4) : readSurface(r["asset"], r["x"], r["y"], channels: 4, defaultValue: 0, &ctx, label)
-        if !isDocumentSource && jsTruthy(r["deep"]) { ctx.problems.append("\(label): its deep (16- or 32-bit) pixels are not read by the Swift paint editor; it loads at 8 bits") }
+        var surface = isDocumentSource ? emptySurface(4) : readSurface(r["asset"], r["x"], r["y"], channels: 4, defaultValue: 0, &ctx, label)
+        if !isDocumentSource && jsTruthy(r["deep"]) { surface = decodeDeepSurface(surface, r["deep"], &ctx.problems, label) }
         let offset = r["offset"]?.objectValue
         var fill: Double?
         if case .number(let f)? = r["fillOpacity"], f != 1 { fill = num(r["fillOpacity"], 0, 1, 1) }
@@ -219,7 +293,7 @@ private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -
         if isDocumentSource { ctx.paintOnly.append("Layer \"\(name)\" refers to an image editor source image; it loads empty.") }
         return RasterLayer(
             id: id, name: name, visible: visible, opacity: opacity, blend: .mode(normalizeBlendMode(r["blend"]?.stringValue)), clipped: clipped,
-            mask: mask, locks: locks, effects: effects, edge: edge,
+            mask: mask, locks: locks, effects: effects, edge: edge, generator: readGenerator(r["generator"]),
             content: .pixel(surface: surface, offset: LayerOffset(x: Int(JS.round(num(offset?["x"], -1e7, 1e7, 0))), y: Int(JS.round(num(offset?["y"], -1e7, 1e7, 0)))), fillOpacity: fill)
         )
     case "group":
@@ -230,6 +304,18 @@ private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -
             id: id, name: name, visible: visible, opacity: opacity, blend: blend, clipped: clipped, mask: mask, locks: locks, effects: effects, edge: edge,
             content: .group(children: children, collapsed: r["collapsed"] == .bool(true) ? true : nil)
         )
+    case "adjustment" where !(r["kind"]?.stringValue.map(ADJUSTMENT_KINDS.contains) ?? false):
+        // `normalizeAdjustmentLayer` refuses a kind it does not know before `paintLayersOnly` sees the layer.
+        ctx.problems.append("\(label): unknown adjustment kind \"\(jsTemplate(r["kind"]))\"")
+        return nil
+    case "annotation" where r["annotation"]?.objectValue?["type"]?.stringValue == nil:
+        ctx.problems.append("\(label): annotation is missing")
+        return nil
+    case "smart":
+        // A paint document has no smart object contents table, so `readContents` finds none.
+        if case .string(let contents)? = r["contents"] { ctx.problems.append("Smart object contents \"\(contents)\" are missing") }
+        ctx.problems.append("\(label): its smart object contents are missing; the layer was dropped")
+        return nil
     default:
         if let type, IMAGE_ONLY_TYPES.contains(type) {
             ctx.paintOnly.append("Layer \"\(name)\" is an image editor \(type) layer, which the paint editor does not have; it was left out.")
@@ -248,7 +334,7 @@ func deserializePaintLayers(_ raw: JSONValue?, _ ctx: inout LayerReadContext) ->
         layers.map { l in
             var next = l
             if seen.contains(l.id) {
-                next = RasterLayer(id: newPaintLayerId(), name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, clipped: l.clipped, mask: l.mask, locks: l.locks, effects: l.effects, edge: l.edge, temporary: l.temporary, content: l.content)
+                next = RasterLayer(id: newPaintLayerId(), name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, clipped: l.clipped, mask: l.mask, locks: l.locks, effects: l.effects, edge: l.edge, temporary: l.temporary, generator: l.generator, content: l.content)
             }
             seen.insert(next.id)
             if let children = next.children { next = next.withChildren(dedupe(children)) }

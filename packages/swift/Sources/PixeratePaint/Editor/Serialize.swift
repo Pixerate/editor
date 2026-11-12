@@ -47,14 +47,50 @@ func encodeSurface(_ surface: TiledSurface) -> (url: String, x: Int, y: Int)? {
     return out
 }
 
+private let deepCache = Locked([Int: JSONValue?]())
+
+/**
+ * A deep (16- or 32-bit) surface's samples over its content (`encodeDeepSurface`): `{ depth, x, y,
+ * width, height, data }`, little-endian samples deflated and base64-encoded; nil for 8-bit surfaces.
+ */
+func encodeDeepSurface(_ surface: TiledSurface) -> JSONValue? {
+    if let hit = deepCache.with({ $0[surface.id] }) { return hit }
+    var out: JSONValue? = nil
+    let depth = surfaceDepth(surface)
+    if depth != 8, let b = contentBounds(surface) {
+        var bytes: [UInt8] = []
+        switch readDeepRegion(surface, b, depth) {
+        case .u16(let samples):
+            bytes.reserveCapacity(samples.count * 2)
+            for v in samples { bytes.append(UInt8(v & 0xFF)); bytes.append(UInt8(v >> 8)) }
+        case .f32(let samples):
+            bytes.reserveCapacity(samples.count * 4)
+            for v in samples {
+                let bits = v.bitPattern
+                bytes.append(UInt8(bits & 0xFF)); bytes.append(UInt8((bits >> 8) & 0xFF)); bytes.append(UInt8((bits >> 16) & 0xFF)); bytes.append(UInt8(bits >> 24))
+            }
+        }
+        let o: JSONObject = ["depth": .number(Double(depth)), "x": .number(Double(b.x)), "y": .number(Double(b.y)), "width": .number(Double(b.width)), "height": .number(Double(b.height)), "data": .string(bytesToBase64(deflate(bytes)))]
+        out = .object(o)
+    }
+    deepCache.with { cache in
+        if cache.count > 64 { cache.removeAll() }
+        cache[surface.id] = .some(out)
+    }
+    return out
+}
+
 private func serializeMask(_ mask: RasterMask, _ hint: String, _ ctx: inout SerializeContext) -> JSONObject {
     var out: JSONObject = ["defaultValue": .number(Double(mask.defaultValue))]
     if let source = mask.source {
         out["source"] = source
-    } else if let enc = encodeSurface(mask.surface) {
-        out["asset"] = .string(ctx.addAsset(enc.url, hint))
-        out["x"] = .number(Double(enc.x))
-        out["y"] = .number(Double(enc.y))
+    } else {
+        if let enc = encodeSurface(mask.surface) {
+            out["asset"] = .string(ctx.addAsset(enc.url, hint))
+            out["x"] = .number(Double(enc.x))
+            out["y"] = .number(Double(enc.y))
+        }
+        if let deep = encodeDeepSurface(mask.surface) { out["deep"] = deep }
     }
     if let d = mask.density, d != 1 { out["density"] = .number(d) }
     if let f = mask.feather, f != 0 { out["feather"] = .number(f) }
@@ -81,6 +117,8 @@ private func serializeLayer(_ layer: RasterLayer, _ ctx: inout SerializeContext,
             out["y"] = .number(Double(enc.y))
         }
         if let fill, fill != 1 { out["fillOpacity"] = .number(fill) }
+        if let generator = layer.generator { out["generator"] = .object(generator) }
+        if let deep = encodeDeepSurface(surface) { out["deep"] = deep }
     case .group(let children, let collapsed):
         out["type"] = "group"
         out["children"] = .array(children.map { serializeLayer($0, &ctx, effects) })

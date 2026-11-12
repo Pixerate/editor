@@ -121,8 +121,19 @@ public struct CultureTip: Equatable, Sendable {
     public var digestPermille: Int
     public var fusePermille: Int
     public var glowPermille: Int
+    /// Fields a saved tip held something other than a number in, which TS reads as NaN (`Math.round(undefined)`)
+    /// or ±Infinity and keeps: the value TS holds (the Int field is 0, or ±2⁵³ for ±Infinity). It stays in
+    /// the saved object, which reopens as it is, and prints as `null`, as `JSON.stringify` prints NaN
+    /// (bit patterns, so a tip still equals itself).
+    var nonFinite: [String: UInt64] = [:]
 
     public var json: JSONValue {
+        guard !nonFinite.isEmpty, case .object(var o) = plainJSON else { return plainJSON }
+        for (k, bits) in nonFinite { o[k] = .number(Double(bitPattern: bits)) }
+        return .object(o)
+    }
+
+    private var plainJSON: JSONValue {
         [
             "id": .number(Double(id)),
             "x": .number(Double(x)),
@@ -1353,10 +1364,18 @@ private func cultureNumber(_ v: JSONValue?) -> Double {
     case .null?: return 0
     case .bool(let b)?: return b ? 1 : 0
     case .number(let n)?: return n
-    case .string(let s)?:
-        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? 0 : Double(t) ?? .nan
-    case .array(let a)?: return a.isEmpty ? 0 : a.count == 1 ? cultureNumber(a[0]) : .nan
+    case .string(let s)?: return s.jsToNumber
+    case .array(let a)?:
+        // `Number([x])` is `Number(String(x))`: a nested array or object goes through its string form.
+        if a.isEmpty { return 0 }
+        if a.count > 1 { return .nan }
+        switch a[0] {
+        case .null: return 0
+        case .bool, .object: return .nan
+        case .number(let n): return n
+        case .string(let s): return s.jsToNumber
+        case .array: return jsTemplate(a[0]).jsToNumber
+        }
     case .object?: return .nan
     }
 }
@@ -1404,35 +1423,47 @@ func cultureFromJSON(_ raw: JSONValue?) throws -> LayerCultureState {
         let decoded = try decodePng(parsed.bytes, keepGray: true)
         let gray = decoded.channels == 1 ? decoded.data : (0..<(decoded.width * decoded.height)).map { decoded.data[$0 * 4] }
         let ro = rect.objectValue
-        occupancy = surfaceFromPixels(width: decoded.width, height: decoded.height, data: gray, channels: 1, x: cultureRound(ro?["x"]), y: cultureRound(ro?["y"]))
+        // `Math.round(rect.x)` unchecked: NaN (a missing or non-number field) writes nothing.
+        let x = JS.round(cultureNumber(ro?["x"]))
+        let y = JS.round(cultureNumber(ro?["y"]))
+        occupancy = try surfaceAtCoordinates(x: x, xEnd: x + Double(decoded.width), y: y, yEnd: y + Double(decoded.height), width: decoded.width, height: decoded.height, data: gray, channels: 1)
     }
     var tips: [CultureTip] = []
     if let list = r["tips"]?.arrayValue {
         for item in list {
             guard tips.count < MAX_CULTURE_TIPS else { break }
             guard let t = item.objectValue, case .number? = t["id"] else { continue }
-            let permille = { (k: String) in Swift.min(1000, Swift.max(0, cultureRound(t[k]))) }
-            let byte = { (k: String) in Swift.min(255, Swift.max(0, cultureRound(t[k]))) }
-            tips.append(CultureTip(
-                id: cultureRound(t["id"]),
-                x: cultureRound(t["x"]),
-                y: cultureRound(t["y"]),
+            // `Math.round(t[k])` then `Math.max` / `clamp`, in doubles: what is not finite afterwards
+            // (NaN from a missing or non-number field, ±Infinity) is kept as TS keeps it.
+            var nonFinite: [String: UInt64] = [:]
+            func field(_ k: String, _ lo: Double = -.infinity, _ hi: Double = .infinity) -> Int {
+                let v = JS.min(hi, JS.max(lo, JS.round(cultureNumber(t[k]))))
+                if v.isFinite { return Int(Swift.min(9_007_199_254_740_991, Swift.max(-9_007_199_254_740_991, v))) }
+                nonFinite[k] = v.bitPattern
+                return v.isNaN ? 0 : v > 0 ? 9_007_199_254_740_991 : -9_007_199_254_740_991
+            }
+            var tip = CultureTip(
+                id: field("id"),
+                x: field("x"),
+                y: field("y"),
                 angle: Int(JS.i32(cultureNumber(t["angle"]))) & CULTURE_ANGLE_MASK,
-                energy: cultureRound(t["energy"]),
-                widthFp: Swift.max(32, cultureRound(t["widthFp"])),
-                r: byte("r"),
-                g: byte("g"),
-                b: byte("b"),
-                age: Swift.max(0, cultureRound(t["age"])),
+                energy: field("energy"),
+                widthFp: field("widthFp", 32),
+                r: field("r", 0, 255),
+                g: field("g", 0, 255),
+                b: field("b", 0, 255),
+                age: field("age", 0),
                 seed: JS.u32(cultureNumber(t["seed"])),
-                reachPx: Swift.max(1, cultureRound(t["reachPx"])),
-                branchPermille: permille("branchPermille"),
-                wanderPermille: permille("wanderPermille"),
-                appetitePermille: permille("appetitePermille"),
-                digestPermille: permille("digestPermille"),
-                fusePermille: permille("fusePermille"),
-                glowPermille: permille("glowPermille")
-            ))
+                reachPx: field("reachPx", 1),
+                branchPermille: field("branchPermille", 0, 1000),
+                wanderPermille: field("wanderPermille", 0, 1000),
+                appetitePermille: field("appetitePermille", 0, 1000),
+                digestPermille: field("digestPermille", 0, 1000),
+                fusePermille: field("fusePermille", 0, 1000),
+                glowPermille: field("glowPermille", 0, 1000)
+            )
+            tip.nonFinite = nonFinite
+            tips.append(tip)
         }
     }
     let segmentsTotal = r["segmentsTotal"]?.finite.map { Swift.max(0, cultureRound(.number($0))) } ?? 0

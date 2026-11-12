@@ -192,12 +192,12 @@ func lightToJSON(_ light: TiledSurface) -> JSONValue? {
 
 /// Saved form → light channel (`lightFromJSON`); throws a sentence when it cannot be read.
 func lightFromJSON(_ raw: JSONValue) throws -> TiledSurface {
-    guard let r = raw.objectValue, let o = savedRectOrigin(r["rect"]), let url = r["light"]?.stringValue
+    guard let r = raw.objectValue, jsTruthy(r["rect"]), let url = r["light"]?.stringValue
     else { throw PaintEditorError("not a saved light channel") }
     guard let parsed = parseDataUrl(url) else { throw PaintEditorError("the light is not a PNG data URL") }
     let img = try decodePng(parsed.bytes, keepGray: true)
     let data = img.channels == 1 ? img.data : (0..<(img.width * img.height)).map { img.data[$0 * 4] }
-    return surfaceFromPixels(width: img.width, height: img.height, data: data, channels: 1, x: o.x, y: o.y)
+    return try surfaceAtSavedRect(r["rect"], width: img.width, height: img.height, data: data, channels: 1)
 }
 
 /// The upper layer's light over the lower's (where the upper paint is transparent), for merging down.

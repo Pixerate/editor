@@ -483,8 +483,24 @@ public struct WetEvent: Equatable {
     public var kind: String
     public var layerId: String?
     public var data: JSONValue?
+    /// The object a saved event was read from: TS keeps saved events verbatim (fields this struct
+    /// does not model, an `at` that is not an integer), so it is written back with only the fields
+    /// changed since (a canvas resize moving `data`) set over it, as `{ ...e, data }` does.
+    var saved: JSONObject?
+
+    /// Equal when they save the same (a saved event equals one built with the same fields and nothing else).
+    public static func == (a: WetEvent, b: WetEvent) -> Bool { a.json == b.json }
 
     public var json: JSONValue {
+        if let saved, let base = WetEvent(json: .object(saved)) {
+            var o = saved
+            if clock != base.clock { o["clock"] = .number(Double(clock)) }
+            if at != base.at { o["at"] = at.map { .number(Double($0)) } ?? Optional<JSONValue>.none }
+            if kind != base.kind { o["kind"] = .string(kind) }
+            if layerId != base.layerId { o["layerId"] = layerId.map { .string($0) } ?? Optional<JSONValue>.none }
+            if data != base.data { o["data"] = data ?? Optional<JSONValue>.none }
+            return .object(o)
+        }
         var o: JSONObject = ["clock": .number(Double(clock))]
         if let at { o["at"] = .number(Double(at)) }
         o["kind"] = .string(kind)
@@ -500,11 +516,19 @@ func savedInteger(_ v: JSONValue?) -> Int? {
     return Int(exactly: n)
 }
 
+/// `Number.isInteger(v)` as an `Int`, clamped to what `Int` holds (nil for anything else): a saved
+/// event with a huge integer still loads, as in TS, and is written back verbatim.
+func savedWholeNumber(_ v: JSONValue?) -> Int? {
+    guard let n = v?.finite, n.rounded(.towardZero) == n else { return nil }
+    return Int(exactly: n) ?? (n > 0 ? Int.max : Int.min)
+}
+
 extension WetEvent {
     /// A saved wet event as `readDocument` keeps it: an integer `clock` and a string `kind`; nil otherwise.
     public init?(json raw: JSONValue) {
-        guard let r = raw.objectValue, let clock = savedInteger(r["clock"]), let kind = r["kind"]?.stringValue else { return nil }
+        guard let r = raw.objectValue, let clock = savedWholeNumber(r["clock"]), let kind = r["kind"]?.stringValue else { return nil }
         self.init(clock: clock, at: savedInteger(r["at"]), kind: kind, layerId: r["layerId"]?.stringValue, data: r["data"])
+        saved = r
     }
 }
 
