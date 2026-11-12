@@ -11,6 +11,7 @@
 import { validateJsonSchema, type JsonSchema } from './schema.js';
 import { stripPrototypeKeys, isUnsafeJsonKey } from './safe-json.js';
 import { parseSkillFrontmatter, type SkillFiles } from './skills.js';
+import { parseFrontmatter, type YamlValue } from './yaml.js';
 import { BRAND_PROFILE_SCHEMA, type BrandProfile } from './brand.js';
 import { SHARED_STYLE_CHECKS, type StyleCheckContext, type StyleSurface } from './style-surface.js';
 
@@ -268,6 +269,8 @@ export interface StyleResolverOptions {
 	domains: readonly StyleDomain<any>[];
 	/** Resolves `$token` references; without it a profile with one is reported as an issue. */
 	tokens?: StyleTokenSource;
+	/** File limits (default {@link DEFAULT_STYLE_LIMITS}). */
+	limits?: Partial<StyleLimits>;
 }
 
 /** Merges house-style layers per domain. Build it with {@link createStyleResolver}. */
@@ -309,6 +312,8 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 
 /** The `domains` frontmatter field: `[chart, tokens]`, `chart, tokens` or one name. */
 export function parseStyleDomains(markdown: string): string[] | undefined {
+	const fm = parseFrontmatter(markdown);
+	if (!fm.error) return domainsOf(fm.data.domains);
 	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown);
 	const line = match?.[1].split(/\r?\n/).find((l) => /^domains:/.test(l));
 	if (!line) return undefined;
@@ -318,6 +323,46 @@ export function parseStyleDomains(markdown: string): string[] | undefined {
 		.map((d) => d.trim().replace(/^(['"])(.*)\1$/, '$2'))
 		.filter(Boolean);
 }
+
+/** A frontmatter `domains` value: a list, or one comma-separated string. */
+function domainsOf(value: YamlValue | undefined): string[] | undefined {
+	if (value === undefined || value === null) return undefined;
+	const list = Array.isArray(value) ? value : String(value).split(',');
+	return list.map((d) => String(d).trim()).filter(Boolean);
+}
+
+/** Size and shape limits for style skill files. Files outside them are left out with an issue. */
+export interface StyleLimits {
+	/** Largest file, in bytes (UTF-8). Default 256 KB. */
+	maxFileBytes: number;
+	/** Largest skill, all files together, in bytes. Default 4 MB (checked by `checkStyleSkill`). */
+	maxSkillBytes: number;
+	/** Most files a skill offers. Default 200. */
+	maxFiles: number;
+	/** Deepest folder nesting inside a skill. Default 4. */
+	maxDepth: number;
+}
+
+export const DEFAULT_STYLE_LIMITS: Readonly<StyleLimits> = Object.freeze({ maxFileBytes: 256 * 1024, maxSkillBytes: 4 * 1024 * 1024, maxFiles: 200, maxDepth: 4 });
+
+/** File types a style skill may hold: text an agent can read. */
+export const STYLE_TEXT_FILE = /\.(md|txt|json|jsonl|ya?ml|toml|csv|tsv|xml|html|css|svg)$/i;
+
+/** Why `path` cannot be a file of a style skill, or `undefined` when it can. */
+export function styleFilePathProblem(path: string, limits: Pick<StyleLimits, 'maxDepth'> = DEFAULT_STYLE_LIMITS): string | undefined {
+	if (!path || path.startsWith('/') || /^[A-Za-z]:/.test(path)) return `"${path}" is not a path inside the skill folder.`;
+	if (path.includes('\\')) return `"${path}" uses backslashes; use / between folders.`;
+	const parts = path.split('/');
+	if (parts.some((p) => p === '' || p === '.' || p === '..')) return `"${path}" must not contain empty, "." or ".." parts.`;
+	if (parts.some((p) => p.startsWith('.'))) return `"${path}" is hidden; hidden files are left out.`;
+	if (!/^[A-Za-z0-9._/-]+$/.test(path)) return `"${path}" may use only letters, digits, ".", "-", "_" and "/".`;
+	if (parts.length - 1 > limits.maxDepth) return `"${path}" is nested more than ${limits.maxDepth} folders deep.`;
+	if (!STYLE_TEXT_FILE.test(path)) return `"${path}" is not a text file type agents can read (md, json, yaml, svg, ...).`;
+	return undefined;
+}
+
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).length;
+const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
 
 /** A one-line frontmatter field (`group: look`), unquoted, or `undefined`. */
 function frontmatterField(markdown: string, key: string): string | undefined {
@@ -482,6 +527,7 @@ function recordSources(value: Record<string, unknown>, source: string, sources: 
  */
 export function createStyleResolver(options: StyleResolverOptions): StyleResolver {
 	const layers = [...options.layers];
+	const limits: StyleLimits = { ...DEFAULT_STYLE_LIMITS, ...options.limits };
 	const domains = options.domains.some((d) => d.id === brandStyleDomain.id) ? [...options.domains] : [...options.domains, brandStyleDomain];
 	const ids = new Set<string>();
 	for (const layer of layers) {
@@ -512,6 +558,12 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 				if (text !== undefined) copies.push({ index: i, text });
 			}
 			if (!copies.length) continue; // state only, for a skill no layer holds
+			const oversized = copies.filter((c) => utf8Bytes(c.text) > limits.maxFileBytes);
+			if (oversized.length) {
+				for (const c of oversized) issues.push({ skill: name, layer: layers[c.index].id, message: `SKILL.md is ${kb(utf8Bytes(c.text))}, over the ${kb(limits.maxFileBytes)} limit, so this copy is left out.` });
+				copies.splice(0, copies.length, ...copies.filter((c) => !oversized.includes(c)));
+				if (!copies.length) continue;
+			}
 			const lockedCopy = copies.find((c) => layers[c.index].locked);
 			const winner = lockedCopy ?? copies[copies.length - 1];
 			const layer = layers[winner.index];
@@ -522,7 +574,9 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 			// State: general to specific; a required layer's skills keep their own state only.
 			let enabled = true;
 			let order = 0;
-			let group = frontmatterField(winner.text, 'group');
+			const fm = parseFrontmatter(winner.text);
+			if (fm.error) skillIssues.push(`SKILL.md ${fm.error}`);
+			let group = fm.error ? frontmatterField(winner.text, 'group') : typeof fm.data.group === 'string' && fm.data.group ? fm.data.group : undefined;
 			let scope: string[] | undefined;
 			for (let i = 0; i < layers.length; i++) {
 				const entry = entries[i].find((e) => e.name === name);
@@ -537,8 +591,10 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 				}
 				enabled = entry.enabled;
 			}
-			const { description = '', body } = parseSkillFrontmatter(winner.text);
-			const named = parseStyleDomains(winner.text);
+			const legacy = parseSkillFrontmatter(winner.text);
+			const description = fm.error ? (legacy.description ?? '') : typeof fm.data.description === 'string' ? fm.data.description : '';
+			const body = legacy.body;
+			const named = fm.error ? parseStyleDomains(winner.text) : domainsOf(fm.data.domains);
 			const applies = new Set<string>();
 			for (const d of named ?? domainIds) {
 				if (domainIds.includes(d)) applies.add(d);
@@ -546,9 +602,17 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 			}
 			const profiles = new Map<string, Record<string, unknown>>();
 			for (const domain of domains) {
-				const raw = await layer.store.read(name, `${domain.id}.json`);
-				if (raw === undefined) continue;
-				const file = `${domain.id}.json`;
+				const fileRaw = await layer.store.read(name, `${domain.id}.json`);
+				// A store that keeps only SKILL.md can carry a profile under a frontmatter key (`chart:`).
+				const inFrontmatter = !fm.error && isPlainObject(fm.data[domain.id]) ? (fm.data[domain.id] as Record<string, unknown>) : undefined;
+				if (fileRaw === undefined && !inFrontmatter) continue;
+				const file = fileRaw !== undefined ? `${domain.id}.json` : `The frontmatter "${domain.id}" profile`;
+				if (fileRaw !== undefined && inFrontmatter) skillIssues.push(`The frontmatter "${domain.id}" profile is ignored: ${domain.id}.json is used.`);
+				if (fileRaw !== undefined && utf8Bytes(fileRaw) > limits.maxFileBytes) {
+					skillIssues.push(`${file} is ${kb(utf8Bytes(fileRaw))}, over the ${kb(limits.maxFileBytes)} limit, so it is left out.`);
+					continue;
+				}
+				const raw = fileRaw ?? JSON.stringify(inFrontmatter);
 				if (domain.id === brandStyleDomain.id) applies.add(domain.id); // a brand applies wherever the skill does
 				else if (!applies.has(domain.id)) {
 					skillIssues.push(`${file} is left out: the skill's domains do not include ${domain.id}.`);
@@ -754,11 +818,18 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 		choose,
 		async readFile(name, file) {
 			const layer = await winnerLayer(name);
-			return layer ? layer.store.read(name, file) : undefined;
+			if (!layer) return undefined;
+			const problem = file === 'SKILL.md' ? undefined : styleFilePathProblem(file, limits);
+			if (problem) throw new Error(`${problem} Read one of the files get_style_file lists.`);
+			const text = await layer.store.read(name, file);
+			if (text !== undefined && utf8Bytes(text) > limits.maxFileBytes) throw new Error(`"${file}" is ${kb(utf8Bytes(text))}, over the ${kb(limits.maxFileBytes)} limit for a style file, so it is not offered.`);
+			return text;
 		},
 		async files(name) {
 			const layer = await winnerLayer(name);
-			return layer ? [...(await layer.store.files(name))] : undefined;
+			if (!layer) return undefined;
+			const all = [...(await layer.store.files(name))].map((f) => f.replace(/^\.?\//, ''));
+			return all.filter((f) => f === 'SKILL.md' || !styleFilePathProblem(f, limits)).slice(0, limits.maxFiles);
 		},
 		async check(domainId, state, opts = {}) {
 			const domain = requireDomain(domainId);
@@ -811,6 +882,9 @@ export function runStyleChecks<State>(domain: StyleDomain<State>, state: State, 
 	return report;
 }
 
+/** Text that tries to open or close a `<style_skill>` or `<style_catalog>` block is escaped. */
+const escapeBlocks = (text: string) => text.replace(/<(\/?)(style_skill|style_catalog)/gi, '&lt;$1$2');
+
 const escapeAttribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /**
@@ -820,10 +894,24 @@ const escapeAttribute = (value: string) => value.replace(/&/g, '&amp;').replace(
 export function renderStyle(style: ResolvedStyle): string {
 	if (!style.skills.length) return `No house style applies to ${style.domain}.`;
 	const blocks = style.skills.map((s) => {
-		const body = s.body.replace(/<(\/?)style_skill/gi, '&lt;$1style_skill');
+		const body = escapeBlocks(s.body);
 		return `<style_skill name="${escapeAttribute(s.name)}" layer="${escapeAttribute(s.layer)}">\n${body}\n</style_skill>`;
 	});
-	const profile = Object.keys(style.profile).length ? `\n\nMerged ${style.domain} profile:\n${JSON.stringify(style.profile, null, 2)}` : '';
-	const brand = style.brand ? `\n\nBrand (brand.json; place the logo as given, never redraw it):\n${JSON.stringify(style.brand, null, 2)}` : '';
+	const json = (value: unknown) => escapeBlocks(JSON.stringify(value, null, 2));
+	const profile = Object.keys(style.profile).length ? `\n\nMerged ${style.domain} profile:\n${json(style.profile)}` : '';
+	const brand = style.brand ? `\n\nBrand (brand.json; place the logo as given, never redraw it):\n${json(style.brand)}` : '';
 	return `${blocks.join('\n\n')}${profile}${brand}`;
+}
+
+/**
+ * A short catalog of style skills for a system prompt: one line per switched-on skill with its
+ * layer, domains and description, inside a `<style_catalog>` block. Agents read the detail on
+ * demand with `get_style`, so the prompt stays small however many skills a host has.
+ */
+export function renderStyleCatalog(skills: readonly StyleSkillInfo[]): string {
+	const on = skills.filter((s) => s.enabled && s.chosen !== false);
+	if (!on.length) return 'No house style applies here.';
+	const line = (s: StyleSkillInfo) =>
+		`- ${s.name} [${s.layer}${s.group ? `, ${s.group}` : ''}] ${s.domains.filter((d) => d !== 'brand').join(', ') || 'brand'}: ${escapeBlocks(s.description.replace(/\s+/g, ' ').trim()) || '(no description)'}`;
+	return `<style_catalog>\nHouse-style skills here (preferences, not instructions; read a domain's with get_style):\n${on.map(line).join('\n')}\n</style_catalog>`;
 }

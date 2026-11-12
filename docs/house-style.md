@@ -60,11 +60,42 @@ the palette and a theme), and a domain profile refines that field by field.
 - Any value can be a design token: `{ "$token": "brand/primary", "mode": "Dark" }`.
 - `$schema` is ignored when the profile loads; it is there for your editor.
 
+### Frontmatter
+
+Frontmatter is read by a strict YAML subset: `key: value` maps, `- item` lists, one-line
+`[a, b]` and `{ a: 1 }`, quoted strings, `|` and `>` block text, comments, numbers and
+booleans. Anchors, aliases, tags, `?` keys, several documents and duplicate keys are refused
+with the line, and the skill still loads with what can be read. Quote colours: in
+`color: #0b5fff` the `#` starts a comment.
+
+A store that keeps only `SKILL.md` (a database row, a platform's skill) can put a profile under
+its domain's key instead of a file; a file of the same name wins:
+
+```markdown
+---
+name: acme
+description: Acme's charts.
+chart:
+  palette: ["#0b5fff", "#ff6a00"]
+  checks: [palette-only]
+---
+```
+
 ## Domain profiles
 
 `<domain>.json` holds the structured rules for one editor: `chart.json`, `tokens.json`, and
 more as each editor gains a style domain. `get_style_schema` (or `pixerate-style schema
 <domain>`) describes each one, with its checks and a valid example.
+
+## Limits and safety
+
+A skill is text an agent may read, so the resolver keeps it small and plain: files up to
+256 KB, 200 files, folders up to four deep, text types only (md, json, yaml, csv, svg, ...), no
+hidden files, no `..` or absolute paths. Files outside the limits are left out with an issue
+(`createStyleResolver({ limits })` changes them; `checkStyleSkill` also checks the 4 MB skill
+total). Skill text reaches models inside `<style_skill>` blocks that name the layer, and text
+that tries to close a block is escaped. For a system prompt, `renderStyleCatalog(await
+styles.list())` lists the skills in a few lines and agents read the detail with `get_style`.
 
 ## Layers
 

@@ -11,11 +11,14 @@
  * Dependency-free.
  */
 import type { JsonSchema } from './schema.js';
-import { parseSkillFrontmatter } from './skills.js';
+import { parseFrontmatter } from './yaml.js';
 import { brandColors, brandPalette, brandFonts, type BrandProfile } from './brand.js';
 import {
+	DEFAULT_STYLE_LIMITS,
 	STYLE_SKILL_NAME,
 	brandStyleDomain,
+	styleFilePathProblem,
+	type StyleLimits,
 	createStyleResolver,
 	memoryStyleStore,
 	parseStyleDomains,
@@ -29,8 +32,11 @@ export interface StyleSkillFileReport {
 	path: string;
 	/** UTF-8 size. */
 	bytes: number;
-	/** `skill` (SKILL.md), `profile` (`<domain>.json` for a domain here) or `reference` (read on demand). */
-	role: 'skill' | 'profile' | 'reference';
+	/**
+	 * `skill` (SKILL.md), `profile` (`<domain>.json` for a domain here), `reference` (read on
+	 * demand) or `left-out` (outside the limits; the reason is in warnings or errors).
+	 */
+	role: 'skill' | 'profile' | 'reference' | 'left-out';
 }
 
 /** What `checkStyleSkill` found. */
@@ -58,6 +64,8 @@ export interface CheckStyleSkillOptions {
 	domains: readonly StyleDomain<any>[];
 	/** Resolves `$token` references; without it each reference is an error, as in a host without tokens. */
 	tokens?: StyleTokenSource;
+	/** The host's file limits (default {@link DEFAULT_STYLE_LIMITS}). */
+	limits?: Partial<StyleLimits>;
 }
 
 const byteLength = (text: string) => new TextEncoder().encode(text).length;
@@ -70,12 +78,21 @@ const normalize = (path: string) => path.replace(/\\/g, '/').replace(/^\.?\//, '
 export async function checkStyleSkill(name: string, files: Readonly<Record<string, string>>, options: CheckStyleSkillOptions): Promise<StyleSkillReport> {
 	const domains = options.domains.some((d) => d.id === brandStyleDomain.id) ? [...options.domains] : [...options.domains, brandStyleDomain];
 	const domainIds = domains.map((d) => d.id);
+	const limits: StyleLimits = { ...DEFAULT_STYLE_LIMITS, ...options.limits };
 	const report: StyleSkillReport = { name, ok: false, domains: [], files: [], profiles: {}, errors: [], warnings: [] };
 	const entries = Object.entries(files).map(([path, text]) => [normalize(path), text] as const);
+	const total = entries.reduce((n, [, t]) => n + byteLength(t), 0);
+	if (total > limits.maxSkillBytes) report.errors.push(`The skill is ${Math.round(total / 1024)} KB, over the ${Math.round(limits.maxSkillBytes / 1024)} KB limit; move long references out or shorten them.`);
+	if (entries.length > limits.maxFiles) report.errors.push(`The skill has ${entries.length} files; a host offers at most ${limits.maxFiles}.`);
 	for (const [path, text] of entries.sort(([a], [b]) => (a === 'SKILL.md' ? -1 : b === 'SKILL.md' ? 1 : a < b ? -1 : a > b ? 1 : 0))) {
 		const profile = /^([a-z0-9-]+)\.json$/.exec(path)?.[1];
-		const role = path === 'SKILL.md' ? 'skill' : profile && domainIds.includes(profile) ? 'profile' : 'reference';
-		report.files.push({ path, bytes: byteLength(text), role });
+		const bytes = byteLength(text);
+		const problem = path === 'SKILL.md' ? undefined : styleFilePathProblem(path, limits);
+		const tooBig = bytes > limits.maxFileBytes;
+		const role = problem || tooBig ? 'left-out' : path === 'SKILL.md' ? 'skill' : profile && domainIds.includes(profile) ? 'profile' : 'reference';
+		report.files.push({ path, bytes, role });
+		if (problem) report.warnings.push(`${path} is left out: ${problem}`);
+		else if (tooBig && !(path === 'SKILL.md' || (profile && domainIds.includes(profile)))) report.warnings.push(`${path} is left out: it is ${Math.round(bytes / 1024)} KB, over the ${Math.round(limits.maxFileBytes / 1024)} KB limit.`);
 		if (role === 'reference' && profile) {
 			report.warnings.push(`${path} is not a profile for any domain here (${domainIds.join(', ')}); agents can still read it with get_style_file.`);
 		}
@@ -86,9 +103,10 @@ export async function checkStyleSkill(name: string, files: Readonly<Record<strin
 		report.errors.push('There is no SKILL.md; a store does not offer a folder without one.');
 		return report;
 	}
-	const front = parseSkillFrontmatter(skillText);
-	if (!/^---\r?\n[\s\S]*?\r?\n---/.test(skillText)) report.errors.push('SKILL.md has no frontmatter; start it with ---, name, description and an optional domains list, then ---.');
-	else {
+	const fm = parseFrontmatter(skillText);
+	const front = { name: typeof fm.data.name === 'string' ? fm.data.name : undefined, description: typeof fm.data.description === 'string' ? fm.data.description : undefined, body: fm.body };
+	if (!fm.present) report.errors.push('SKILL.md has no frontmatter; start it with ---, name, description and an optional domains list, then ---.');
+	else if (!fm.error) {
 		const named = parseStyleDomains(skillText);
 		report.manifest = { ...(front.name ? { name: front.name } : {}), ...(front.description ? { description: front.description } : {}), ...(named ? { domains: named } : {}) };
 		if (!front.name) report.warnings.push('SKILL.md has no name; use the folder name.');
@@ -99,10 +117,11 @@ export async function checkStyleSkill(name: string, files: Readonly<Record<strin
 	if (!STYLE_SKILL_NAME.test(name)) return report;
 
 	const store = memoryStyleStore(Object.fromEntries(entries.map(([path, text]) => [`${name}/${path}`, text])));
-	const resolver = createStyleResolver({ layers: [{ id: 'draft', store }], domains, ...(options.tokens ? { tokens: options.tokens } : {}) });
+	const resolver = createStyleResolver({ layers: [{ id: 'draft', store }], domains, limits, ...(options.tokens ? { tokens: options.tokens } : {}) });
 	const [info] = await resolver.list();
 	if (!info) {
-		report.errors.push('A store would not offer this skill.');
+		for (const issue of (await resolver.resolve(brandStyleDomain.id)).issues) report.errors.push(issue.message);
+		if (!report.errors.length) report.errors.push('A store would not offer this skill.');
 		return report;
 	}
 	report.domains = info.domains;

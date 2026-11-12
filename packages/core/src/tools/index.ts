@@ -27,6 +27,7 @@ export * from './style-surface.js';
 export * from './brand.js';
 export * from './style-authoring.js';
 export * from './style-testing.js';
+export * from './yaml.js';
 export * from './style-tools.js';
 export * from './origin.js';
 export * from './conformance.js';

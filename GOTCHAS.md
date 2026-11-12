@@ -4582,3 +4582,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A chart derived from `brand.json` (`fonts.body: "Inter"`) drew its labels in a serif face in the `pixerate-style preview` page and in SVG exports on machines without Inter.
 - **Root Cause**: A brand names one family, but SVG `font-family` with a single unavailable family falls back to the user agent's default, which is a serif.
 - **Solution / Workaround**: `chartStyleFromBrand` turns a single family into a stack (`Inter, system-ui, sans-serif`, quoting names with spaces); a brand font that is already a stack is kept as is. Do the same in any `themeFromBrand` that writes a CSS font family.
+
+### [core/style] An Unquoted `#` Colour in Style Frontmatter Is a Comment
+
+- **Issue / Symptom**: A style skill with `color: #0b5fff` (or `primary: #0b5fff` under a frontmatter `brand:` profile) loads with that value `null`, so the profile fails its schema or the colour is missing.
+- **Root Cause**: Style frontmatter is YAML (`parseFrontmatter`), where ` #` starts a comment. Inside a flow list (`[#0b5fff]`) the `#` follows `[`, not a space, so it is kept, which makes the mistake easy to miss.
+- **Solution / Workaround**: Quote colours in frontmatter (`"#0b5fff"`), or keep profiles in `<domain>.json` files. `checkStyleSkill` / `pixerate-style check` report the resulting schema error with the field.
