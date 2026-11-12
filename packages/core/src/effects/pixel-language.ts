@@ -1,7 +1,8 @@
 /**
  * Pixel expressions: the small, bounded language that effects written at run time (by a person or
  * an agent) use. It is data, not code: there are no loops, no functions of your own, no memory and
- * no access to anything but the pixel's position, the time and the effect's controls. Every
+ * no access to anything but the pixel's position, the time, the effect's controls and, through
+ * `sample(p)`, an input picture (which makes the effect a filter). Every
  * program runs a fixed number of steps per pixel (its `cost`, capped by `maxCost`), so it cannot
  * hang the GPU or the host app, and hosts that may not run downloaded code (App Store 2.5.2) can
  * still let agents write effects. The same source compiles to a CPU evaluator here and in Swift,
@@ -30,7 +31,7 @@ export const PIXEL_LANGUAGE = "pixel" as const;
 export interface PixelLimits {
   /** Longest source in UTF-16 code units (default 65536). */
   maxSourceLength?: number;
-  /** Most work per pixel, in expression steps (`noise` counts 4; default 1024). */
+  /** Most work per pixel, in expression steps (`noise` and `sample` count 4; default 1024). */
   maxCost?: number;
 }
 
@@ -208,6 +209,13 @@ export const PIXEL_FUNCTIONS: Readonly<
     max: 1,
     result: "scalar",
     description: "noise(p): smooth value noise 0..1 over a vec2.",
+  },
+  sample: {
+    min: 1,
+    max: 1,
+    result: "vec4",
+    description:
+      "sample(p): the input picture (source) at p, a vec2 in uv, as a vec4 with straight alpha (bilinear, clamped to the edge). An effect that calls it is a filter.",
   },
   vec2: {
     min: 1,
@@ -661,6 +669,14 @@ export function compilePixelSource(
         line,
       );
     }
+    if (fn === "sample") {
+      if (args[0].size !== 2)
+        throw new PixelSyntaxError(
+          `sample takes a vec2 in uv (e.g. sample(uv) or sample(uv + vec2(1, 0) / size)), not a ${sizeName(args[0].size)}`,
+          line,
+        );
+      return { k: "call", fn, args, size: 4, line };
+    }
     if (
       spec.result === "vec2" ||
       spec.result === "vec3" ||
@@ -921,9 +937,37 @@ export function exprCost(e: PixelExpr): number {
       return 1 + exprCost(e.a) + exprCost(e.b);
     case "call":
       return (
-        (e.fn === "noise" ? 4 : 1) + e.args.reduce((s, a) => s + exprCost(a), 0)
+        (e.fn === "noise" || e.fn === "sample" ? 4 : 1) +
+        e.args.reduce((s, a) => s + exprCost(a), 0)
       );
   }
+}
+
+/** Whether an expression calls `sample` (reads the input picture). */
+function exprSamples(e: PixelExpr): boolean {
+  switch (e.k) {
+    case "num":
+    case "const":
+    case "var":
+      return false;
+    case "neg":
+    case "swizzle":
+      return exprSamples(e.a);
+    case "bin":
+      return exprSamples(e.a) || exprSamples(e.b);
+    case "call":
+      return e.fn === "sample" || e.args.some(exprSamples);
+  }
+}
+
+/**
+ * Whether a program reads an input picture (calls `sample`): such an effect is a filter with an
+ * image input `source`; any other is a generator.
+ */
+export function pixelProgramSamples(program: PixelProgram): boolean {
+  return (
+    program.lets.some((l) => exprSamples(l.expr)) || exprSamples(program.out)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -995,6 +1039,76 @@ export function pixelNoise(x: number, y: number): number {
   return top + (bottom - top) * uy;
 }
 
+/** An input picture for `sample`: straight-alpha RGBA8, row by row from the top. */
+export interface PixelSampleSource {
+  width: number;
+  height: number;
+  data: ArrayLike<number>;
+}
+
+/**
+ * `sample(p)`: the picture at `p` (a vec2 in uv, so pixel centres are at (x + 0.5) / width), as
+ * straight-alpha RGBA 0..1. Bilinear between the four nearest pixels, clamped to the edge, with
+ * colour weighted by alpha (so transparent pixels don't darken the edges of paint); colour where
+ * all four are transparent is 0. A coordinate that is not a number reads the left or top edge.
+ * No picture (or an empty one) reads as transparent. Swift and MSL do exactly this.
+ */
+export function pixelSample(
+  src: PixelSampleSource | null | undefined,
+  x: number,
+  y: number,
+  into: Float64Array | number[],
+  at = 0,
+): void {
+  const w = src ? src.width : 0;
+  const h = src ? src.height : 0;
+  if (!src || !(w >= 1) || !(h >= 1)) {
+    into[at] = 0;
+    into[at + 1] = 0;
+    into[at + 2] = 0;
+    into[at + 3] = 0;
+    return;
+  }
+  let tx = x * w - 0.5;
+  let ty = y * h - 0.5;
+  if (!(tx > -1)) tx = -1;
+  else if (tx > w) tx = w;
+  if (!(ty > -1)) ty = -1;
+  else if (ty > h) ty = h;
+  const fx0 = Math.floor(tx);
+  const fy0 = Math.floor(ty);
+  const fx = tx - fx0;
+  const fy = ty - fy0;
+  const x0 = fx0 < 0 ? 0 : fx0 > w - 1 ? w - 1 : fx0;
+  const x1 = fx0 + 1 < 0 ? 0 : fx0 + 1 > w - 1 ? w - 1 : fx0 + 1;
+  const y0 = fy0 < 0 ? 0 : fy0 > h - 1 ? h - 1 : fy0;
+  const y1 = fy0 + 1 < 0 ? 0 : fy0 + 1 > h - 1 ? h - 1 : fy0 + 1;
+  const d = src.data;
+  const i00 = (y0 * w + x0) * 4;
+  const i10 = (y0 * w + x1) * 4;
+  const i01 = (y1 * w + x0) * 4;
+  const i11 = (y1 * w + x1) * 4;
+  const w00 = (1 - fx) * (1 - fy) * d[i00 + 3];
+  const w10 = fx * (1 - fy) * d[i10 + 3];
+  const w01 = (1 - fx) * fy * d[i01 + 3];
+  const w11 = fx * fy * d[i11 + 3];
+  const a = w00 + w10 + w01 + w11;
+  if (a > 0) {
+    for (let c = 0; c < 3; c++)
+      into[at + c] =
+        (w00 * d[i00 + c] +
+          w10 * d[i10 + c] +
+          w01 * d[i01 + c] +
+          w11 * d[i11 + c]) /
+        (a * 255);
+  } else {
+    into[at] = 0;
+    into[at + 1] = 0;
+    into[at + 2] = 0;
+  }
+  into[at + 3] = a / 255;
+}
+
 const unary: Record<string, (x: number) => number> = {
   sin: Math.sin,
   cos: Math.cos,
@@ -1043,13 +1157,17 @@ const ternary: Record<string, (a: number, b: number, c: number) => number> = {
 
 /** A program ready to run per pixel on the CPU. */
 export interface PixelEvaluator {
-  /** Draws the program into straight-alpha RGBA8 (`out` must hold width × height × 4 bytes). */
+  /**
+   * Draws the program into straight-alpha RGBA8 (`out` must hold width × height × 4 bytes).
+   * `source` is the picture `sample` reads (any size; none reads as transparent).
+   */
   render(
     width: number,
     height: number,
     timeMs: number,
     values: EffectValues,
     out: Uint8ClampedArray,
+    source?: PixelSampleSource | null,
   ): void;
 }
 
@@ -1098,6 +1216,7 @@ export function createPixelEvaluator(program: PixelProgram): PixelEvaluator {
     return at;
   });
   const ops: ((r: Float64Array) => void)[] = [];
+  let source: PixelSampleSource | null = null;
 
   const emit = (e: PixelExpr): number => {
     switch (e.k) {
@@ -1259,6 +1378,11 @@ export function createPixelEvaluator(program: PixelProgram): PixelEvaluator {
           r[at] = pixelNoise(r[a], r[a + 1]);
         });
         break;
+      case "sample":
+        ops.push((r) => {
+          pixelSample(source, r[a], r[a + 1], r, at);
+        });
+        break;
       case "vec2":
       case "vec3":
       case "vec4": {
@@ -1295,7 +1419,8 @@ export function createPixelEvaluator(program: PixelProgram): PixelEvaluator {
   const byte = (v: number) => (v > 0 ? (v < 1 ? Math.round(v * 255) : 255) : 0);
 
   return {
-    render(width, height, timeMs, values, out) {
+    render(width, height, timeMs, values, out, src) {
+      source = src ?? null;
       regs[sz] = width;
       regs[sz + 1] = height;
       regs[tm] = timeMs / 1000;
@@ -1328,6 +1453,7 @@ export function createPixelEvaluator(program: PixelProgram): PixelEvaluator {
           o += 4;
         }
       }
+      source = null;
     },
   };
 }

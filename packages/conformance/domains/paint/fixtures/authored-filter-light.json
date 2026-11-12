@@ -1,0 +1,468 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "authored-filter-light",
+  "description": "An effect written at run time that reads the picture with sample() is a filter: saved into the painting, offered for light on dried paint and not for paint, and run with apply_effect on a painted layer (bilinear samples between pixels, clamped at the edge), then kept after a reload.",
+  "setup": {
+    "width": 48,
+    "height": 32,
+    "authoredEffects": "author"
+  },
+  "steps": [
+    {
+      "tool": "open_effect_authoring",
+      "arguments": {
+        "effect": "pixel.blank"
+      },
+      "expect": {
+        "result": {
+          "compiled": true,
+          "controls": [
+            {
+              "alpha": false,
+              "default": "#1d2b53",
+              "description": "Colour at the top. (#rrggbb)",
+              "id": "top",
+              "type": "color"
+            },
+            {
+              "alpha": false,
+              "default": "#ff77a8",
+              "description": "Colour at the bottom. (#rrggbb)",
+              "id": "bottom",
+              "type": "color"
+            }
+          ],
+          "duration": 1000,
+          "from": "pixel.blank",
+          "issues": [],
+          "loop": false,
+          "name": "Blank",
+          "source": "control top: color = #1d2b53 // Colour at the top.\ncontrol bottom: color = #ff77a8 // Colour at the bottom.\nout = mix(top, bottom, uv.y)\n",
+          "sourceLanguage": "pixel",
+          "values": {
+            "bottom": "#ff77a8",
+            "top": "#1d2b53"
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_source",
+      "arguments": {
+        "source": "control light: color = #fff2c4 // Colour of the light.\ncontrol angle: number = 135 range 0 360 // Where the light comes from, in degrees.\ncontrol strength: number = 0.6 range 0 1 // How strongly the edges catch the light.\nlet dir = vec2(cos(angle / 180 * PI), sin(angle / 180 * PI)) * 1.5 / size\nlet c = sample(uv)\nlet ahead = sample(uv + dir)\nlet behind = sample(uv - dir)\nlet edge = clamp((behind.a - ahead.a) * strength + 0.5, 0, 1)\nout = vec4(mix(c.rgb * 0.6, mix(c.rgb, light, 0.5), edge), c.a)\n"
+      },
+      "expect": {
+        "result": {
+          "issues": []
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_set_source",
+      "arguments": {
+        "source": "out = sample(uv.x)\n"
+      },
+      "expect": {
+        "result": {
+          "issues": [
+            {
+              "line": 1,
+              "message": "sample takes a vec2 in uv (e.g. sample(uv) or sample(uv + vec2(1, 0) / size)), not a number",
+              "severity": "error"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_undo",
+      "expect": {
+        "result": {
+          "canRedo": true,
+          "canUndo": true,
+          "changed": true
+        }
+      }
+    },
+    {
+      "tool": "save_authored_effect",
+      "arguments": {
+        "name": "Glaze"
+      },
+      "expect": {
+        "result": {
+          "animated": [],
+          "controls": [
+            "light",
+            "angle",
+            "strength"
+          ],
+          "duration": 1000,
+          "id": "authored.glaze",
+          "loop": false,
+          "name": "Glaze"
+        }
+      }
+    },
+    {
+      "tool": "close_effect_authoring",
+      "expect": {
+        "result": {
+          "closed": "Blank"
+        }
+      }
+    },
+    {
+      "tool": "describe_effect",
+      "arguments": {
+        "effect": "authored.glaze"
+      },
+      "expect": {
+        "result": {
+          "appliesHere": true,
+          "available": true,
+          "category": "authored",
+          "controls": {
+            "additionalProperties": false,
+            "properties": {
+              "angle": {
+                "description": "Where the light comes from, in degrees.",
+                "maximum": 360,
+                "minimum": 0,
+                "type": "number"
+              },
+              "light": {
+                "description": "Colour of the light. (#rrggbb)",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              },
+              "strength": {
+                "description": "How strongly the edges catch the light.",
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "defaults": {
+            "angle": 135,
+            "light": "#fff2c4",
+            "strength": 0.6
+          },
+          "description": "An effect written in pixel expressions.",
+          "duration": 1000,
+          "id": "authored.glaze",
+          "inputs": [
+            {
+              "description": "The picture sample(p) reads (straight-alpha RGBA8, any size; p is in uv). Without one, sample reads transparent.",
+              "kind": "image",
+              "name": "source",
+              "required": true
+            }
+          ],
+          "kind": "shader",
+          "loop": false,
+          "name": "Glaze",
+          "presets": [],
+          "tags": [
+            "authored",
+            "pixel"
+          ],
+          "transparent": true,
+          "uses": [
+            "filter"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "query": "glaze",
+        "place": "light"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [
+            {
+              "category": "authored",
+              "description": "An effect written in pixel expressions.",
+              "duration": 1000,
+              "id": "authored.glaze",
+              "kind": "shader",
+              "loop": false,
+              "name": "Glaze",
+              "tags": [
+                "authored",
+                "pixel"
+              ],
+              "transparent": true,
+              "uses": [
+                "filter"
+              ]
+            }
+          ],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [
+            {
+              "count": 1,
+              "tag": "authored"
+            },
+            {
+              "count": 1,
+              "tag": "pixel"
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "search_effects",
+      "arguments": {
+        "query": "glaze",
+        "place": "paint"
+      },
+      "expect": {
+        "result": {
+          "available": true,
+          "effects": [],
+          "provider": {
+            "capabilities": {
+              "maxSize": 8192,
+              "supportsAuthoring": true,
+              "supportsFloat": true,
+              "supportsHostImages": false,
+              "supportsMask": true,
+              "supportsVector": true,
+              "supportsWorker": false
+            },
+            "id": "fake",
+            "name": "Fake effects"
+          },
+          "tags": [],
+          "total": 0
+        }
+      }
+    },
+    {
+      "tool": "fill_layer",
+      "arguments": {
+        "color": "#3a6ea5"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "layerId": "@1"
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Paint"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Paint",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "ink-pen",
+        "color": "#c0392b",
+        "brush": {
+          "tip": {
+            "size": 10,
+            "hardness": 1
+          },
+          "dynamics": {
+            "smoothing": 0,
+            "pressureSize": false,
+            "pressureOpacity": false
+          }
+        },
+        "seed": 3,
+        "points": [
+          {
+            "x": 2,
+            "y": 6
+          },
+          {
+            "x": 24,
+            "y": 18
+          },
+          {
+            "x": 44,
+            "y": 26
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 38,
+            "width": 60,
+            "x": -7,
+            "y": -3
+          },
+          "dabs": 94,
+          "layerId": "@2",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "apply_effect",
+      "arguments": {
+        "target": "@2",
+        "effect": "authored.glaze",
+        "values": {
+          "angle": 200,
+          "strength": 0.9
+        },
+        "opacity": 0.8
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "baked": true,
+          "effect": {
+            "effect": "authored.glaze",
+            "enabled": true,
+            "id": "light",
+            "name": "Glaze",
+            "opacity": 0.8,
+            "provider": "authored",
+            "role": "baked light",
+            "values": {
+              "angle": 200,
+              "light": "#fff2c4",
+              "strength": 0.9
+            }
+          },
+          "effects": [],
+          "target": "@2"
+        },
+        "pixels": {
+          "file": "png/authored-filter-light.13.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "39b3d1c58f1f67ef91ae31a449407db49055fe53993a9cbc3452d6135e7213fe",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "apply_effect",
+      "arguments": {
+        "target": "@1",
+        "effect": "authored.glaze"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "baked": true,
+          "effect": {
+            "effect": "authored.glaze",
+            "enabled": true,
+            "id": "light",
+            "name": "Glaze",
+            "opacity": 1,
+            "provider": "authored",
+            "role": "baked light",
+            "values": {
+              "angle": 135,
+              "light": "#fff2c4",
+              "strength": 0.6
+            }
+          },
+          "effects": [],
+          "target": "@1"
+        },
+        "pixels": {
+          "file": "png/authored-filter-light.14.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "f8156b6c155357f55b2a7a03e5c35106796c1c3af44eacc2acf579c18cae0697",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_authored_effects",
+      "reload": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "effects": [
+            {
+              "animated": [],
+              "controls": [
+                "light",
+                "angle",
+                "strength"
+              ],
+              "duration": 1000,
+              "id": "authored.glaze",
+              "language": "pixel",
+              "loop": false,
+              "name": "Glaze",
+              "uses": {
+                "layers": [],
+                "paint": false,
+                "paper": false,
+                "strokes": 0
+              }
+            }
+          ],
+          "open": null,
+          "policy": "author"
+        },
+        "loaded": [],
+        "pixels": {
+          "file": "png/authored-filter-light.15.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "f8156b6c155357f55b2a7a03e5c35106796c1c3af44eacc2acf579c18cae0697",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

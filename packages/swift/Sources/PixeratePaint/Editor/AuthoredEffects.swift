@@ -200,9 +200,9 @@ private func authoredAsUsed(_ d: EffectDescription, _ entry: PaintAuthoredEffect
     o["controls"] = .object(controls)
     o["defaults"] = .object(defaults)
     o["presets"] = .array(presets)
-    // The document's paint hint, while the controls left here still fit it.
+    // The document's paint hint (filters have none), while the controls left here still fit it.
     o["paint"] = Optional<JSONValue>.none
-    if let paint = doc["paint"], effectPaintHintProblems(EffectDescription(o), paint: paint).isEmpty { o["paint"] = paint }
+    if let paint = doc["paint"], !d.uses.contains("filter"), effectPaintHintProblems(EffectDescription(o), paint: paint).isEmpty { o["paint"] = paint }
     return EffectDescription(o)
 }
 
@@ -436,11 +436,16 @@ func authoredNow() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e
 /// Renders `trialSize`² once and times it: the check an effect passes before it is saved (`trialRender`).
 func authoredTrialRender(_ provider: AuthoredEffectsProvider, _ id: String, _ limits: ResolvedAuthoredLimits) async throws -> (ms: Double, problem: String?) {
     let size = limits.trialSize
+    // A filter is timed on a picture of the trial size, as it reads one wherever it is used.
+    let d = try await provider.describe(id)
+    let request: EffectRenderRequest = d.uses.contains("filter")
+        ? EffectRenderRequest(time: 0, inputs: ["source": EffectPixels(width: size, height: size)])
+        : EffectRenderRequest(time: 0)
     let r = try provider.createRenderer(id, width: size, height: size)
     defer { r.dispose() }
     let t0 = authoredNow()
     let out: EffectPixels
-    if let sync = r as? SyncEffectRenderer { out = try sync.renderSync(EffectRenderRequest(time: 0)) } else { out = try await r.render(EffectRenderRequest(time: 0)) }
+    if let sync = r as? SyncEffectRenderer { out = try sync.renderSync(request) } else { out = try await r.render(request) }
     let ms = authoredNow() - t0
     if out.data.count != size * size * 4 { return (ms, "the trial render returned the wrong number of pixels") }
     if ms >= limits.trialRenderMs {

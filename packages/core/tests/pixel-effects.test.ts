@@ -7,6 +7,8 @@ import {
   PIXEL_TEMPLATES,
   pixelHash,
   pixelNoise,
+  pixelProgramSamples,
+  pixelSample,
 } from "../src/effects/index.js";
 
 const manual = () => () => () => {};
@@ -126,7 +128,7 @@ describe("pixel expressions: compiling", () => {
       issues: [],
     });
     expect(issuesOf("out = toString(1)").issues).toEqual([
-      'error@1: there is no function "toString"; the functions are sin, cos, tan, asin, acos, atan, sqrt, exp, log, abs, sign, floor, ceil, fract, pow, mod, min, max, clamp, mix, step, smoothstep, select, length, distance, dot, normalize, hash, noise, vec2, vec3, vec4',
+      'error@1: there is no function "toString"; the functions are sin, cos, tan, asin, acos, atan, sqrt, exp, log, abs, sign, floor, ceil, fract, pow, mod, min, max, clamp, mix, step, smoothstep, select, length, distance, dot, normalize, hash, noise, sample, vec2, vec3, vec4',
     ]);
     expect(issuesOf("out = vec3(1) $").issues).toEqual([
       'error@1: unexpected character "$"',
@@ -228,6 +230,129 @@ describe("pixel expressions: evaluating", () => {
       12,
     );
     expect(pixelHash(1e12, -1e12)).toBe(pixelHash(1e9, -1e9));
+  });
+});
+
+/** A 2×2 picture: opaque red, opaque green / transparent, half-transparent blue. */
+const SRC = {
+  width: 2,
+  height: 2,
+  data: new Uint8ClampedArray([
+    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 0, 0, 0, 255, 128,
+  ]),
+};
+
+function sampled(source: string, w = 2, h = 2, src: typeof SRC | null = SRC) {
+  const r = compilePixelSource(source);
+  if (!r.ok) throw new Error(JSON.stringify(r.issues));
+  const out = new Uint8ClampedArray(w * h * 4);
+  createPixelEvaluator(r.program).render(w, h, 0, {}, out, src);
+  return [...out];
+}
+
+describe("pixel expressions: sample (filters)", () => {
+  it("reads the source at pixel centres exactly", () => {
+    expect(sampled("out = sample(uv)")).toEqual([...SRC.data]);
+    // The source can be another size: uv still spans it.
+    // (the middle of the 2×2: alpha 159.5 / 255, colour weighted by alpha)
+    expect(sampled("out = sample(uv)", 1, 1)).toEqual([102, 102, 51, 160]);
+  });
+
+  it("is bilinear with colour weighted by alpha, and clamps to the edge", () => {
+    const at = (x: number, y: number) => {
+      const v = [0, 0, 0, 0];
+      pixelSample(SRC, x, y, v);
+      return v;
+    };
+    // Halfway between red and green: an even mix.
+    expect(at(0.5, 0.25)).toEqual([0.5, 0.5, 0, 1]);
+    // Halfway between red and transparent: red at half alpha, not darkened.
+    expect(at(0.25, 0.5)).toEqual([1, 0, 0, 0.5]);
+    // The middle: the alpha-weighted mix of all four.
+    const mid = at(0.5, 0.5);
+    const a = (255 + 255 + 0 + 128) / 4;
+    expect(mid[3]).toBeCloseTo(a / 255, 12);
+    expect(mid[0]).toBeCloseTo((255 * 255) / 4 / (a * 255), 12);
+    expect(mid[2]).toBeCloseTo((128 * 255) / 4 / (a * 255), 12);
+    // Outside the picture and non-numbers read the nearest edge pixel.
+    expect(at(-3, -3)).toEqual([1, 0, 0, 1]);
+    expect(at(9, -1)).toEqual([0, 1, 0, 1]);
+    expect(at(NaN, 0.25)).toEqual([1, 0, 0, 1]);
+    expect(at(Infinity, Infinity)).toEqual([0, 0, 1, 128 / 255]);
+    // Transparent all round: colour 0.
+    const clear = { width: 1, height: 1, data: [9, 9, 9, 0] };
+    const v = [1, 1, 1, 1];
+    pixelSample(clear, 0.5, 0.5, v);
+    expect(v).toEqual([0, 0, 0, 0]);
+    // No source: transparent.
+    pixelSample(null, 0.5, 0.5, v);
+    expect(v).toEqual([0, 0, 0, 0]);
+    expect(sampled("out = sample(uv)", 1, 1, null)).toEqual([0, 0, 0, 0]);
+  });
+
+  it("works in expressions: a filter that inverts and shifts", () => {
+    expect(sampled("let c = sample(uv)\nout = vec4(1 - c.rgb, c.a)")).toEqual([
+      0, 255, 255, 255, 255, 0, 255, 255, 255, 255, 255, 0, 255, 255, 0, 128,
+    ]);
+    // One pixel to the left, clamped at the edge.
+    expect(sampled("out = sample(uv - vec2(1, 0) / size)").slice(0, 8)).toEqual(
+      [255, 0, 0, 255, 255, 0, 0, 255],
+    );
+  });
+
+  it("checks its argument, counts 4 steps and makes the program a filter", () => {
+    expect(issuesOf("out = sample(uv.x)").issues).toEqual([
+      "error@1: sample takes a vec2 in uv (e.g. sample(uv) or sample(uv + vec2(1, 0) / size)), not a number",
+    ]);
+    expect(issuesOf("out = sample(uv, uv)").issues).toEqual([
+      "error@1: sample takes 1 argument, not 2",
+    ]);
+    expect(issuesOf("out = sample()").issues).toEqual([
+      "error@1: sample takes 1 argument, not 0",
+    ]);
+    expect(issuesOf("out = sample").issues).toEqual([
+      "error@1: sample is a function; call it, e.g. sample(…)",
+    ]);
+    expect(issuesOf("let sample = 1\nout = vec3(sample)").issues[0]).toMatch(
+      /^error@1: .*sample/,
+    );
+    expect(issuesOf("out = sample(uv).rgb + 1").ok).toBe(true);
+    const r = compilePixelSource("let c = sample(uv)\nout = c");
+    expect(r.ok && r.program.cost).toBe(4);
+    expect(r.ok && pixelProgramSamples(r.program)).toBe(true);
+    const g = compilePixelSource("out = vec3(uv, 0)");
+    expect(g.ok && pixelProgramSamples(g.program)).toBe(false);
+    const heavy = `out = ${Array.from({ length: 257 }, () => "sample(uv)").join(" + ")}`;
+    expect(compilePixelSource(heavy).issues[0].message).toMatch(
+      /^the program does 1284 steps per pixel; the limit is 1024/,
+    );
+  });
+
+  it("an effect that samples is a filter with a source input; the renderer reads it", async () => {
+    const p = createPixelEffectProvider({ session: { schedule: manual() } });
+    const s = await p.openAuthoring!({ effectId: "pixel.blank" });
+    await s.setSource!(
+      "control amount: number = 1 range 0 1 // How far to invert.\nlet c = sample(uv)\nout = vec4(mix(c.rgb, 1 - c.rgb, amount), c.a)",
+    );
+    const d = s.getState().description;
+    expect(d.uses).toEqual(["filter"]);
+    expect(d.inputs).toEqual([
+      expect.objectContaining({
+        name: "source",
+        kind: "image",
+        required: true,
+      }),
+    ]);
+    // The template's paint hint is not kept: filters don't paint.
+    expect(d.paint).toBeUndefined();
+    const r = await s.createPreview({ width: 2, height: 2 });
+    const out = await r.render({ time: 0, inputs: { source: SRC } });
+    expect([...out.data.slice(0, 4)]).toEqual([0, 255, 255, 255]);
+    // No source: sample reads transparent (inverted colour, alpha 0).
+    expect([...(await r.render({ time: 0 })).data.slice(0, 4)]).toEqual([
+      255, 255, 255, 0,
+    ]);
+    r.dispose();
   });
 });
 

@@ -195,7 +195,11 @@ function asUsed(
   // The document's paint hint, while the controls left here still fit it.
   const paint =
     doc.paint &&
-    !effectPaintHintProblems({ controls: { ...d.controls, properties } as EffectDescription["controls"], paint: doc.paint }).length
+    !d.uses.includes("filter") &&
+    !effectPaintHintProblems({
+      controls: { ...d.controls, properties } as EffectDescription["controls"],
+      paint: doc.paint,
+    }).length
       ? doc.paint
       : undefined;
   return {
@@ -444,15 +448,23 @@ export async function trialRender(
   limits: Required<AuthoredEffectLimits>,
   now: () => number,
 ): Promise<{ ms: number; problem: string | null }> {
+  // A filter is timed on a picture of the trial size, as it reads one wherever it is used.
+  const d = await provider.describe(id);
+  const req = d.uses.includes("filter")
+    ? {
+        time: 0,
+        inputs: {
+          source: createEffectPixels(limits.trialSize, limits.trialSize),
+        },
+      }
+    : { time: 0 };
   const r = await provider.createRenderer(id, {
     width: limits.trialSize,
     height: limits.trialSize,
   });
   try {
     const t0 = now();
-    const out = r.renderSync
-      ? r.renderSync({ time: 0 })
-      : await r.render({ time: 0 });
+    const out = r.renderSync ? r.renderSync(req) : await r.render(req);
     const ms = now() - t0;
     if (out.data.length !== limits.trialSize * limits.trialSize * 4)
       return {
