@@ -1,0 +1,63 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-allowed-type",
+  "description": "allowed-type with its types (valid options) runs: a line chart in a house style that allows bars and pies is an error naming the layer that asked for the check.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "style": {
+      "checks": [
+        {
+          "id": "allowed-type",
+          "types": [
+            "bar",
+            "pie"
+          ]
+        }
+      ]
+    },
+    "spec": {
+      "type": "line",
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "Revenue",
+          "values": [
+            100,
+            120
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "allowed-type",
+              "layer": "org",
+              "message": "This is a line chart; the house style allows bar, pie. Change the type with update_chart.",
+              "severity": "error",
+              "target": {
+                "kind": "chart"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "allowed-type"
+          ],
+          "skipped": []
+        }
+      }
+    }
+  ]
+}

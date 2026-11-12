@@ -84,20 +84,12 @@ private func regexMatch(_ regex: NSRegularExpression, _ text: String) -> [String
 
 private func takeTitle(_ text: String) -> (title: String?, rest: String) {
     let t = text.jsTrimmed
-    if t.hasPrefix("\"") {
-        let chars = Array(t)
-        var end = -1
-        for idx in 1..<chars.count {
-            if chars[idx] == "\"" {
-                end = idx
-                break
-            }
-        }
-        if end > 0 {
-            let quotedPart = String(chars[0...end])
-            let restPart = (end + 1 < chars.count) ? String(chars[(end + 1)...]).jsTrimmed : ""
-            return (title: mermaidUnquote(quotedPart), rest: restPart)
-        }
+    // `t.indexOf('"', 1)` and slices count UTF-16 code units.
+    let units = Array(t.utf16)
+    if units.first == 0x22, let end = units.indices.dropFirst().first(where: { units[$0] == 0x22 }) {
+        let quotedPart = String(decoding: units[...end], as: UTF16.self)
+        let restPart = String(decoding: units[(end + 1)...], as: UTF16.self).jsTrimmed
+        return (title: mermaidUnquote(quotedPart), rest: restPart)
     }
     if t.isEmpty || t.hasPrefix("[") || regexMatch(rangeRegex, t) != nil || regexMatch(startsWithSignedDigitRegex, t) != nil {
         return (title: nil, rest: t)

@@ -116,7 +116,7 @@ public func chartErrorAmounts(_ bars: ChartErrorBars, _ values: [ChartValue]) ->
 public func describeChartErrorBars(_ bars: ChartErrorBars) -> String {
     let sign = bars.direction == .plus ? "+" : bars.direction == .minus ? "−" : "±"
     let value = bars.value ?? defaultChartErrorBarValue(bars.type)
-    let valStr = value.map(JSONValue.jsNumber) ?? "undefined"
+    let valStr = value.map(JSONValue.jsString) ?? "undefined"
     switch bars.type {
     case .fixed:
         return "\(sign)\(valStr) error bars"
@@ -168,7 +168,7 @@ public func chartErrorBarsOfType(
 public func formatChartAmountList(_ values: [ChartValue]?) -> String {
     (values ?? []).map { v in
         guard let v else { return "-" }
-        return JSONValue.jsNumber(v)
+        return JSONValue.jsString(v)
     }.joined(separator: ", ")
 }
 

@@ -194,8 +194,10 @@ private func replaceIds(_ value: JSONValue, _ ids: ConformanceIds) -> JSONValue 
 
 /// A value as scenarios store it (the package README's normalization rules).
 public func normalizeConformanceValue(_ value: JSONValue, _ ids: ConformanceIds, isGeneratedId: (String) -> Bool = { _ in false }) -> JSONValue {
-    collectIds(value, ids) { !isPlaceholder($0) && isGeneratedId($0) }
-    return replaceIds(value, ids)
+    // `JSON.parse(JSON.stringify(value))`: a document may hold NaN in memory (a culture tip's unread field).
+    let json = value.asJSON
+    collectIds(json, ids) { !isPlaceholder($0) && isGeneratedId($0) }
+    return replaceIds(json, ids)
 }
 
 /// `value` without the members at `paths` (`/a/b`, `*` for every element or member).

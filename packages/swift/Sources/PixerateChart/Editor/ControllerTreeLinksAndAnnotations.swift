@@ -614,7 +614,7 @@ extension ChartController {
             if !frame.isFinite || frame < 0 || frame > Double(Swift.max(0, n - 1)) {
                 let rangePart = n > 1 ? " (\"\(spec.categories[0])\" to \"\(spec.categories[n - 1])\")" : ""
                 let msg = n > 0
-                    ? "The race has time points 0 to \(n - 1)\(rangePart); got \(JSONValue.jsNumber(frame))."
+                    ? "The race has time points 0 to \(n - 1)\(rangePart); got \(JSONValue.jsString(frame))."
                     : "The chart has no time points (categories) yet."
                 return .failure(msg)
             }
@@ -626,17 +626,18 @@ extension ChartController {
         return .success()
     }
 
-    private func scheduleRaceStep(from: Double, start: Double, per: Double) {
+    /// `last` is captured when playback starts, as the TS `step` closure does: editing categories
+    /// mid-race does not move the end.
+    private func scheduleRaceStep(from: Double, start: Double, per: Double, last: Double) {
         raceStop = raceTicker.next { [weak self] in
             guard let self else { return }
-            let lastIdx = Double(self.spec.categories.count - 1)
-            let at = Swift.min(lastIdx, from + (self.raceTicker.now() - start) / per)
+            let at = Swift.min(last, from + (self.raceTicker.now() - start) / per)
             self.raceFrame = at
-            if at >= lastIdx {
+            if at >= last {
                 self.raceStop = nil
                 self.raceFrame = nil
             } else {
-                self.scheduleRaceStep(from: from, start: start, per: per)
+                self.scheduleRaceStep(from: from, start: start, per: per, last: last)
             }
             self.notify(specChanged: false)
         }
@@ -651,7 +652,7 @@ extension ChartController {
         let from = (raceFrame == nil || raceFrame! >= last) ? 0.0 : raceFrame!
         let start = raceTicker.now()
         raceFrame = from
-        scheduleRaceStep(from: from, start: start, per: per)
+        scheduleRaceStep(from: from, start: start, per: per, last: last)
         notify(specChanged: false)
         return .success()
     }

@@ -1,0 +1,82 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-invalid-profile",
+  "description": "A house-style chart.json that breaks the chart profile schema or a check's options schema (allowed-type without types, a token reference with no token source, an unknown field, a value out of range) is left out with an issue saying why, so check_chart_style runs no checks.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "style": {
+      "palette": [
+        "#1f77b4",
+        {
+          "$token": "brand/primary"
+        }
+      ],
+      "theme": {
+        "fontSize": 2,
+        "background": {
+          "$token": "surface",
+          "mode": 3
+        }
+      },
+      "extra": true,
+      "toString": "an Object.prototype name the TS schema check lets through",
+      "checks": [
+        "palette-only",
+        "distinguishable",
+        {
+          "id": "allowed-type"
+        },
+        {
+          "id": "min-contrast",
+          "ratio": 50,
+          "other": 1
+        },
+        {
+          "id": "no-such-check",
+          "x": 1
+        },
+        7
+      ]
+    },
+    "spec": {
+      "type": "bar",
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "Revenue",
+          "values": [
+            100,
+            120
+          ],
+          "color": "#ff0000"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "issues": [
+            {
+              "layer": "org",
+              "message": "chart.json is left out: palette[1]: \"brand/primary\" is a token reference, but this host has no design tokens to resolve it. theme.background: a token reference is { \"$token\": \"<variable name or id>\", \"mode\"?: \"<mode>\" }. /palette/1: Expected string, got undefined. /theme/fontSize: Must be >= 6. /extra: Unknown property \"extra\". Allowed: palette, colorSchemes, layouts, theme, defaults. checks[2] (allowed-type)/types: Missing required property \"types\". checks[3] (min-contrast)/ratio: Must be <= 21. checks[3] (min-contrast)/other: Unknown property \"other\". Allowed: ratio. checks[5]: expected a check id or { \"id\": ..., options }.",
+              "skill": "house"
+            }
+          ],
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    }
+  ]
+}

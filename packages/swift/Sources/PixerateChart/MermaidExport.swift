@@ -47,14 +47,10 @@ internal func mermaidQuote(_ text: String) -> String {
 }
 
 internal func mermaidUnquote(_ text: String) -> String {
-    let t = text.jsTrimmed
-    let inner: String
-    if t.count >= 2 && t.hasPrefix("\"") && t.hasSuffix("\"") {
-        inner = String(t.dropFirst().dropLast())
-    } else {
-        inner = t
-    }
-    return inner.replacingOccurrences(of: "#quot;", with: "\"")
+    // Code units, as in JS: `"\u{301}` is one Swift Character, so `hasSuffix("\"")` would miss it.
+    let t = Array(text.jsTrimmed.utf16)
+    let inner = t.count >= 2 && t.first == 0x22 && t.last == 0x22 ? Array(t[1..<(t.count - 1)]) : t
+    return String(decoding: inner, as: UTF16.self).jsReplacingAll("#quot;", with: "\"")
 }
 
 private func isAsciiWordChar(_ scalar: Unicode.Scalar) -> Bool {
@@ -71,18 +67,19 @@ internal func mermaidWord(_ text: String) -> String {
 
 internal func mermaidNum(_ value: Double) -> String {
     if value.isFinite && floor(value) == value {
-        return JSONValue.jsNumber(value)
+        return JSONValue.jsString(value)
     }
-    return JSONValue.jsNumber(jsToPrecision(value, 10).jsToNumber)
+    return JSONValue.jsString(jsToPrecision(value, 10).jsToNumber)
 }
 
-/// Splits on `sep` outside quotes and brackets.
-internal func splitOutside(_ text: String, _ sep: Character) -> [String] {
+/// Splits on `sep` outside quotes and brackets. `for (const ch of text)` walks code points, so this
+/// walks Unicode scalars (a quote followed by a combining mark is still a quote).
+internal func splitOutside(_ text: String, _ sep: Unicode.Scalar) -> [String] {
     var out: [String] = []
-    var cur = ""
+    var cur = String.UnicodeScalarView()
     var quoted = false
     var depth = 0
-    for ch in text {
+    for ch in text.unicodeScalars {
         if ch == "\"" {
             quoted.toggle()
         } else if !quoted && (ch == "[" || ch == "{") {
@@ -91,13 +88,13 @@ internal func splitOutside(_ text: String, _ sep: Character) -> [String] {
             depth -= 1
         }
         if ch == sep && !quoted && depth == 0 {
-            out.append(cur)
-            cur = ""
+            out.append(String(cur))
+            cur = String.UnicodeScalarView()
         } else {
             cur.append(ch)
         }
     }
-    out.append(cur)
+    out.append(String(cur))
     return out
 }
 

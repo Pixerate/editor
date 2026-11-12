@@ -127,9 +127,9 @@ private func readAbrPack(_ bytes: [UInt8], _ name: String, _ prefix: String, _ l
 }
 
 private func readProcreatePack(_ bytes: [UInt8], _ name: String, _ prefix: String, _ licence: String?, _ pack: inout BrushPack) throws {
-    let entries: [ZipEntry]
-    do { entries = try readZip(bytes) } catch { throw BrushPackError("\"\(name)\" can't be read as a Procreate brush pack: \(error.localizedDescription)") }
-    var byName: [String: ZipEntry] = [:]
+    let entries: [BrushZipEntry]
+    do { entries = try readBrushZip(bytes) } catch { throw BrushPackError("\"\(name)\" can't be read as a Procreate brush pack: \(error.localizedDescription)") }
+    var byName: [String: BrushZipEntry] = [:]
     for e in entries { byName[e.name] = e }
     // Licence and terms files found in the pack, after the licence given.
     var found: [String] = []

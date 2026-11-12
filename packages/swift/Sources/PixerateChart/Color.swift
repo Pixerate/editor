@@ -344,7 +344,7 @@ public func checkChartColors(
             if best.distance < minDistance {
                 let who = vision == .normal ? "" : " with \(vision.rawValue)"
                 issues.append(
-                    "Colours \(best.a + 1) (\(best.colors.0)) and \(best.b + 1) (\(best.colors.1)) are hard to tell apart\(who) (distance \(JSONValue.jsNumber(best.distance)), want at least \(JSONValue.jsNumber(minDistance)))."
+                    "Colours \(best.a + 1) (\(best.colors.0)) and \(best.b + 1) (\(best.colors.1)) are hard to tell apart\(who) (distance \(JSONValue.jsString(best.distance)), want at least \(JSONValue.jsString(minDistance)))."
                 )
             }
         }
@@ -356,7 +356,7 @@ public func checkChartColors(
     for (i, ratio) in contrast.enumerated() {
         if let ratio, ratio < minContrast {
             issues.append(
-                "Colour \(i + 1) (\(colors[i])) barely stands out from the background \(surface) (contrast \(JSONValue.jsNumber(ratio)):1, want at least \(JSONValue.jsNumber(minContrast)):1)."
+                "Colour \(i + 1) (\(colors[i])) barely stands out from the background \(surface) (contrast \(JSONValue.jsString(ratio)):1, want at least \(JSONValue.jsString(minContrast)):1)."
             )
         }
     }
