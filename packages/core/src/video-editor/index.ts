@@ -45,3 +45,4 @@ export * from './ui.js';
 export * from './playback.js';
 export * from './editorDocument.js';
 export * from './sequence.js';
+export * from './style.js';

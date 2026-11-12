@@ -63,7 +63,9 @@ the pitfalls, and uses the tools below.
    you want gone to `remove_video_ranges` in one call. Re-read the transcript afterwards: every
    time after a cut has moved.
 7. **Check.** `check_video_project` and fix every error and warning; `find_video_gaps` for
-   unintended black or silence.
+   unintended black or silence. With a house style (`get_style` with `domain: "video-editor"`),
+   run `check_video_style`; `fix_video_style` applies the house frame rate, title sizes and
+   transitions as one undo step.
 8. **Look and listen.** `get_video_frame` at cuts and transitions for layers and audio gains as
    numbers; `render_video_frame` with `times` for a contact sheet of the sequence. Render
    after a batch, not after every edit.
@@ -218,6 +220,8 @@ the pitfalls, and uses the tools below.
 
 | Tool | Use it to |
 | --- | --- |
+| `check_video_style` | Check the edit against the house style: frame aspect ratio and rate, length, title sizes, transition types and lengths, and the brand's colours and fonts on titles. Returns findings with a `target` (`{ clip, set? }`, `{ clip, transition }` or `{ project: true, set? }`), `fixable`, and the checks that `ran` and were `skipped`. |
+| `fix_video_style` | Apply every certain house-style fix (frame rate, title sizes, transitions) as one undo step. Returns `fixed` and the findings `left`. Hidden on a read-only project. |
 | `get_video_project` | Start here. Returns frame size, fps, length (ms), assets (id, kind, src, duration), tracks top to bottom with each clip in time order (id, type, start, duration, end, source in/out, fades, transition), a summary of each nested sequence (`sequences`: id, length, clip count, `nests`, `usedBy`), markers, playhead, selection, issues and whether it can be edited. |
 | `list_video_sequences` | Read the nested sequences compound clips play (or one `sequence`): length, the sequences each nests, `usedBy` (the compound clips that play it, with timeline start / end and the stretch of the sequence as `source`), any `cycle`, and its tracks and clips in the `get_video_project` shape. Call it before trimming, slipping or grading a compound clip, to know what it holds. |
 | `get_video_frame` | Inspect a `time` (ms) as data: pictures back to front (clip, track, asset, source time, opacity, placement rect, rotation, wipe) and sounds (clip, source time, gain after volumes, fades and transitions). A compound clip is one picture whose `layers` are its sequence's, with `sourceTime` in sequence time; its sounds carry clip paths like `comp/inner`. Use to verify a cut, layer order or J/L cut without images. |

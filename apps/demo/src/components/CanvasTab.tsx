@@ -52,7 +52,8 @@ import {
   type CanvasNode,
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
-import { createCanvasGestureRecorder, createCanvasStickerHost, renderCanvasBrushPreview, type CanvasEdge, type FreehandStrokeStyle } from "@pixerate/editor/canvas";
+import { createCanvasGestureRecorder, createCanvasStickerHost, createCanvasStyleToolProvider, renderCanvasBrushPreview, type CanvasEdge, type FreehandStrokeStyle } from "@pixerate/editor/canvas";
+import { demoStyles } from "../houseStyles";
 import { CANVAS_PROFILE, createBrushLibraryToolProvider } from "@pixerate/editor/brushes";
 import { BrushLibraryBrowser, BrushLibraryEditor, useBrushLibrary } from "@pixerate/editor-react/brushes";
 import { demoBrushLibrary } from "../demoBrushes";
@@ -351,6 +352,9 @@ const CanvasDemo: React.FC = () => {
   const stickerHost = useMemo(() => createCanvasStickerHost<BoxNode>({ getNodes: () => effectNodesRef.current, setNodes, history: history.manager }), [setNodes, history.manager]);
   const stickerTools = useMemo(() => createStickerToolProvider({ provider: () => demoStickers, insert: stickerHost, id: "canvas-stickers", namespace: "canvasstickers" }), [stickerHost]);
   useAgentToolProvider(demoToolRegistry, stickerTools);
+  // House style: check_canvas_style / fix_canvas_style (canvasstyle__*), one undo step per fix.
+  const canvasStyleTools = useMemo(() => createCanvasStyleToolProvider<BoxNode>(demoStyles, { getNodes: () => effectNodesRef.current, setNodes, history: history.manager, id: "canvas-style", namespace: "canvasstyle" }), [setNodes, history.manager]);
+  useAgentToolProvider(demoToolRegistry, canvasStyleTools);
   // The shared brush library's tools for the canvas profile (canvasbrushes__*): list, create and
   // check the brushes canvas.drawFreehand takes; previews are canvas strokes.
   const canvasBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: CANVAS_PROFILE, renderPreview: renderCanvasBrushPreview, id: "canvas-brushes", namespace: "canvasbrushes" }), []);

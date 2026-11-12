@@ -20,3 +20,4 @@ export type { MentionRoleSyntax, TextMention } from '../serializers/mention-text
 export type { JsonSchema, SchemaValidationError } from '../tools/schema.js';
 export { validateJsonSchema } from '../tools/schema.js';
 export type { AgentTool, AgentToolProvider, McpToolDefinition, McpToolResult } from '../tools/registry.js';
+export * from './style.js';

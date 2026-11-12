@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useAgentToolProvider } from "@pixerate/editor-react";
+import { demoStyles } from "../houseStyles";
 import { FileDown, Film } from "lucide-react";
 import { VideoEditor, useVideoDialogueTools, useVideoEditorController, useVideoEditorState, useVideoEditorTools, useVideoEffectsTools, useVideoMusicTools } from "@pixerate/editor-react/video-editor";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
-import { createVideoEditorDocument, VideoFrameCache } from "@pixerate/editor/video-editor";
+import { createVideoEditorDocument, createVideoStyleToolProvider, VideoFrameCache } from "@pixerate/editor/video-editor";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { VIDEO_SCRIPTS } from "../agentScripts";
@@ -70,6 +72,8 @@ function VideoDemo() {
   const controller = useVideoEditorController({ project, frameCache });
   const state = useVideoEditorState(controller);
   useVideoEditorTools(demoToolRegistry, controller, { id: "video", namespace: "video" });
+  // House style: check_video_style / fix_video_style join the video toolset.
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createVideoStyleToolProvider(controller, demoStyles, { namespace: "video" }), [controller]));
   // The demo-wide effects provider (the built-in test effects, or Flair once it is published).
   const { provider: effects, source: effectsSource } = useDemoEffects();
   // The effects turn names effect ids, so play the one written for the selected provider.

@@ -26,6 +26,20 @@ import {
 	type AgentToolProvider
 } from '../src/agent';
 import { createRichTextStyleToolProvider, richTextStyleDomain } from '../src/richTextStyle';
+import { createSpreadsheetStyleToolProvider, spreadsheetStyleDomain } from '../src/spreadsheet/style';
+import { createDiagramStyleToolProvider, diagramStyleDomain } from '../src/diagram/style';
+import { canvasStyleDomain, createCanvasStyleToolProvider } from '../src/canvas/style';
+import { createTypographyStyleToolProvider, typographyStyleDomain } from '../src/typography/style';
+import { createImageStyleToolProvider, imageStyleDomain } from '../src/image-editor/style';
+import { createPaintStyleToolProvider, paintStyleDomain } from '../src/paint-editor/style';
+import { animationStyleDomain, createAnimationStyleToolProvider } from '../src/animation-editor/style';
+import { createVideoStyleToolProvider, videoStyleDomain } from '../src/video-editor/style';
+import { createGenerationStyleToolProvider, generationStyleDomain } from '../src/generation/style';
+import { createParametersStyleToolProvider, parametersStyleDomain } from '../src/parameters/style';
+import { createVectorStyleToolProvider, vectorStyleDomain } from '../src/vector/style';
+import { createEffectAuthoringStyleToolProvider, effectAuthoringStyleDomain } from '../src/effects/authoring-style';
+import { createStickerStyleToolProvider, stickerStyleDomain } from '../src/stickers/style';
+import { brushStyleDomain, createBrushStyleToolProvider } from '../src/brushes/style';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -105,7 +119,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain, vectorStyleDomain, effectAuthoringStyleDomain, stickerStyleDomain, brushStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -129,7 +143,8 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-spreadsheet': [
 			...toolNames(createSpreadsheetToolProvider(sheet, { id: 'sheet' })),
 			...commandIds(createSpreadsheetCommands(stub)),
-			...toolNames(createDocumentToolProvider(createSpreadsheetEditorDocument(sheet), { store: documentStore() }))
+			...toolNames(createDocumentToolProvider(createSpreadsheetEditorDocument(sheet), { store: documentStore() })),
+			...toolNames(createSpreadsheetStyleToolProvider(sheet, styles))
 		],
 		'pixerate-canvas': [
 			...toolNames(editorMcp, (n) => n.startsWith('canvas_') || shared.includes(n)),
@@ -139,6 +154,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createCanvasExplosionToolProvider(canvasExplosionToolTarget(createCanvasExplosionStateController(), { getNodes: () => [] }))),
 			...toolNames(createCanvasProposalToolProvider(createCanvasProposals({ getNodes: () => [], getEdges: () => [], setNodes: () => {}, setEdges: () => {} }))),
 			...toolNames(createCanvasEdgeAnimationToolProvider({ getEdges: () => [], setEdges: () => {} })),
+			...toolNames(createCanvasStyleToolProvider(styles, { getNodes: () => [], setNodes: () => {} })),
 			...commandIds(createArrangeCommands(stub)),
 			...commandIds(createShapeCommands(stub)),
 			...commandIds(createDrawCommands(stub)),
@@ -146,7 +162,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createCanvasAnimationCommands(stub)),
 			...toolNames(createDocumentToolProvider(createCanvasEditorDocument({ getNodes: () => [], setNodes: () => {}, getEdges: () => [], setEdges: () => {}, history: new HistoryManager() }), { store: documentStore() }))
 		],
-		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) })), ...toolNames(createDocumentToolProvider(createVectorEditorDocument(new VectorEditorController()), { store: documentStore() }))],
+		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) })), ...toolNames(createDocumentToolProvider(createVectorEditorDocument(new VectorEditorController()), { store: documentStore() })), ...toolNames(createVectorStyleToolProvider(new VectorEditorController(), styles))],
 		'pixerate-chart': [
 			...toolNames(createChartToolProvider(new ChartController(), { id: 'chart' })),
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
@@ -157,10 +173,12 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-diagram': [
 			...toolNames(createDiagramToolProvider(new DiagramController(), { id: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) })),
 			// The diagram's own provider has undo_diagram / redo_diagram, so its document tools leave them out.
-			...toolNames(createDocumentToolProvider(createDiagramEditorDocument(new DiagramController()), { history: false, store: documentStore() }))
+			...toolNames(createDocumentToolProvider(createDiagramEditorDocument(new DiagramController()), { history: false, store: documentStore() })),
+			...toolNames(createDiagramStyleToolProvider(new DiagramController(), styles))
 		],
 		'pixerate-image-editor': [
 			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
+			...toolNames(createImageStyleToolProvider(new ImageEditorController(), styles)),
 			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' })),
 			// Its tools are listed only while a segmentation provider is set.
 			...toolNames(createImageSegmentationToolProvider(new ImageEditorController({ segmentation: { segment: async () => [] } }), { id: 'img-segmentation' })),
@@ -168,17 +186,20 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-paint-editor': [
 			...toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
+			...toolNames(createPaintStyleToolProvider(new PaintEditorController({ width: 64, height: 64 }), styles)),
 			...toolNames(createPaintEffectsToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-effects' })),
 			...toolNames(createPaintProposalToolProvider(createPaintProposals({ controller: new PaintEditorController({ width: 64, height: 64 }) }))),
 			...toolNames(createDocumentToolProvider(createPaintEditorDocument(new PaintEditorController({ width: 64, height: 64 })), { history: false, store: documentStore() }))
 		],
 		'pixerate-animation-editor': [
 			...toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
+			...toolNames(createAnimationStyleToolProvider(new AnimationEditorController(), styles)),
 			...toolNames(createAnimationEffectsToolProvider(new AnimationEditorController(), { id: 'animation-effects' })),
 			...toolNames(createDocumentToolProvider(createAnimationEditorDocument(new AnimationEditorController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-video-editor': [
 			...toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
+			...toolNames(createVideoStyleToolProvider(new VideoEditorController(), styles)),
 			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' })),
 			...toolNames(createDocumentToolProvider(createVideoEditorDocument(new VideoEditorController()), { history: false, store: documentStore() }))
 		],
@@ -220,7 +241,8 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-canvas-layout': [],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
-			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
+			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) })),
+			...toolNames(createGenerationStyleToolProvider(styles))
 		],
 		'pixerate-tokens': [
 			...toolNames(createDocumentToolProvider(createTokensEditorDocument(new TokenStore()), { store: documentStore() })),
@@ -231,7 +253,8 @@ function expectedBySkill(): Record<string, string[]> {
 			// parameters.undo / parameters.redo are commands, so the document tools leave undo out.
 			...toolNames(
 				createDocumentToolProvider(createParametersEditorDocument(new ParametersController({ schema: { fields: [] } })), { history: false, store: documentStore() })
-			)
+			),
+			...toolNames(createParametersStyleToolProvider(new ParametersController({ schema: { fields: [] } }), styles))
 		],
 		'pixerate-effect-authoring': (() => {
 			const authoringSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;
@@ -241,13 +264,13 @@ function expectedBySkill(): Record<string, string[]> {
 				capture: async () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 			});
 			// The paint editor's authoring tools (its own five plus the shared ones above).
-			return [...new Set([...toolNames(authoringProvider), ...toolNames(createPaintEffectAuthoringToolProvider(new PaintEditorController({ width: 64, height: 64 })))])];
+			return [...new Set([...toolNames(authoringProvider), ...toolNames(createPaintEffectAuthoringToolProvider(new PaintEditorController({ width: 64, height: 64 }))), ...toolNames(createEffectAuthoringStyleToolProvider({ session: () => authoringSession }, styles))])];
 		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
-		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))],
-		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) })),
+		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel())), ...toolNames(createTypographyStyleToolProvider(new FontPickerModel(), styles))],
+		'pixerate-stickers': [...toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) })), ...toolNames(createStickerStyleToolProvider(styles, { provider: () => editorStickers() }))],
 		// preview_brush registers only with a host renderer.
-		'pixerate-brushes': toolNames(createBrushLibraryToolProvider(createBrushLibrary(), { renderPreview: () => ({ data: '', mimeType: 'image/png' }) }))
+		'pixerate-brushes': [...toolNames(createBrushLibraryToolProvider(createBrushLibrary(), { renderPreview: () => ({ data: '', mimeType: 'image/png' }) })), ...toolNames(createBrushStyleToolProvider(createBrushLibrary(), styles))]
 	};
 	doc.destroy();
 	return result;
@@ -265,8 +288,10 @@ const FACTORIES: Record<string, string> = {
 	createTableCommands: 'pixerate-rich-text',
 	createFormatCommands: 'pixerate-rich-text',
 	createSpreadsheetToolProvider: 'pixerate-spreadsheet',
+	createSpreadsheetStyleToolProvider: 'pixerate-spreadsheet',
 	createSpreadsheetCommands: 'pixerate-spreadsheet',
 	createCanvasComponentToolProvider: 'pixerate-canvas',
+	createCanvasStyleToolProvider: 'pixerate-canvas',
 	createArrangeCommands: 'pixerate-canvas',
 	createShapeCommands: 'pixerate-canvas',
 	createDrawCommands: 'pixerate-canvas',
@@ -283,35 +308,47 @@ const FACTORIES: Record<string, string> = {
 	createTokensStyleToolProvider: 'pixerate-tokens',
 	createStyleToolProvider: 'pixerate-agent-tools',
 	createDiagramToolProvider: 'pixerate-diagram',
+	createDiagramStyleToolProvider: 'pixerate-diagram',
 	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
 	createDocumentToolProvider:
 		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens, pixerate-canvas, pixerate-image-editor, pixerate-paint-editor',
 	createImageEditorToolProvider: 'pixerate-image-editor',
+	createImageStyleToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createImageSegmentationToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
+	createPaintStyleToolProvider: 'pixerate-paint-editor',
 	createFerroTools: 'pixerate-paint-editor',
 	createTimeMachineTools: 'pixerate-paint-editor',
 	createPaintEffectsToolProvider: 'pixerate-paint-editor',
 	createPaintProposalToolProvider: 'pixerate-paint-editor',
 	createPaintEvolutionToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
+	createAnimationStyleToolProvider: 'pixerate-animation-editor',
 	createAnimationEffectsToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
+	createVideoStyleToolProvider: 'pixerate-video-editor',
 	createVideoEffectsToolProvider: 'pixerate-video-editor',
 	createVideoDialogueToolProvider: 'pixerate-talking-head-edit',
 	createVideoMusicToolProvider: 'pixerate-bgm-alignment',
 	// The shared effect tools; each editor that hosts them documents them in its own skill.
 	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor, pixerate-animation-editor, pixerate-vector, pixerate-canvas, pixerate-paint-editor',
 	createGenerationToolProvider: 'pixerate-generation',
+	createGenerationStyleToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
+	createParametersStyleToolProvider: 'pixerate-parameters',
 	createStickerToolProvider: 'pixerate-stickers',
 	createBrushLibraryToolProvider: 'pixerate-brushes',
 	createPaintBrushLibraryToolProvider: 'pixerate-brushes',
 	createColorToolProvider: 'pixerate-color',
 	createGradientToolProvider: 'pixerate-color',
 	createTypographyToolProvider: 'pixerate-typography',
+	createTypographyStyleToolProvider: 'pixerate-typography',
+	createVectorStyleToolProvider: 'pixerate-vector',
+	createEffectAuthoringStyleToolProvider: 'pixerate-effect-authoring',
+	createStickerStyleToolProvider: 'pixerate-stickers',
+	createBrushStyleToolProvider: 'pixerate-brushes',
 	createFontPickerToolProvider: 'pixerate-typography',
 	createEffectAuthoringToolProvider: 'pixerate-effect-authoring',
 	createPaintEffectAuthoringToolProvider: 'pixerate-effect-authoring',

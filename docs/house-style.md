@@ -133,6 +133,124 @@ total). Skill text reaches models inside `<style_skill>` blocks that name the la
 that tries to close a block is escaped. For a system prompt, `renderStyleCatalog(await
 styles.list())` lists the skills in a few lines and agents read the detail with `get_style`.
 
+### `spreadsheet.json` and `diagram.json`
+
+```json
+{ "headerCase": "sentence", "numberFormats": { "currency": "\"$\"#,##0.00", "percentage": "0.0%" }, "freezeHeader": true,
+  "checks": ["header-case", "number-formats", "freeze-header", "palette-only"] }
+```
+
+```json
+{ "directions": ["LR", "TB"], "labelCase": "sentence", "maxLabelLength": 40, "maxNodes": 25,
+  "shapes": ["rect", "round", "diam", "cyl"], "checks": ["direction", "label-case", "label-length", "max-nodes", "allowed-shapes"] }
+```
+
+Spreadsheet findings target cells in A1 notation (`{ cell: "B3", numberFormat }`), conditional
+format rules (`{ rule }`) whose colours the brand checks, or the sheet. Diagram findings target
+nodes, edges and groups by id (with the `label` to set), or the diagram (with the `direction`).
+`fix_spreadsheet_style` and `fix_diagram_style` apply the certain fixes as one undo step. In
+React and Svelte, `useStyleFindings(styles, "spreadsheet", document)` and `useStyleFindings(styles,
+"diagram", graph)` show the findings; pass a new value after each change.
+
+### `canvas.json` and `typography.json`
+
+```json
+{ "cornerRadii": [0, 4, 8], "strokeWidths": [1, 2], "fontSizes": [12, 14, 16, 20, 24, 32], "grid": 8,
+  "checks": ["corner-radii", "stroke-widths", "font-sizes", "grid", "palette-only", "fonts-allowed"] }
+```
+
+```json
+{ "weights": [400, 600], "sizes": [12, 14, 16, 20, 25, 31], "lineHeight": { "min": 1.3, "max": 1.7 },
+  "checks": ["weights", "sizes", "line-height", "letter-spacing", "fonts-allowed"] }
+```
+
+Canvas findings target `{ node, property, value }` and read node styles as strings (SvelteFlow),
+objects (React Flow) or shape paints; `createCanvasStyleToolProvider({ getNodes, setNodes,
+history })` records `fix_canvas_style` as one undoable command. Typography checks the font
+picker's selection; `fix_typography_style` snaps it to the house type in one change.
+
+### `image-editor.json` and `paint-editor.json`
+
+```json
+{ "aspectRatios": ["1:1", "4:5", "16:9"], "minSize": { "width": 1080 },
+  "adjustments": { "saturation": { "min": -20, "max": 20 } }, "checks": ["aspect-ratio", "min-size", "adjustment-ranges"] }
+```
+
+```json
+{ "papers": ["cold-pressed", "hot-pressed"], "brushes": ["watercolor-round", "pencil-hb"], "maxLayers": 12,
+  "checks": ["paper", "brushes", "max-layers", "palette-only"] }
+```
+
+An aspect-ratio finding carries the centred crop that reaches the nearest house ratio, for
+`set_crop`; `fix_image_style` clamps the base adjustments. `fix_paint_style` switches to the house
+paper and brush; strokes already painted stay as they are. The Swift paint editor does not read
+house styles yet.
+
+### `animation-editor.json` and `video-editor.json`
+
+```json
+{ "easings": ["ease-out", "ease-in-out"], "durations": { "min": 200, "max": 1200 }, "minHold": 600,
+  "maxLength": 15000, "fps": [30, 60], "checks": ["easings", "durations", "holds", "max-length", "fps"] }
+```
+
+```json
+{ "aspectRatios": ["16:9", "9:16"], "fps": [30, 25], "maxLength": 60000, "titleSizes": { "min": 48 },
+  "transitions": ["crossfade", "dip"], "maxTransition": 500,
+  "checks": ["aspect-ratio", "fps", "max-length", "title-sizes", "transitions", "min-contrast"] }
+```
+
+`fix_animation_style` applies the house easings, durations, holds and frame rate, and
+`fix_video_style` the frame rate, title sizes and transitions, each as one undo step.
+
+### `generation.json` and `parameters.json`
+
+```json
+{ "models": ["image-standard"], "aspectRatios": ["1:1", "16:9"], "maxCount": 4,
+  "promptSuffix": "flat vector illustration, soft daylight", "negativeTerms": ["text", "watermark"],
+  "bannedTerms": ["photorealistic"], "checks": ["models", "limits", "prompt-suffix", "negative-terms", "banned-terms"] }
+```
+
+```json
+{ "values": { "grain": 0.2 }, "ranges": { "intensity": { "max": 0.6 } }, "checks": ["house-values", "ranges", "palette-only"] }
+```
+
+Generation is checked before anything is spent: `check_generation_style` and
+`apply_generation_style` take the request (as `plan_generation` does) and the second returns it
+in the house style, without generating. `fix_parameters_style` sets the house values in one step.
+
+### `vector.json` and `effect-authoring.json`
+
+```json
+{ "strokeWidths": [1, 2, 4], "cornerRadii": [4, 8], "checks": ["stroke-widths", "corner-radii", "palette-only", "fonts-allowed"] }
+```
+
+```json
+{ "languages": ["pixel"], "maxDuration": 4000, "loop": true, "presets": ["Subtle", "Strong"],
+  "checks": ["languages", "timing", "presets", "palette-only"] }
+```
+
+`fix_vector_style` snaps stroke widths and live corner radii to the nearest house value in one
+undo step; the brand checks run on solid fills, strokes, text and the artboard. Effect authoring
+checks the effect open in a session (`createEffectAuthoringStyleToolProvider({ session })`):
+`fix_effect_authoring_style` sets the house timing in one step, and the house presets and colour
+controls are left to the agent. The Swift vector editor does not read house styles yet.
+
+### `stickers.json` and `brushes.json`
+
+```json
+{ "libraries": ["acme-brand"], "commercialOnly": true, "allowAiGenerated": false, "bannedTags": ["food"],
+  "checks": ["libraries", "commercial", "ai-art", "banned-tags", "palette-only"] }
+```
+
+```json
+{ "media": ["paint", "dry"], "requireSourceLicence": true, "checks": ["media", "source-licences", "palette-only"] }
+```
+
+These are about which assets the house uses, so their checks only read: `check_sticker_style`
+checks stickers by ref before they are placed and returns the `find_stickers` filters that keep a
+search in the house style; `check_brush_style` checks the user's saved brushes, or any brushes by
+id before painting with them.
+
 ## Layers
 
 A host stacks stores from general to specific, for example `org`, `workspace`, `user`,

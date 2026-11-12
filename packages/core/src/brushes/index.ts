@@ -99,3 +99,4 @@ export {
   type ReadBrushPackOptions,
 } from './import/pack';
 export { AbrError, readAbr, type AbrFile, type AbrTip } from './import/abr';
+export { brushStyleDomain, brushStyleState, brushStyleSurface, createBrushStyleToolProvider, type BrushStyleProfile, type BrushStyleState, type BrushStyleTarget, type BrushStyleToolProviderOptions } from './style';

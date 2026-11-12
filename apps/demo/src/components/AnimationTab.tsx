@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useAgentToolProvider } from "@pixerate/editor-react";
+import { demoStyles } from "../houseStyles";
 import { ArrowDownUp, Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
-import { createAnimationEditorDocument, AnimationEditorController, fromFlairVectorEffect, fromPptxAnimation, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
+import { createAnimationEditorDocument, createAnimationStyleToolProvider, AnimationEditorController, fromFlairVectorEffect, fromPptxAnimation, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools, useAnimationEffectsTools } from "@pixerate/editor-react/animation-editor";
 import { useDemoEffects } from "../demoEffects";
@@ -145,6 +147,8 @@ function AnimationDemo() {
   const controller = useAnimationEditorController({ scene: SCENE });
   const state = useAnimationEditorState(controller);
   useAnimationEditorTools(demoToolRegistry, controller, { id: "animation", namespace: "animation" });
+  // House style: check_animation_style / fix_animation_style join the animation toolset.
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createAnimationStyleToolProvider(controller, demoStyles, { namespace: "animation" }), [controller]));
   // The demo-wide effects provider (built-in test effects, or Flair).
   const { provider: effects } = useDemoEffects();
   useAnimationEffectsTools(demoToolRegistry, controller, { id: "animation-effects", namespace: "animationfx" });

@@ -15,3 +15,4 @@ export { combineStickerProviders } from './combine';
 export { checkStickerProvider, type StickerConformanceIssue, type StickerConformanceOptions } from './conformance';
 export { createInsertStickerTool, insertSticker, createStickerTools, createStickerToolProvider, describeStickerRef, stickerForAgent, type StickerInsertHost, type StickerPlacement, type StickerToolsOptions } from './tools';
 export { StickerBrowser, type StickerBrowserItem, type StickerBrowserState } from './browser';
+export { createStickerStyleToolProvider, stickerStyleDomain, stickerStyleSurface, type StickerStyleItem, type StickerStyleProfile, type StickerStyleState, type StickerStyleTarget, type StickerStyleToolProviderOptions } from './style';

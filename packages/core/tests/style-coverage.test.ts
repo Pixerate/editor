@@ -12,6 +12,20 @@ import { styleChecksOf, SHARED_STYLE_CHECKS, type StyleDomain } from '../src/too
 import { chartStyleDomain } from '../src/chart';
 import { tokensStyleDomain } from '../src/tokens';
 import { richTextStyleDomain } from '../src/richTextStyle';
+import { spreadsheetStyleDomain } from '../src/spreadsheet/style';
+import { diagramStyleDomain } from '../src/diagram/style';
+import { canvasStyleDomain } from '../src/canvas/style';
+import { typographyStyleDomain } from '../src/typography/style';
+import { imageStyleDomain } from '../src/image-editor/style';
+import { paintStyleDomain } from '../src/paint-editor/style';
+import { animationStyleDomain } from '../src/animation-editor/style';
+import { videoStyleDomain } from '../src/video-editor/style';
+import { generationStyleDomain } from '../src/generation/style';
+import { parametersStyleDomain } from '../src/parameters/style';
+import { vectorStyleDomain } from '../src/vector/style';
+import { effectAuthoringStyleDomain } from '../src/effects/authoring-style';
+import { stickerStyleDomain } from '../src/stickers/style';
+import { brushStyleDomain } from '../src/brushes/style';
 
 type Coverage = StyleDomain<any> | { pending: `#${number}` } | { none: string };
 
@@ -21,20 +35,20 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-chart': chartStyleDomain,
 	'pixerate-tokens': tokensStyleDomain,
 	'pixerate-rich-text': richTextStyleDomain,
-	'pixerate-spreadsheet': { pending: '#779' },
-	'pixerate-canvas': { pending: '#779' },
-	'pixerate-vector': { pending: '#779' },
-	'pixerate-diagram': { pending: '#779' },
-	'pixerate-image-editor': { pending: '#779' },
-	'pixerate-paint-editor': { pending: '#779' },
-	'pixerate-animation-editor': { pending: '#779' },
-	'pixerate-video-editor': { pending: '#779' },
-	'pixerate-generation': { pending: '#779' },
-	'pixerate-parameters': { pending: '#779' },
-	'pixerate-effect-authoring': { pending: '#779' },
-	'pixerate-typography': { pending: '#779' },
-	'pixerate-stickers': { pending: '#779' },
-	'pixerate-brushes': { pending: '#779' }
+	'pixerate-spreadsheet': spreadsheetStyleDomain,
+	'pixerate-canvas': canvasStyleDomain,
+	'pixerate-vector': vectorStyleDomain,
+	'pixerate-diagram': diagramStyleDomain,
+	'pixerate-image-editor': imageStyleDomain,
+	'pixerate-paint-editor': paintStyleDomain,
+	'pixerate-animation-editor': animationStyleDomain,
+	'pixerate-video-editor': videoStyleDomain,
+	'pixerate-generation': generationStyleDomain,
+	'pixerate-parameters': parametersStyleDomain,
+	'pixerate-effect-authoring': effectAuthoringStyleDomain,
+	'pixerate-typography': typographyStyleDomain,
+	'pixerate-stickers': stickerStyleDomain,
+	'pixerate-brushes': brushStyleDomain
 };
 
 /** The reference skills: the first table of skills/README.md, before "## Workflow skills". */

@@ -48,6 +48,9 @@ what this machine has.
 8. **Drive the on-screen picker.** When a font picker is mounted, `get_font_selection` shows what
    is chosen, `list_picker_fonts` what it offers, and `set_font_selection` changes any fields in
    one step and returns the new selection.
+9. **House type.** When the host has a house style (`get_style` with `domain: "typography"`),
+   `check_typography_style` checks the selection against the house weights, type scale,
+   line-height, tracking and fonts; `fix_typography_style` snaps it to them in one change.
 
 ## Best practices
 
@@ -66,6 +69,8 @@ what this machine has.
 
 | Tool | When to use | Returns |
 | --- | --- | --- |
+| `check_typography_style` | Check the picker's selection against the house type: weights, the type-scale sizes, line-height and tracking ranges, and the fonts allowed. Returns findings with a `target` `{ field, value? }` and the checks that `ran` and were `skipped`. |
+| `fix_typography_style` | Snap the selection to the house type in one change (nearest weight and scale size, ranges, an allowed font the picker offers). Returns `fixed`, the new `selection` and the findings `left`. Hidden when the picker is read-only. |
 | `list_fonts` | Discover families the host offers; filter by `category`, `source`, `weight`, `style`, `tags`, `query`; `limit` default 50 | `{ fonts: [{ family, category, weights, styles, isVariable?, source, tags? }], total, truncated, tags: [{ tag, count }] }` |
 | `resolve_font_stack` | Turn a family (or stack) into a resilient `font-family` value for its category; also says if the provider lists it | `{ stack, families, category, available }` |
 | `suggest_type_scale` | Sizes for arbitrary integer `steps` (-12…12) from `baseSize` (px, default 16) and `ratio` (name or number, default major-third) | `{ ratio, baseSize, steps: [{ name, step, size, lineHeight, letterSpacing }] }` |

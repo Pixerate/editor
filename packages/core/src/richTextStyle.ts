@@ -12,6 +12,7 @@ import type { AgentTool, AgentToolProvider } from './tools/registry.js';
 import type { StyleCheck, StyleDomain, StyleResolver } from './tools/style.js';
 import type { StyleSurface, StyleSurfaceColor } from './tools/style-surface.js';
 import { brandFonts, brandPalette } from './tools/brand.js';
+import { applyTextCase } from './tools/text-case.js';
 
 /** A text block: a heading, paragraph, list item, quote or code block. */
 export interface RichTextStyleBlock {
@@ -144,35 +145,8 @@ const targetOf = (block: RichTextStyleBlock, start: number, end: number, replace
 const prose = (state: RichTextStyleState) => state.blocks.filter((b) => b.kind !== 'code');
 const quote = (text: string) => `"${text.length > 60 ? `${text.slice(0, 57)}...` : text}"`;
 
-const SMALL_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'from', 'in', 'into', 'nor', 'of', 'on', 'or', 'over', 'per', 'so', 'the', 'to', 'up', 'via', 'vs', 'with', 'yet']);
-
-/** `text` in the house heading case, keeping acronyms, words with digits and proper nouns. */
-export function richTextHeadingCase(text: string, kind: 'sentence' | 'title' | 'upper', properNouns: readonly string[] = []): string {
-	if (kind === 'upper') return text.toUpperCase();
-	const nouns = new Map(properNouns.map((n) => [n.toLowerCase(), n]));
-	const words = text.split(/(\s+)/);
-	const wordIndexes = words.map((w, i) => (/\S/.test(w) ? i : -1)).filter((i) => i >= 0);
-	const first = wordIndexes[0];
-	const last = wordIndexes[wordIndexes.length - 1];
-	let afterColon = false;
-	return words
-		.map((w, i) => {
-			if (!/\S/.test(w)) return w;
-			const startsSentence = i === first || afterColon;
-			afterColon = /[:.!?]$/.test(w);
-			const bare = w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-			const lower = bare.toLowerCase();
-			if (!bare) return w;
-			if (nouns.has(lower)) return w.replace(bare, nouns.get(lower)!);
-			// Acronyms (API, NASA), words with digits or inner capitals (iOS, Q3) stay as written.
-			if ((bare.length > 1 && bare === bare.toUpperCase() && /\p{L}/u.test(bare)) || /\d/.test(bare) || /^\p{Ll}+\p{Lu}/u.test(bare) || /\p{Ll}\p{Lu}/u.test(bare.slice(1))) return w;
-			const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-			if (kind === 'sentence') return w.replace(bare, startsSentence ? cap(lower) : lower);
-			const small = SMALL_WORDS.has(lower) && i !== first && i !== last && !startsSentence;
-			return w.replace(bare, small ? lower : cap(bare));
-		})
-		.join('');
-}
+/** `text` in the house heading case (see `applyTextCase`). */
+export const richTextHeadingCase = applyTextCase;
 
 const headingCase: StyleCheck<RichTextStyleState> = {
 	id: 'heading-case',

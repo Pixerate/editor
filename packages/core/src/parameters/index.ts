@@ -9,3 +9,4 @@ export * from './playback.js';
 export * from './editorDocument.js';
 export * from './theme.js';
 export * from './options.js';
+export * from './style.js';

@@ -91,3 +91,4 @@ export {
   type UnfilledRegion,
   type FindUnfilledRegionsMaskOptions,
 } from '../raster/fill';
+export * from './style';

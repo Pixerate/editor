@@ -18,6 +18,7 @@ import {
 } from "@xyflow/react";
 import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidFamilyScene, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult } from "@pixerate/editor-react/canvas";
 import { useAgentToolProvider } from "@pixerate/editor-react";
+import { demoStyles } from "../houseStyles";
 import { createDocumentToolProvider } from "@pixerate/editor/persistence";
 import { EditorDocumentAutosave } from "./EditorDocumentAutosave";
 import {
@@ -33,7 +34,7 @@ import {
   type MermaidFlowEdge,
   type MermaidFlowNode,
 } from "@pixerate/editor/canvas";
-import { DiagramController, FAMILY_TEMPLATES, FAMILY_TITLES, createDiagramToolProvider, familyUI, findMermaidSources, type DiagramFamily, type FieldSpec } from "@pixerate/editor/diagram";
+import { DiagramController, FAMILY_TEMPLATES, FAMILY_TITLES, createDiagramStyleToolProvider, createDiagramToolProvider, familyUI, findMermaidSources, type DiagramFamily, type FieldSpec } from "@pixerate/editor/diagram";
 import { Download, GitBranch, Play, Redo2, Undo2 } from "lucide-react";
 import { demoDocumentStore, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
@@ -225,6 +226,9 @@ const MermaidEditorPane: React.FC = () => {
   );
   const viewport = useViewport();
   useAgentToolProvider(demoToolRegistry, provider);
+  // House style: check_diagram_style / fix_diagram_style join the diagram toolset.
+  const styleProvider = useMemo(() => createDiagramStyleToolProvider(controller, demoStyles, { namespace: "diagram" }), [controller]);
+  useAgentToolProvider(demoToolRegistry, styleProvider);
   // Save / load tools; undo and redo come from the diagram provider above.
   const documentTools = useMemo(
     () =>

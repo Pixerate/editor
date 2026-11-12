@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { EffectsBrowser, EffectAuthoringEditor } from "@pixerate/editor-react/effects";
 import type { EffectAuthoringSession } from "@pixerate/editor/effects";
-import { createEffectAuthoringToolProvider } from "@pixerate/editor/effects";
+import { createEffectAuthoringStyleToolProvider, createEffectAuthoringToolProvider } from "@pixerate/editor/effects";
+import { demoStyles } from "../houseStyles";
 import { useAgentToolProvider } from "@pixerate/editor-react";
 import { useDemoEffects } from "../demoEffects";
 import { demoToolRegistry } from "../agentTools";
@@ -62,6 +63,9 @@ function EffectAuthoringView() {
     [session]
   );
   useAgentToolProvider(demoToolRegistry, authoringTools);
+  // House style for the open effect: check_effect_authoring_style / fix_effect_authoring_style.
+  const styleTools = useMemo(() => (session ? createEffectAuthoringStyleToolProvider({ session: () => session }, demoStyles, { namespace: "effectstyle" }) : null), [session]);
+  useAgentToolProvider(demoToolRegistry, styleTools);
 
   return (
     <div className="space-y-4">

@@ -137,6 +137,11 @@ machine with no session or provider. Authoring needs the editor's `authoredEffec
    `previewError` (typically a `vector` effect whose provider only draws it as SVG), there is no pixel
    preview: `effect_authoring_view` is refused with that reason, but values, presets, keyframes and
    timing still work. Judge the result from the values instead of retrying the view.
+8. **House style.** When the host has one (`get_style` with `domain: "effect-authoring"`), run
+   `check_effect_authoring_style` before saving. `fix_effect_authoring_style` sets the house
+   timing in one step; save any missing house preset with `effect_authoring_save_preset`, move
+   colour controls onto house colours with `effect_authoring_set_values`, and rewrite a source in
+   a language the house does not allow from a template in one it does.
 
 ## Best practices
 
@@ -164,6 +169,8 @@ machine with no session or provider. Authoring needs the editor's `authoredEffec
 | `list_authored_effects` | Paint editor: the painting's authored effects with language, controls, animated controls, where each is used and any problem drawing it, plus the policy and the open session. |
 | `remove_authored_effect` | Paint editor: removes an authored effect nothing uses (refused, saying where, while one is used). One undo step. |
 | `close_effect_authoring` | Paint editor: closes the session without saving; returns the closed effect's name or null. |
+| `check_effect_authoring_style` | Check the open effect against the house style: its source language, timing (duration and loop), the presets every effect ships, and the brand's colours on colour controls. Returns findings with a `target` (`{ timing }` with the house timing, `{ source }`, `{ preset }` or `{ control }`) and the checks that `ran` and were `skipped`. Refused when no effect is open. |
+| `fix_effect_authoring_style` | Set the house timing on the open effect (duration within the limit, looping as the house says) as one undo step. Returns the `timing` it set, `duration` and `loop` now, and the findings `left`. Hidden when read-only. |
 | `effect_authoring_describe` | Reads the currently open effect session: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead `time`, duration, loop, compile issues, and `previewError` (why there is no pixel preview, or null). Call it first. |
 | `effect_authoring_get_source` | Retrieves shader or script source code and language for code-backed effects. Refused if `sourceLanguage` is null. |
 | `effect_authoring_set_source` | Recompiles the effect with new shader or script source code. Returns compiler issues with line numbers and messages. Available only when supported by the session. |

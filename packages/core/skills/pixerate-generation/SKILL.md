@@ -31,7 +31,7 @@ the pitfalls, and uses the tools below.
 
 1. **Discover.** `list_models` (filter with `media`) and read each candidate's `requestSchema`:
    supported fields, enum options, ranges, prompt limits, reference roles.
-2. **Plan.** Build the request from the user's intent and call `plan_generation`. Read every
+2. **Plan.** Build the request from the user's intent; with a house style (`get_style` with `domain: "generation"`), pass it through `apply_generation_style` first and reword anything it leaves (banned terms). Then call `plan_generation`. Read every
    `adjustments` entry (`field`, `from`, `to`, `kind`, `reason`) and every `errors` entry. If
    an adjustment changes what the user asked for (a different aspect ratio, a dropped
    reference, fewer outputs), choose another model or tell the user before going on.
@@ -83,6 +83,8 @@ template, a model that changed, a missing reference) before spending. Then conti
 
 | Tool | Use it to |
 | --- | --- |
+| `check_generation_style` | Check a request against the house style before spending: models, aspect ratios, qualities, count and duration limits, the house look in the prompt, negative terms, banned terms. Returns findings with a `target` `{ field, value? }`. Generates nothing. |
+| `apply_generation_style` | Return the request in the house style (house model, ratio, quality, limits, the look appended, negative terms added), with `changed` and the findings `left`. Generates nothing; pass the request on to `estimate_generation` and `generate`. |
 | `list_models` | List available models: `id`, `media`, optional `name`, `description`, `badges`, and the `requestSchema` (JSON Schema of the request fields, options, ranges and reference roles it accepts). Optional `media` filter: image, video, audio or text. Call first; the list can change while you work. |
 | `plan_generation` | Check a request without generating. Takes `model`, `request`, optional `strategy` (nearest default, upgrade, downgrade, error) and `resolvedPrompt`. Returns `plan`: `ok`, the adjusted `request`, `adjustments` (snapped, clamped, truncated, dropped, defaulted, each with a reason) and `errors`. Fix every error before estimating or generating. |
 | `list_generations` | Find past generations (newest first): id, model, kind (generate, recreate, variation), parent, time, templates, assets and a 160-character prompt preview. Filter by `model`, `template`, `text`, `kind` or `parentId`; page with `limit` (default 20, max 100) and `offset`. Returns `total` too. |

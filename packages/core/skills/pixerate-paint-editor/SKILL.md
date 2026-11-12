@@ -60,7 +60,10 @@ the pitfalls, and uses the tools below.
 7. **Repeat and vary instead of drawing every mark.** Paint one good stroke, then `replay_strokes` it with `dx` / `dy`, `rotate`, `scale`, `flipX`, `color`, `brushId` and `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
 8. **Check** with `render_preview` after each block of work, not after each stroke. `pick_color` reads exact values. Undo what made it worse.
 9. **Watercolour** is its own way of working: see "Wet media" below.
-10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop, `save_paint_document` to keep the painting with its strokes (when the host has storage).
+10. **House style.** When the host has one (`get_style` with `domain: "paint-editor"`), run
+   `check_paint_style` before you start and before delivering; `fix_paint_style` switches to the
+   house paper and brush. Paint with house colours (`get_style`'s `swatches`).
+11. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop, `save_paint_document` to keep the painting with its strokes (when the host has storage).
 
 ## Best practices
 
@@ -206,6 +209,8 @@ When `get_canvas_info` has `bounds`, the painting is a layer of a larger canvas 
 
 | Tool | Use |
 | --- | --- |
+| `check_paint_style` | Check the painting against the house style: paper, brushes (current and per stroke), the layer limit, and the brand's colours on strokes, the current colour and swatches. Returns findings with a `target` (`{ paper }` / `{ brush }` with the house value, `{ stroke }`, `{ color: "current" }`, `{ swatch }`), and the checks that `ran` and were `skipped`. |
+| `fix_paint_style` | Switch to the house paper and the house brush. Strokes already painted stay; returns what `changed` and the findings `left`. Hidden on a read-only painting. |
 | `get_canvas_info` | Read the canvas size and dpi, its `origin` (moved by `extend_canvas`), paper (preset, colour, depth), active layer, layer count, active brush id, colours, view, hand, number of recorded strokes, undo / redo labels and the blend modes. Call first. |
 | `new_canvas` | Start over with a blank canvas: one empty layer over the paper. `width`, `height` (1..16384 px), `dpi`, `paper` preset id; missing ones keep the current values. Undo brings the old painting back. Returns the size, paper and layer id. |
 | `set_canvas` | Resize the canvas (pixels stay put, anchored top-left) or change its `dpi`. Returns the canvas. |

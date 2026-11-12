@@ -53,6 +53,9 @@ the pitfalls, and uses the tools below.
 5. **Verify** after each group of corrections: `measure_region` (no render needed) or
    `render_preview` then `get_histogram`; read the `applied` and `clamped` lists writes return.
    `undo_image` takes back a step that made things worse.
+6. **House style.** When the host has one (`get_style` with `domain: "image-editor"`), run
+   `check_image_style` before delivering. `fix_image_style` clamps the base adjustments into the
+   house ranges; crop to a house ratio with `set_crop` and the finding's `crop`.
 
 ### Working with layers
 
@@ -159,6 +162,8 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 
 | Tool | Use it to |
 | --- | --- |
+| `check_image_style` | Check the image against the house style: output aspect ratio and minimum size, the house ranges for the base adjustments, and the brand's colours and fonts on annotations. Returns findings with a `target` (`{ crop }` with the centred crop for `set_crop`, `{ adjustment, value }`, `{ annotation }` or `{ image: true }`), and the checks that `ran` and were `skipped`. |
+| `fix_image_style` | Clamp the base adjustments into the house ranges as one undo step. Returns what it `fixed` and the findings `left` (crop with `set_crop`). Hidden on a read-only image. |
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |

@@ -59,3 +59,4 @@ export {
 	type PresenceClock,
 	type PresenceState
 } from '../animation/presence.js';
+export * from './style.js';

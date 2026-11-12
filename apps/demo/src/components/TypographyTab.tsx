@@ -9,6 +9,7 @@ import {
   checkTypographyAccessibility,
   createFontPickerToolProvider,
   createSystemFontProvider,
+  createTypographyStyleToolProvider,
   createTypographyToolProvider,
   generateTypeHierarchy,
   segmentText,
@@ -16,6 +17,7 @@ import {
   type ModularScaleRatio,
 } from "@pixerate/editor/typography";
 import { demoToolRegistry } from "../agentTools";
+import { demoStyles } from "../houseStyles";
 import { CheckCircle2, Type, XCircle } from "lucide-react";
 import { EditorPage, EditorPanel } from "./EditorPage";
 
@@ -37,6 +39,9 @@ function TypographyView() {
   const pickerTools = useMemo(() => createFontPickerToolProvider(model), [model]);
   useAgentToolProvider(demoToolRegistry, typographyTools);
   useAgentToolProvider(demoToolRegistry, pickerTools);
+  // House type: check_typography_style / fix_typography_style snap the picker to the house scale.
+  const typeStyleTools = useMemo(() => createTypographyStyleToolProvider(model, demoStyles), [model]);
+  useAgentToolProvider(demoToolRegistry, typeStyleTools);
 
   const [spec, setSpec] = useState<FontSpec>(() => model.value);
   const [ratio, setRatio] = useState<ModularScaleRatio>("major-third");

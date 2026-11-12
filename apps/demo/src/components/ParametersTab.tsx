@@ -10,11 +10,14 @@ import {
   type ParameterValues,
   type ShaderControlLike,
   createParametersEditorDocument,
+  createParametersStyleToolProvider,
 } from "@pixerate/editor/parameters";
+import { useAgentToolProvider } from "@pixerate/editor-react";
+import { demoStyles } from "../houseStyles";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { ParametersPanel, useParameterCommands, useParameters, useParametersController } from "@pixerate/editor-react/parameters";
 import { Pause, Play, SlidersHorizontal } from "lucide-react";
-import { demoCommandRegistry, demoPlayback } from "../agentTools";
+import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { EditorPage, EditorPanel } from "./EditorPage";
 import { PARAMETER_SCRIPTS } from "../agentScripts";
@@ -268,6 +271,8 @@ export function ParametersTab() {
   );
   const controller = useParametersController({ schema: SCHEMA, keyframes });
   useParameterCommands(demoCommandRegistry, controller, { group: "Parameters" });
+  // House style: check_parameters_style / fix_parameters_style (parametersstyle__*).
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createParametersStyleToolProvider(controller, demoStyles, { namespace: "parametersstyle" }), [controller]));
   const editorDocument = useDemoEditorDocument(controller, createParametersEditorDocument, { namespace: "parameters", skill: "pixerate-parameters", history: false });
 
   return (
