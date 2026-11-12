@@ -1,5 +1,35 @@
 # @pixerate/editor
 
+## 0.297.0
+
+### Minor Changes
+
+- 27412b9: House style reaches every editor domain (#772):
+
+  - **`brand.json`**: a style skill can carry a shared brand (colour roles, an ordered palette, fonts, a logo). Every domain gets it as `ResolvedStyle.brand` and in `get_style`, and `get_style` with domain `"brand"` reads it alone. Roles are looked up through fallback names, so Office theme slots (`accent1`, `dk1`, `lt1`, ...) work too: `brandColor`, `brandColors`, `brandPalette`, `brandFonts`, `BRAND_COLOR_ROLES`.
+  - **Derived styles**: `StyleDomain.themeFromBrand(brand)` gives a domain its starting profile from the brand; the domain's own profile refines it field by field, and `sources` marks derived fields `<layer> (brand)`. Charts derive their palette and theme (`chartStyleFromBrand`).
+  - **Shared checks**: `StyleDomain.surface(state)` lists the colours and fonts a domain draws with, and `SHARED_STYLE_CHECKS` (`palette-only`, `min-contrast`, `distinguishable`, `fonts-allowed`) then run there. A domain's own check with the same id wins. A brand's `checks` run in every `check_<domain>_style`. Charts and design tokens have surfaces (`tokensStyleSurface`).
+  - `StyleCheck.run` takes a fourth `context` argument with the brand; `styleChecksOf(domain)` lists the checks a profile can turn on.
+
+### Patch Changes
+
+- 27412b9: House style: a style profile that is itself a `$token` reference (`chart.json` set to `{ "$token": "…" }`) no longer crashes `createStyleResolver`. The profile is left out with an issue saying why, and `get_style` / `check_chart_style` keep working (#768).
+
+## 0.296.2
+
+### Patch Changes
+
+- 979e41f: House style: a style profile that is itself a `$token` reference (`chart.json` set to `{ "$token": "…" }`) no longer crashes `createStyleResolver`. The profile is left out with an issue saying why, and `get_style` / `check_chart_style` keep working (#768).
+
+## 0.296.1
+
+### Patch Changes
+
+- 6be3243: Large sticker brushes spread out, and thick paint that also paints light works in Swift.
+
+  - **Stickers at large sizes.** Past `STICKER_REACH` (64 px) a sticker brush's spacing now eases from its density toward `STICKER_LARGE_SPACING` (0.9 diameters) by `STICKER_SPREAD_SIZE` (256 px), so big stickers lie side by side along the path instead of piling onto one another. Scatter still stops at the reach, so they keep tracing the stroke. `stickerSpacing(density, size)` gives the spacing.
+  - **Swift: thick paint with light.** A stroke whose light twin paints with an engine other than dab, particle, bristle and the exchange engines (the glow gel, or any impasto brush on a layer that already holds light) now lays plain dabs as in `stroke.ts`, instead of failing with "…which the Swift paint editor does not paint with yet".
+
 ## 0.296.0
 
 ### Minor Changes
