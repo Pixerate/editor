@@ -8,7 +8,7 @@ import XCTest
 final class ChartConformanceTests: XCTestCase {
     func testChartScenarios() async throws {
         let scenarios = try ConformanceScenario.load(domain: "chart")
-        XCTAssertEqual(scenarios.count, 18)
+        XCTAssertEqual(scenarios.count, 23)
         var passed: [String] = []
         var skipped: [(String, String)] = []
         var failures: [ConformanceMismatch] = []
@@ -43,7 +43,7 @@ final class ChartConformanceTests: XCTestCase {
         }
         for failure in failures { XCTFail(failure.description) }
         for (id, reason) in skipped { XCTFail("The chart domain is fully ported, but \(id) is skipped for Swift: \(reason)") }
-        XCTAssertEqual(passed.count, 18)
+        XCTAssertEqual(passed.count, 23)
         XCTAssertEqual(skipped.count, 0)
         ChartConformanceReport.write(passed: passed, skipped: skipped, failed: Set(failures.map(\.scenario)).count)
     }

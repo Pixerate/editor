@@ -1,0 +1,44 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-token-root",
+  "description": "A chart.json that is itself a token reference has nothing to resolve it with; the TS resolver then fails to load the profile, and check_chart_style returns that error.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "style": {
+      "$token": "house/chart"
+    },
+    "spec": {
+      "type": "bar",
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "Revenue",
+          "values": [
+            100,
+            120
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Cannot destructure property 'checks' of 'resolved' as it is undefined."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

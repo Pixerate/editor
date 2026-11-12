@@ -346,7 +346,7 @@ internal func jsCellString(_ value: JSONValue?) -> String {
     switch value {
     case .null: return "null"
     case .bool(let b): return b ? "true" : "false"
-    case .number(let n): return JSONValue.jsNumber(n)
+    case .number(let n): return JSONValue.jsString(n)
     case .string(let s): return s
     case .array, .object: return value.stringified()
     }
@@ -380,7 +380,7 @@ private func textField(
     guard let value, value != .null else { return fallback }
     switch value {
     case .string(let s): return s
-    case .number(let n): return JSONValue.jsNumber(n)
+    case .number(let n): return JSONValue.jsString(n)
     case .bool(let b): return b ? "true" : "false"
     default:
         issues.append(ChartIssue(path: path, message: "\(path) must be text."))
@@ -488,7 +488,7 @@ public func normalizeChartAxis(
     if let mn = min, let mx = max, mn >= mx {
         issues.append(ChartIssue(
             path: "\(path).max",
-            message: "\(path).max (\(JSONValue.jsNumber(mx))) must be greater than \(path).min (\(JSONValue.jsNumber(mn)))."
+            message: "\(path).max (\(JSONValue.jsString(mx))) must be greater than \(path).min (\(JSONValue.jsString(mn)))."
         ))
         min = fallback.min
         max = fallback.max
@@ -550,14 +550,14 @@ public func normalizeChartAxis(
         if let mn = axis.min, !(mn > 0) {
             issues.append(ChartIssue(
                 path: "\(path).min",
-                message: "\(path).min must be greater than 0 on a logarithmic axis (or null for automatic); got \(JSONValue.jsNumber(mn))."
+                message: "\(path).min must be greater than 0 on a logarithmic axis (or null for automatic); got \(JSONValue.jsString(mn))."
             ))
             axis.min = nil
         }
         if let mx = axis.max, !(mx > 0) {
             issues.append(ChartIssue(
                 path: "\(path).max",
-                message: "\(path).max must be greater than 0 on a logarithmic axis (or null for automatic); got \(JSONValue.jsNumber(mx))."
+                message: "\(path).max must be greater than 0 on a logarithmic axis (or null for automatic); got \(JSONValue.jsString(mx))."
             ))
             axis.max = nil
         }
@@ -716,7 +716,7 @@ private func normalizeSeries(
                 case .string(let c):
                     return !c.jsTrimmed.isEmpty ? c : nil
                 case .number(let n):
-                    return JSONValue.jsNumber(n)
+                    return JSONValue.jsString(n)
                 default:
                     return nil
                 }
@@ -1143,7 +1143,7 @@ public func normalizeChartSpec(_ input: JSONValue?) -> (spec: ChartSpec, issues:
         }
         issues.append(ChartIssue(
             path: name,
-            message: "\(name) must be a number from \(JSONValue.jsNumber(min)) to \(JSONValue.jsNumber(max))."
+            message: "\(name) must be a number from \(JSONValue.jsString(min)) to \(JSONValue.jsString(max))."
         ))
         return fallback
     }
@@ -1170,7 +1170,7 @@ public func normalizeChartSpec(_ input: JSONValue?) -> (spec: ChartSpec, issues:
             case .string(let s):
                 if !highlight.contains(s) { highlight.append(s) }
             case .number(let n):
-                let name = JSONValue.jsNumber(n)
+                let name = JSONValue.jsString(n)
                 if !highlight.contains(name) { highlight.append(name) }
             default:
                 issues.append(ChartIssue(

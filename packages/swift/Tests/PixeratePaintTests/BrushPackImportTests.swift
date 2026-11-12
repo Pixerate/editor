@@ -63,13 +63,13 @@ final class BrushPackImportTests: XCTestCase {
     }
 
     func testZipAndKeyedArchive() throws {
-        let entries = try readZip(try fixture("test-set.brushset"))
+        let entries = try readBrushZip(try fixture("test-set.brushset"))
         XCTAssertTrue(entries.map(\.name).contains("A1/Shape.png"))
         let archive = try XCTUnwrap(entries.first { $0.name == "A1/Brush.archive" }).read()
         let root = try XCTUnwrap(keyedArchiveRoot(try readBinaryPlist(archive)))
         XCTAssertEqual(root["name"], .string("Dry ink"))
         XCTAssertEqual(root["plotSpacing"], .number(0.15))
-        XCTAssertThrowsError(try readZip([UInt8](repeating: 0, count: 100))) { XCTAssertEqual(($0 as? ZipError)?.message, "Not a ZIP archive: no end of central directory.") }
+        XCTAssertThrowsError(try readBrushZip([UInt8](repeating: 0, count: 100))) { XCTAssertEqual(($0 as? BrushZipError)?.message, "Not a ZIP archive: no end of central directory.") }
         XCTAssertThrowsError(try readBinaryPlist([UInt8](repeating: 0, count: 10))) { XCTAssertEqual(($0 as? PlistError)?.message, "Not a binary property list.") }
     }
 

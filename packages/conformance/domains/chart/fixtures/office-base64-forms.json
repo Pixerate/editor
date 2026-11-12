@@ -1,0 +1,63 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "office-base64-forms",
+  "description": "Open files in the setup may be base64 with a data: URL prefix, line breaks and no padding (as atob takes them); both hosts read the same workbook.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "files": [
+      {
+        "name": "wrapped.xlsx",
+        "data": "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,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\r\neG1sUEsFBgAAAAAIAAgALgIAAKIJAAAAAA"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "tool": "list_open_files",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "files": [
+            {
+              "bytes": 3046,
+              "name": "wrapped.xlsx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_file_charts",
+      "arguments": {
+        "file": "wrapped.xlsx"
+      },
+      "expect": {
+        "result": {
+          "charts": [
+            {
+              "anchor": "B2",
+              "categories": 2,
+              "id": "chart-1",
+              "issues": [],
+              "lossless": true,
+              "name": "Chart 1",
+              "partKind": "chart",
+              "path": "xl/charts/chart1.xml",
+              "place": "Data!B2",
+              "range": "B2:H18",
+              "series": [
+                "North"
+              ],
+              "sheet": "Data",
+              "title": "Revenue",
+              "type": "bar",
+              "unsupported": []
+            }
+          ],
+          "format": "xlsx"
+        }
+      }
+    }
+  ]
+}

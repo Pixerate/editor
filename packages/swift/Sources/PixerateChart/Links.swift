@@ -8,7 +8,7 @@ private func nameOf(_ value: JSONValue?) -> String {
     guard let value else { return "" }
     switch value {
     case .number(let n):
-        return JSONValue.jsNumber(n)
+        return JSONValue.jsString(n)
     case .string(let s):
         return s.jsTrimmed
     default:

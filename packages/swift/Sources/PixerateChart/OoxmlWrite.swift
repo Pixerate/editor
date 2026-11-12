@@ -90,7 +90,7 @@ private func strLit(_ items: [String]) -> String {
 private func numLit(_ items: [ChartValue], _ code: String = "General") -> String {
     let pts = items.enumerated().compactMap { i, v -> String? in
         guard let v, v.isFinite else { return nil }
-        return "<c:pt idx=\"\(i)\"><c:v>\(JSONValue.jsNumber(v))</c:v></c:pt>"
+        return "<c:pt idx=\"\(i)\"><c:v>\(JSONValue.jsString(v))</c:v></c:pt>"
     }.joined()
     return "<c:numLit><c:formatCode>\(esc(code))</c:formatCode><c:ptCount val=\"\(items.count)\"/>\(pts)</c:numLit>"
 }
@@ -139,7 +139,7 @@ private func errBarsXml(_ bars: ChartErrorBars, _ dir: String?) -> String {
         x += "<c:plus>\(numLit(plus))</c:plus><c:minus>\(numLit(minus))</c:minus>"
     } else if bars.type != .stderr {
         let val = bars.value ?? (bars.type == .percent ? 5.0 : 1.0)
-        x += "<c:val val=\"\(JSONValue.jsNumber(val))\"/>"
+        x += "<c:val val=\"\(JSONValue.jsString(val))\"/>"
     }
     return "\(x)</c:errBars>"
 }
@@ -281,9 +281,9 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
                 var x = "<c:trendline>\(nameTag)\(fillXml(t.color, true))<c:trendlineType val=\"\(tOut)\"/>"
                 if t.type == .polynomial { x += "<c:order val=\"\(t.order ?? 2)\"/>" }
                 if t.type == .movingAverage { x += "<c:period val=\"\(t.period ?? 2)\"/>" }
-                if let fw = t.forward, fw != 0 { x += "<c:forward val=\"\(JSONValue.jsNumber(fw))\"/>" }
-                if let bw = t.backward, bw != 0 { x += "<c:backward val=\"\(JSONValue.jsNumber(bw))\"/>" }
-                if let ic = t.intercept { x += "<c:intercept val=\"\(JSONValue.jsNumber(ic))\"/>" }
+                if let fw = t.forward, fw != 0 { x += "<c:forward val=\"\(JSONValue.jsString(fw))\"/>" }
+                if let bw = t.backward, bw != 0 { x += "<c:backward val=\"\(JSONValue.jsString(bw))\"/>" }
+                if let ic = t.intercept { x += "<c:intercept val=\"\(JSONValue.jsString(ic))\"/>" }
                 x += "<c:dispRSqr val=\"\(t.showR2 == true ? 1 : 0)\"/><c:dispEq val=\"\(t.showEquation == true ? 1 : 0)\"/></c:trendline>"
                 parts.append(x)
             }
@@ -364,10 +364,10 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
     }
 
     func scaling(_ a: ChartAxis) -> String {
-        let logTag = a.scale == .log ? "<c:logBase val=\"\(JSONValue.jsNumber(a.logBase ?? 10.0))\"/>" : ""
+        let logTag = a.scale == .log ? "<c:logBase val=\"\(JSONValue.jsString(a.logBase ?? 10.0))\"/>" : ""
         let orient = "<c:orientation val=\"\(a.reverse == true ? "maxMin" : "minMax")\"/>"
-        let maxTag = a.max != nil ? "<c:max val=\"\(JSONValue.jsNumber(a.max!))\"/>" : ""
-        let minTag = a.min != nil ? "<c:min val=\"\(JSONValue.jsNumber(a.min!))\"/>" : ""
+        let maxTag = a.max != nil ? "<c:max val=\"\(JSONValue.jsString(a.max!))\"/>" : ""
+        let minTag = a.min != nil ? "<c:min val=\"\(JSONValue.jsString(a.min!))\"/>" : ""
         return "<c:scaling>\(logTag)\(orient)\(maxTag)\(minTag)</c:scaling>"
     }
     func title(_ a: ChartAxis) -> String {
@@ -383,7 +383,7 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
     let catPos = horizontal ? "l" : "b"
     let valPos = horizontal ? "b" : "l"
     func valAx(_ id: Int, _ cross: Int, _ a: ChartAxis, _ pos: String, _ crosses: String, _ catKind: Bool = false) -> String {
-        let stepTag = (a.step != nil && a.step != 0) ? "<c:majorUnit val=\"\(JSONValue.jsNumber(a.step!))\"/>" : ""
+        let stepTag = (a.step != nil && a.step != 0) ? "<c:majorUnit val=\"\(JSONValue.jsString(a.step!))\"/>" : ""
         return "<c:valAx><c:axId val=\"\(id)\"/>\(scaling(a))<c:delete val=\"\(a.show ? 0 : 1)\"/><c:axPos val=\"\(pos)\"/>\(a.gridlines ? "<c:majorGridlines/>" : "")\(title(a))\(fmt(a))<c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"\(cross)\"/><c:crosses val=\"\(crosses)\"/><c:crossBetween val=\"\(catKind ? "midCat" : "between")\"/>\(stepTag)</c:valAx>"
     }
     func catAx(_ id: Int, _ cross: Int, _ a: ChartAxis, _ pos: String, _ hidden: Bool = false) -> String {

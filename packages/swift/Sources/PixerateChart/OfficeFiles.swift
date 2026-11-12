@@ -61,6 +61,22 @@ public struct OfficeFileChart: Sendable, Equatable {
         self.unsupported = unsupported
         self.lossless = lossless
     }
+
+    /// The chart as `JSON.stringify` writes the TS object (keys in the same order, absent fields left out).
+    public func toJSON() -> JSONValue {
+        var out = JSONObject([("id", .string(id)), ("path", .string(path)), ("partKind", .string(partKind.rawValue))])
+        if let sheet { out["sheet"] = .string(sheet) }
+        if let slide { out["slide"] = .number(Double(slide)) }
+        if let anchor { out["anchor"] = .string(anchor) }
+        if let range { out["range"] = .string(range) }
+        if let name { out["name"] = .string(name) }
+        out["title"] = .string(title)
+        out["spec"] = spec.toJSON()
+        out["issues"] = .array(issues.map(JSONValue.string))
+        out["unsupported"] = .array(unsupported.map(JSONValue.string))
+        out["lossless"] = .bool(lossless)
+        return .object(out)
+    }
 }
 
 public struct OfficeChartsResult: Sendable, Equatable {
@@ -70,6 +86,10 @@ public struct OfficeChartsResult: Sendable, Equatable {
     public init(format: OfficeChartFileFormat, charts: [OfficeFileChart]) {
         self.format = format
         self.charts = charts
+    }
+
+    public func toJSON() -> JSONValue {
+        .object(JSONObject([("format", .string(format.rawValue)), ("charts", .array(charts.map { $0.toJSON() }))]))
     }
 }
 
@@ -116,23 +136,23 @@ private struct Relationship {
     var external: Bool
 }
 
+/// A JS `Map<string, Relationship>`: insertion order, a repeated id replaces the value in place, and
+/// ids are compared by code units (not Unicode-normalised).
 private struct RelsMap {
-    private var byId: [String: Relationship] = [:]
+    private var byId: [JSKey: Int] = [:]
     private(set) var values: [Relationship] = []
 
     mutating func set(_ id: String, _ rel: Relationship) {
-        if byId[id] != nil {
-            if let idx = values.firstIndex(where: { $0.id == id }) {
-                values[idx] = rel
-            }
+        if let idx = byId[JSKey(id)] {
+            values[idx] = rel
         } else {
+            byId[JSKey(id)] = values.count
             values.append(rel)
         }
-        byId[id] = rel
     }
 
     func get(_ id: String) -> Relationship? {
-        byId[id]
+        byId[JSKey(id)].map { values[$0] }
     }
 }
 
@@ -140,31 +160,36 @@ private struct Reader {
     let zip: ZipArchive
     let max: Int
     var charts: [OfficeFileChart] = []
-    var seen = Set<String>()
+    var seen = Set<JSKey>()
 }
 
+// Paths are sliced and split by UTF-16 code units, as in JS: a `/` followed by a combining mark is
+// one Swift `Character`, so `lastIndex(of: "/")` and `split(separator: "/")` would miss it.
+
+/// `path.slice(0, path.lastIndexOf('/') + 1)`
 private func dirname(_ path: String) -> String {
-    guard let idx = path.lastIndex(of: "/") else { return "" }
-    return String(path[...idx])
+    let units = Array(path.utf16)
+    guard let idx = units.lastIndex(of: 0x2F) else { return "" }
+    return String(decoding: units[...idx], as: UTF16.self)
 }
 
 private func resolvePartPath(_ baseDir: String, _ target: String) -> String {
-    let joined = target.hasPrefix("/") ? String(target.dropFirst()) : (baseDir + target)
-    var out: [String] = []
-    for segment in joined.split(separator: "/", omittingEmptySubsequences: false) {
-        if segment.isEmpty || segment == "." { continue }
-        if segment == ".." {
+    let joined = target.jsStartsWith("/") ? Array(target.utf16.dropFirst()) : Array((baseDir + target).utf16)
+    var out: [ArraySlice<UInt16>] = []
+    for segment in joined.split(separator: 0x2F, omittingEmptySubsequences: false) {
+        if segment.isEmpty || segment.elementsEqual([0x2E]) { continue }
+        if segment.elementsEqual([0x2E, 0x2E]) {
             if !out.isEmpty { out.removeLast() }
         } else {
-            out.append(String(segment))
+            out.append(segment)
         }
     }
-    return out.joined(separator: "/")
+    return String(decoding: Array(out.joined(separator: [0x2F])), as: UTF16.self)
 }
 
 private func relsPathFor(_ partPath: String) -> String {
     let dir = dirname(partPath)
-    let rest = String(partPath.dropFirst(dir.count))
+    let rest = String(decoding: partPath.utf16.dropFirst(dir.utf16.count), as: UTF16.self)
     return "\(dir)_rels/\(rest).rels"
 }
 
@@ -178,7 +203,7 @@ private func elements(_ el: MiniXmlElement, _ localName: String) -> [MiniXmlElem
 
 private func relId(_ el: MiniXmlElement, _ localName: String = "id") -> String? {
     for a in el.attributes {
-        if a.localName == localName && ((a.namespaceURI?.contains("relationships") ?? false) || a.prefix == "r") {
+        if a.localName == localName && ((a.namespaceURI?.jsIncludes("relationships") ?? false) || a.prefix == "r") {
             return a.value
         }
     }
@@ -190,19 +215,14 @@ private func firstChild(_ el: MiniXmlElement?, _ localName: String) -> MiniXmlEl
 }
 
 private func readEntryText(_ zip: ZipArchive, _ path: String) throws -> String? {
-    if zip.has(path) {
-        return try zip.readText(path)
-    }
-    let lower = path.lowercased()
-    if let match = zip.entries.first(where: { $0.name.lowercased() == lower }) {
-        return try zip.readText(match.name)
-    }
-    return nil
+    let lower = JSKey(path.jsLowercased)
+    guard let entry = zip.get(path) ?? zip.entries.first(where: { JSKey($0.name.jsLowercased) == lower }) else { return nil }
+    return try zip.readText(entry)
 }
 
 private func readXml(_ r: Reader, _ path: String) throws -> MiniXmlDocument? {
     guard let text = try readEntryText(r.zip, path) else { return nil }
-    let doc = parseChartXml(text)
+    let doc = try parseChartXml(text)
     return doc.getElementsByTagName("parsererror").isEmpty ? doc : nil
 }
 
@@ -213,7 +233,7 @@ private func readRels(_ r: Reader, _ partPath: String) throws -> RelsMap {
     for rel in elements(doc, "Relationship") {
         guard let id = rel.getAttribute("Id"), !id.isEmpty else { continue }
         let target = rel.getAttribute("Target") ?? ""
-        let external = rel.getAttribute("TargetMode")?.lowercased() == "external"
+        let external = rel.getAttribute("TargetMode").map { JSKey($0.jsLowercased) } == JSKey("external")
         let resolved = external ? target : resolvePartPath(base, target)
         rels.set(id, Relationship(id: id, type: rel.getAttribute("Type") ?? "", target: resolved, external: external))
     }
@@ -255,14 +275,10 @@ private func chartsInPart(
     for ref in elements(root, "chart") {
         if r.charts.count >= r.max { return }
         if !isChartRef(ref) { continue }
-        guard let rid = relId(ref),
-              let rel = rels.get(rid),
-              !rel.external,
-              !r.seen.contains(rel.target),
-              r.zip.has(rel.target),
-              let xmlText = try Optional(r.zip.readText(rel.target)) else { continue }
-        r.seen.insert(rel.target)
-        let read = chartFromOoxml(xmlText)
+        guard let rel = rels.get(relId(ref) ?? ""), !rel.external, !r.seen.contains(JSKey(rel.target)) else { continue }
+        guard let entry = r.zip.get(rel.target) else { continue }
+        r.seen.insert(JSKey(rel.target))
+        let read = chartFromOoxml(try r.zip.readText(entry))
         let name = frameName(ref)
         let p = place(ref)
         r.charts.append(OfficeFileChart(
@@ -301,7 +317,7 @@ private func anchorCell(_ marker: MiniXmlElement?) -> String? {
     let row = firstChild(marker, "row").map { $0.textContent.jsToNumber } ?? .nan
     guard col.isFinite, row.isFinite, col == col.rounded(.towardZero), row == row.rounded(.towardZero),
           col >= 0, row >= 0 else { return nil }
-    return "\(columnName(col))\(JSONValue.jsNumber(row + 1))"
+    return "\(columnName(col))\(JSONValue.jsString(row + 1))"
 }
 
 private func drawingPlace(_ ref: MiniXmlElement, sheet: String) -> ChartPlace {
@@ -326,7 +342,7 @@ private func drawingPlace(_ ref: MiniXmlElement, sheet: String) -> ChartPlace {
 
 private func readMainPart(_ r: Reader) throws -> (path: String, doc: MiniXmlDocument) {
     let rootRels = try readRels(r, "")
-    let main = rootRels.values.first { $0.type.hasSuffix("/officeDocument") && !$0.external }
+    let main = rootRels.values.first { $0.type.jsEndsWith("/officeDocument") && !$0.external }
     guard let main, let doc = try readXml(r, main.target) else {
         throw OfficeChartsError("This is not an Office file: _rels/.rels names no main part (expected an .xlsx, .pptx or .docx file).")
     }

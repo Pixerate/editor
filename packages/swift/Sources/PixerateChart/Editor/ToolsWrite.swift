@@ -49,7 +49,7 @@ extension ChartToolProviderImpl {
                     let text: String
                     switch raw {
                     case .string(let str): text = str
-                    case .number(let d): text = JSONValue.jsNumber(d)
+                    case .number(let d): text = JSONValue.jsString(d)
                     case .bool(let b): text = b ? "true" : "false"
                     default: text = raw.stringified()
                     }
@@ -596,7 +596,7 @@ extension ChartToolProviderImpl {
             guard case .point(let seriesId, let index) = target else {
                 let what = target.map { "that is the \($0.kindName)" } ?? "that is outside the chart"
                 throw ToolExecutionError(
-                    "There is no bar or point at (\(JSONValue.jsNumber(fromX)), \(JSONValue.jsNumber(fromY))); \(what). Use render_chart to find marks."
+                    "There is no bar or point at (\(JSONValue.jsString(fromX)), \(JSONValue.jsString(fromY))); \(what). Use render_chart to find marks."
                 )
             }
             let before = self.controller.getSeries(seriesId)?.values[index] ?? nil

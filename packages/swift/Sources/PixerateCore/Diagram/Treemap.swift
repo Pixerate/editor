@@ -238,17 +238,18 @@ public func parseTreemap(_ source: String) -> TreemapParse {
 
 /// Drops a `%%` comment, unless it sits inside a quoted name.
 private func stripTreemapComment(_ line: String) -> String {
-    let chars = Array(line)
-    var quote: Character? = nil
+    // `line[i]` is a UTF-16 code unit: a quote followed by a combining mark still opens a name.
+    let units = Array(line.utf16)
+    var quote: UInt16? = nil
     var i = 0
-    while i < chars.count {
-        let ch = chars[i]
+    while i < units.count {
+        let ch = units[i]
         if let q = quote {
             if ch == q { quote = nil }
-        } else if ch == "\"" || ch == "'" {
+        } else if ch == 0x22 || ch == 0x27 {
             quote = ch
-        } else if ch == "%" && i + 1 < chars.count && chars[i + 1] == "%" {
-            return String(chars[0..<i])
+        } else if ch == 0x25 && i + 1 < units.count && units[i + 1] == 0x25 {
+            return String(decoding: units[0..<i], as: UTF16.self)
         }
         i += 1
     }

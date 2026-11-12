@@ -71,20 +71,172 @@ public struct ChartStyleCheckReport: Sendable, Equatable {
     }
 }
 
+/**
+ * The chart house style: one style skill's resolved `chart.json` profile.
+ *
+ * `init(skill:layer:chartJson:)` is a port of what `createStyleResolver` (`tools/style.ts`) does for
+ * one layer holding one skill (the conformance host's setup): `$token` references (left out with an
+ * issue, as there is no token source), the profile validated against `chartStyleDomain.profileSchema`
+ * and each check's `optionsSchema`, and a profile with errors left out with the TS issue message.
+ * Multi-layer merging (locks, required layers, skill state) is not ported.
+ */
 public final class ChartStyleResolver: @unchecked Sendable {
     public var profile: JSONObject
+    /// The layer that set the profile's `checks` (`style.sources.checks`), named on findings.
     public var layer: String?
     public var styleIssues: [JSONValue]
+    /// Whether a style skill applies to charts (without one, `check_chart_style` adds a note).
+    public var hasSkills: Bool
+    /// The error the TS resolver throws while loading the profile, which `check_chart_style` returns.
+    public var loadFailure: String?
 
     public init(profile: JSONObject = JSONObject(), layer: String? = "org", styleIssues: [JSONValue] = []) {
         self.profile = profile
         self.layer = profile.isEmpty ? nil : layer
         self.styleIssues = styleIssues
+        self.hasSkills = !profile.isEmpty
+    }
+
+    /// One `layer` holding one skill whose `chart.json` is `chartJson` (parsed JSON).
+    public init(skill: String, layer: String, chartJson: JSONValue) {
+        let loaded = loadChartStyleProfile(chartJson)
+        var issues: [JSONValue] = []
+        if let error = loaded.error {
+            issues.append(.object(JSONObject([("skill", .string(skill)), ("layer", .string(layer)), ("message", .string(error))])))
+        }
+        self.profile = loaded.profile ?? JSONObject()
+        self.layer = self.profile["checks"] != nil ? layer : nil
+        self.styleIssues = issues
+        self.hasSkills = true
+        self.loadFailure = loaded.thrown
     }
 
     public func check(_ spec: ChartSpec) -> ChartStyleCheckReport {
         runChartStyleChecks(spec, profile: profile, layer: layer, styleIssues: styleIssues)
     }
+}
+
+// MARK: - Profile validation (`createStyleResolver` load step and `chartStyleDomain` schemas)
+
+/// `CHART_TYPES` in `chart/style.ts` (the types `allowed-type` accepts), not the spec's list.
+private let STYLE_CHART_TYPES = ["bar", "line", "area", "scatter", "bubble", "pie", "donut", "radar", "waterfall", "histogram", "box", "funnel", "treemap"]
+
+private func styleSchema(_ json: String) -> JSONValue { try! JSONValue.parse(json) }
+
+private let STYLE_COLOR = #"{"type":"string","minLength":1,"description":"A CSS colour (hex or rgb()), or a { \"$token\": ... } reference."}"#
+
+/// `chartStyleDomain.profileSchema`.
+private let CHART_STYLE_PROFILE_SCHEMA: JSONValue = {
+    let schemes = CHART_COLOR_SCHEMES.map { JSONValue.string($0.id).stringified() }.joined(separator: ",")
+    let layouts = CHART_LAYOUT_PRESETS.map { JSONValue.string($0.id).stringified() }.joined(separator: ",")
+    let c = STYLE_COLOR
+    return styleSchema("""
+    {"type":"object","properties":{
+    "palette":{"type":"array","items":\(c),"minItems":1},
+    "colorSchemes":{"type":"array","items":{"type":"string","enum":[\(schemes)]}},
+    "layouts":{"type":"array","items":{"type":"string","enum":[\(layouts)]}},
+    "theme":{"type":"object","properties":{"background":\(c),"surface":\(c),"text":\(c),"mutedText":\(c),"grid":\(c),"axis":\(c),"positive":\(c),"negative":\(c),
+    "fontFamily":{"type":"string","minLength":1},"fontSize":{"type":"number","minimum":6,"maximum":48},"titleSize":{"type":"number","minimum":6,"maximum":72}},"additionalProperties":false},
+    "defaults":{"type":"object","properties":{"dataLabels":{"type":"boolean"},"points":{"type":"boolean"},"curve":{"type":"string","enum":["linear","smooth","step"]},
+    "stacking":{"type":"string","enum":["none","stacked","percent"]},"orientation":{"type":"string","enum":["vertical","horizontal"]},
+    "labelPosition":{"type":"string","enum":["auto","inside","outside","center"]}},"additionalProperties":false}
+    },"additionalProperties":false}
+    """)
+}()
+
+/// Each chart style check's `optionsSchema`, in `chartStyleDomain.checks` order.
+private let CHART_STYLE_CHECK_OPTIONS: [(id: String, schema: JSONValue)] = [
+    ("palette-only", styleSchema(#"{"type":"object","properties":{"tolerance":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false}"#)),
+    ("distinguishable", styleSchema(#"{"type":"object","properties":{"minDistance":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false}"#)),
+    ("min-contrast", styleSchema(#"{"type":"object","properties":{"ratio":{"type":"number","minimum":1,"maximum":21}},"additionalProperties":false}"#)),
+    ("allowed-type", styleSchema("""
+    {"type":"object","properties":{"types":{"type":"array","items":{"type":"string","enum":[\(STYLE_CHART_TYPES.map { "\"\($0)\"" }.joined(separator: ","))]},"minItems":1}},"required":["types"],"additionalProperties":false}
+    """)),
+]
+
+/// `resolveTokens` with no token source: every `{ "$token": ... }` is an error and resolves to
+/// `undefined` (`nil`). An `undefined` array item becomes `null`, its path kept in `undefinedPaths` so
+/// the schema message can say `undefined`; an `undefined` object member is dropped (the TS validator
+/// skips it, and `required` treats it as missing).
+private func resolveStyleTokens(_ value: JSONValue, _ path: String, _ pointer: String, _ errors: inout [String], _ undefinedPaths: inout Set<String>) -> JSONValue? {
+    switch value {
+    case .array(let items):
+        return .array(items.enumerated().map { i, v in
+            if let r = resolveStyleTokens(v, "\(path)[\(i)]", "\(pointer)/\(i)", &errors, &undefinedPaths) { return r }
+            undefinedPaths.insert("\(pointer)/\(i)")
+            return .null
+        })
+    case .object(let obj):
+        if obj.contains("$token") {
+            let token = obj["$token"]
+            let mode = obj["mode"]
+            let tokenOk: Bool = { if case .string(let s)? = token { return !s.isEmpty }; return false }()
+            let modeOk: Bool = { if mode == nil { return true }; if case .string? = mode { return true }; return false }()
+            if !tokenOk || !modeOk || obj.keys.contains(where: { $0 != "$token" && $0 != "mode" }) {
+                errors.append("\(path.isEmpty ? "profile" : path): a token reference is { \"$token\": \"<variable name or id>\", \"mode\"?: \"<mode>\" }.")
+                return nil
+            }
+            errors.append("\(path): \"\(token!.stringValue!)\" is a token reference, but this host has no design tokens to resolve it.")
+            return nil
+        }
+        var out = JSONObject()
+        for (k, v) in obj {
+            if let r = resolveStyleTokens(v, path.isEmpty ? k : "\(path).\(k)", "\(pointer)/\(k)", &errors, &undefinedPaths) { out[k] = r }
+        }
+        return .object(out)
+    default:
+        return value
+    }
+}
+
+private func styleSchemaErrors(_ value: JSONValue, _ schema: JSONValue, _ undefinedPaths: Set<String>, pointerPrefix: String = "") -> [SchemaValidationError] {
+    validateJSONSchema(value, schema).map { e in
+        guard undefinedPaths.contains(pointerPrefix + e.path), e.message.hasSuffix(", got null.") else { return e }
+        return SchemaValidationError(path: e.path, message: String(e.message.dropLast("null.".count)) + "undefined.")
+    }
+}
+
+/// `checkListErrors`: problems with a profile's `checks` list, against the chart checks.
+private func chartCheckListErrors(_ list: JSONValue?, _ undefinedPaths: Set<String>) -> [String] {
+    guard let list else { return [] }
+    guard case .array(let entries) = list else { return ["checks: expected a list of check ids or { \"id\": ..., options } objects."] }
+    var errors: [String] = []
+    for (i, entry) in entries.enumerated() {
+        let id: String?
+        switch entry {
+        case .string(let s): id = s
+        case .object(let o): id = o["id"]?.stringValue
+        default: id = nil
+        }
+        guard let id, !id.isEmpty, !undefinedPaths.contains("/checks/\(i)") else {
+            errors.append("checks[\(i)]: expected a check id or { \"id\": ..., options }.")
+            continue
+        }
+        guard case .object(var options) = entry, let check = CHART_STYLE_CHECK_OPTIONS.first(where: { $0.id == id }) else { continue }
+        options["id"] = Optional<JSONValue>.none
+        for e in styleSchemaErrors(.object(options), check.schema, undefinedPaths, pointerPrefix: "/checks/\(i)") {
+            errors.append("checks[\(i)] (\(id))\(e.path): \(e.message)")
+        }
+    }
+    return errors
+}
+
+/// Loads a style skill's `chart.json` as `createStyleResolver` does: the profile, or why it is left out.
+public func loadChartStyleProfile(_ raw: JSONValue, file: String = "chart.json") -> (profile: JSONObject?, error: String?, thrown: String?) {
+    guard case .object = stripPrototypeKeys(raw) else { return (nil, "\(file) must hold a JSON object.", nil) }
+    var errors: [String] = []
+    var undefinedPaths = Set<String>()
+    // A root `{ "$token": ... }` resolves to undefined, which `const { checks, ...rest } = resolved` cannot
+    // destructure: the TS resolver throws a TypeError (a TS bug, see GOTCHAS), and so does this port.
+    guard case .object(let resolved)? = resolveStyleTokens(stripPrototypeKeys(raw), "", "", &errors, &undefinedPaths) else {
+        return (nil, nil, "Cannot destructure property 'checks' of 'resolved' as it is undefined.")
+    }
+    var rest = resolved
+    rest["checks"] = Optional<JSONValue>.none
+    errors += styleSchemaErrors(.object(rest), CHART_STYLE_PROFILE_SCHEMA, undefinedPaths).map { "\($0.path.isEmpty ? "(profile)" : $0.path): \($0.message)" }
+    errors += chartCheckListErrors(resolved["checks"], undefinedPaths)
+    if !errors.isEmpty { return (nil, "\(file) is left out: \(errors.joined(separator: " "))", nil) }
+    return (resolved, nil, nil)
 }
 
 private struct DrawnColorItem {
@@ -208,7 +360,7 @@ public func runChartStyleChecks(
                     check: id,
                     layer: layer,
                     severity: "warning",
-                    message: "\(colors[pair.a].label) (\(pair.colors.0)) and \(colors[pair.b].label) (\(pair.colors.1)) are hard to tell apart\(who) (distance \(JSONValue.jsNumber(pair.distance)), want \(JSONValue.jsNumber(minDistance))); give the second another palette colour.",
+                    message: "\(colors[pair.a].label) (\(pair.colors.0)) and \(colors[pair.b].label) (\(pair.colors.1)) are hard to tell apart\(who) (distance \(JSONValue.jsString(pair.distance)), want \(JSONValue.jsString(minDistance))); give the second another palette colour.",
                     target: colors[pair.b].target
                 ))
             }
@@ -232,7 +384,7 @@ public func runChartStyleChecks(
                     check: id,
                     layer: layer,
                     severity: "warning",
-                    message: "\(item.label) (\(item.color)) has contrast \(JSONValue.jsNumber(rounded)):1 against the background \(background); want at least \(JSONValue.jsNumber(ratio)):1, so use a darker or lighter palette colour.",
+                    message: "\(item.label) (\(item.color)) has contrast \(JSONValue.jsString(rounded)):1 against the background \(background); want at least \(JSONValue.jsString(ratio)):1, so use a darker or lighter palette colour.",
                     target: item.target
                 ))
             }
@@ -293,6 +445,7 @@ public func createChartStyleToolProvider(
             openWorldHint: false
         ),
         handler: { _, _ in
+            if let failure = style.loadFailure { throw ToolExecutionError(failure) }
             let report = style.check(controller.getSpec())
             var out = JSONObject([
                 ("findings", .array(report.findings.map { $0.toJSON() })),
@@ -300,7 +453,7 @@ public func createChartStyleToolProvider(
                 ("skipped", .array(report.skipped.map { $0.toJSON() })),
                 ("ok", .bool(report.findings.isEmpty))
             ])
-            if style.layer == nil {
+            if !style.hasSkills {
                 out["note"] = .string("No house style applies to charts.")
             }
             if !report.styleIssues.isEmpty {
