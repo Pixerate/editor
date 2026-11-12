@@ -13,6 +13,6 @@ public enum PaintContractVersions {
     public static let paintFormat = "pixerate-paint"
     public static let paintVersion = 2
     /// Tool and command counts, to check the bundled files against.
-    public static let toolCount = 189
+    public static let toolCount = 190
     public static let commandCount = 14
 }

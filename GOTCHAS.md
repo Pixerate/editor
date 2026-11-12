@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint] `effect_authoring_view` Is Listed Only by Hosts That Capture, So the Paint Contract Needed One
+
+- **Issue / Symptom**: The Swift paint editor had no `effect_authoring_view`: Swift tools come from `tools.json`, and the paint authoring provider's contract never listed the tool, because the TS paint provider passed no `capture` to `createEffectAuthoringToolProvider` (which lists the view tool only with one). Agents writing an effect in a painting could not look at it before saving.
+- **Root Cause**: The shared authoring tools leave the view tool to hosts with a preview (React and Svelte `<EffectAuthoringEditor>` hosts); the paint editor has no preview canvas of its own.
+- **Solution / Workaround**: The paint provider captures on the CPU (`captureAuthoringPreview` in Swift, the `capture` option in `effect-authoring-tools.ts`): one frame of the session's preview at its playhead, `paintAuthoringViewSize` of the painting (its aspect, longest side ≤ 256), sample pictures for image inputs, as a PNG data URL. The `effect-authoring` scenario calls it; conformance compares only its text (`Captured effect preview at <time>ms.`), since image blocks aren't `structuredContent`. An effect with no pixel preview (a vector effect) fails the first capture with the provider's error and records `previewError`; later calls are refused with that reason, as in TS.
+
+### [swift/paint-ui] The Effect Authoring Editor Follows the Session, Not Its Own Copy
+
+- **Issue / Symptom**: An editor model that kept the source and values it was opened with showed stale controls after an agent changed the source with `effect_authoring_set_source`, and a sheet bound to a session that an agent closed showed a dead editor.
+- **Root Cause**: The person and the agent share one `EffectAuthoringSession` (the controller's `authoringSession`), and either can open, change, save or close it.
+- **Solution / Workaround**: `EffectAuthoringModel` subscribes to the session and replaces its `state` on every change; the typed source (`sourceDraft`) follows the session's source except while an edit waits to be applied (`sourceDelay`, 0.3 s), and Save to painting commits the typed source first. `PaintEditorModel.authoringEditor` returns the same model while `controller.authoringSession` is the same object and drops it (`detach()`, which also cancels the `Cancellable`: it does not cancel on release) when the session closes; the sheet shows only while `authoringPresented` and a session is open, so a session an agent opens doesn't pop up over the person's work. The Metal preview draws only sources that compile (`compiled != false`) with the state's values at the playhead; while the source has errors the session's CPU preview keeps drawing the last source that compiled.
+
 ### [core|swift/paint-editor] Specialty Guide Actions: Hosted Coordinates and Wet Mutation Brushes
 
 - **Issue / Symptom**: (1) On a paint document hosted as a canvas layer (`origin`), `get_specialty_guides` returned `add_magnet` / `paint_heat` arguments in document pixels, so an agent replaying them put magnets and heat in the wrong place; declaring `coordinates.out: ['guides[].actions[].arguments']` instead would also shift the view tilt action's `{ x: 0.6, y: -0.4 }`. (2) A wet mutation brush (`mutation-wash`) showed both a ghost and a mutation guide.

@@ -18706,6 +18706,29 @@
             "idempotentHint": false,
             "openWorldHint": false
           }
+        },
+        {
+          "name": "effect_authoring_view",
+          "title": "View effect preview image",
+          "description": "Captures an image of the effect preview at the current playhead time or at a specified time in milliseconds. Refused, with the reason, when the effect has no pixel preview (see previewError in effect_authoring_describe).",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Optional time in milliseconds to view the preview at. Moves playhead to this time before capturing."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "View effect preview image",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
         }
       ]
     },

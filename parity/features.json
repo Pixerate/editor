@@ -2284,14 +2284,14 @@
           "core": "`createEffectAuthoringSession`, `createEffectAuthoringToolProvider`, `pixerate-effect-authoring` skill (`/effects`)",
           "react": "`useEffectAuthoring`, `<EffectAuthoringEditor>` (`/effects`)",
           "svelte": "`effectAuthoringOf`, `<EffectAuthoringEditor>` (`/effects`)",
-          "swift": "✅ headless: `GenericEffectAuthoringSession` (values, keyframes with `evaluateEasing`, presets, timing, playback, undo, source editing through an `AuthoringSourceBackend`), `AuthoringEffectProvider`, `effectAuthoringToolHandlers`, `pixerate-effect-authoring` skill; the editor view: Planned (#533)"
+          "swift": "✅ headless: `GenericEffectAuthoringSession` (values, keyframes with `evaluateEasing`, presets, timing, playback, undo, source editing through an `AuthoringSourceBackend`), `AuthoringEffectProvider`, `effectAuthoringToolHandlers` with `effect_authoring_view` (`effectAuthoringViewHandler`), `pixerate-effect-authoring` skill; the editor view: `EffectAuthoringEditor` on `EffectAuthoringModel` (toolbar, Metal or CPU preview, source pane with line numbers and issue markers, parameters with keyframe toggles, timeline) (#752)"
         },
         {
           "feature": "Effects Written at Run Time (pixel expressions: a bounded per-pixel language with controls, line-numbered issues and a cost cap, safe for hosts that may not run generated code; `pixel.blank` / `pixel.rings` / `pixel.clouds` templates with source editing; authored effects kept in the painting with their source and used as effect paint, paper, effect layers, fills and light; `off` / `replay` / `author` host policy, raw shader opt-in, trial render and live frame budgets; Metal rendering in Swift)",
           "core": "`compilePixelSource`, `createPixelEffectProvider`, `createPaintEffectAuthoringToolProvider`, `PaintEditorController.effectsCatalog` (`/effects`, `/paint-editor`)",
           "react": "authored effects in `PaintEffectsPanel` (via `usePaintEffectsProvider`), authoring tools registered by `usePaintEffectsTools` (`/paint-editor`)",
           "svelte": "authored effects in the paint effects panel (via `paintEffectsProvider`), authoring tools registered by `usePaintEffectsTools` (`/paint-editor`)",
-          "swift": "✅ `compilePixelSource`, `PixelEffectProvider`, `PixelMetalRenderer` (generated MSL, no loops), `createPaintEffectAuthoringToolProvider`, authored effects in `PaintProviderEffectsPanel`"
+          "swift": "✅ `compilePixelSource`, `PixelEffectProvider`, `PixelMetalRenderer` (generated MSL, no loops), `createPaintEffectAuthoringToolProvider` (with `effect_authoring_view` captures), authored effects in `PaintProviderEffectsPanel` with New effect, Edit and Save to painting in the effect authoring editor (`authoredPolicy` `author`)"
         }
       ]
     },

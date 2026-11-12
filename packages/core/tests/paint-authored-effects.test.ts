@@ -5,8 +5,10 @@ import {
   createPaintEditorToolProvider,
   createPaintEffectAuthoringToolProvider,
   createPaintEffectsToolProvider,
+  paintAuthoringViewSize,
   type PaintPixelLayer,
 } from "../src/paint-editor";
+import { decodePng } from "../src/raster/png";
 import { readPixel } from "../src/raster/surface";
 import { ToolRegistry } from "../src/tools/registry";
 
@@ -421,6 +423,42 @@ describe("authored effects in the paint editor", () => {
       'The authored effect "authored.bad" could not be read; it was dropped (paint that uses it shows a placeholder).',
       'The authored effect "not-authored" could not be read; it was dropped (paint that uses it shows a placeholder).',
     ]);
+  });
+});
+
+describe("effect_authoring_view in the paint editor", () => {
+  it("captures the open effect at the playhead or at a time, at the painting's aspect", async () => {
+    const t = setup();
+    expect(await t.fail("effect_authoring_view")).toMatch(/No effect is open for authoring/);
+    await t.call("open_effect_authoring", { effect: "pixel.blank" });
+    await t.call("effect_authoring_set_source", { source: SPLIT });
+    const r = await t.reg.callTool("effect_authoring_view", { time: 750 });
+    expect(r.isError).toBeFalsy();
+    const image = r.content.find((c) => c.type === "image") as { data: string; mimeType: string };
+    expect(image.mimeType).toBe("image/png");
+    const png = decodePng(Uint8Array.from(Buffer.from(image.data, "base64")));
+    expect([png.width, png.height]).toEqual([W, H]);
+    expect(Array.from(png.data.slice(0, 4))).toEqual([255, 0, 0, 255]);
+    expect(r.content.find((c) => c.type === "text")).toMatchObject({ text: "Captured effect preview at 750ms." });
+    expect(t.c.authoringSession!.getState().time).toBe(750);
+    expect((await t.reg.callTool("effect_authoring_view", { time: -1 })).isError).toBe(true);
+  });
+
+  it("refuses with the preview error of an effect that draws no pixels", async () => {
+    const t = setup();
+    await t.call("open_effect_authoring", { effect: "fake.badge" });
+    await t.fail("effect_authoring_view");
+    const reason = t.c.authoringSession!.getState().previewError!;
+    expect(reason).toMatch(/^No pixel preview for this vector effect/);
+    expect(await t.fail("effect_authoring_view")).toBe(
+      `${reason} The other effect authoring tools still work; check values with effect_authoring_describe.`,
+    );
+  });
+
+  it("sizes captures like the painting, at most 256 px on the longest side", () => {
+    expect(paintAuthoringViewSize({ width: 48, height: 32 })).toEqual({ width: 48, height: 32 });
+    expect(paintAuthoringViewSize({ width: 1024, height: 768 })).toEqual({ width: 256, height: 192 });
+    expect(paintAuthoringViewSize({ width: 4000, height: 2 })).toEqual({ width: 256, height: 1 });
   });
 });
 
