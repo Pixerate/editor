@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint] The First Metal Compile on a Cold iOS Simulator Can Exceed the 2 s Pixel-Shader Budget
+
+- **Issue / Symptom**: `PixelLanguageTests.testMetalMatchesCPU()` failed only in the "Swift (iOS simulator)" CI job, on `main` and on PRs that never touched paint: `pixel.blank: … took longer than 2000 ms to compile for the GPU`. It passes on macOS and locally. Only the first template failed; every later kernel compiled in time.
+- **Root Cause**: Not a pixel divergence. `PixelMetalRenderer` gives `makeLibrary` `PixelGPU.defaultCompileTimeoutMs` (2000 ms) and throws `unsupported` past it, which is right for hosts (they fall back to `PixelCPURenderer`). A fresh CI simulator has no Metal shader cache and starts its compiler service on the first compile, which can take longer than 2 s. The GPU-vs-CPU tests used the production budget, so they measured cold-start time instead of pixels.
+- **Solution / Workaround**: Tests that compare the GPU with the CPU pass `compileTimeoutMs: gpuParityCompileTimeoutMs` (120 s, in `PixelLanguageTests.swift`). Leave the 2 s default alone: the timeout test uses an explicit `0`. A new GPU test that does not check compile time should pass the same constant.
+
 ### [core|swift/paint] `effect_authoring_view` Is Listed Only by Hosts That Capture, So the Paint Contract Needed One
 
 - **Issue / Symptom**: The Swift paint editor had no `effect_authoring_view`: Swift tools come from `tools.json`, and the paint authoring provider's contract never listed the tool, because the TS paint provider passed no `capture` to `createEffectAuthoringToolProvider` (which lists the view tool only with one). Agents writing an effect in a painting could not look at it before saving.
