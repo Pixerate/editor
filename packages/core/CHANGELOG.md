@@ -1,5 +1,63 @@
 # @pixerate/editor
 
+## 0.302.0
+
+### Minor Changes
+
+- f06932c: House style for documents (#778): a `rich-text` style domain (`richTextStyleDomain`, from `@pixerate/editor`).
+
+  - `rich-text.json` sets heading case (`sentence`, `title`, `upper`, keeping acronyms, words with digits and `properNouns`), the deepest heading level, list item endings, curly or straight quotes, terms to avoid (with replacements), the thousands separator and the date format. Checks: `heading-case`, `heading-levels`, `list-punctuation`, `quotes`, `terms`, `number-format`, `date-format`, plus the shared `palette-only`, `min-contrast` and `fonts-allowed` on the document's text colours and fonts. A brand gives documents its fonts and palette.
+  - `richTextStyleState(doc)` reads a ProseMirror document into blocks and styled runs with positions; findings target `{ from, to }` ranges for `replace_range`, with the `replacement` when the fix is certain.
+  - Agent tools: `check_rich_text_style`, and `fix_rich_text_style`, which applies every certain fix as one undo step (hidden on a read-only document). `createRichTextStyleToolProvider`.
+  - React and Svelte: `useRichTextStyleFindings(styles, editor, scope?)`; `useStyleFindings` takes an optional `scope`.
+
+## 0.301.0
+
+### Minor Changes
+
+- dfd74a5: House style in the editors (#776).
+
+  - `styleSwatches(style)` lists the colours (profile palette, brand palette, brand roles) and fonts a house style offers, in picker order; `get_style` returns them as `swatches`, so agents pick from the same set as people.
+  - `StyleDomain.defaults` and `styleDefaults(domain, style)` give new work its starting patch; charts use `chartStylePatch`. New agent tool `apply_chart_style` applies it as one undo step (refused on a read-only chart, `readOnly` option).
+  - `STYLE_AGENT_INSTRUCTIONS`: domain-neutral prompt text for hosts while a house style is active.
+  - React and Svelte: `useStyleSwatches(styles, domain, scope?)`, and `ChartEditor` / `ChartInspector` take `swatches` shown beside each series colour.
+  - Swift: `apply_chart_style` in `createChartStyleToolProvider` (hidden on a read-only chart, `ChartStyleToolProviderOptions.readOnly`), with the `style-apply` scenario.
+
+## 0.300.0
+
+### Minor Changes
+
+- 52bbc40: House style: safer loading and smaller prompts (#774).
+
+  - Style skill frontmatter is read by a strict YAML subset (`parseYaml`, `parseFrontmatter`): maps, lists, flow `[a, b]` / `{ a: 1 }`, quotes, block text, comments. Anchors, aliases, tags, `?` keys, several documents and duplicate keys are refused with the line; the skill still loads and lists the problem as an issue.
+  - A profile can sit under its domain's frontmatter key (`chart:`) for stores that keep only `SKILL.md`; a `chart.json` of the same skill wins.
+  - File limits (`createStyleResolver({ limits })`, `DEFAULT_STYLE_LIMITS`): files up to 256 KB, 200 files, four folders deep, text types only, no hidden or `..` paths. Oversized `SKILL.md` copies and profiles are left out with an issue; `readFile` / `get_style_file` refuse unsafe paths with the reason; `checkStyleSkill` also checks the 4 MB skill total and marks files `left-out`. `styleFilePathProblem` and `STYLE_TEXT_FILE` are exported.
+  - `renderStyleCatalog(skills)` renders a short `<style_catalog>` of switched-on skills for system prompts. `renderStyle` now escapes block tags in profile and brand JSON as well as in skill bodies.
+
+## 0.299.0
+
+### Minor Changes
+
+- 6217143: House style: one-of-a-kind groups and scoped skills (#773).
+
+  - A style skill can join a group (`group: look` in frontmatter, or `group` in store state). Of the switched-on skills in a group only the first applies. `resolver.choose(name, { layer, scope })` switches one on and its rivals off in one write to the most specific writable layer (`StyleStore.setState`), and refuses, writing nothing, for an ungrouped skill, a read-only layer or a rival a required layer keeps on. `resolver.chosen(group)` and `resolver.choices()` read the choice; `StyleSkillInfo` gains `group`, `scope` and `chosen`.
+  - A skill's state can carry `scope: string[]`; scoped skills apply only when `resolve` / `check` / `list` are asked for one of their scopes. The style and check tool providers take a host-set `scope` option.
+  - Agent tools `list_style_choices` and `choose_style`.
+  - React and Svelte: `useStyleChoices(styles, scope?)` for pickers.
+
+## 0.298.0
+
+### Minor Changes
+
+- f6fe15f: House style: an authoring kit for the people who write style skills (#775).
+
+  - `checkStyleSkill(name, files, { domains, tokens })` reads a draft skill exactly as a resolver would and reports `ok`, errors (what would be left out and why), warnings, each file's role, the profile each domain gets and the brand. Agents get it as the `check_style_skill` tool.
+  - `styleProfileSchema(domain)` is a domain's standalone JSON Schema with its checks; profiles may carry `"$schema"` for editor completion (ignored when they load). `StyleDomain.example` gives each domain a valid example (brand, chart, tokens), which `get_style_schema` now returns along with the shared checks.
+  - `scaffoldStyleSkill` starts a skill from the examples; `renderStylePreview` draws a report as an HTML page with brand swatches, fonts, the logo and a sample per domain (`StyleDomain.preview`; charts draw a sample bar chart, `chartStylePreview`).
+  - New `pixerate-style` command: `check` (exit 1 on errors, `--json`, `--tokens`), `init`, `schema` and `preview` (live reload on 127.0.0.1).
+  - `styleStoreConformance` and `STYLE_FIXTURE_SKILLS` test a host's own `StyleStore`.
+  - `StyleResolver.tokens` exposes the token source; `STYLE_SKILL_NAME` is exported.
+
 ## 0.297.0
 
 ### Minor Changes
