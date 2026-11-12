@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vite
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createStyleResolver, memoryStyleStore, type StyleDomain, type StyleCheckReport, type StyleResolver } from "@pixerate/editor/tools";
-import { StyleFindings, useStyle, useStyleFindings, type UseStyleFindingsResult, type UseStyleResult } from "../src/style";
+import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, type UseStyleChoicesResult, type UseStyleFindingsResult, type UseStyleResult } from "../src/style";
 
 let container: HTMLDivElement;
 let root: any;
@@ -186,5 +186,37 @@ describe("<StyleFindings>", () => {
     expect(container.querySelector("section")?.className).toContain("mine");
     await act(async () => root.render(<StyleFindings report={null} />));
     expect(container.innerHTML).toBe("");
+  });
+});
+
+describe("useStyleChoices", () => {
+  const look = (max: number) => ({
+    "SKILL.md": "---\nname: look\ndescription: A look.\ngroup: look\n---\nA look.",
+    "list.json": JSON.stringify({ max }),
+  });
+
+  it("lists the groups and re-reads after a choice", async () => {
+    const org = memoryStyleStore({});
+    org.set("tight", look(1));
+    org.set("roomy", look(9));
+    const user = memoryStyleStore({});
+    const styles = createStyleResolver({ layers: [{ id: "org", store: org }, { id: "user", store: user }], domains: [listDomain] });
+    let result!: UseStyleChoicesResult;
+    function Probe() {
+      result = useStyleChoices(styles);
+      return null;
+    }
+    await act(async () => root.render(<Probe />));
+    await flush();
+    expect(result.groups?.map((g) => [g.group, g.chosen, g.options.map((o) => o.name)])).toEqual([["look", "roomy", ["roomy", "tight"]]]);
+    await act(async () => {
+      expect(await result.choose("tight")).toMatchObject({ chosen: "tight", layer: "user", switchedOff: ["roomy"] });
+    });
+    await flush();
+    expect(result.groups?.[0].chosen).toBe("tight");
+    await act(async () => {
+      await expect(result.choose("nope")).rejects.toThrow(/no house-style skill "nope"/);
+    });
+    expect(result.error).toMatch(/no house-style skill "nope"/);
   });
 });

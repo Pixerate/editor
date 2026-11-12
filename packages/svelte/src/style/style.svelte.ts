@@ -1,4 +1,4 @@
-import type { ResolvedStyle, StyleCheckReport, StyleResolver } from "@pixerate/editor/tools";
+import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver } from "@pixerate/editor/tools";
 
 type MaybeGetter<T> = T | (() => T);
 const read = <T>(value: MaybeGetter<T>): T => (typeof value === "function" ? (value as () => T)() : value);
@@ -118,6 +118,52 @@ export function useStyleFindings(
     },
     get error() {
       return error;
+    },
+  };
+}
+
+export interface SvelteStyleChoices {
+  /** The one-of-a-kind groups (a look, a theme) with the chosen skill and every option, or `null` before the first read (reactive). */
+  readonly groups: StyleChoiceGroup[] | null;
+  /** Why the last read or choice failed, or `null` (reactive). */
+  readonly error: string | null;
+  /** Chooses a skill of its group (see `StyleResolver.choose`); resolves to what changed, or rejects with the reason. */
+  choose(name: string, options?: { layer?: string }): Promise<StyleChoiceResult>;
+}
+
+/**
+ * Svelte 5 rune: the house-style choices for a picker, each one-of-a-kind group with the skill
+ * that applies and its options, in `scope` when given. Re-reads when the resolver notifies.
+ * Call it during component initialisation. Parity with React's `useStyleChoices`.
+ */
+export function useStyleChoices(styles: MaybeGetter<StyleResolver | null | undefined>, scope?: MaybeGetter<string | undefined>): SvelteStyleChoices {
+  let groups = $state.raw<StyleChoiceGroup[] | null>(null);
+  let error = $state.raw<string | null>(null);
+  resolverTask(
+    () => ({ styles: read(styles), input: scope === undefined ? undefined : read(scope) }),
+    (s, sc) => s.choices(sc !== undefined ? { scope: sc } : {}),
+    (result) => {
+      groups = result.value;
+      error = result.error;
+    },
+  );
+  return {
+    get groups() {
+      return groups;
+    },
+    get error() {
+      return error;
+    },
+    async choose(name, options = {}) {
+      const s = read(styles);
+      if (!s) throw new Error("There is no style resolver to choose with.");
+      const sc = scope === undefined ? undefined : read(scope);
+      try {
+        return await s.choose(name, { ...options, ...(sc !== undefined ? { scope: sc } : {}) });
+      } catch (e) {
+        error = message(e);
+        throw e;
+      }
     },
   };
 }

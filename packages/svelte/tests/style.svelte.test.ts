@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { createStyleResolver, memoryStyleStore, type StyleDomain, type StyleCheckReport, type StyleResolver } from "@pixerate/editor/tools";
-import { StyleFindings, useStyle, useStyleFindings, type SvelteStyle, type SvelteStyleFindings } from "../src/style";
+import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, type SvelteStyle, type SvelteStyleChoices, type SvelteStyleFindings } from "../src/style";
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -183,5 +183,31 @@ describe("<StyleFindings> (Svelte)", () => {
     expect(target.querySelector("section")?.className).toContain("mine");
     const empty = render(StyleFindings, { report: null });
     expect(empty.querySelector("section")).toBeNull();
+  });
+});
+
+describe("useStyleChoices (Svelte)", () => {
+  const look = (max: number) => ({
+    "SKILL.md": "---\nname: look\ndescription: A look.\ngroup: look\n---\nA look.",
+    "list.json": JSON.stringify({ max }),
+  });
+
+  it("lists the groups and re-reads after a choice", async () => {
+    const org = memoryStyleStore({});
+    org.set("tight", look(1));
+    org.set("roomy", look(9));
+    const user = memoryStyleStore({});
+    const styles = createStyleResolver({ layers: [{ id: "org", store: org }, { id: "user", store: user }], domains: [listDomain] });
+    let link!: SvelteStyleChoices;
+    cleanups.push($effect.root(() => {
+      link = useStyleChoices(styles);
+    }));
+    await settle();
+    expect(link.groups?.map((g) => [g.group, g.chosen, g.options.map((o) => o.name)])).toEqual([["look", "roomy", ["roomy", "tight"]]]);
+    expect(await link.choose("tight")).toMatchObject({ chosen: "tight", layer: "user", switchedOff: ["roomy"] });
+    await settle();
+    expect(link.groups?.[0].chosen).toBe("tight");
+    await expect(link.choose("nope")).rejects.toThrow(/no house-style skill "nope"/);
+    expect(link.error).toMatch(/no house-style skill "nope"/);
   });
 });

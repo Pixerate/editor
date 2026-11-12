@@ -74,6 +74,20 @@ field by field (a user layer can change one brand colour), and `sources` says wh
 each field. A `locked` layer keeps what it sets; a `required` layer's skills cannot be
 switched off.
 
+## One of a kind, and scope
+
+Some styles apply one at a time: a look, a theme. Put them in a group (`group: look` in the
+frontmatter, or `group` in the host's state). Of the switched-on skills in a group, only the
+first applies. `resolver.choose(name)` switches one on and its rivals off in one write to the
+most specific writable layer (a store with `setState`); `resolver.chosen(group)` and
+`resolver.choices()` read it back, and agents use `list_style_choices` / `choose_style`. React
+and Svelte pickers use `useStyleChoices`.
+
+A host can scope a skill to where it applies (`scope: ["report"]` in its state). Scoped skills
+apply only when the resolver is asked for that scope (`resolve(domain, { scope })`, or the
+`scope` option of the tool providers); unscoped skills apply everywhere. Each scope keeps its own
+choice.
+
 ## Writing and checking a skill
 
 ```bash
@@ -100,7 +114,8 @@ style and hand over files that load.
 
 ## Storing skills (hosts)
 
-Implement `StyleStore` over your storage (`list`, `read`, `files`, optional `subscribe`) and
+Implement `StyleStore` over your storage (`list`, `read`, `files`, optional `subscribe`, and
+`setState` if people or agents may choose styles) and
 test it with the kit:
 
 ```ts

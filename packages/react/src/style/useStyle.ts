@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { ResolvedStyle, StyleCheckReport, StyleResolver } from '@pixerate/editor/tools';
+import { useCallback, useEffect, useState } from 'react';
+import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver } from '@pixerate/editor/tools';
 
 export interface UseStyleResult {
   /** The resolved house style for the domain, or `null` before the first resolve (or without a resolver). */
@@ -88,4 +88,41 @@ export function useStyleFindings(styles: StyleResolver | null | undefined, domai
     [domain, state],
   );
   return result;
+}
+
+export interface UseStyleChoicesResult {
+  /** The one-of-a-kind groups (a look, a theme) with the chosen skill and every option, or `null` before the first read. */
+  groups: StyleChoiceGroup[] | null;
+  /** Why the last read or choice failed, or `null`. */
+  error: string | null;
+  /** Chooses a skill of its group (see `StyleResolver.choose`); resolves to what changed, or rejects with the reason. */
+  choose(name: string, options?: { layer?: string }): Promise<StyleChoiceResult>;
+}
+
+/**
+ * The house-style choices for a picker: each one-of-a-kind group with the skill that applies
+ * and its options, in `scope` when given. Re-reads when the resolver notifies, so a choice an
+ * agent makes with `choose_style` shows at once. Parity with Svelte's `useStyleChoices`.
+ */
+export function useStyleChoices(styles: StyleResolver | null | undefined, scope?: string): UseStyleChoicesResult {
+  const [state, setState] = useState<{ groups: StyleChoiceGroup[] | null; error: string | null }>({ groups: null, error: null });
+  useResolverTask(
+    styles,
+    (s) => s.choices(scope !== undefined ? { scope } : {}),
+    ({ value, error }) => setState({ groups: value, error }),
+    [scope],
+  );
+  const choose = useCallback(
+    async (name: string, options: { layer?: string } = {}) => {
+      if (!styles) throw new Error('There is no style resolver to choose with.');
+      try {
+        return await styles.choose(name, { ...options, ...(scope !== undefined ? { scope } : {}) });
+      } catch (error) {
+        setState((prev) => ({ ...prev, error: message(error) }));
+        throw error;
+      }
+    },
+    [styles, scope],
+  );
+  return { ...state, choose };
 }

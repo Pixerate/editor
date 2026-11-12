@@ -252,6 +252,8 @@ export interface ChartStyleToolProviderOptions {
 	id?: string;
 	/** Tool-name prefix; defaults to `chart`, so `check_chart_style` joins the chart toolset. */
 	namespace?: string;
+	/** Where the tool works (`report`, ...): skills scoped elsewhere do not apply. Set by the host. */
+	scope?: string;
 }
 
 /** `check_chart_style`: runs the chart house-style checks against a chart. */
@@ -265,7 +267,7 @@ export function createChartStyleToolProvider(controller: ChartController, styles
 		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
 		annotations: { title: 'Check chart house style', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 		handler: async () => {
-			const { style, ...report } = await styles.check('chart', controller.getSpec() as ChartSpec);
+			const { style, ...report } = await styles.check('chart', controller.getSpec() as ChartSpec, options.scope !== undefined ? { scope: options.scope } : {});
 			return {
 				...report,
 				ok: report.findings.length === 0,

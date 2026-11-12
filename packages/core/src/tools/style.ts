@@ -22,6 +22,16 @@ export interface StyleSkillState {
 	enabled?: boolean;
 	/** Sort key among skills of the same layer (lower first, default 0). */
 	order?: number;
+	/**
+	 * One-of-a-kind group (`look`, `theme`): of the switched-on skills in a group, only the first
+	 * applies. `choose` switches one on and its rivals off. Overrides the frontmatter `group`.
+	 */
+	group?: string;
+	/**
+	 * Where the skill applies (`report`, `slides`, a document type). A skill with a scope applies
+	 * only when the resolver is asked for one of them; without one it applies everywhere.
+	 */
+	scope?: string[];
 }
 
 /** One entry of {@link StyleStore.list}: a skill this store holds, or state for another layer's. */
@@ -42,6 +52,8 @@ export interface StyleStore {
 	files(name: string): MaybePromise<readonly string[]>;
 	/** Called when the store's skills or state change; returns an unsubscribe function. */
 	subscribe?(listener: () => void): () => void;
+	/** Records (or with `undefined`, clears) state for a skill; a store without it is read-only. */
+	setState?(name: string, state: StyleSkillState | undefined): MaybePromise<void>;
 }
 
 /** A layer of style skills, from general (first) to specific (last). */
@@ -176,8 +188,42 @@ export interface StyleSkillInfo {
 	profiles: string[];
 	enabled: boolean;
 	order: number;
+	/** Its one-of-a-kind group, from state or frontmatter. */
+	group?: string;
+	/** Where it applies; absent means everywhere. */
+	scope?: string[];
+	/** For a grouped skill: whether it is the one that applies (in the scope asked for). */
+	chosen?: boolean;
 	/** Why it, or part of it, is left out. A skill with issues and no usable part is not applied. */
 	issues: string[];
+}
+
+/** Options for reading a resolver in one place of the host. */
+export interface StyleScopeOptions {
+	/** Where the work is (`report`, `slides`, ...): scoped skills apply only when it is one of theirs. */
+	scope?: string;
+}
+
+/** A one-of-a-kind group and its skills, as `choices` lists them. */
+export interface StyleChoiceGroup {
+	group: string;
+	/** The skill that applies, if any is switched on. */
+	chosen?: string;
+	/** Every skill of the group that applies in the scope, switched on or off, in order. */
+	options: StyleSkillInfo[];
+}
+
+/** What `choose` did. */
+export interface StyleChoiceResult {
+	group: string;
+	/** The skill now chosen. */
+	chosen: string;
+	/** The layer whose state was written. */
+	layer: string;
+	/** Rivals it switched off. */
+	switchedOff: string[];
+	/** Set when a later layer's state still keeps another skill in front. */
+	note?: string;
 }
 
 /** A skill's prose as it applies to one domain. */
@@ -231,15 +277,26 @@ export interface StyleResolver {
 	/** The token source `$token` references resolve against, if any. */
 	readonly tokens?: StyleTokenSource;
 	/** Every style skill across layers (switched-off ones too), general to specific. */
-	list(options?: { domain?: string }): Promise<StyleSkillInfo[]>;
+	list(options?: { domain?: string } & StyleScopeOptions): Promise<StyleSkillInfo[]>;
 	/** The resolved style for a domain. Throws for an unknown domain. */
-	resolve(domain: string): Promise<ResolvedStyle>;
+	resolve(domain: string, options?: StyleScopeOptions): Promise<ResolvedStyle>;
+	/** The one-of-a-kind groups and their skills (in the scope). */
+	choices(options?: StyleScopeOptions): Promise<StyleChoiceGroup[]>;
+	/** The skill that applies in `group`, or `undefined` when none is switched on. */
+	chosen(group: string, options?: StyleScopeOptions): Promise<StyleSkillInfo | undefined>;
+	/**
+	 * Switches skill `name` on and the other skills of its group off (those that apply in
+	 * `scope`, when given), in one write to `layer` (default: the most specific writable layer).
+	 * Throws, writing nothing, for an unknown or ungrouped skill, a read-only layer, or a rival
+	 * that a required layer keeps on.
+	 */
+	choose(name: string, options?: { layer?: string } & StyleScopeOptions): Promise<StyleChoiceResult>;
 	/** A file of the skill copy in use. */
 	readFile(name: string, file: string): Promise<string | undefined>;
 	/** Files of the skill copy in use (`undefined` for an unknown skill). */
 	files(name: string): Promise<string[] | undefined>;
 	/** Runs the domain's checks that the resolved profile turns on against `state`. */
-	check<State>(domain: string, state: State): Promise<StyleCheckReport & { style: ResolvedStyle }>;
+	check<State>(domain: string, state: State, options?: StyleScopeOptions): Promise<StyleCheckReport & { style: ResolvedStyle }>;
 	/** Called when a store or the token source changes; returns an unsubscribe function. */
 	subscribe(listener: () => void): () => void;
 }
@@ -260,6 +317,14 @@ export function parseStyleDomains(markdown: string): string[] | undefined {
 		.split(',')
 		.map((d) => d.trim().replace(/^(['"])(.*)\1$/, '$2'))
 		.filter(Boolean);
+}
+
+/** A one-line frontmatter field (`group: look`), unquoted, or `undefined`. */
+function frontmatterField(markdown: string, key: string): string | undefined {
+	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown);
+	const line = match?.[1].split(/\r?\n/).find((l) => l.startsWith(`${key}:`));
+	const value = line?.slice(key.length + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
+	return value || undefined;
 }
 
 /**
@@ -457,10 +522,14 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 			// State: general to specific; a required layer's skills keep their own state only.
 			let enabled = true;
 			let order = 0;
+			let group = frontmatterField(winner.text, 'group');
+			let scope: string[] | undefined;
 			for (let i = 0; i < layers.length; i++) {
 				const entry = entries[i].find((e) => e.name === name);
 				if (!entry) continue;
 				if (i === winner.index && entry.order !== undefined) order = entry.order;
+				if (typeof entry.group === 'string' && entry.group) group = entry.group;
+				if (Array.isArray(entry.scope)) scope = entry.scope.filter((x): x is string => typeof x === 'string');
 				if (entry.enabled === undefined) continue;
 				if (layer.required && i !== winner.index) {
 					if (entry.enabled === false) skillIssues.push(`The ${layers[i].id} layer cannot switch it off: the ${layer.id} layer requires it.`);
@@ -523,6 +592,8 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 					profiles: [...profiles.keys()],
 					enabled,
 					order,
+					...(group ? { group } : {}),
+					...(scope ? { scope } : {}),
 					issues: skillIssues
 				},
 				layerIndex: winner.index,
@@ -535,9 +606,85 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 		return { skills, issues };
 	}
 
-	async function resolve(domainId: string): Promise<ResolvedStyle> {
+	const inScope = (info: StyleSkillInfo, scope?: string) => !info.scope || (scope !== undefined && info.scope.includes(scope));
+
+	/** The skills that apply in `scope`: switched on, in scope, and the first switched on of their group. */
+	function active(skills: readonly LoadedSkill[], scope?: string): Set<string> {
+		const out = new Set<string>();
+		const taken = new Set<string>();
+		for (const s of skills) {
+			if (!s.info.enabled || !inScope(s.info, scope)) continue;
+			if (s.info.group) {
+				if (taken.has(s.info.group)) continue;
+				taken.add(s.info.group);
+			}
+			out.add(s.info.name);
+		}
+		return out;
+	}
+
+	const withChosen = (info: StyleSkillInfo, applying: Set<string>): StyleSkillInfo => (info.group ? { ...info, chosen: applying.has(info.name) } : info);
+
+	async function choices(opts: StyleScopeOptions = {}): Promise<StyleChoiceGroup[]> {
+		const { skills } = await load();
+		const applying = active(skills, opts.scope);
+		const groups = new Map<string, StyleChoiceGroup>();
+		for (const s of skills) {
+			if (!s.info.group || !inScope(s.info, opts.scope)) continue;
+			const g = groups.get(s.info.group) ?? { group: s.info.group, options: [] };
+			g.options.push(withChosen(s.info, applying));
+			if (applying.has(s.info.name)) g.chosen = s.info.name;
+			groups.set(s.info.group, g);
+		}
+		return [...groups.values()].sort((a, b) => a.group.localeCompare(b.group));
+	}
+
+	async function choose(name: string, opts: { layer?: string } & StyleScopeOptions = {}): Promise<StyleChoiceResult> {
+		const { skills } = await load();
+		const skill = skills.find((s) => s.info.name === name);
+		if (!skill) {
+			throw new Error(`There is no house-style skill "${name}"; ${skills.length ? `the skills are ${skills.map((s) => `"${s.info.name}"`).join(', ')}` : 'none are installed'}.`);
+		}
+		const group = skill.info.group;
+		if (!group) {
+			const groups = [...new Set(skills.map((s) => s.info.group).filter(Boolean))];
+			throw new Error(`"${name}" is not in a one-of-a-kind group, so it is not chosen; it applies whenever it is switched on.${groups.length ? ` The groups are ${groups.map((g) => `"${g}"`).join(', ')}.` : ''}`);
+		}
+		if (!inScope(skill.info, opts.scope)) throw new Error(`"${name}" does not apply in scope "${opts.scope ?? '(none)'}"; its scopes are ${skill.info.scope!.map((x) => `"${x}"`).join(', ')}.`);
+		const writable = layers.filter((l) => l.store.setState);
+		const target = opts.layer !== undefined ? layers.find((l) => l.id === opts.layer) : writable[writable.length - 1];
+		if (!target) {
+			throw new Error(opts.layer !== undefined ? `There is no layer "${opts.layer}"; the layers are ${layers.map((l) => `"${l.id}"`).join(', ')}.` : 'No layer here can record a choice: every style store is read-only.');
+		}
+		if (!target.store.setState) throw new Error(`The ${target.id} layer is read-only; choose in one of ${writable.map((l) => `"${l.id}"`).join(', ') || '(none: every style store is read-only)'}.`);
+		const rivals = skills.filter((s) => s.info.group === group && s.info.name !== name && s.info.enabled && inScope(s.info, opts.scope));
+		const kept = rivals.filter((r) => layers[r.layerIndex].required);
+		if (kept.length) throw new Error(`The ${layers[kept[0].layerIndex].id} layer requires "${kept[0].info.name}", so "${name}" cannot replace it in the "${group}" group.`);
+		const current = new Map((await target.store.list()).map((e) => [e.name, e]));
+		const write = async (skillName: string, enabled: boolean) => {
+			const { name: _n, ...state } = current.get(skillName) ?? { name: skillName };
+			await target.store.setState!(skillName, { ...state, enabled });
+		};
+		if (!skill.info.enabled || current.get(name)?.enabled === false) await write(name, true);
+		for (const r of rivals) await write(r.info.name, false);
+		const now = await chosen(group, opts);
+		return {
+			group,
+			chosen: name,
+			layer: target.id,
+			switchedOff: rivals.map((r) => r.info.name),
+			...(now?.name !== name ? { note: `A later layer's state still puts "${now?.name ?? '(none)'}" first in "${group}"; choose in that layer instead.` } : {})
+		};
+	}
+
+	async function chosen(group: string, opts: StyleScopeOptions = {}): Promise<StyleSkillInfo | undefined> {
+		return (await choices(opts)).find((g) => g.group === group)?.options.find((o) => o.chosen);
+	}
+
+	async function resolve(domainId: string, opts: StyleScopeOptions = {}): Promise<ResolvedStyle> {
 		const domain = requireDomain(domainId);
 		const { skills, issues: loadIssues } = await load();
+		const applying = active(skills, opts.scope);
 		const issues: StyleIssue[] = [...loadIssues];
 		const profile: Record<string, unknown> = {};
 		const sources: Record<string, string> = {};
@@ -549,9 +696,9 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 		const applied: ResolvedStyleSkill[] = [];
 		const own: { skill: LoadedSkill; profile: Record<string, unknown> }[] = [];
 		for (const skill of skills) {
-			if (!skill.applies.has(domainId)) continue;
+			if (!skill.applies.has(domainId) || !inScope(skill.info, opts.scope)) continue;
 			for (const message of skill.info.issues) issues.push({ skill: skill.info.name, layer: skill.info.layer, message });
-			if (!skill.info.enabled) continue;
+			if (!applying.has(skill.info.name)) continue;
 			applied.push({ name: skill.info.name, description: skill.info.description, layer: skill.info.layer, body: skill.body });
 			const brandProfile = skill.profiles.get(brandStyleDomain.id);
 			if (brandProfile && domainId !== brandStyleDomain.id) {
@@ -596,9 +743,15 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 		async list(opts = {}) {
 			if (opts.domain !== undefined) requireDomain(opts.domain);
 			const { skills } = await load();
-			return skills.filter((s) => opts.domain === undefined || s.applies.has(opts.domain)).map((s) => s.info);
+			const applying = active(skills, opts.scope);
+			return skills
+				.filter((s) => (opts.domain === undefined || s.applies.has(opts.domain)) && (opts.scope === undefined || inScope(s.info, opts.scope)))
+				.map((s) => withChosen(s.info, applying));
 		},
 		resolve,
+		choices,
+		chosen,
+		choose,
 		async readFile(name, file) {
 			const layer = await winnerLayer(name);
 			return layer ? layer.store.read(name, file) : undefined;
@@ -607,9 +760,9 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 			const layer = await winnerLayer(name);
 			return layer ? [...(await layer.store.files(name))] : undefined;
 		},
-		async check(domainId, state) {
+		async check(domainId, state, opts = {}) {
 			const domain = requireDomain(domainId);
-			const style = await resolve(domainId);
+			const style = await resolve(domainId, opts);
 			return { ...runStyleChecks(domain, state, style), style };
 		},
 		subscribe(listener) {
