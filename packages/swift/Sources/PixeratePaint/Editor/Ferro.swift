@@ -553,13 +553,12 @@ func ferroToJSON(_ ferro: TiledSurface, _ settings: FerroSettings? = nil) -> JSO
 }
 
 func ferroFromJSON(_ raw: JSONValue) throws -> (surface: TiledSurface, settings: FerroSettings) {
-    guard let r = raw.objectValue, let rect = r["rect"]?.objectValue, let url = r["ferro"]?.stringValue,
-          let x = rect["x"]?.numberValue, let y = rect["y"]?.numberValue
+    guard let r = raw.objectValue, jsTruthy(r["rect"]), let url = r["ferro"]?.stringValue
     else { throw PaintEditorError("not a saved ferrofluid channel") }
     guard let parsed = parseDataUrl(url) else { throw PaintEditorError("the ferrofluid channel is not a PNG data URL") }
     let img = try decodePng(parsed.bytes, keepGray: true)
     let data = img.channels == 1 ? img.data : (0..<(img.width * img.height)).map { img.data[$0 * 4] }
-    let surface = surfaceFromPixels(width: img.width, height: img.height, data: data, channels: 1, x: Int(x), y: Int(y))
+    let surface = try surfaceAtSavedRect(r["rect"], width: img.width, height: img.height, data: data, channels: 1)
     var sRaw = JSONObject()
     sRaw["amount"] = .number(0)
     if let w = r["wavelength"] { sRaw["wavelength"] = w }

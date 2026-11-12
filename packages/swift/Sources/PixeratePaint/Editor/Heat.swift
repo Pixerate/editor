@@ -597,20 +597,20 @@ func thermoToJSON(_ thermo: TiledSurface?) -> JSONValue? {
 
 /// Saved form → fluorescence channel (`fluorFromJSON`); throws a sentence when it cannot be read.
 func fluorFromJSON(_ raw: JSONValue) throws -> TiledSurface {
-    guard let r = raw.objectValue, let o = savedRectOrigin(r["rect"]), let url = r["fluor"]?.stringValue
+    guard let r = raw.objectValue, jsTruthy(r["rect"]), let url = r["fluor"]?.stringValue
     else { throw PaintEditorError("not a saved fluorescence channel") }
     guard let parsed = parseDataUrl(url) else { throw PaintEditorError("the fluorescence channel is not a PNG data URL") }
     let img = try decodePng(parsed.bytes)
-    return surfaceFromPixels(width: img.width, height: img.height, data: img.data, channels: 4, x: o.x, y: o.y)
+    return try surfaceAtSavedRect(r["rect"], width: img.width, height: img.height, data: img.data, channels: 4)
 }
 
 /// Saved form → thermochromic channel (`thermoFromJSON`); throws a sentence when it cannot be read.
 func thermoFromJSON(_ raw: JSONValue) throws -> TiledSurface {
-    guard let r = raw.objectValue, let o = savedRectOrigin(r["rect"]), let url = r["thermo"]?.stringValue
+    guard let r = raw.objectValue, jsTruthy(r["rect"]), let url = r["thermo"]?.stringValue
     else { throw PaintEditorError("not a saved thermochromic channel") }
     guard let parsed = parseDataUrl(url) else { throw PaintEditorError("the thermochromic channel is not a PNG data URL") }
     let img = try decodePng(parsed.bytes)
-    return surfaceFromPixels(width: img.width, height: img.height, data: img.data, channels: 4, x: o.x, y: o.y)
+    return try surfaceAtSavedRect(r["rect"], width: img.width, height: img.height, data: img.data, channels: 4)
 }
 
 func heatToJSON(_ field: HeatField?) -> JSONValue? {

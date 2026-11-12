@@ -150,44 +150,14 @@ func readStrokeBrush(_ raw: JSONValue?) -> PaintBrush {
     return normalizePaintBrush(raw?.objectValue ?? [:])
 }
 
-/// One side of a dual colour as `normalizeColor` gives it, for hex input (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`).
-private func dualColorSide(_ raw: String) -> String? {
-    let h = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard h.range(of: "^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$", options: .regularExpression) != nil else { return nil }
-    var digits = Array(h.dropFirst())
-    if digits.count <= 4 { digits = digits.flatMap { [$0, $0] } }
-    return "#" + String(digits)
-}
-
 /**
  * `normalizeDualColor` for the colours strokes keep: `{ light, dark }`, `light-dark(a, b)` or one
- * colour for both, each side read as hex. Sides with alpha below 1 keep it (`#rrggbbaa`), as TS does.
+ * colour for both, each side any CSS colour the TS core reads (hex, named, `rgb()`, `hsl()`,
+ * `oklab()`, `oklch()`, `color()`) as lowercase hex. Sides with alpha below 1 keep it (`#rrggbbaa`).
  */
 func normalizePaintDualColor(_ raw: JSONValue?) -> PaintDualColor? {
-    var pair: (String, String)?
-    if let o = raw?.objectValue, let l = o["light"]?.stringValue, let d = o["dark"]?.stringValue {
-        pair = (l, d)
-    } else if let s = raw?.stringValue {
-        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.lowercased().hasPrefix("light-dark("), t.hasSuffix(")") {
-            let inner = t.dropFirst("light-dark(".count).dropLast()
-            if inner.lowercased().contains("light-dark(") { return nil }
-            var depth = 0
-            var comma: String.Index?
-            for i in inner.indices {
-                let ch = inner[i]
-                if ch == "(" { depth += 1 } else if ch == ")" { depth -= 1 } else if ch == ",", depth == 0 { comma = i; break }
-            }
-            guard let comma else { return nil }
-            pair = (String(inner[..<comma]), String(inner[inner.index(after: comma)...]))
-        } else {
-            pair = (t, t)
-        }
-    }
-    guard let (l, d) = pair, let light = dualColorSide(l), let dark = dualColorSide(d) else { return nil }
-    let a = light.hasSuffix("ff") && light.count == 9 ? String(light.prefix(7)) : light
-    let b = dark.hasSuffix("ff") && dark.count == 9 ? String(dark.prefix(7)) : dark
-    return PaintDualColor(light: a, dark: b)
+    guard let dual = normalizeCssDualColor(raw) else { return nil }
+    return PaintDualColor(light: dual.light, dark: dual.dark)
 }
 
 private func isHex6(_ s: String) -> Bool { s.range(of: "^#[0-9a-f]{6}$", options: .regularExpression) != nil }
