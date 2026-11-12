@@ -7486,7 +7486,7 @@
         {
           "name": "update_stroke",
           "title": "Change a stroke",
-          "description": "Changes a stroke on a stroke layer after it was painted: another brush preset (brushId, keeping the stroke size), brush settings (as set_brush takes), colour (replaces gradient paint), paint, or seed, then redraws the layer exactly. Ids come from list_strokes {live: true}. Refuses brushes a stroke layer cannot redraw (wet, impasto, sticker, eraser, smudge, blender, pick-up). One undo step. Returns the stroke and the area that changed.",
+          "description": "Changes a stroke on a stroke layer after it was painted: another brush preset (brushId, keeping the stroke size), brush settings (as set_brush takes), colour (replaces gradient paint), paint, or seed, then redraws the layer exactly. Ids come from list_strokes {live: true}. Refuses brushes a stroke layer cannot redraw (wet, impasto, sticker, smudge, blender, pick-up); erasers and light brushes are fine. One undo step. Returns the stroke and the area that changed.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -9700,7 +9700,7 @@
         {
           "name": "remove_strokes",
           "title": "Delete strokes",
-          "description": "Deletes strokes from their stroke layers (the eraser of a stroke layer) and redraws them. All checked first; one undo step. Returns the ids removed and the area that changed.",
+          "description": "Deletes whole strokes from their stroke layers and redraws them (to erase part of a stroke, paint an eraser stroke on the layer, which stays editable). All checked first; one undo step. Returns the ids removed and the area that changed.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -9752,7 +9752,7 @@
         {
           "name": "rasterize_stroke_layer",
           "title": "Rasterize a stroke layer",
-          "description": "Turns a stroke layer into a plain pixel layer with the same pixels: its strokes stop being editable, and erasers, smudges and fills work on it. One undo step. Returns the layer.",
+          "description": "Turns a stroke layer into a plain pixel layer with the same pixels: its strokes stop being editable, and smudges, blenders, wet paint and fills work on it. One undo step. Returns the layer.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -12197,6 +12197,23 @@
             "readOnlyHint": false,
             "destructiveHint": false,
             "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "get_specialty_guides",
+          "title": "Read how to use the brush’s specialty paint",
+          "description": "Reads guides for the specialty paint the active brush lays (ferro: ferrofluid, fluorescence: UV-fluorescent ink, thermochromic ink, iridescence: thin-film, ghost paint, mutation paint, livePatterns: reaction-diffusion), one per kind, empty for standard brushes and tools: title, howToUse (how strokes behave), status (whether the canvas is set up now: UV blacklight, heat, magnets, view tilt, a mutation agent, wet time), ready (the effect shows right away) and actions, the quick setups that apply now, each with the tool to call and its arguments (set_uv_light, paint_heat, advance_heat, clear_heat, add_magnet, cure_ferrofluid, set_view_tilt, seed_live_patterns). Call it after set_brush with a specialty brush, run an action’s tool with its arguments, then call it again to check ready. Changes nothing. Returns brushId, specialties and guides.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Read how to use the brush’s specialty paint",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
             "openWorldHint": false
           }
         },

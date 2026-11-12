@@ -39,6 +39,7 @@ export * from './vortex';
 export * from './wet-tools';
 export * from './thick';
 export * from './heat';
+export * from './specialty-guides';
 export { BACKLIGHT_SPILL, DEFAULT_BACKLIGHT_COLOR, backlightOf } from './backlight';
 export * from './thick-tools';
 export * from './ferro';

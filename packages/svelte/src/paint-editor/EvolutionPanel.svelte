@@ -3,7 +3,7 @@
   import {
     EVOLUTION_SLIDERS,
     exportProposalContactSheetPng,
-    liveStrokeRefusal,
+    evolutionStrokeRefusal,
     normalizeMutationRates,
     paintProposalGhost,
     proposalGenomeStrokes,
@@ -45,7 +45,7 @@
   let error = $state<string | null>(null);
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
 
-  const eligibleStrokes = $derived(editor.current.document.strokes.filter((s) => !liveStrokeRefusal(s.brush)));
+  const eligibleStrokes = $derived(editor.current.document.strokes.filter((s) => !evolutionStrokeRefusal(s.brush)));
   const activeStrokeIds = $derived(selectedStrokes.filter((id) => eligibleStrokes.some((s) => s.id === id)));
   const effectiveStrokeIds = $derived(
     activeStrokeIds.length > 0

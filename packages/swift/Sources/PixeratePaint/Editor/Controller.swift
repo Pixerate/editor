@@ -2014,7 +2014,7 @@ public final class PaintEditorController {
         if let surface = session.surfaceAfter {
             let stroke = record(session)
             result.strokeId = stroke.id
-            paintedBounds[stroke.key] = .some(result.bounds)
+            paintedBounds[stroke.key] = .some(redrawArea(session))
             noteVortexAnimation(session, strokeId: stroke.id)
             if let scraper = session.initValues.scraper {
                 let scraped = scraper.commitToDocument(d)

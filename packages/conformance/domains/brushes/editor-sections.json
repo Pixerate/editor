@@ -688,48 +688,46 @@
             "label": "Suggest a glow",
             "ariaLabel": "Brush suggest a glow",
             "value": false
-          },
-          {
-            "kind": "slider",
-            "path": "fluorescence.amount",
-            "label": "UV fluorescence",
-            "ariaLabel": "Brush fluorescence amount",
-            "min": 0,
-            "max": 1,
-            "step": 0.01,
-            "value": 0
-          },
+          }
+        ]
+      },
+      {
+        "id": "specialty",
+        "title": "Specialty",
+        "controls": [
           {
             "kind": "toggle",
-            "path": "fluorescence.invisible",
-            "label": "Invisible in daylight",
-            "ariaLabel": "Brush invisible in daylight",
+            "path": "ferro.enabled",
+            "label": "Ferrofluid",
+            "ariaLabel": "Brush ferrofluid",
             "value": false
           },
           {
-            "kind": "colour",
-            "path": "thermochromic.hotColor",
-            "label": "Hot colour",
-            "ariaLabel": "Brush thermochromic hot colour",
-            "value": null,
-            "dark": null,
-            "gradient": false
+            "kind": "toggle",
+            "path": "fluorescence.enabled",
+            "label": "UV fluorescence",
+            "ariaLabel": "Brush UV fluorescence",
+            "value": false
           },
           {
-            "kind": "slider",
-            "path": "thermochromic.threshold",
-            "label": "Heat threshold",
-            "ariaLabel": "Brush thermochromic threshold",
-            "min": 0.05,
-            "max": 0.95,
-            "step": 0.01,
-            "value": 0.5
+            "kind": "toggle",
+            "path": "thermochromic.enabled",
+            "label": "Thermochromic ink",
+            "ariaLabel": "Brush thermochromic ink",
+            "value": false
           },
           {
             "kind": "toggle",
             "path": "iridescence",
             "label": "Thin-film iridescence",
             "ariaLabel": "Brush thin-film iridescence",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "mutation.enabled",
+            "label": "Mutation paint",
+            "ariaLabel": "Brush mutation paint",
             "value": false
           }
         ]
@@ -2901,72 +2899,46 @@
             "max": 1,
             "step": 0.01,
             "value": 0
-          },
+          }
+        ]
+      },
+      {
+        "id": "specialty",
+        "title": "Specialty",
+        "controls": [
           {
             "kind": "toggle",
-            "path": "light.pressure",
-            "label": "Light follows pressure",
-            "ariaLabel": "Light follows pressure",
+            "path": "ferro.enabled",
+            "label": "Ferrofluid",
+            "ariaLabel": "Brush ferrofluid",
             "value": false
           },
           {
-            "kind": "slider",
-            "path": "light.spill.radius",
-            "label": "Spill",
-            "ariaLabel": "Brush light spill",
-            "min": 0,
-            "max": 128,
-            "step": 1,
-            "value": 24
-          },
-          {
             "kind": "toggle",
-            "path": "light.glow",
-            "label": "Suggest a glow",
-            "ariaLabel": "Brush suggest a glow",
-            "value": false
-          },
-          {
-            "kind": "slider",
-            "path": "fluorescence.amount",
+            "path": "fluorescence.enabled",
             "label": "UV fluorescence",
-            "ariaLabel": "Brush fluorescence amount",
-            "min": 0,
-            "max": 1,
-            "step": 0.01,
-            "value": 0
-          },
-          {
-            "kind": "toggle",
-            "path": "fluorescence.invisible",
-            "label": "Invisible in daylight",
-            "ariaLabel": "Brush invisible in daylight",
+            "ariaLabel": "Brush UV fluorescence",
             "value": false
           },
           {
-            "kind": "colour",
-            "path": "thermochromic.hotColor",
-            "label": "Hot colour",
-            "ariaLabel": "Brush thermochromic hot colour",
-            "value": null,
-            "dark": null,
-            "gradient": false
-          },
-          {
-            "kind": "slider",
-            "path": "thermochromic.threshold",
-            "label": "Heat threshold",
-            "ariaLabel": "Brush thermochromic threshold",
-            "min": 0.05,
-            "max": 0.95,
-            "step": 0.01,
-            "value": 0.5
+            "kind": "toggle",
+            "path": "thermochromic.enabled",
+            "label": "Thermochromic ink",
+            "ariaLabel": "Brush thermochromic ink",
+            "value": false
           },
           {
             "kind": "toggle",
             "path": "iridescence",
             "label": "Thin-film iridescence",
             "ariaLabel": "Brush thin-film iridescence",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "mutation.enabled",
+            "label": "Mutation paint",
+            "ariaLabel": "Brush mutation paint",
             "value": false
           }
         ]
@@ -5018,13 +4990,84 @@
             "value": false
           },
           {
+            "kind": "toggle",
+            "path": "culture",
+            "label": "Biopaint (mycelial ink)",
+            "ariaLabel": "Brush biopaint",
+            "value": false
+          }
+        ]
+      },
+      {
+        "id": "light",
+        "title": "Light",
+        "controls": [
+          {
+            "kind": "slider",
+            "path": "light.amount",
+            "label": "Light",
+            "ariaLabel": "Brush light",
+            "min": 0,
+            "max": 1,
+            "step": 0.01,
+            "value": 0
+          }
+        ]
+      },
+      {
+        "id": "specialty",
+        "title": "Specialty",
+        "controls": [
+          {
+            "kind": "toggle",
+            "path": "ferro.enabled",
+            "label": "Ferrofluid",
+            "ariaLabel": "Brush ferrofluid",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "fluorescence.enabled",
+            "label": "UV fluorescence",
+            "ariaLabel": "Brush UV fluorescence",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "thermochromic.enabled",
+            "label": "Thermochromic ink",
+            "ariaLabel": "Brush thermochromic ink",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "iridescence",
+            "label": "Thin-film iridescence",
+            "ariaLabel": "Brush thin-film iridescence",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "ghost.enabled",
+            "label": "Ghost paint",
+            "ariaLabel": "Brush ghost paint",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "mutation.enabled",
+            "label": "Mutation paint",
+            "ariaLabel": "Brush mutation paint",
+            "value": false
+          },
+          {
             "kind": "choice",
             "path": "livePatterns.pattern",
             "label": "Live pattern",
             "ariaLabel": "Live pattern",
             "options": [
               {
-                "value": "",
+                "value": "none",
                 "label": "None"
               },
               {
@@ -5048,97 +5091,7 @@
                 "label": "Worms"
               }
             ],
-            "value": ""
-          },
-          {
-            "kind": "toggle",
-            "path": "culture",
-            "label": "Biopaint (mycelial ink)",
-            "ariaLabel": "Brush biopaint",
-            "value": false
-          }
-        ]
-      },
-      {
-        "id": "light",
-        "title": "Light",
-        "controls": [
-          {
-            "kind": "slider",
-            "path": "light.amount",
-            "label": "Light",
-            "ariaLabel": "Brush light",
-            "min": 0,
-            "max": 1,
-            "step": 0.01,
-            "value": 0
-          },
-          {
-            "kind": "toggle",
-            "path": "light.pressure",
-            "label": "Light follows pressure",
-            "ariaLabel": "Light follows pressure",
-            "value": false
-          },
-          {
-            "kind": "slider",
-            "path": "light.spill.radius",
-            "label": "Spill",
-            "ariaLabel": "Brush light spill",
-            "min": 0,
-            "max": 128,
-            "step": 1,
-            "value": 24
-          },
-          {
-            "kind": "toggle",
-            "path": "light.glow",
-            "label": "Suggest a glow",
-            "ariaLabel": "Brush suggest a glow",
-            "value": false
-          },
-          {
-            "kind": "slider",
-            "path": "fluorescence.amount",
-            "label": "UV fluorescence",
-            "ariaLabel": "Brush fluorescence amount",
-            "min": 0,
-            "max": 1,
-            "step": 0.01,
-            "value": 0
-          },
-          {
-            "kind": "toggle",
-            "path": "fluorescence.invisible",
-            "label": "Invisible in daylight",
-            "ariaLabel": "Brush invisible in daylight",
-            "value": false
-          },
-          {
-            "kind": "colour",
-            "path": "thermochromic.hotColor",
-            "label": "Hot colour",
-            "ariaLabel": "Brush thermochromic hot colour",
-            "value": null,
-            "dark": null,
-            "gradient": false
-          },
-          {
-            "kind": "slider",
-            "path": "thermochromic.threshold",
-            "label": "Heat threshold",
-            "ariaLabel": "Brush thermochromic threshold",
-            "min": 0.05,
-            "max": 0.95,
-            "step": 0.01,
-            "value": 0.5
-          },
-          {
-            "kind": "toggle",
-            "path": "iridescence",
-            "label": "Thin-film iridescence",
-            "ariaLabel": "Brush thin-film iridescence",
-            "value": false
+            "value": "none"
           }
         ]
       },
@@ -6940,72 +6893,46 @@
             "max": 1,
             "step": 0.01,
             "value": 0
-          },
+          }
+        ]
+      },
+      {
+        "id": "specialty",
+        "title": "Specialty",
+        "controls": [
           {
             "kind": "toggle",
-            "path": "light.pressure",
-            "label": "Light follows pressure",
-            "ariaLabel": "Light follows pressure",
+            "path": "ferro.enabled",
+            "label": "Ferrofluid",
+            "ariaLabel": "Brush ferrofluid",
             "value": false
           },
           {
-            "kind": "slider",
-            "path": "light.spill.radius",
-            "label": "Spill",
-            "ariaLabel": "Brush light spill",
-            "min": 0,
-            "max": 128,
-            "step": 1,
-            "value": 24
-          },
-          {
             "kind": "toggle",
-            "path": "light.glow",
-            "label": "Suggest a glow",
-            "ariaLabel": "Brush suggest a glow",
-            "value": false
-          },
-          {
-            "kind": "slider",
-            "path": "fluorescence.amount",
+            "path": "fluorescence.enabled",
             "label": "UV fluorescence",
-            "ariaLabel": "Brush fluorescence amount",
-            "min": 0,
-            "max": 1,
-            "step": 0.01,
-            "value": 0
-          },
-          {
-            "kind": "toggle",
-            "path": "fluorescence.invisible",
-            "label": "Invisible in daylight",
-            "ariaLabel": "Brush invisible in daylight",
+            "ariaLabel": "Brush UV fluorescence",
             "value": false
           },
           {
-            "kind": "colour",
-            "path": "thermochromic.hotColor",
-            "label": "Hot colour",
-            "ariaLabel": "Brush thermochromic hot colour",
-            "value": null,
-            "dark": null,
-            "gradient": false
-          },
-          {
-            "kind": "slider",
-            "path": "thermochromic.threshold",
-            "label": "Heat threshold",
-            "ariaLabel": "Brush thermochromic threshold",
-            "min": 0.05,
-            "max": 0.95,
-            "step": 0.01,
-            "value": 0.5
+            "kind": "toggle",
+            "path": "thermochromic.enabled",
+            "label": "Thermochromic ink",
+            "ariaLabel": "Brush thermochromic ink",
+            "value": false
           },
           {
             "kind": "toggle",
             "path": "iridescence",
             "label": "Thin-film iridescence",
             "ariaLabel": "Brush thin-film iridescence",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "mutation.enabled",
+            "label": "Mutation paint",
+            "ariaLabel": "Brush mutation paint",
             "value": false
           }
         ]
@@ -8658,66 +8585,33 @@
             "max": 1,
             "step": 0.01,
             "value": 0
-          },
+          }
+        ]
+      },
+      {
+        "id": "specialty",
+        "title": "Specialty",
+        "controls": [
           {
             "kind": "toggle",
-            "path": "light.pressure",
-            "label": "Light follows pressure",
-            "ariaLabel": "Light follows pressure",
+            "path": "ferro.enabled",
+            "label": "Ferrofluid",
+            "ariaLabel": "Brush ferrofluid",
             "value": false
           },
           {
-            "kind": "slider",
-            "path": "light.spill.radius",
-            "label": "Spill",
-            "ariaLabel": "Brush light spill",
-            "min": 0,
-            "max": 128,
-            "step": 1,
-            "value": 24
-          },
-          {
             "kind": "toggle",
-            "path": "light.glow",
-            "label": "Suggest a glow",
-            "ariaLabel": "Brush suggest a glow",
-            "value": false
-          },
-          {
-            "kind": "slider",
-            "path": "fluorescence.amount",
+            "path": "fluorescence.enabled",
             "label": "UV fluorescence",
-            "ariaLabel": "Brush fluorescence amount",
-            "min": 0,
-            "max": 1,
-            "step": 0.01,
-            "value": 0
-          },
-          {
-            "kind": "toggle",
-            "path": "fluorescence.invisible",
-            "label": "Invisible in daylight",
-            "ariaLabel": "Brush invisible in daylight",
+            "ariaLabel": "Brush UV fluorescence",
             "value": false
           },
           {
-            "kind": "colour",
-            "path": "thermochromic.hotColor",
-            "label": "Hot colour",
-            "ariaLabel": "Brush thermochromic hot colour",
-            "value": null,
-            "dark": null,
-            "gradient": false
-          },
-          {
-            "kind": "slider",
-            "path": "thermochromic.threshold",
-            "label": "Heat threshold",
-            "ariaLabel": "Brush thermochromic threshold",
-            "min": 0.05,
-            "max": 0.95,
-            "step": 0.01,
-            "value": 0.5
+            "kind": "toggle",
+            "path": "thermochromic.enabled",
+            "label": "Thermochromic ink",
+            "ariaLabel": "Brush thermochromic ink",
+            "value": false
           },
           {
             "kind": "toggle",
@@ -11643,72 +11537,46 @@
             "max": 1,
             "step": 0.01,
             "value": 0
-          },
+          }
+        ]
+      },
+      {
+        "id": "specialty",
+        "title": "Specialty",
+        "controls": [
           {
             "kind": "toggle",
-            "path": "light.pressure",
-            "label": "Light follows pressure",
-            "ariaLabel": "Light follows pressure",
+            "path": "ferro.enabled",
+            "label": "Ferrofluid",
+            "ariaLabel": "Brush ferrofluid",
             "value": false
           },
           {
-            "kind": "slider",
-            "path": "light.spill.radius",
-            "label": "Spill",
-            "ariaLabel": "Brush light spill",
-            "min": 0,
-            "max": 128,
-            "step": 1,
-            "value": 24
-          },
-          {
             "kind": "toggle",
-            "path": "light.glow",
-            "label": "Suggest a glow",
-            "ariaLabel": "Brush suggest a glow",
-            "value": false
-          },
-          {
-            "kind": "slider",
-            "path": "fluorescence.amount",
+            "path": "fluorescence.enabled",
             "label": "UV fluorescence",
-            "ariaLabel": "Brush fluorescence amount",
-            "min": 0,
-            "max": 1,
-            "step": 0.01,
-            "value": 0
-          },
-          {
-            "kind": "toggle",
-            "path": "fluorescence.invisible",
-            "label": "Invisible in daylight",
-            "ariaLabel": "Brush invisible in daylight",
+            "ariaLabel": "Brush UV fluorescence",
             "value": false
           },
           {
-            "kind": "colour",
-            "path": "thermochromic.hotColor",
-            "label": "Hot colour",
-            "ariaLabel": "Brush thermochromic hot colour",
-            "value": null,
-            "dark": null,
-            "gradient": false
-          },
-          {
-            "kind": "slider",
-            "path": "thermochromic.threshold",
-            "label": "Heat threshold",
-            "ariaLabel": "Brush thermochromic threshold",
-            "min": 0.05,
-            "max": 0.95,
-            "step": 0.01,
-            "value": 0.5
+            "kind": "toggle",
+            "path": "thermochromic.enabled",
+            "label": "Thermochromic ink",
+            "ariaLabel": "Brush thermochromic ink",
+            "value": false
           },
           {
             "kind": "toggle",
             "path": "iridescence",
             "label": "Thin-film iridescence",
             "ariaLabel": "Brush thin-film iridescence",
+            "value": false
+          },
+          {
+            "kind": "toggle",
+            "path": "mutation.enabled",
+            "label": "Mutation paint",
+            "ariaLabel": "Brush mutation paint",
             "value": false
           }
         ]

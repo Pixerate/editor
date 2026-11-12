@@ -5,6 +5,7 @@ import { BrushEditor } from '../brushes/BrushEditor';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
 import { PaintGradientEditor } from './PaintGradientEditor';
 import { StickerPicker } from './StickerPicker';
+import { SpecialtyGuideCard } from './SpecialtyPanel';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, button, chip, panel, useAttempt } from './shared';
 
@@ -13,19 +14,23 @@ export interface BrushPanelProps {
   /** Thumbnail size in px (default 112 × 32). */
   thumbnailWidth?: number;
   thumbnailHeight?: number;
+  /** With it, the specialty guide card has an "Open Specialty panel" button (the paint editor's Specialty tab). */
+  onOpenSpecialtyPanel?: () => void;
   className?: string;
 }
 
 /**
  * The brush library (`BrushLibraryBrowser`: thumbnails of a test stroke on the current paper,
- * grouped by medium and variety, tools apart) and the active brush in the `BrushEditor`: its
+ * grouped by medium and variety, specialty paint and tools apart), a guide card for a specialty
+ * brush (`SpecialtyGuideCard`: how to use it, the canvas's status, one-click setup) and the active
+ * brush in the `BrushEditor`: its
  * facets with a live preview, and "Save brush" into the editor's brush library. The paint
  * editor adds the brush's own gradient, the sticker stamps, what the brush carries (Load /
  * Clean), and import and export of library files; import also reads brush packs (`.abr`,
  * `.brush`, `.brushset`). Images picked for an image tip or grain are
  * added to the brush library as sources.
  */
-export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWidth = 112, thumbnailHeight = 32, className }) => {
+export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWidth = 112, thumbnailHeight = 32, onOpenSpecialtyPanel, className }) => {
   const state = usePaintEditorState(controller);
   const [error, attempt] = useAttempt();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -53,6 +58,7 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
   return (
     <div className={`${panel} ${className ?? ''}`} data-testid="brush-panel">
       <BrushLibraryBrowser entries={entries} activeId={brush.id} onSelect={(id) => controller.setBrush({ id })} thumbnail={(id) => thumbs.get(id) ?? null} thumbnailWidth={thumbnailWidth} thumbnailHeight={thumbnailHeight} />
+      <SpecialtyGuideCard controller={controller} onOpenSpecialtyPanel={onOpenSpecialtyPanel} />
       <BrushEditor
         brush={spec}
         profile={PAINT_PROFILE}

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   BRUSH_PRESETS,
+  BRUSH_SPECIALTIES,
   brushEditorScope,
+  brushSpecialties,
+  isSpecialtyBrush,
   brushEditorSections,
   brushLibraryGroups,
   CANVAS_PROFILE,
@@ -36,7 +39,7 @@ describe('brushEditorSections', () => {
 
   it('lists the facets of a brush in order, with values from the brush or its engine defaults', () => {
     const sections = brushEditorSections(preset('highlighter'));
-    expect(sections.map((s) => s.id)).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'colour']);
+    expect(sections.map((s) => s.id)).toEqual(['medium', 'shape', 'grain', 'marks', 'feel', 'behaviour', 'light', 'specialty', 'colour']);
     expect(control(preset('highlighter'), 'tip.size')).toMatchObject({ kind: 'slider', value: 30, min: 1 });
     expect(control(preset('highlighter'), 'tip.blend')).toMatchObject({ kind: 'choice', value: 'multiply', ariaLabel: 'Brush blend' });
     expect(control(preset('highlighter'), 'light.spill.radius')).toMatchObject({ value: 0 });
@@ -203,7 +206,7 @@ describe('brushLibraryGroups', () => {
   const entries = BRUSH_PRESETS.map((brush) => ({ brush, builtin: true }));
   it('groups marks by medium then variety, tools apart, in a stable order', () => {
     const groups = brushLibraryGroups(entries);
-    expect(groups.map((g) => g.id)).toEqual(['dry', 'ink', 'paint', 'spray', 'other', 'tools']);
+    expect(groups.map((g) => g.id)).toEqual(['dry', 'ink', 'paint', 'spray', 'other', 'specialty', 'tools']);
     expect(groups.flatMap((g) => g.varieties.flatMap((v) => v.entries))).toHaveLength(entries.length);
     expect(groups.find((g) => g.id === 'ink')!.varieties.find((v) => v.variety === 'highlighter')!.entries.map((e) => e.brush.id)).toEqual(['highlighter']);
     expect(groups.at(-1)!.varieties[0].entries.every((e) => e.brush.kind === 'tool')).toBe(true);
@@ -214,5 +217,84 @@ describe('brushLibraryGroups', () => {
     expect(brushLibraryGroups(entries, { source: 'user' })).toEqual([]);
     const canvas = brushLibraryGroups(entries, { profile: CANVAS_PROFILE }).flatMap((g) => g.varieties.flatMap((v) => v.entries));
     expect(canvas.every((e) => e.brush.kind === 'mark' && e.brush.marks === undefined)).toBe(true);
+  });
+});
+
+describe('specialty brushes', () => {
+  const entries = BRUSH_PRESETS.map((brush) => ({ brush, builtin: true }));
+  const sectionOf = (brush: Brush, id: string, profile = PAINT_PROFILE) => brushEditorSections(brush, profile).find((s) => s.id === id);
+
+  it('names the specialty kinds of a brush from its facets', () => {
+    expect(BRUSH_SPECIALTIES.map((s) => s.id)).toEqual(['ferro', 'fluorescence', 'thermochromic', 'iridescence', 'ghost', 'mutation', 'livePatterns']);
+    expect(brushSpecialties(preset('ferrofluid'))).toEqual(['ferro']);
+    expect(brushSpecialties(preset('uv-marker'))).toEqual(['fluorescence']);
+    expect(brushSpecialties(preset('thermo-ink'))).toEqual(['thermochromic']);
+    expect(brushSpecialties(preset('scarab-lacquer'))).toEqual(['iridescence']);
+    expect(brushSpecialties(preset('invisible-ink'))).toEqual(['ghost']);
+    expect(brushSpecialties(preset('mutation-wash'))).toEqual(['mutation']);
+    expect(brushSpecialties(preset('turing-wash'))).toEqual(['livePatterns']);
+    expect(brushSpecialties({ ...preset('ink-pen'), ferro: { amount: 0 } })).toEqual([]);
+    // Glowing light paint stays standard.
+    expect(isSpecialtyBrush(preset('highlighter'))).toBe(false);
+    expect(isSpecialtyBrush(preset('blender'))).toBe(false);
+  });
+
+  it('files specialty brushes in their own group by kind, keeping their medium', () => {
+    const groups = brushLibraryGroups(entries);
+    const specialty = groups.find((g) => g.id === 'specialty')!;
+    expect(specialty.title).toBe('Specialty');
+    expect(specialty.varieties.map((v) => v.title)).toEqual(['Live patterns', 'UV-fluorescent', 'Thermochromic', 'Iridescence', 'Ghost paint', 'Mutation paint', 'Ferrofluid']);
+    expect(specialty.varieties.find((v) => v.variety === 'ferro')!.entries.map((e) => e.brush.id)).toEqual(['ferrofluid', 'ferro-ink']);
+    const standard = groups.filter((g) => g.id !== 'specialty').flatMap((g) => g.varieties.flatMap((v) => v.entries));
+    expect(standard.some((e) => isSpecialtyBrush(e.brush))).toBe(false);
+    expect(standard.map((e) => e.brush.id)).toContain('highlighter');
+    expect(preset('ferrofluid').medium).toBe('paint');
+  });
+
+  it('keeps specialty controls out of Light and Behaviour, and opts in under Specialty', () => {
+    const wash = preset('watercolor-wash');
+    expect(sectionOf(wash, 'behaviour')!.controls.map((c) => c.path)).not.toContain('livePatterns.pattern');
+    expect(sectionOf(preset('highlighter'), 'light')!.controls.map((c) => c.path)).toEqual(['light.amount', 'light.pressure', 'light.spill.radius', 'light.glow']);
+    expect(sectionOf(preset('ink-pen'), 'light')!.controls.map((c) => c.path)).toEqual(['light.amount']);
+    const specialty = sectionOf(wash, 'specialty')!;
+    expect(specialty.title).toBe('Specialty');
+    expect(specialty.controls.map((c) => c.path)).toEqual(['ferro.enabled', 'fluorescence.enabled', 'thermochromic.enabled', 'iridescence', 'ghost.enabled', 'mutation.enabled', 'livePatterns.pattern']);
+    expect(specialty.controls.every((c) => c.hint === undefined)).toBe(true);
+    expect(control(wash, 'livePatterns.pattern')).toMatchObject({ kind: 'choice', value: 'none' });
+    // Dry brushes have no ghost paint or live patterns; tools have no specialty section.
+    expect(sectionOf(preset('pencil-6b'), 'specialty')!.controls.map((c) => c.path)).toEqual(['ferro.enabled', 'fluorescence.enabled', 'thermochromic.enabled', 'iridescence', 'mutation.enabled']);
+    expect(sectionOf(preset('blender'), 'specialty')).toBeUndefined();
+    // Other hosts paint none of them.
+    expect(sectionOf(preset('pencil-6b'), 'specialty', CANVAS_PROFILE)).toBeUndefined();
+  });
+
+  it('shows an active specialty with its settings and how to use it', () => {
+    const uv = sectionOf(preset('uv-marker'), 'specialty')!.controls;
+    expect(uv.find((c) => c.path === 'fluorescence.enabled')).toMatchObject({ kind: 'toggle', value: true, hint: expect.stringMatching(/UV blacklight on/) });
+    expect(uv.map((c) => c.path)).toEqual(expect.arrayContaining(['fluorescence.amount', 'fluorescence.invisible']));
+    expect(control(preset('uv-marker'), 'fluorescence.amount')).toMatchObject({ value: 0.9 });
+    expect(control(preset('turing-wash'), 'livePatterns.pattern')).toMatchObject({ value: 'spots', hint: expect.any(String) });
+    expect(sectionOf(preset('turing-wash'), 'specialty')!.controls.map((c) => c.path)).toEqual(expect.arrayContaining(['livePatterns.scale', 'livePatterns.contrast', 'livePatterns.relief']));
+    expect(sectionOf(preset('ghost-gouache'), 'specialty')!.controls.map((c) => c.path)).toEqual(expect.arrayContaining(['ghost.linger', 'ghost.smear']));
+    expect(sectionOf(preset('ghost-gouache'), 'behaviour')!.controls.map((c) => c.path)).not.toContain('ghost.linger');
+    expect(sectionOf(preset('mutation-ink'), 'specialty')!.controls.map((c) => c.path)).toEqual(expect.arrayContaining(['mutation.settle', 'mutation.patience', 'mutation.fade']));
+    expect(sectionOf(preset('ferrofluid'), 'specialty')!.controls.map((c) => c.path)).toEqual(expect.arrayContaining(['ferro.amount', 'ferro.wavelength', 'ferro.threshold']));
+    expect(sectionOf(preset('thermo-ink'), 'specialty')!.controls.map((c) => c.path)).toEqual(expect.arrayContaining(['thermochromic.hotColor', 'thermochromic.threshold']));
+    expect(sectionOf(preset('soap-film'), 'specialty')!.controls.map((c) => c.path)).toEqual(expect.arrayContaining(['iridescence.thickness', 'iridescence.ior', 'iridescence.pressureToThickness']));
+  });
+
+  it('switches specialties on and off from the editor', () => {
+    const on = (b: Brush, path: string, v: unknown) => setBrushEditorValue(b, path, v).brush;
+    expect(on(preset('ink-pen'), 'fluorescence.enabled', true).fluorescence).toEqual({ amount: 0.8 });
+    expect(on(preset('uv-marker'), 'fluorescence.enabled', false).fluorescence).toBeUndefined();
+    expect(on(preset('ink-pen'), 'thermochromic.enabled', true).thermochromic).toEqual({ hotColor: '#f97316', threshold: 0.5 });
+    expect(on(preset('ink-pen'), 'ferro.enabled', true).ferro).toEqual({ amount: 0.8 });
+    expect(brushSpecialties(on(preset('watercolor-wash'), 'ghost.enabled', true))).toEqual(['ghost']);
+    expect(brushSpecialties(on(preset('ink-pen'), 'mutation.enabled', true))).toEqual(['mutation']);
+    expect(on(preset('ink-pen'), 'iridescence', true).iridescence).toEqual({ thickness: 400 });
+    expect(on(preset('turing-wash'), 'livePatterns.pattern', 'none').livePatterns).toBeUndefined();
+    expect(on(preset('watercolor-wash'), 'livePatterns.pattern', 'maze').livePatterns).toMatchObject({ pattern: 'maze' });
+    // Switching on again keeps the settings of a brush that already has them.
+    expect(on(preset('uv-marker'), 'fluorescence.enabled', true).fluorescence).toEqual({ amount: 0.9, invisible: true });
   });
 });

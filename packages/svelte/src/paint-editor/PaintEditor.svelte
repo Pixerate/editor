@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PaintPresence, documentToScreen, screenToDocument, type FillRegionOptions, type PaintEditorController, type PaintProposals, type PaintAgentStrokes, type PaintTool } from '@pixerate/editor/paint-editor';
+  import { PaintPresence, documentToScreen, screenToDocument, specialtyInPlay, type FillRegionOptions, type PaintEditorController, type PaintProposals, type PaintAgentStrokes, type PaintTool } from '@pixerate/editor/paint-editor';
   import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
   import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
   import PresenceLayer from '../playback/PresenceLayer.svelte';
@@ -9,13 +9,14 @@
   import PaintLayersPanel from './PaintLayersPanel.svelte';
   import PaintToolbar from './PaintToolbar.svelte';
   import PaperPanel from './PaperPanel.svelte';
+  import SpecialtyPanel from './SpecialtyPanel.svelte';
   import WetPanel from './WetPanel.svelte';
   import StickerPanel from './StickerPanel.svelte';
   import StrokePanel from './StrokePanel.svelte';
   import PathStrokePanel from './PathStrokePanel.svelte';
   import EvolutionPanel from './EvolutionPanel.svelte';
   import PaintEffectsPanel from './PaintEffectsPanel.svelte';
-  import { chip, paintEffectsProvider } from './paintEditorRune.svelte.js';
+  import { chip, paintEditorState, paintEffectsProvider } from './paintEditorRune.svelte.js';
 
   interface Props {
     controller: PaintEditorController;
@@ -109,20 +110,24 @@
   };
   let tool = $state<PaintTool>('brush');
   let fillOptions = $state<Omit<FillRegionOptions, 'x' | 'y' | 'points'>>({ reference: 'all', tolerance: 32, closeGap: 4, expand: 1, antialias: true });
-  let tab = $state<'color' | 'wet' | 'paper' | 'layers' | 'effects'>('color');
+  let tab = $state<'color' | 'wet' | 'paper' | 'specialty' | 'layers' | 'effects'>('color');
   const effects = paintEffectsProvider(() => controller);
-  const tabs = $derived(effects.current ? (['color', 'wet', 'paper', 'layers', 'effects'] as const) : (['color', 'wet', 'paper', 'layers'] as const));
+  const tabs = $derived(effects.current ? (['color', 'wet', 'paper', 'specialty', 'layers', 'effects'] as const) : (['color', 'wet', 'paper', 'specialty', 'layers'] as const));
+  const TAB_LABELS = { color: 'Colour', wet: 'Wet', paper: 'Paper', specialty: 'Specialty', layers: 'Layers', effects: 'Effects' } as const;
+  // The Specialty tab's indicator: a specialty brush, or the UV blacklight, heat, magnets or a view tilt in play.
+  const editorState = paintEditorState(() => controller);
+  const specialty = $derived(specialtyInPlay(editorState.current));
   let error = $state<string | null>(null);
 </script>
 
-<!-- Toolbar, brush library, the canvas, and colour / wet media / paper / layers. -->
+<!-- Toolbar, brush library, the canvas, and colour / wet media / paper / specialty paint / layers. -->
 <div bind:this={root} class={`relative flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900 p-2 ${className}`} style={`height: ${typeof height === 'number' ? `${height}px` : height}`} data-testid="paint-editor">
   {#if playing}
     <PresenceLayer presence={agentPresence} viewport={docToRoot} />
   {/if}
   <PaintToolbar {controller} {tool} ontoolchange={(t) => (tool = t)} {fillOptions} onfilloptionschange={(f) => (fillOptions = f)} {fileName} />
   <div class="flex min-h-0 flex-1 gap-2">
-    <BrushPanel {controller} class="w-60 shrink-0 overflow-y-auto pr-1" />
+    <BrushPanel {controller} onopenspecialtypanel={() => (tab = 'specialty')} class="w-60 shrink-0 overflow-y-auto pr-1" />
     <div class="flex min-w-0 flex-1 flex-col">
       <!-- With playback the editor draws the cursor (over the panels too), so the canvas doesn't. -->
       <PaintCanvas {controller} {tool} {fillOptions} presence={playing ? undefined : presence} {proposals} {agentStrokes} {deviceTilt} onerror={(e) => (error = e)} class="flex-1 rounded-lg" />
@@ -131,13 +136,14 @@
     <div class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
       <div class="flex gap-1" role="tablist" aria-label="Paint panels">
         {#each tabs as t (t)}
-          <button type="button" role="tab" aria-selected={tab === t} data-paint-tab={t} class={chip(tab === t)} onclick={() => (tab = t)}>{t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : t === 'layers' ? 'Layers' : 'Effects'}</button>
+          <button type="button" role="tab" aria-selected={tab === t} data-paint-tab={t} class={chip(tab === t)} onclick={() => (tab = t)} data-active={t === 'specialty' && specialty ? '' : undefined} title={t === 'specialty' && specialty ? 'Specialty paint is in play' : undefined}>{TAB_LABELS[t]}{#if t === 'specialty' && specialty}<span aria-hidden="true" class="ml-1 text-indigo-300">•</span>{/if}</button>
         {/each}
       </div>
       <div class="flex flex-col gap-2" data-paint-panel={tab}>
         {#if tab === 'color'}<ColorPanel {controller} />{/if}
         {#if tab === 'wet'}<WetPanel {controller} />{/if}
         {#if tab === 'paper'}<PaperPanel {controller} />{/if}
+        {#if tab === 'specialty'}<SpecialtyPanel {controller} />{/if}
         {#if tab === 'layers'}<PaintLayersPanel {controller} /><StrokePanel {controller} /><PathStrokePanel {controller} /><EvolutionPanel {controller} {proposals} /><StickerPanel {controller} />{/if}
         {#if tab === 'effects' && effects.current}<PaintEffectsPanel {controller} />{/if}
       </div>

@@ -158,6 +158,7 @@
             {/each}
           </div>
         {/if}
+        {#if c.hint}<p class="text-[10px] leading-snug text-slate-400" data-hint={c.path}>{c.hint}</p>{/if}
         {#if onaddsource && (c.path === 'tip.stamps' || c.path === 'tip.grain.source')}
           {@const label = c.path === 'tip.stamps' ? 'Add image tip…' : 'Add grain image…'}
           <label class={`${button} cursor-pointer self-start`}>

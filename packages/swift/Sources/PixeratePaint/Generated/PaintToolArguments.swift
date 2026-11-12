@@ -1992,6 +1992,13 @@ public struct SeedLivePatternsArguments: Sendable {
     }
 }
 
+/// Arguments of `get_specialty_guides`.
+public struct GetSpecialtyGuidesArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
 /// Arguments of `get_light`.
 public struct GetLightArguments: Sendable {
     /// Pixel layer id from list_layers (default the active layer).
@@ -4059,6 +4066,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .getLivePatterns: try GetLivePatternsArguments(args)
     case .setLivePatterns: try SetLivePatternsArguments(args)
     case .seedLivePatterns: try SeedLivePatternsArguments(args)
+    case .getSpecialtyGuides: try GetSpecialtyGuidesArguments(args)
     case .getLight: try GetLightArguments(args)
     case .setLightSpill: try SetLightSpillArguments(args)
     case .clearLight: try ClearLightArguments(args)

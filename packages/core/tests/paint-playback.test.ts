@@ -5,6 +5,8 @@ import { createInstantPresenceClock } from '../src/tools';
 describe('paint playback', () => {
 	it('opens the panel a write belongs to and points at its control', () => {
 		expect(paintPlaybackPanel('set_paper')).toBe('paper');
+		expect(paintPlaybackPanel('add_magnet')).toBe('specialty');
+		expect(paintPlaybackPanel('set_uv_light')).toBe('specialty');
 		expect(paintPlaybackPanel('advance_wet_paint')).toBe('wet');
 		expect(paintPlaybackPanel('add_layer')).toBe('layers');
 		expect(paintPlaybackPanel('mix_colors')).toBe('color');
