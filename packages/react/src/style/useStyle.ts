@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { styleSwatches } from '@pixerate/editor/tools';
+import { richTextStyleState, type RichTextStyleState } from '@pixerate/editor';
+import type { Editor } from '@tiptap/core';
 import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver, StyleSwatch } from '@pixerate/editor/tools';
 
 export interface UseStyleResult {
@@ -74,11 +76,11 @@ export function useStyle(styles: StyleResolver | null | undefined, domain: strin
  * changes by reference, the domain or resolver changes, or the resolver notifies. Results of
  * older runs that settle late are ignored. Feed `report` to `<StyleFindings>`.
  */
-export function useStyleFindings(styles: StyleResolver | null | undefined, domain: string, state: unknown): UseStyleFindingsResult {
+export function useStyleFindings(styles: StyleResolver | null | undefined, domain: string, state: unknown, scope?: string): UseStyleFindingsResult {
   const [result, setResult] = useState<UseStyleFindingsResult>({ report: null, style: null, error: null });
   useResolverTask(
     styles,
-    (s) => s.check(domain, state),
+    (s) => s.check(domain, state, scope !== undefined ? { scope } : {}),
     ({ value, error }) => {
       if (!value) setResult({ report: null, style: null, error });
       else {
@@ -86,7 +88,7 @@ export function useStyleFindings(styles: StyleResolver | null | undefined, domai
         setResult({ report, style, error: null });
       }
     },
-    [domain, state],
+    [domain, state, scope],
   );
   return result;
 }
@@ -155,4 +157,28 @@ export function useStyleSwatches(styles: StyleResolver | null | undefined, domai
     const { colors, fonts } = state.style ? styleSwatches(state.style) : { colors: [], fonts: [] };
     return { colors: colors.map((c) => c.color), swatches: colors, fonts, error: state.error };
   }, [state]);
+}
+
+/**
+ * The document house-style findings for a TipTap editor (`rich-text` domain), re-checked after
+ * every edit. Feed `report` to `<StyleFindings>`; each finding's `target` is a `{ from, to }`
+ * range (with `replacement` when the fix is certain). Parity with Svelte's
+ * `useRichTextStyleFindings`.
+ */
+export function useRichTextStyleFindings(styles: StyleResolver | null | undefined, editor: Editor | null | undefined, scope?: string): UseStyleFindingsResult {
+  const [doc, setDoc] = useState(() => editor?.state.doc ?? null);
+  useEffect(() => {
+    if (!editor) {
+      setDoc(null);
+      return;
+    }
+    setDoc(editor.state.doc);
+    const onUpdate = () => setDoc(editor.state.doc);
+    editor.on('update', onUpdate);
+    return () => {
+      editor.off('update', onUpdate);
+    };
+  }, [editor]);
+  const state = useMemo<RichTextStyleState | null>(() => (doc ? richTextStyleState(doc as never) : null), [doc]);
+  return useStyleFindings(state ? styles : null, 'rich-text', state, scope);
 }

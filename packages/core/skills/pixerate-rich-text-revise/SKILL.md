@@ -48,8 +48,10 @@ This skill is the method. `pixerate-rich-text` has the full tool reference.
 4. **Rewrite a passage** with `replace_range` over exactly its range (`from` / `to` of the block
    or a `find_text` match), keeping the surrounding text.
    **Check:** `get_text` `blocks`: the other blocks' text is unchanged.
-5. **Consistency.** Terms, numbers and dates one way: `find_text` with a `regex` for the
-   variants, then `replace_text`.
+5. **Consistency.** Terms, numbers and dates one way. With a house style, `check_rich_text_style`
+   finds them for you and `fix_rich_text_style` applies the certain fixes as one undo step
+   (with tracking on, prefer `replace_range` per finding so each shows as a suggestion).
+   Otherwise `find_text` with a `regex` for the variants, then `replace_text`.
 6. **Report** the fixes made, the matches you left and why. When tracking is on, `list_changes`
    shows the suggestions you made; leave accepting them to the user.
 
@@ -64,6 +66,7 @@ This skill is the method. `pixerate-rich-text` has the full tool reference.
 | Insert a missing word | `insert_text` at the position from `find_text` |
 | A point only the author can decide | `add_comment` on the passage, saying what you suggest |
 | Formatting only | `format_text` on the range; leave the words |
+| The host has a house style for documents | `check_rich_text_style`, then `fix_rich_text_style` (or `replace_range` per finding's `target`) |
 
 ## Recipes
 
@@ -97,3 +100,4 @@ blocks[0].to, text }` with one sentence.
 - `undo_rich_text`: take back a step
 - `set_track_changes`, `list_changes`: suggest fixes as tracked changes and list them
 - `add_comment`: flag what the author should decide
+- `check_rich_text_style`, `fix_rich_text_style`: find and fix what breaks the house style

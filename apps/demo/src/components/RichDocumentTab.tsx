@@ -14,10 +14,14 @@ import {
   useRegisterCommands,
   ExportDocxButton,
   createReactChartNodeView,
+  StyleFindings,
+  useRichTextStyleFindings,
 } from "@pixerate/editor-react";
 import { CommentStore, DEFAULT_TABLE_TOOLBAR, createTableCommands, getCrossReferenceTargets } from "@pixerate/editor";
 import type { DocxExportReport } from "@pixerate/editor/export";
 import { createRichTextToolProvider } from "@pixerate/editor/agent";
+import { createRichTextStyleToolProvider } from "@pixerate/editor";
+import { demoStyles } from "../houseStyles";
 import {
   Bold,
   Italic,
@@ -194,6 +198,10 @@ const RichDocumentDemo: React.FC = () => {
     [editor]
   );
   useAgentToolProvider(demoToolRegistry, provider);
+  // House style for documents: check_rich_text_style / fix_rich_text_style join the doc toolset.
+  const styleProvider = useMemo(() => (editor ? createRichTextStyleToolProvider(editor, demoStyles, { namespace: "doc" }) : null), [editor]);
+  useAgentToolProvider(demoToolRegistry, styleProvider);
+  const houseStyle = useRichTextStyleFindings(demoStyles, editor);
 
   // Table commands in the command palette (⌘K) and for agents (commands__run_command).
   const tableCommands = useMemo(() => (editor ? createTableCommands(editor) : null), [editor]);
@@ -450,6 +458,20 @@ const RichDocumentDemo: React.FC = () => {
               Detect structure
             </label>
           </div>
+        </div>
+      </EditorPanel>
+
+      <EditorPanel id="house-style" label="House style">
+        <div className="text-slate-200" data-testid="document-house-style">
+          <StyleFindings
+            report={houseStyle.report}
+            title="Org: Acme writing style"
+            onSelect={(f) => {
+              const t = f.target as { from: number; to: number } | undefined;
+              if (editor && t) editor.chain().focus().setTextSelection({ from: t.from, to: t.to }).run();
+            }}
+          />
+          {houseStyle.error && <p className="text-xs text-rose-400">{houseStyle.error}</p>}
         </div>
       </EditorPanel>
 

@@ -2,8 +2,10 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { Editor } from "@tiptap/core";
+import { createRichTextPreset, richTextStyleDomain } from "@pixerate/editor";
 import { createStyleResolver, memoryStyleStore, type StyleDomain, type StyleCheckReport, type StyleResolver } from "@pixerate/editor/tools";
-import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, useStyleSwatches, type UseStyleSwatchesResult, type UseStyleChoicesResult, type UseStyleFindingsResult, type UseStyleResult } from "../src/style";
+import { StyleFindings, useRichTextStyleFindings, useStyle, useStyleChoices, useStyleFindings, useStyleSwatches, type UseStyleSwatchesResult, type UseStyleChoicesResult, type UseStyleFindingsResult, type UseStyleResult } from "../src/style";
 
 let container: HTMLDivElement;
 let root: any;
@@ -239,5 +241,30 @@ describe("useStyleSwatches", () => {
     await act(async () => store.set("acme", { "SKILL.md": "---\nname: acme\ndescription: Acme.\n---\nUse it.", "brand.json": JSON.stringify({ colors: { primary: "#e4002b" } }) }));
     await flush();
     expect(result.colors).toEqual(["#e4002b"]);
+  });
+});
+
+describe("useRichTextStyleFindings", () => {
+  it("re-checks the document after each edit", async () => {
+    const store = memoryStyleStore({
+      "house/SKILL.md": "---\nname: house\ndescription: House.\n---\nWrite plainly.",
+      "house/rich-text.json": JSON.stringify({ headingCase: "sentence", checks: ["heading-case"] }),
+    });
+    const styles = createStyleResolver({ layers: [{ id: "org", store }], domains: [richTextStyleDomain] });
+    const editor = new Editor({ extensions: createRichTextPreset(), content: "<h1>Our Big Plan</h1>" });
+    let result!: UseStyleFindingsResult;
+    function Probe() {
+      result = useRichTextStyleFindings(styles, editor);
+      return null;
+    }
+    await act(async () => root.render(<Probe />));
+    await flush();
+    expect(result.report?.findings.map((f) => (f.target as any).replacement)).toEqual(["Our big plan"]);
+    await act(async () => {
+      editor.commands.setContent("<h1>Our big plan</h1>", { emitUpdate: true });
+    });
+    await flush();
+    expect(result.report?.findings).toEqual([]);
+    editor.destroy();
   });
 });

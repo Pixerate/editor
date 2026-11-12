@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
+import { Editor } from "@tiptap/core";
+import { createRichTextPreset, richTextStyleDomain } from "@pixerate/editor";
 import { createStyleResolver, memoryStyleStore, type StyleDomain, type StyleCheckReport, type StyleResolver } from "@pixerate/editor/tools";
-import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, useStyleSwatches, type SvelteStyleSwatches, type SvelteStyle, type SvelteStyleChoices, type SvelteStyleFindings } from "../src/style";
+import { StyleFindings, useRichTextStyleFindings, useStyle, useStyleChoices, useStyleFindings, useStyleSwatches, type SvelteStyleSwatches, type SvelteStyle, type SvelteStyleChoices, type SvelteStyleFindings } from "../src/style";
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -228,5 +230,26 @@ describe("useStyleSwatches (Svelte)", () => {
     store.set("acme", { "SKILL.md": "---\nname: acme\ndescription: Acme.\n---\nUse it.", "brand.json": JSON.stringify({ colors: { primary: "#e4002b" } }) });
     await settle();
     expect(link.colors).toEqual(["#e4002b"]);
+  });
+});
+
+describe("useRichTextStyleFindings (Svelte)", () => {
+  it("re-checks the document after each edit", async () => {
+    const store = memoryStyleStore({
+      "house/SKILL.md": "---\nname: house\ndescription: House.\n---\nWrite plainly.",
+      "house/rich-text.json": JSON.stringify({ headingCase: "sentence", checks: ["heading-case"] }),
+    });
+    const styles = createStyleResolver({ layers: [{ id: "org", store }], domains: [richTextStyleDomain] });
+    const editor = new Editor({ extensions: createRichTextPreset(), content: "<h1>Our Big Plan</h1>" });
+    let link!: SvelteStyleFindings;
+    cleanups.push($effect.root(() => {
+      link = useRichTextStyleFindings(styles, editor);
+    }));
+    await settle();
+    expect(link.report?.findings.map((f) => (f.target as any).replacement)).toEqual(["Our big plan"]);
+    editor.commands.setContent("<h1>Our big plan</h1>", { emitUpdate: true });
+    await settle();
+    expect(link.report?.findings).toEqual([]);
+    editor.destroy();
   });
 });
