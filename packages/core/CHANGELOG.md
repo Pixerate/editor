@@ -1,5 +1,44 @@
 # @pixerate/editor
 
+## 0.304.0
+
+### Minor Changes
+
+- 97a4735: House style for animation and video (#779).
+
+  - `animationStyleDomain` (`animation-editor.json`): the easings allowed, a range for command durations, the least hold per shot, a length limit, the frame rates allowed, and the brand's palette-only on style commands. Agent tools `check_animation_style` and `fix_animation_style` (easings, durations, holds and frame rate as one undo step; hidden when read-only), `createAnimationStyleToolProvider`.
+  - `videoStyleDomain` (`video-editor.json`): frame aspect ratios and rates, a length limit, title sizes, the transitions allowed and their longest length, and the brand's palette-only / min-contrast / fonts-allowed on titles. Agent tools `check_video_style` and `fix_video_style` (frame rate, title sizes and transitions as one undo step; hidden when read-only), `createVideoStyleToolProvider`.
+
+- 97a4735: House style for the canvas and typography (#779).
+
+  - `canvasStyleDomain` (`canvas.json`): the corner radii, stroke widths and font sizes allowed, a position grid, and the brand's palette-only / min-contrast / fonts-allowed on fills, strokes, text colours and fonts. Node styles are read as strings, objects or shape paints through `CANVAS_TOKEN_PROPERTIES`. Agent tools `check_canvas_style` and `fix_canvas_style` (snaps to the house values as one undoable command; hidden when read-only), `createCanvasStyleToolProvider({ getNodes, setNodes, history })`.
+  - `typographyStyleDomain` (`typography.json`): the weights and type-scale sizes allowed, line-height and tracking ranges, and fonts-allowed, checked on a font picker's selection. Agent tools `check_typography_style` and `fix_typography_style` (snaps the selection in one change), `createTypographyStyleToolProvider`.
+
+- 97a4735: House style for generation and effect parameters (#779).
+
+  - `generationStyleDomain` (`generation.json`): the models, aspect ratios and qualities allowed, count and duration limits, a house look appended to every prompt, negative terms every request carries, and banned terms. It checks a request before anything is spent: agent tools `check_generation_style` and `apply_generation_style` (returns the request in the house style; both read-only, neither generates), `createGenerationStyleToolProvider`.
+  - `parametersStyleDomain` (`parameters.json`): values the house fixes, ranges for numeric parameters, the presets allowed, and the brand's palette-only on colour parameters. Agent tools `check_parameters_style` and `fix_parameters_style` (one undo step; read-only parameters left; hidden when read-only), `createParametersStyleToolProvider`.
+
+- 97a4735: House style for images and paintings (#779).
+
+  - `imageStyleDomain` (`image-editor.json`): output aspect ratios (findings carry the centred crop to the nearest house ratio for `set_crop`), a minimum size, ranges for the base adjustments, and the brand's palette-only / fonts-allowed on annotations. Agent tools `check_image_style` and `fix_image_style` (clamps the adjustments as one undo step; hidden when read-only), `createImageStyleToolProvider`.
+  - `paintStyleDomain` (`paint-editor.json`): papers (from the paper library) and brushes allowed, a layer limit, and the brand's palette-only on stroke colours, the current colour and swatches. Agent tools `check_paint_style` and `fix_paint_style` (switches to the house paper and brush), `createPaintStyleToolProvider`. Not in the Swift paint editor yet.
+
+- 97a4735: House style for spreadsheets and diagrams (#779).
+
+  - `spreadsheetStyleDomain` (`spreadsheet.json`): header case, the house number format for each kind of value (`numberFormats`), a frozen header, and the brand's palette-only / min-contrast on conditional format colours. Findings target cells in A1 notation with the certain fix. Agent tools `check_spreadsheet_style` and `fix_spreadsheet_style` (one undo step; hidden when read-only), `createSpreadsheetStyleToolProvider`. `SpreadsheetController.batch(fn)` runs several edits as one undo step.
+  - `diagramStyleDomain` (`diagram.json`): layout direction, label case and length, node count, node shapes, and the brand's palette-only / min-contrast / fonts-allowed on node, group and edge styles. Agent tools `check_diagram_style` and `fix_diagram_style` (label case and direction as one undo step; hidden when the diagram cannot be edited), `createDiagramStyleToolProvider`.
+  - `applyTextCase` (`/tools`): the sentence / title / upper case helper the rich-text, spreadsheet and diagram styles share (`richTextHeadingCase` is now an alias).
+
+- 97a4735: House style for vector drawings, effect authoring, stickers and brushes, completing house style for every editor (#779).
+
+  - `vectorStyleDomain` (`vector.json`): stroke widths and corner radii allowed, and the brand's palette-only, min-contrast and fonts-allowed on solid fills, strokes, text and the artboard. Agent tools `check_vector_style` and `fix_vector_style` (snaps widths and radii to the nearest house value as one undo step; hidden when read-only), `createVectorStyleToolProvider`.
+  - `effectAuthoringStyleDomain` (`effect-authoring.json`): the source languages allowed, a timing limit and looping, the presets every effect ships, and the brand's palette-only on colour controls. Agent tools `check_effect_authoring_style` and `fix_effect_authoring_style` (sets the house timing as one undo step), `createEffectAuthoringStyleToolProvider({ session })`.
+  - `stickerStyleDomain` (`stickers.json`): sticker libraries and collections allowed, commercial licences only, no AI-generated art, banned tags, and the brand's palette-only on tints. Read-only agent tool `check_sticker_style` checks stickers by ref before placing them and returns the `find_stickers` filters that keep a search in the house style.
+  - `brushStyleDomain` (`brushes.json`): brushes and media allowed, licences recorded on image sources, and the brand's palette-only on brush colours. Read-only agent tool `check_brush_style` checks the user's saved brushes, or any brushes by id; `brushStyleState(library)` builds the state for hooks.
+  - The `pixerate-style` command now knows every editor domain the package ships, not only chart and tokens.
+  - `check_generation_style`'s annotation title now matches its tool title.
+
 ## 0.303.0
 
 ### Minor Changes
