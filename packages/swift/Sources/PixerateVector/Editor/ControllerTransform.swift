@@ -241,6 +241,79 @@ extension VectorEditorController {
     }
 }
 
+// MARK: - Callouts (`placeCallouts`, `geom/labels.ts`)
+
+/// A label to place: its node, and the point (or node) it belongs to.
+public struct VectorCalloutRequest: Sendable {
+    public var id: String
+    public var anchor: Vec2?
+    public var anchorId: String?
+    public init(id: String, anchor: Vec2? = nil, anchorId: String? = nil) { self.id = id; self.anchor = anchor; self.anchorId = anchorId }
+}
+
+extension VectorEditorController {
+    /// Places labels near what they describe, clear of the other art and each other, with leader
+    /// lines, as one undo step (`placeCallouts` in `controller.ts`). Refuses, changing nothing,
+    /// an unknown or locked label, an unknown anchor node, or a label without an anchor.
+    public func placeCallouts(_ labels: [VectorCalloutRequest], prefer: [LabelSide]? = nil, leader: Bool? = nil, gap: Double? = nil, distance: Double? = nil, leaderStroke: String? = nil) throws -> (result: VectorActionResult, placed: [JSONValue], clashes: Int) {
+        if labels.isEmpty { return (.failure("Give at least one label."), [], 0) }
+        var seen = Set<String>()
+        var items: [(id: String, b: VectorBounds, anchor: Vec2)] = []
+        for (i, l) in labels.enumerated() {
+            guard let node = getNode(l.id) else { return (.failure("Label \(i): there is no node \"\(l.id)\"; vector.list lists them."), [], 0) }
+            if node.isLocked { return (.failure("Label \(i): \"\(l.id)\" is locked; unlock it first."), [], 0) }
+            if seen.contains(l.id) { return (.failure("Label \(i): \"\(l.id)\" is listed twice."), [], 0) }
+            seen.insert(l.id)
+            guard let b = try boundsOf([l.id]) else { return (.failure("Label \(i): \"\(l.id)\" draws nothing, so it has no size to place."), [], 0) }
+            var anchor = l.anchor
+            if let anchorId = l.anchorId {
+                if anchorId == l.id { return (.failure("Label \(i): a label cannot point at itself."), [], 0) }
+                let ab = getNode(anchorId) != nil ? try boundsOf([anchorId]) : nil
+                guard let ab else { return (.failure("Label \(i): there is no node \"\(anchorId)\" with a size to point at."), [], 0) }
+                anchor = Vec2(x: ab.x + ab.width / 2, y: ab.y)
+            }
+            guard let a = anchor, a.x.isFinite, a.y.isFinite else { return (.failure("Label \(i): give an anchor { x, y } or an anchorId."), [], 0) }
+            items.append((l.id, b, a))
+        }
+        func holds(_ n: VectorNode) -> Bool { seen.contains(n.id) || (n.type == .group && n.children.contains(where: holds)) }
+        var obstacles: [LabelObstacle] = []
+        for n in doc.nodes where n.isVisible && !holds(n) {
+            if let b = try boundsOf([n.id]) { obstacles.append(LabelObstacle(.box(LabelBox(x: b.x, y: b.y, width: b.width, height: b.height)))) }
+        }
+        var options = PlaceLabelsOptions()
+        options.obstacles = obstacles
+        options.bounds = LabelBox(x: 0, y: 0, width: doc.width, height: doc.height)
+        options.leader = leader != false
+        if let prefer { options.prefer = prefer }
+        if let gap { options.gap = gap }
+        if let distance { options.distance = distance }
+        let placed = try placeLabels(items.map { LabelRequest(anchor: LabelPoint(x: $0.anchor.x, y: $0.anchor.y), width: $0.b.width, height: $0.b.height) }, options)
+        var out: [JSONValue] = []
+        try change("Place Callouts") {
+            var leaders: [VectorNode] = []
+            for (k, it) in items.enumerated() {
+                let p = placed[k]
+                let dx = p.x - it.b.x
+                let dy = p.y - it.b.y
+                if abs(dx) > 1e-9 || abs(dy) > 1e-9 { doc = try transformed(doc, [it.id], translateMatrix(dx, dy)) }
+                var entry: [(String, JSONValue)] = [("id", .string(it.id)), ("x", .number(p.x)), ("y", .number(p.y)), ("width", .number(p.width)), ("height", .number(p.height)), ("side", .string(p.side.rawValue)), ("ok", .bool(p.ok))]
+                if let (a, e) = p.leader {
+                    let leaderId = newId()
+                    let name = getNode(it.id)?.name ?? it.id
+                    leaders.append(VectorNode(
+                        props: JSONObject([("id", .string(leaderId)), ("type", "path"), ("name", .string("Leader: \(name)")), ("fill", .null), ("stroke", .string(leaderStroke ?? "#6b7280")), ("strokeWidth", 1)]),
+                        subpaths: [VectorSubpath(anchors: [VectorAnchor(x: a.x, y: a.y), VectorAnchor(x: e.x, y: e.y)], closed: false)]
+                    ))
+                    entry.append(("leader", .string(leaderId)))
+                }
+                out.append(.object(JSONObject(entry)))
+            }
+            if !leaders.isEmpty { setDoc(doc.nodes + leaders) }
+        }
+        return (.success, out, placed.reduce(0) { $0 + $1.clashes })
+    }
+}
+
 // MARK: - Free Distort (`distort.ts`, `geom/homography.ts`, `pathMap.ts`)
 
 /// Default tolerance (document units) of Free Distort's adaptive path mapping.

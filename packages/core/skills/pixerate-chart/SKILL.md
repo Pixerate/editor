@@ -73,7 +73,9 @@ the pitfalls, and uses the tools below.
    `add_chart_reference_line` for a target or average, `add_chart_reference_band` for a
    normal or target range, `set_chart_callout` on the one or two points the title talks
    about, `highlight_chart` to mute what does not matter, and `note` (in `update_chart`) for
-   the source.
+   the source. Callouts are placed together, clear of the bars, points and each other (above a
+   column or point, beside a horizontal bar, then the next clear side); keep their text short so
+   they fit.
 6. **Check.** Read the `warnings` that `get_chart` and `render_chart` return (hidden or
    thinned labels, crowded legend, skipped values) and run `check_chart_colors`. With a house
    style, start a new chart with `apply_chart_style`, pick series colours from `get_style`'s

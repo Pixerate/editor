@@ -354,7 +354,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Vector editor</strong> (42)</summary>
+<summary><strong>Vector editor</strong> (43)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -400,6 +400,7 @@ Every feature is available from core and from both framework packages, except wh
 | Vector Style Panel (fill, stroke, gradient editor, width, alignment, width profile, arrowheads, corner radius and kind, opacity, fill and stroke stacks, blend mode, filters, effects, envelope; defaults for new shapes) | `getVectorSelectionStyle`, `setStyle` & `setCornerRadius` | `<VectorStylePanel>` | `<VectorStylePanel>` | Planned (#533) |
 | Vector SVG Import / Export & Agent Commands | `parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands` | `useVectorCommands` | `useVectorCommands` | Agent commands ✅ (`createVectorCommands`: every command with its contract metadata, enablement and Swift run), SVG export and import ✅ headless (`vectorDocumentToSvg`, `parseVectorSvg`); the views: Planned (#533) |
 | Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools) | `vectorEffectGroups`, `createVectorEffectsToolProvider` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` | ✅ headless (`addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups`, `createVectorEffectsToolProvider`); the views: Planned (#533) |
+| Callouts and Label Placement (labels placed near their anchors and clear of the art, marks and each other, stepping outwards from preferred sides and wrapping when that fits better, with leader lines: `placeLabels` for any editor; `vector.placeCallouts` moves label nodes and draws leaders as one undo step; chart callouts and diagram SVG edge labels use it) | `placeLabels`, `labelHull` (`/tools`), `vector.placeCallouts` | ✅ (`vector.placeCallouts` in the command palette and agent tools) | ✅ (`vector.placeCallouts` in the command palette and agent tools) | ✅ (`placeLabels` in PixerateRaster, chart callouts, `vector.placeCallouts`) |
 
 </details>
 

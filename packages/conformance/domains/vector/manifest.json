@@ -8,7 +8,7 @@
   "counts": {
     "providers": 3,
     "tools": 12,
-    "commands": 150
+    "commands": 151
   },
   "files": [
     "commands.json",

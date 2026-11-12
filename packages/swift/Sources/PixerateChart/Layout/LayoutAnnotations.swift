@@ -208,12 +208,17 @@ internal func drawCallouts(_ ctx: LayoutCtx, _ plot: ChartRect) {
     let fs = ctx.fs
     let measure = ctx.measure
     let horizontal = spec.orientation == .horizontal
-    var placed: [ChartRect] = []
-    func overlaps(_ a: ChartRect) -> Bool {
-        placed.contains { b in
-            a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
-        }
+    let size = fs - 1.0
+    struct Wanted {
+        var seriesId: String
+        var index: Int
+        var text: String
+        var anchor: (x: Double, y: Double)
+        var sideways: Bool
+        var width: Double
+        var height: Double
     }
+    var wanted: [Wanted] = []
     var unplaced = 0
     for s in spec.series {
         if (s.hidden ?? false) { continue }
@@ -229,50 +234,50 @@ internal func drawCallouts(_ ctx: LayoutCtx, _ plot: ChartRect) {
                 unplaced += 1
                 continue
             }
-            let size = fs - 1.0
             let text = truncate(label, plot.width * 0.6, size, measure)
-            let w = measure(text, size, 600) + 10.0
-            let h = size + 8.0
-            let sideways = horizontal && isRect
-            var bx = sideways ? anchor.x + 14.0 : anchor.x - w / 2.0
-            var by = sideways ? anchor.y - h / 2.0 : anchor.y - h - 14.0
-            func clampPos() {
-                bx = Swift.max(plot.x, Swift.min(plot.x + plot.width - w, bx))
-                by = Swift.max(plot.y - fs / 2.0, Swift.min(plot.y + plot.height - h, by))
+            wanted.append(Wanted(seriesId: s.id, index: i, text: text, anchor: anchor, sideways: horizontal && isRect, width: measure(text, size, 600) + 10.0, height: size + 8.0))
+        }
+    }
+    if !wanted.isEmpty {
+        // Bars and points are what callouts must not cover.
+        var obstacles: [LabelObstacle] = []
+        for m in ctx.marks where m.role == .bar || m.role == .point {
+            switch m {
+            case .rect(let r): obstacles.append(LabelObstacle(.box(LabelBox(x: r.x, y: r.y, width: r.width, height: r.height))))
+            case .circle(let c): obstacles.append(LabelObstacle(.box(LabelBox(x: c.cx - c.r, y: c.cy - c.r, width: 2 * c.r, height: 2 * c.r))))
+            default: break
             }
-            clampPos()
-            let covers = anchor.x >= bx - 2.0 && anchor.x <= bx + w + 2.0 && anchor.y >= by - 2.0 && anchor.y <= by + h + 2.0
-            if covers {
-                if sideways { bx = anchor.x - w - 14.0 }
-                else { by = anchor.y + 14.0 }
-                clampPos()
-            }
-            var k = 0
-            while k < 6 && overlaps(ChartRect(x: bx, y: by, width: w, height: h)) {
-                if sideways { by += h + 2.0 }
-                else { by -= h + 2.0 }
-                clampPos()
-                k += 1
-            }
-            let box = ChartRect(x: bx, y: by, width: w, height: h)
-            placed.append(box)
-            let target: ChartSelection = .point(seriesId: s.id, index: i)
-            let ex = Swift.max(bx, Swift.min(bx + w, anchor.x))
-            let ey = Swift.max(by, Swift.min(by + h, anchor.y))
-            if JS.hypot(ex - anchor.x, ey - anchor.y) > 2.0 {
+        }
+        var options = PlaceLabelsOptions()
+        options.obstacles = obstacles
+        options.bounds = LabelBox(x: plot.x, y: plot.y - fs / 2.0, width: plot.width, height: plot.height + fs / 2.0)
+        options.distance = 14
+        options.step = 6
+        options.reach = 62
+        options.gap = 2
+        options.leader = true
+        let requests = wanted.map { w in
+            LabelRequest(anchor: LabelPoint(x: w.anchor.x, y: w.anchor.y), width: w.width, height: w.height, prefer: w.sideways ? CALLOUT_SIDEWAYS : CALLOUT_UPRIGHT)
+        }
+        // Sizes and anchors are finite here, so placement cannot refuse them.
+        let placed = (try? placeLabels(requests, options)) ?? []
+        for (k, w) in wanted.enumerated() where k < placed.count {
+            let box = placed[k]
+            let target: ChartSelection = .point(seriesId: w.seriesId, index: w.index)
+            if let leader = box.leader {
                 ctx.marks.append(.line(
-                    key: "callout-leader-\(s.id)-\(i)",
+                    key: "callout-leader-\(w.seriesId)-\(w.index)",
                     role: .callout,
-                    x1: anchor.x,
-                    y1: anchor.y,
-                    x2: ex,
-                    y2: ey,
+                    x1: leader.0.x,
+                    y1: leader.0.y,
+                    x2: leader.1.x,
+                    y2: leader.1.y,
                     stroke: theme.axis,
                     strokeWidth: 1
                 ))
             }
             ctx.marks.append(.rect(
-                key: "callout-box-\(s.id)-\(i)",
+                key: "callout-box-\(w.seriesId)-\(w.index)",
                 role: .callout,
                 x: box.x,
                 y: box.y,
@@ -285,11 +290,11 @@ internal func drawCallouts(_ ctx: LayoutCtx, _ plot: ChartRect) {
                 target: target
             ))
             ctx.marks.append(.text(
-                key: "callout-\(s.id)-\(i)",
+                key: "callout-\(w.seriesId)-\(w.index)",
                 role: .callout,
-                x: bx + w / 2.0,
-                y: by + h / 2.0,
-                text: text,
+                x: box.x + box.width / 2.0,
+                y: box.y + box.height / 2.0,
+                text: w.text,
                 anchor: .middle,
                 baseline: .middle,
                 size: size,
@@ -306,6 +311,10 @@ internal func drawCallouts(_ ctx: LayoutCtx, _ plot: ChartRect) {
         )
     }
 }
+
+/// Where callouts go, best first: above a column or point, beside a horizontal bar.
+private let CALLOUT_UPRIGHT: [LabelSide] = [.above, .aboveRight, .aboveLeft, .right, .left, .below]
+private let CALLOUT_SIDEWAYS: [LabelSide] = [.right, .belowRight, .aboveRight, .below, .above, .left]
 
 private let MUTED_ROLES: Set<ChartMarkRole> = [
     .node, .region, .bar, .line, .area, .point, .slice, .cell, .box, .whisker,

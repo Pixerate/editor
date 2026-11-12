@@ -1,5 +1,6 @@
 // Reference lines and bands, callouts, highlight and the note: the annotations Ursula's chart
 // documents carry (src/chart/types.ts `referenceLines`, `referenceBands`, `callouts`, `highlight`, `note`).
+import { placeLabels, type LabelObstacle, type LabelSide } from '../geom/labels.js';
 import { truncate, type LayoutCtx } from './layout-shared.js';
 import type { ScaleInfo } from './layout-cartesian.js';
 import type { ChartMark, ChartMarkRole, ChartRect, ChartReferenceAxis, ChartSelection, ChartSpec } from './types.js';
@@ -83,12 +84,15 @@ function anchorOf(mark: ChartMark, horizontal: boolean): { x: number; y: number 
 	return null;
 }
 
-/** Draws each series' callouts: a boxed label with a leader line to its bar or point, kept inside the plot and clear of the other callouts. */
+/**
+ * Draws each series' callouts: a boxed label with a leader line to its bar or point, placed
+ * together (`placeLabels`) inside the plot, clear of the bars, points and each other.
+ */
 export function drawCallouts(ctx: LayoutCtx, plot: ChartRect) {
 	const { spec, marks, theme, fs, measure } = ctx;
 	const horizontal = spec.orientation === 'horizontal';
-	const placed: ChartRect[] = [];
-	const overlaps = (a: ChartRect) => placed.some((b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height);
+	const size = fs - 1;
+	const wanted: { seriesId: string; index: number; text: string; anchor: { x: number; y: number }; sideways: boolean; width: number; height: number }[] = [];
 	let unplaced = 0;
 	for (const s of spec.series) {
 		if (s.hidden || !s.callouts) continue;
@@ -100,43 +104,36 @@ export function drawCallouts(ctx: LayoutCtx, plot: ChartRect) {
 				unplaced++;
 				return;
 			}
-			const size = fs - 1;
 			const text = truncate(label, plot.width * 0.6, size, measure);
-			const w = measure(text, size, 600) + 10;
-			const h = size + 8;
-			const sideways = horizontal && mark!.kind === 'rect';
-			let bx = sideways ? anchor.x + 14 : anchor.x - w / 2;
-			let by = sideways ? anchor.y - h / 2 : anchor.y - h - 14;
-			const clamp = () => {
-				bx = Math.max(plot.x, Math.min(plot.x + plot.width - w, bx));
-				by = Math.max(plot.y - fs / 2, Math.min(plot.y + plot.height - h, by));
-			};
-			clamp();
-			// No room above the tallest bar (or right of the longest): put the label on the other side of the anchor.
-			const covers = anchor.x >= bx - 2 && anchor.x <= bx + w + 2 && anchor.y >= by - 2 && anchor.y <= by + h + 2;
-			if (covers) {
-				if (sideways) bx = anchor.x - w - 14;
-				else by = anchor.y + 14;
-				clamp();
-			}
-			for (let k = 0; k < 6 && overlaps({ x: bx, y: by, width: w, height: h }); k++) {
-				if (sideways) by += h + 2;
-				else by -= h + 2;
-				clamp();
-			}
-			const box = { x: bx, y: by, width: w, height: h };
-			placed.push(box);
-			const target: ChartSelection = { kind: 'point', seriesId: s.id, index: i };
-			// The leader runs from the anchor to the nearest edge of the box.
-			const ex = Math.max(bx, Math.min(bx + w, anchor.x));
-			const ey = Math.max(by, Math.min(by + h, anchor.y));
-			if (Math.hypot(ex - anchor.x, ey - anchor.y) > 2) marks.push({ kind: 'line', key: `callout-leader-${s.id}-${i}`, role: 'callout', x1: anchor.x, y1: anchor.y, x2: ex, y2: ey, stroke: theme.axis, strokeWidth: 1 });
-			marks.push({ kind: 'rect', key: `callout-box-${s.id}-${i}`, role: 'callout', ...box, fill: theme.surface, stroke: theme.axis, strokeWidth: 1, radius: 3, target });
-			marks.push({ kind: 'text', key: `callout-${s.id}-${i}`, role: 'callout', x: bx + w / 2, y: by + h / 2, text, anchor: 'middle', baseline: 'middle', size, weight: 600, fill: theme.text, target });
+			wanted.push({ seriesId: s.id, index: i, text, anchor, sideways: horizontal && mark!.kind === 'rect', width: measure(text, size, 600) + 10, height: size + 8 });
+		});
+	}
+	if (wanted.length) {
+		// Bars and points are what callouts must not cover.
+		const obstacles: LabelObstacle[] = [];
+		for (const m of marks) {
+			if (m.role !== 'bar' && m.role !== 'point') continue;
+			if (m.kind === 'rect') obstacles.push({ box: { x: m.x, y: m.y, width: m.width, height: m.height } });
+			else if (m.kind === 'circle') obstacles.push({ box: { x: m.cx - m.r, y: m.cy - m.r, width: 2 * m.r, height: 2 * m.r } });
+		}
+		const placed = placeLabels(
+			wanted.map((w) => ({ anchor: w.anchor, width: w.width, height: w.height, prefer: w.sideways ? CALLOUT_SIDEWAYS : CALLOUT_UPRIGHT })),
+			{ obstacles, bounds: { x: plot.x, y: plot.y - fs / 2, width: plot.width, height: plot.height + fs / 2 }, distance: 14, step: 6, reach: 62, gap: 2, leader: true }
+		);
+		wanted.forEach((w, k) => {
+			const box = placed[k];
+			const target: ChartSelection = { kind: 'point', seriesId: w.seriesId, index: w.index };
+			if (box.leader) marks.push({ kind: 'line', key: `callout-leader-${w.seriesId}-${w.index}`, role: 'callout', x1: box.leader[0].x, y1: box.leader[0].y, x2: box.leader[1].x, y2: box.leader[1].y, stroke: theme.axis, strokeWidth: 1 });
+			marks.push({ kind: 'rect', key: `callout-box-${w.seriesId}-${w.index}`, role: 'callout', x: box.x, y: box.y, width: box.width, height: box.height, fill: theme.surface, stroke: theme.axis, strokeWidth: 1, radius: 3, target });
+			marks.push({ kind: 'text', key: `callout-${w.seriesId}-${w.index}`, role: 'callout', x: box.x + box.width / 2, y: box.y + box.height / 2, text: w.text, anchor: 'middle', baseline: 'middle', size, weight: 600, fill: theme.text, target });
 		});
 	}
 	if (unplaced) ctx.warn('annotations-skipped', `${unplaced} callout${unplaced === 1 ? ' points' : 's point'} at a gap or a hidden value and ${unplaced === 1 ? 'is' : 'are'} not drawn.`);
 }
+
+/** Where callouts go, best first: above a column or point, beside a horizontal bar. */
+const CALLOUT_UPRIGHT: readonly LabelSide[] = ['above', 'above-right', 'above-left', 'right', 'left', 'below'];
+const CALLOUT_SIDEWAYS: readonly LabelSide[] = ['right', 'below-right', 'above-right', 'below', 'above', 'left'];
 
 const MUTED: ReadonlySet<ChartMarkRole> = new Set(['node', 'region', 'bar', 'line', 'area', 'point', 'slice', 'cell', 'box', 'whisker', 'outlier', 'connector', 'trendline', 'trendline-label', 'error-bar', 'data-label', 'legend-swatch', 'legend-label']);
 

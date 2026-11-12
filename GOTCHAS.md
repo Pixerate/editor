@@ -4606,3 +4606,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: With `night` extending `paper`, a field `night` did not set (`palette.ground`) reported its source as the variant's layer instead of `<layer> (from paper)`, whenever `night` set a sibling in the same object (`palette.sky`).
 - **Root Cause**: The merge cleared the recorded origin of every path under a key before merging into it. That is right when a value replaces an object, but an object merging into an object must keep the origins of the fields it does not touch.
 - **Solution / Workaround**: Clear origins below a key only when a leaf value replaces it; when an object replaces a leaf, clear only that leaf's origin. `tests/style-extends-versions.test.ts` checks the sources of untouched siblings.
+
+### [swift] `sorted(by:)` Is Not Stable, So a Port Must Break Ties the Way JavaScript's Sort Keeps Them
+
+- **Issue / Symptom**: A Swift port of a placement or ordering routine can give a different result from the TypeScript core when two items compare equal (two labels with the same number of clear spots, two points with the same x), and the conformance vectors then differ in a way that looks random.
+- **Root Cause**: `Array.prototype.sort` is stable (equal items keep their input order); Swift's `sorted(by:)` makes no such promise.
+- **Solution / Workaround**: Give every Swift comparator an explicit last tie-break on the input index (`a < b` for indices, or `offset` from `enumerated()`), as `placeLabels` and `labelHull` in `PixerateRaster/LabelPlacement.swift` do, or use an existing helper such as the vector module's `jsSorted`. Do the same in the TypeScript when the order matters to a contract, so both read alike.

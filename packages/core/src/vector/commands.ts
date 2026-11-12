@@ -1,3 +1,5 @@
+import { LABEL_SIDES, type LabelSide } from '../geom/labels.js';
+import type { Vec2 } from '../geom/types.js';
 import { withVectorPlayback } from './playback.js';
 import { VECTOR_BRUSHSTROKE_MAX_SEED, vectorBrushstrokeBrush } from './brushstroke.js';
 import { GRAIN_PATTERNS } from '../paint/grain.js';
@@ -3397,6 +3399,47 @@ export function createVectorCommands(controller: VectorEditorController, options
 			run: (_ctx: unknown, params: { direction: 'horizontal' | 'vertical'; ids?: string[] }) => {
 				check(controller.distribute(params.direction, { ids: ids(params) }));
 				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}placeCallouts`,
+			label: 'Place Callouts…',
+			keywords: ['label', 'labels', 'callout', 'annotate', 'leader', 'overlap', 'collide', 'tidy'],
+			description:
+				'Moves labels (text, or any node) near what they describe, clear of the other art and of each other, and draws a thin leader line from each anchor to its label when they are apart. Each label gives its node `id` and an `anchor` point in document units, or an `anchorId` node (its top centre). Tries the `prefer` sides first (default above, right, below, left, then the corners), stepping outwards, inside the artboard. One undo step. Returns each label\'s new box, side, `ok` (false when no clear spot was left) and its leader id, and the total `clashes`. Refuses, changing nothing, an unknown or locked label, an unknown anchor node, or a label without an anchor.',
+			params: {
+				type: 'object',
+				properties: {
+					labels: {
+						type: 'array',
+						minItems: 1,
+						maxItems: 200,
+						description: 'The labels to place.',
+						items: {
+							type: 'object',
+							properties: {
+								id: { type: 'string', minLength: 1, description: 'The label node (usually text) to move.' },
+								anchor: { type: 'object', properties: { x: { type: 'number', description: 'Document units.' }, y: { type: 'number', description: 'Document units.' } }, required: ['x', 'y'], additionalProperties: false, description: 'The point the label belongs to.' },
+								anchorId: { type: 'string', minLength: 1, description: 'A node the label belongs to instead of a point (its top centre).' }
+							},
+							required: ['id'],
+							additionalProperties: false
+						}
+					},
+					prefer: { type: 'array', items: { type: 'string', enum: [...LABEL_SIDES] }, minItems: 1, description: 'Sides to try, best first (default above, right, below, left, then the corners; center puts a label on its anchor).' },
+					leader: { type: 'boolean', description: 'Draw leader lines (default true).' },
+					gap: { type: 'number', minimum: 0, description: 'Space kept between labels, document units (default 2).' },
+					distance: { type: 'number', minimum: 0, description: 'First distance from the anchor, document units (default 12 with leaders, else 4).' }
+				},
+				required: ['labels'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { labels: { id: string; anchor?: Vec2; anchorId?: string }[]; prefer?: LabelSide[]; leader?: boolean; gap?: number; distance?: number }) => {
+				const result = controller.placeCallouts(params.labels, { prefer: params.prefer, leader: params.leader, gap: params.gap, distance: params.distance });
+				check(result);
+				return { placed: result.placed, clashes: result.clashes };
 			}
 		},
 		{
