@@ -8,3 +8,4 @@ export * from './affine';
 export * from './homography';
 export * from './warp';
 export * from './iso';
+export * from './labels';

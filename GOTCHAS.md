@@ -4612,3 +4612,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Calling a `PixerateGeometry` or `PixerateRaster` helper (such as `IsoProjector`) from the vector editor fails to compile with "cannot convert value of type 'PixerateVector.Vec2' to expected argument type 'PixerateRaster.Vec2'".
 - **Root Cause**: The vector module declares its own `Vec2` (the TS `canvas/types` point) while the raster and geometry modules use `PixerateRaster.Vec2`; both are in scope in vector files, and the unqualified name means the vector one.
 - **Solution / Workaround**: Write `PixerateRaster.Vec2(x:y:)` where a raster or geometry API takes a point, and convert at the boundary (`VectorAnchor(x: p.x, y: p.y)` for anchors), as `addIsoBoxes` in `ControllerTransform.swift` does.
+
+### [swift] `sorted(by:)` Is Not Stable, So a Port Must Break Ties the Way JavaScript's Sort Keeps Them
+
+- **Issue / Symptom**: A Swift port of a placement or ordering routine can give a different result from the TypeScript core when two items compare equal (two labels with the same number of clear spots, two points with the same x), and the conformance vectors then differ in a way that looks random.
+- **Root Cause**: `Array.prototype.sort` is stable (equal items keep their input order); Swift's `sorted(by:)` makes no such promise.
+- **Solution / Workaround**: Give every Swift comparator an explicit last tie-break on the input index (`a < b` for indices, or `offset` from `enumerated()`), as `placeLabels` and `labelHull` in `PixerateRaster/LabelPlacement.swift` do, or use an existing helper such as the vector module's `jsSorted`. Do the same in the TypeScript when the order matters to a contract, so both read alike.

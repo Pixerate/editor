@@ -13412,6 +13412,110 @@
     "readOnly": false
   },
   {
+    "id": "vector.placeCallouts",
+    "label": "Place Callouts…",
+    "group": "Vector",
+    "keywords": [
+      "label",
+      "labels",
+      "callout",
+      "annotate",
+      "leader",
+      "overlap",
+      "collide",
+      "tidy"
+    ],
+    "description": "Moves labels (text, or any node) near what they describe, clear of the other art and of each other, and draws a thin leader line from each anchor to its label when they are apart. Each label gives its node `id` and an `anchor` point in document units, or an `anchorId` node (its top centre). Tries the `prefer` sides first (default above, right, below, left, then the corners), stepping outwards, inside the artboard. One undo step. Returns each label's new box, side, `ok` (false when no clear spot was left) and its leader id, and the total `clashes`. Refuses, changing nothing, an unknown or locked label, an unknown anchor node, or a label without an anchor.",
+    "params": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "description": "The labels to place.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The label node (usually text) to move."
+              },
+              "anchor": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "description": "Document units."
+                  },
+                  "y": {
+                    "type": "number",
+                    "description": "Document units."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false,
+                "description": "The point the label belongs to."
+              },
+              "anchorId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A node the label belongs to instead of a point (its top centre)."
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "prefer": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "above",
+              "right",
+              "below",
+              "left",
+              "above-right",
+              "below-right",
+              "above-left",
+              "below-left",
+              "center"
+            ]
+          },
+          "minItems": 1,
+          "description": "Sides to try, best first (default above, right, below, left, then the corners; center puts a label on its anchor)."
+        },
+        "leader": {
+          "type": "boolean",
+          "description": "Draw leader lines (default true)."
+        },
+        "gap": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Space kept between labels, document units (default 2)."
+        },
+        "distance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "First distance from the anchor, document units (default 12 with leaders, else 4)."
+        }
+      },
+      "required": [
+        "labels"
+      ],
+      "additionalProperties": false
+    },
+    "undoable": true,
+    "readOnly": false
+  },
+  {
     "id": "vector.addIsoBoxes",
     "label": "Add Isometric Blocks…",
     "group": "Vector",

@@ -1245,6 +1245,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "✅ headless (`addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups`, `createVectorEffectsToolProvider`); the views: Planned (#533)"
       },
       {
+        "feature": "Callouts and Label Placement (labels placed near their anchors and clear of the art, marks and each other, stepping outwards from preferred sides and wrapping when that fits better, with leader lines: `placeLabels` for any editor; `vector.placeCallouts` moves label nodes and draws leaders as one undo step; chart callouts and diagram SVG edge labels use it)",
+        "core": "`placeLabels`, `labelHull` (`/tools`), `vector.placeCallouts`",
+        "react": "✅ (`vector.placeCallouts` in the command palette and agent tools)",
+        "svelte": "✅ (`vector.placeCallouts` in the command palette and agent tools)",
+        "swift": "✅ (`placeLabels` in PixerateRaster, chart callouts, `vector.placeCallouts`)"
+      },
+      {
         "feature": "Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: \"isometric\"` draws a diagram as blocks on group tiles with edges on the floor)",
         "core": "`isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `mermaidToSvg` `projection`",
         "react": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection)",

@@ -344,6 +344,18 @@ func vectorCommandRuns() -> [String: VectorCommandRun] {
         return ok()
     }
 
+    r["vector.placeCallouts"] = { c, params in
+        let labels = (params["labels"]?.arrayValue ?? []).map { v -> VectorCalloutRequest in
+            let o = v.objectValue ?? JSONObject()
+            return VectorCalloutRequest(id: o["id"]?.stringValue ?? "", anchor: Vec2(json: o["anchor"]), anchorId: o["anchorId"]?.stringValue)
+        }
+        let p = VectorParams(params)
+        let prefer = p.strings("prefer")?.compactMap { LabelSide(rawValue: $0) }
+        let (result, placed, clashes) = try c.placeCallouts(labels, prefer: prefer, leader: p.bool("leader"), gap: p.num("gap"), distance: p.num("distance"))
+        try check(result)
+        return .object(JSONObject([("placed", .array(placed)), ("clashes", .number(Double(clashes)))]))
+    }
+
     r["vector.addIsoBoxes"] = { c, params in
         let p = VectorParams(params)
         let boxes = (params["boxes"]?.arrayValue ?? []).map { v -> VectorIsoBoxRequest in

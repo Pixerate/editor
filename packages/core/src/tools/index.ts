@@ -34,3 +34,4 @@ export * from './origin.js';
 export * from './conformance.js';
 export * from './style-storage.js';
 export * from '../geom/iso.js';
+export * from '../geom/labels.js';

@@ -46,7 +46,8 @@ the pitfalls, and uses the tools below.
 4. **Check.** Read the returned ids and any `diagnostics`; fix parse problems before going
    on.
 5. **Look.** `render_diagram` (`format: "png"` when offered) after a batch of edits to
-   check crossings, crowding and label length. Undo your own mistakes with `undo_diagram`.
+   check crossings, crowding and label length. In the drawing, an edge label sits on its edge,
+   or just beside it when a node or another label is there; a label that still crowds is too long. Undo your own mistakes with `undo_diagram`.
 6. **House style.** When the host has one (`get_style` with `domain: "diagram"`), run
    `check_diagram_style`. `fix_diagram_style` applies the certain fixes (label case, the house
    direction) as one undo step; fix what it leaves (long labels, too many nodes, other shapes,
