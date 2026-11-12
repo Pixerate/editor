@@ -91,7 +91,9 @@ doesn't compile, the session keeps the last controls that did, and `compiled` is
 1. `open_effect_authoring` with `pixel.blank` (or `pixel.rings`, `pixel.clouds` to start from an
    example). It returns the source, controls and issues.
 2. `effect_authoring_set_source` until `issues` has no errors; tune with
-   `effect_authoring_set_values`, animate with `effect_authoring_set_keyframe`.
+   `effect_authoring_set_values`, animate with `effect_authoring_set_keyframe`. Look at it with
+   `effect_authoring_view` (a frame at the playhead, or at `time`, in the painting's aspect with its
+   longest side at most 256 px) before saving.
 3. `save_authored_effect` with a name: it trial-renders the effect and returns its id,
    `authored.<name>`.
    Before saving, give an effect meant for strokes a paint hint with

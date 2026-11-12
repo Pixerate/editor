@@ -1,5 +1,6 @@
 import Foundation
 import PixerateCore
+import PixerateRaster
 
 /**
  * Agent tools for writing effects at run time in the paint editor and keeping them in the
@@ -33,7 +34,8 @@ public func createPaintEffectAuthoringToolProvider(_ c: PaintEditorController, r
         return .object(o)
     }
 
-    var h: [String: PaintToolHandler] = effectAuthoringToolHandlers(host: EffectAuthoringToolHost(session: { c.authoringSession }, noSession: PAINT_NO_AUTHORING_SESSION, alwaysListSetSource: true))
+    let host = EffectAuthoringToolHost(session: { c.authoringSession }, noSession: PAINT_NO_AUTHORING_SESSION, alwaysListSetSource: true, capture: { try await c.captureAuthoringPreview() })
+    var h: [String: PaintToolHandler] = effectAuthoringToolHandlers(host: host)
     h["open_effect_authoring"] = { a in
         _ = try await c.openEffectAuthoring(a["effect"]?.stringValue ?? "")
         return opened()
@@ -60,5 +62,31 @@ public func createPaintEffectAuthoringToolProvider(_ c: PaintEditorController, r
     h["close_effect_authoring"] = { _ in
         ["closed": c.closeEffectAuthoring().map { .string($0) } ?? .null]
     }
-    return try contractProvider("paint-effect-authoring", h)
+    return try contractProvider("paint-effect-authoring", h, content: ["effect_authoring_view": effectAuthoringViewHandler(host: host)])
+}
+
+/// The longest side of an `effect_authoring_view` capture (`PAINT_AUTHORING_VIEW_MAX_SIDE`).
+public let PAINT_AUTHORING_VIEW_MAX_SIDE = 256
+
+/// The size `effect_authoring_view` captures at (`paintAuthoringViewSize`): the painting's aspect, its longest side at most `maxSide`, never larger than the painting.
+public func paintAuthoringViewSize(width: Int, height: Int, maxSide: Int = PAINT_AUTHORING_VIEW_MAX_SIDE) -> (width: Int, height: Int) {
+    let scale = Swift.min(1, Double(maxSide) / Double(Swift.max(width, height)))
+    return (Swift.max(1, Int(JS.round(Double(width) * scale))), Swift.max(1, Int(JS.round(Double(height) * scale))))
+}
+
+extension PaintEditorController {
+    /**
+     * One frame of the open authoring session's preview at its playhead, on the CPU, as a PNG data
+     * URL (what `effect_authoring_view` shows): `paintAuthoringViewSize` of the painting, with
+     * sample pictures for image inputs. Throws when no session is open or it has no pixel preview.
+     */
+    public func captureAuthoringPreview() async throws -> String {
+        guard let session = authoringSession else { throw EffectToolError(PAINT_NO_AUTHORING_SESSION) }
+        let size = paintAuthoringViewSize(width: doc.canvas.width, height: doc.canvas.height)
+        let renderer = try await session.createPreview(width: size.width, height: size.height)
+        defer { renderer.dispose() }
+        let state = session.getState()
+        let pixels = try await renderer.render(EffectRenderRequest(time: state.time, inputs: effectSampleInputs(state.description, width: size.width, height: size.height)))
+        return pngDataUrl(pixels.width, pixels.height, pixels.data)
+    }
 }

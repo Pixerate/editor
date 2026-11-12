@@ -9,7 +9,8 @@ import SwiftUI
  * strokes), layer styles and wet paint on the right. Wet paint keeps flowing: the view ticks the
  * simulation every frame (`runWetClock`), living biopaint grows live (`runCultureClock`), and
  * live effect paint plays (`runEffectClock`). With an effects provider registered, an Effects tab
- * puts provider effects on the paper, layers and brush (`PaintProviderEffectsPanel`).
+ * puts provider effects on the paper, layers and brush (`PaintProviderEffectsPanel`); with the
+ * `author` policy it also writes effects in the effect authoring editor, shown as a sheet.
  * Agents drive the same editor through `model.registry`.
  */
 public struct PaintEditorView: View {
@@ -78,6 +79,7 @@ public struct PaintEditorView: View {
             }
         }
         .controlSize(.small)
+        .paintEffectAuthoringSheet(model)
         .task {
             model.catchUpCultures()
             await model.runWetClock()

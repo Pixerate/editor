@@ -109,6 +109,9 @@ public final class PaintEditorModel {
     public var tab: PaintPanelTab = .color
     /// Set while a provider effect renders from the effects panel (`aria-busy`).
     public internal(set) var effectsBusy = false
+    /// Whether the effect authoring editor is shown (over the open authoring session, `authoringEditor`).
+    public var authoringPresented = false
+    @ObservationIgnored var authoringCache: EffectAuthoringModel?
     /// The canvas view's size in points (the canvas view keeps it current).
     @ObservationIgnored public var viewport: (width: Double, height: Double) = (800, 600)
     @ObservationIgnored public private(set) var gesture: PaintGesture!

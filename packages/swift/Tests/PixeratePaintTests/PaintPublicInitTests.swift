@@ -28,7 +28,7 @@ final class PaintPublicInitTests: XCTestCase {
         let c = try PaintEditorController(width: 32, height: 16, authoredEffects: try AuthoredEffectsPolicy.parse("author"), rawShaders: false, authoredEffectLimits: AuthoredEffectLimits(maxSourceLength: 4096, maxCost: 512, trialSize: 32, trialRenderMs: 200, liveFrameMs: 40))
         XCTAssertEqual(c.authoredPolicy, .author)
         _ = PaintAuthoredEffect(id: "authored.x", name: "X", document: ["version": 1, "providerId": "pixel"])
-        XCTAssertEqual(try createPaintEffectAuthoringToolProvider(c, readOnly: { nil }).tools.count, 20)
+        XCTAssertEqual(try createPaintEffectAuthoringToolProvider(c, readOnly: { nil }).tools.count, 21, "with effect_authoring_view")
     }
 
     func testHostBuildsEngineOptionStructs() {

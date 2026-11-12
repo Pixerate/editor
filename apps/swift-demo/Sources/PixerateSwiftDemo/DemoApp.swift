@@ -51,7 +51,8 @@ final class DemoAppDelegate: NSObject, NSApplicationDelegate {
 struct DemoRoot: View {
     @State private var model: PaintEditorModel? = {
         do {
-            let m = try PaintEditorModel()
+            // `author`: the Effects tab offers New effect and the effect authoring editor (#752).
+            let m = try PaintEditorModel(controller: PaintEditorController(width: 1024, height: 768, authoredEffects: .author))
             // A few marks so the canvas isn't empty on first launch.
             let c = m.controller
             _ = try c.setColor("#2563eb")

@@ -10,7 +10,8 @@
 
 import { createEffectAuthoringToolProvider } from "../effects/authoring-tools.js";
 import { PIXEL_TEMPLATES } from "../effects/pixel-provider.js";
-import { effectParameterFields } from "../effects/ui.js";
+import { effectParameterFields, effectSampleInputs } from "../effects/ui.js";
+import { pngDataUrl } from "../raster/png.js";
 import type { AgentTool, AgentToolProvider } from "../tools/registry.js";
 import type { PaintEditorController } from "./controller";
 import { withPaintPlayback } from "./playback";
@@ -50,6 +51,21 @@ const EMPTY = {
   additionalProperties: false,
 } as const;
 
+/** The longest side of an `effect_authoring_view` capture (the painting's aspect, never larger than the painting). */
+export const PAINT_AUTHORING_VIEW_MAX_SIDE = 256;
+
+/** The size `effect_authoring_view` captures at: the painting's aspect, its longest side at most `maxSide`. */
+export function paintAuthoringViewSize(
+  canvas: { width: number; height: number },
+  maxSide = PAINT_AUTHORING_VIEW_MAX_SIDE,
+): { width: number; height: number } {
+  const scale = Math.min(1, maxSide / Math.max(canvas.width, canvas.height));
+  return {
+    width: Math.max(1, Math.round(canvas.width * scale)),
+    height: Math.max(1, Math.round(canvas.height * scale)),
+  };
+}
+
 const NO_SESSION =
   "No effect is open for authoring; open one with open_effect_authoring (start from pixel.blank to write a new effect), then use the effect_authoring_* tools.";
 
@@ -79,6 +95,23 @@ export function createPaintEffectAuthoringToolProvider(
       subscribe: (notify) => controller.subscribeAuthoring(notify),
       noSession: NO_SESSION,
       alwaysListSetSource: true,
+      // `effect_authoring_view`: one frame of the open session's preview at its playhead, on the CPU.
+      capture: async () => {
+        const session = controller.authoringSession;
+        if (!session) throw new Error(NO_SESSION);
+        const size = paintAuthoringViewSize(controller.document.canvas);
+        const renderer = await session.createPreview(size);
+        try {
+          const state = session.getState();
+          const pixels = await renderer.render({
+            time: state.time,
+            inputs: effectSampleInputs(state.description, size),
+          });
+          return pngDataUrl(pixels.width, pixels.height, pixels.data);
+        } finally {
+          renderer.dispose();
+        }
+      },
     },
     { id: "effect-authoring" },
   );

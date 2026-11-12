@@ -3,9 +3,10 @@ import PixerateCore
 
 /**
  The effect authoring agent tools (`effects/authoring-tools.ts`, `createEffectAuthoringToolProvider`):
- handlers for every `effect_authoring_*` tool except `effect_authoring_view` (Swift hosts have no
- preview capture yet). Results and error messages are the TS core's; a thrown `EffectToolError`
- becomes an `isError` result. Tool definitions come from the editor's contracts.
+ handlers for every `effect_authoring_*` tool, with `effect_authoring_view` (an image result,
+ `effectAuthoringViewHandler`) when the host can capture the preview. Results and error messages
+ are the TS core's; a thrown `EffectToolError` becomes an `isError` result. Tool definitions come
+ from the editor's contracts.
  */
 
 /// What the tools say when no session is open (unless the host says otherwise).
@@ -19,15 +20,18 @@ public struct EffectAuthoringToolHost {
     public var noSession: String?
     /// List `effect_authoring_set_source` even while no session (or one without source) is open; it then refuses with the reason.
     public var alwaysListSetSource: Bool
+    /// A data URL (PNG) of the open session's preview at its playhead, for `effect_authoring_view`; nil when this host can't capture (the tool is then not listed).
+    public var capture: (() async throws -> String)?
 
-    public init(session: @escaping () -> EffectAuthoringSession?, noSession: String? = nil, alwaysListSetSource: Bool = false) {
+    public init(session: @escaping () -> EffectAuthoringSession?, noSession: String? = nil, alwaysListSetSource: Bool = false, capture: (() async throws -> String)? = nil) {
         self.session = session
         self.noSession = noSession
         self.alwaysListSetSource = alwaysListSetSource
+        self.capture = capture
     }
 }
 
-/// The authoring tools listed now, in the TS order (`set_source` only with a session that edits source, or `alwaysListSetSource`; no `view`).
+/// The authoring tools listed now, in the TS order (`set_source` only with a session that edits source, or `alwaysListSetSource`; `view` only with `capture`).
 public func effectAuthoringToolNames(_ host: EffectAuthoringToolHost) -> [String] {
     var names = ["effect_authoring_describe", "effect_authoring_get_source"]
     if host.session()?.canEditSource == true || host.alwaysListSetSource { names.append("effect_authoring_set_source") }
@@ -35,7 +39,45 @@ public func effectAuthoringToolNames(_ host: EffectAuthoringToolHost) -> [String
         "effect_authoring_set_values", "effect_authoring_reset_values", "effect_authoring_apply_preset", "effect_authoring_save_preset", "effect_authoring_set_keyframe",
         "effect_authoring_remove_keyframe", "effect_authoring_clear_track", "effect_authoring_set_timing", "effect_authoring_set_paint_hint", "effect_authoring_seek", "effect_authoring_undo", "effect_authoring_redo",
     ]
+    if host.capture != nil { names.append("effect_authoring_view") }
     return names
+}
+
+/**
+ `effect_authoring_view`: seeks to `time` when given, then captures the preview through the host
+ and returns an image block and `Captured effect preview at <time>ms.` (the TS tool's content).
+ Refused when the host can't capture, and with the session's `previewError` when the effect has no
+ pixel preview.
+ */
+public func effectAuthoringViewHandler(host: EffectAuthoringToolHost) -> (JSONObject) async throws -> ToolOutput {
+    return { a in
+        guard let session = host.session() else { throw EffectToolError(host.noSession ?? NO_EFFECT_AUTHORING_SESSION) }
+        guard let capture = host.capture else { throw EffectToolError("Capturing a preview image is not supported by this host.") }
+        if let previewError = session.getState().previewError, !previewError.isEmpty {
+            throw EffectToolError("\(previewError) The other effect authoring tools still work; check values with effect_authoring_describe.")
+        }
+        if let t = a["time"] {
+            guard let time = t.numberValue, time.isFinite, time >= 0 else { throw EffectToolError("time must be a finite non-negative number.") }
+            session.seek(time)
+        }
+        let dataUrl = try await capture()
+        let image = splitImageDataUrl(dataUrl)
+        let time = JSONValue.jsNumber(session.getState().time)
+        return .result(McpToolResult(content: [.image(data: image.data, mimeType: image.mimeType), .text("Captured effect preview at \(time)ms.")]))
+    }
+}
+
+/// The base64 data and image MIME type of a data URL, split as the TS tool does: `image/png` when the URL names no image type, the whole string when it has no comma.
+func splitImageDataUrl(_ url: String) -> (data: String, mimeType: String) {
+    guard let comma = url.firstIndex(of: ",") else { return (url, "image/png") }
+    let head = String(url[..<comma])
+    let data = String(url[url.index(after: comma)...])
+    let lower = head.lowercased()
+    guard lower.hasPrefix("data:image/"), lower.hasSuffix(";base64") else { return (data, "image/png") }
+    let type = String(head.dropFirst(5).dropLast(7))
+    let subtype = type.dropFirst(6)
+    let allowed = subtype.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) || ".+-".unicodeScalars.contains($0) }
+    return (data, !subtype.isEmpty && allowed ? type : "image/png")
 }
 
 /// A value as JavaScript's `String(value)` prints it (for easing refusals).

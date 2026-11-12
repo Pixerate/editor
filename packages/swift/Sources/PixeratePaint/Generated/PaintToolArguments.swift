@@ -3340,6 +3340,17 @@ public struct EffectAuthoringRedoArguments: Sendable {
     }
 }
 
+/// Arguments of `effect_authoring_view`.
+public struct EffectAuthoringViewArguments: Sendable {
+    /// Optional time in milliseconds to view the preview at.
+    public var time: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        time = try args.number("time")
+    }
+}
+
 /// Arguments of `list_brush_presets`.
 public struct ListBrushPresetsArguments: Sendable {
     /// mark (lays a material) or tool (works on paint already down).
@@ -4151,6 +4162,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .effectAuthoringSeek: try EffectAuthoringSeekArguments(args)
     case .effectAuthoringUndo: try EffectAuthoringUndoArguments(args)
     case .effectAuthoringRedo: try EffectAuthoringRedoArguments(args)
+    case .effectAuthoringView: try EffectAuthoringViewArguments(args)
     case .listBrushPresets: try ListBrushPresetsArguments(args)
     case .describeBrush: try DescribeBrushArguments(args)
     case .checkBrush: try CheckBrushArguments(args)

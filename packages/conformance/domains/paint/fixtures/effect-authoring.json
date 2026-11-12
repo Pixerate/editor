@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "effect-authoring",
-  "description": "Writing an effect at run time in pixel expressions: opening a template, source with compile errors and a fix, values, presets, keyframes, timing, undo, saving it into the painting, and a provider effect that has no source.",
+  "description": "Writing an effect at run time in pixel expressions: opening a template, source with compile errors and a fix, values, presets, keyframes, timing, undo, preview captures, saving it into the painting, and a provider effect that has no source.",
   "setup": {
     "width": 48,
     "height": 32,
@@ -20,6 +20,18 @@
     },
     {
       "tool": "effect_authoring_describe",
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No effect is open for authoring; open one with open_effect_authoring (start from pixel.blank to write a new effect), then use the effect_authoring_* tools."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "effect_authoring_view",
       "expect": {
         "result": {
           "error": {
@@ -455,6 +467,42 @@
             "soft": true
           }
         }
+      }
+    },
+    {
+      "tool": "effect_authoring_view",
+      "arguments": {
+        "time": 750
+      },
+      "expect": {
+        "result": "Captured effect preview at 750ms."
+      }
+    },
+    {
+      "tool": "effect_authoring_seek",
+      "arguments": {
+        "time": 250
+      },
+      "expect": {
+        "result": {
+          "time": 250,
+          "values": {
+            "center": [
+              0.5,
+              0.5
+            ],
+            "count": 8,
+            "glow": 0.4,
+            "ink": "#1d2b53",
+            "soft": true
+          }
+        }
+      }
+    },
+    {
+      "tool": "effect_authoring_view",
+      "expect": {
+        "result": "Captured effect preview at 250ms."
       }
     },
     {

@@ -26,7 +26,7 @@ public struct PaintProviderEffectsPanel: View {
                 if model.effectsBusy { ProgressView().controlSize(.mini).accessibilityLabel("Rendering the effect") }
             }
             if model.effectsProvider == nil {
-                Text("No effects provider is registered. Effects in the painting are kept.").font(.caption).foregroundStyle(.secondary)
+                Text(model.canAuthorEffects ? "No effects provider is registered: write an effect below." : "No effects provider is registered. Effects in the painting are kept.").font(.caption).foregroundStyle(.secondary)
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 4)], alignment: .leading, spacing: 4) {
                     ForEach(PaintEffectPlace.allCases) { place in
@@ -48,6 +48,7 @@ public struct PaintProviderEffectsPanel: View {
             if let paint = model.effectPaint { EffectPaintSection(model: model, paint: paint) }
             if let animation = model.liveAnimation { EffectPlaybackSection(model: model, animation: animation) }
             if let layer = model.activeEffectLayer { EffectLayerSection(model: model, source: layer) }
+            if model.canAuthorEffects { PaintAuthoringSection(model: model) }
         }
     }
 }
