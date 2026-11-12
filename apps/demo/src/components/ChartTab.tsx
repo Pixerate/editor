@@ -14,7 +14,7 @@ import {
   createChartEditorDocument,
   createChartStyleToolProvider,
 } from "@pixerate/editor/chart";
-import { StyleFindings, useAgentToolProvider, useStyleFindings } from "@pixerate/editor-react";
+import { StyleFindings, useAgentToolProvider, useStyleChoices, useStyleFindings } from "@pixerate/editor-react";
 import { registerChartMap, type ChartSelection } from "@pixerate/editor/chart";
 import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
 
@@ -292,6 +292,8 @@ function ChartEditorDemo() {
   // House style: `check_chart_style` joins the chart toolset (the `style` toolset is registered once in houseStyles.ts).
   useAgentToolProvider(demoToolRegistry, useMemo(() => createChartStyleToolProvider(controller, demoStyles), [controller]));
   const houseStyle = useStyleFindings(demoStyles, "chart", state.spec);
+  // One-of-a-kind looks: the picker and the agent's choose_style write the same user-layer state.
+  const looks = useStyleChoices(demoStyles);
   // Office files the user opened: listed in the "Open an Office file" panel and readable by the agent.
   const [officeFiles, setOfficeFiles] = useState<OfficeChartFile[]>([]);
   const officeFilesRef = useRef(officeFiles);
@@ -363,6 +365,24 @@ function ChartEditorDemo() {
         <div className="text-slate-200" data-testid="chart-house-style">
           <StyleFindings report={houseStyle.report} title="Org: Acme (locked) · user: big labels" onSelect={(f) => controller.select(f.target as ChartSelection)} />
           {houseStyle.error && <p className="text-xs text-rose-400">{houseStyle.error}</p>}
+          {looks.groups?.map((g) => (
+            <label key={g.group} className="mt-2 flex items-center gap-2 text-xs text-slate-300">
+              Chart look
+              <select
+                className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
+                value={g.chosen ?? ""}
+                onChange={(e) => void looks.choose(e.target.value).catch(() => {})}
+                data-testid="chart-look"
+              >
+                {g.options.map((o) => (
+                  <option key={o.name} value={o.name} title={o.description}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          {looks.error && <p className="text-xs text-rose-400">{looks.error}</p>}
         </div>
       </EditorPanel>
       <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place; every other call is acted out on the inspector, data grid and toolbar." />

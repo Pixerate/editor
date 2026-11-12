@@ -13,8 +13,16 @@ demoBrandTokens.transact("seed", () => {
 });
 demoBrandTokens.replaceState(demoBrandTokens.getState(), { reason: "seed" });
 
+/** One-of-a-kind chart looks the org offers (group "look"): the user picks one, in the chart tab or through choose_style. */
+const look = (name: string, description: string, defaults: Record<string, unknown>) => ({
+  [`${name}/SKILL.md`]: `---\nname: ${name}\ndescription: ${description}\ndomains: [chart]\ngroup: look\n---\n\n${description}\n`,
+  [`${name}/chart.json`]: JSON.stringify({ defaults }, null, 2),
+});
+
 /** The org layer: locked, so later layers cannot change what it sets. */
 export const demoOrgStyles = memoryStyleStore({
+  ...look("look-calm", "Calm charts: smooth lines, no stacking.", { curve: "smooth", stacking: "none" }),
+  ...look("look-dense", "Dense charts: stacked bars and step lines for dashboards.", { curve: "step", stacking: "stacked" }),
   "acme-brand/SKILL.md": `---
 name: acme-brand
 description: Acme's house style for charts and design tokens.

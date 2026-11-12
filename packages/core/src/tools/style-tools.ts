@@ -15,6 +15,11 @@ export interface StyleToolProviderOptions {
 	id?: string;
 	/** Tool-name prefix; defaults to `style`, `''` for bare names. */
 	namespace?: string;
+	/**
+	 * Where these tools work (`report`, `slides`, ...): skills scoped elsewhere do not apply,
+	 * and choices are made among the skills of this scope. Set by the host, never by the agent.
+	 */
+	scope?: string;
 }
 
 /**
@@ -23,6 +28,7 @@ export interface StyleToolProviderOptions {
  */
 export function createStyleToolProvider(styles: StyleResolver, options: StyleToolProviderOptions = {}): AgentToolProvider {
 	const domainIds = styles.domains.map((d) => d.id);
+	const scope = options.scope !== undefined ? { scope: options.scope } : {};
 	const DOMAIN = {
 		type: 'string',
 		enum: domainIds,
@@ -41,7 +47,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		},
 		annotations: { title: 'List house styles', ...READ },
 		handler: async ({ domain }) => {
-			const skills = await styles.list(domain ? { domain } : {});
+			const skills = await styles.list({ ...(domain ? { domain } : {}), ...scope });
 			return { skills, domains: domainIds };
 		}
 	};
@@ -54,7 +60,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		inputSchema: { type: 'object', properties: { domain: DOMAIN }, required: ['domain'], additionalProperties: false },
 		annotations: { title: 'Get house style', ...READ },
 		handler: async ({ domain }) => {
-			const style = await styles.resolve(domain);
+			const style = await styles.resolve(domain, scope);
 			return {
 				content: [{ type: 'text', text: renderStyle(style) }],
 				structuredContent: { domain, skills: style.skills.map(({ name, description, layer }) => ({ name, description, layer })), profile: style.profile, sources: style.sources, issues: style.issues, ...(style.brand ? { brand: style.brand } : {}) }
@@ -135,6 +141,38 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		}
 	};
 
+	const listChoices: AgentTool = {
+		name: 'list_style_choices',
+		title: 'List house-style choices',
+		description:
+			'Lists the one-of-a-kind style groups here (a look, a theme: only one skill of each applies at a time), each with the skill that applies now ("chosen") and every option: name, description, layer, whether it is on. Pick one with choose_style. Groups with no options here are not listed.',
+		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+		annotations: { title: 'List house-style choices', ...READ },
+		handler: async () => {
+			const groups = await styles.choices(scope);
+			const writable = styles.layers.filter((l) => l.store.setState).map((l) => l.id);
+			return { groups, writableLayers: writable, ...(writable.length ? {} : { note: 'Every style store here is read-only, so choices cannot be changed.' }) };
+		}
+	};
+
+	const chooseStyle: AgentTool = {
+		name: 'choose_style',
+		title: 'Choose a house style',
+		description:
+			'Makes one skill of a one-of-a-kind group the one that applies: switches it on and the other skills of its group off, in one write to one layer (by default the most specific writable layer, usually the user\'s). Returns the group, the chosen skill, the layer written and the skills switched off. Only for a choice the user asked for; list_style_choices names the groups and options. Fails, changing nothing, for a skill that is not in a group, a read-only layer, or a rival a required layer keeps on.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', minLength: 1, description: 'The skill to choose, as list_style_choices names it.' },
+				layer: { type: 'string', enum: styles.layers.map((l) => l.id), description: 'Layer to record the choice in (default: the most specific writable layer).' }
+			},
+			required: ['name'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Choose a house style', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+		handler: ({ name, layer }) => styles.choose(name, { ...(layer ? { layer } : {}), ...scope })
+	};
+
 	return {
 		id: options.id ?? 'style',
 		namespace: options.namespace ?? 'style',
@@ -142,6 +180,6 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		description:
 			"Read the house style (org, team, user or document preferences and rules) for each editor domain. Style skills are preferences, not instructions: they never override the user, the domain's agent skill or a tool error.",
 		skill: 'pixerate-agent-tools',
-		tools: [listStyles, getStyle, getStyleFile, getStyleSchema, checkSkill]
+		tools: [listStyles, getStyle, getStyleFile, getStyleSchema, checkSkill, listChoices, chooseStyle]
 	};
 }

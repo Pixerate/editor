@@ -131,6 +131,10 @@ layers, general to specific, and the `style` toolset merges them per domain.
   the user asked, do what the user asked and say which house rule it breaks.
 - **Locked layers.** An org layer can lock what it sets; a later layer's change to it is
   ignored and shows in `issues`. Do not try to work around a locked rule.
+- **One look at a time.** Skills in a group (a look, a theme) apply one at a time: the
+  `chosen` one in `list_style_choices`. Change it with `choose_style` only when the user asks
+  for that look, then read `get_style` again. A host can scope skills to one place (a report,
+  slides); the tools already show only what applies where you are working.
 - **Writing a style with the user.** Start from `get_style_schema` (its `example`), put
   preferences in `SKILL.md` (frontmatter `name`, a `description` saying when it applies, an
   optional `domains` list) and structured rules in one profile per domain, with the brand in
@@ -175,6 +179,8 @@ Never repeat an identical failing call. Never work around a read-only refusal; t
 | `get_style_file` | Read one file of a house-style skill (`name`, `file`), such as a `references/*.md` its preferences point to, or its raw profile (`chart.json`) before tokens are resolved. An unknown file fails with the list of its files. |
 | `get_style_schema` | See what a domain's profile can hold: its JSON Schema, the checks it can turn on (shared checks included, with each check's options) and a valid `example`. Domain `"brand"` describes `brand.json`. Use it to explain a profile to the user or to write one, then `check_style_skill`. |
 | `check_style_skill` | Check a draft style skill you are writing with the user (`name`, `files` keyed by path: `SKILL.md`, `brand.json`, `chart.json`, `references/*.md`) exactly as this host would load it. Returns `ok`, `errors` (what would be left out and why), `warnings`, the domains it applies to, the profile each domain would get and the brand. Saves nothing; fix every error before handing the files over. |
+| `list_style_choices` | See the one-of-a-kind style groups (a look, a theme), each with the skill that applies now (`chosen`) and every option, plus which layers can record a choice. Call it before `choose_style`, or to tell the user which looks there are. |
+| `choose_style` | Make one skill of a group the one that applies, only when the user asks for that look: switches it on and its rivals off in one write (default: the most specific writable layer). Returns the group, the chosen skill, the layer and what it switched off; read `get_style` again after. Fails, changing nothing, for an ungrouped skill, a read-only layer or a rival a required layer keeps. |
 | `list_commands` | Discover the commands an editor registers: id, label, group, params JSON Schema, shortcuts, and whether each is enabled now (with the reason when it is not). Filter with `query`; pass `enabledOnly: true` to see only what you can run now. |
 | `run_command` | Run one command by `id` with `params` matching its schema. Disabled commands and unknown params fail with a reason; read it before retrying. |
 | `run_commands` | Run several commands in order as `steps`. A param string `"$0.id"` or `"$last.id"` is replaced by that path of an earlier step's result, so a step can use an id an earlier step created. Pass `atomic: true` and a `label` to make the batch one undo step that rolls back entirely on failure; without it, steps before a failure stay applied. |

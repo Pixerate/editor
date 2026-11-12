@@ -194,6 +194,8 @@ export interface TokensStyleToolProviderOptions {
 	id?: string;
 	/** Tool-name prefix; defaults to `tokens`. */
 	namespace?: string;
+	/** Where the tool works (`report`, ...): skills scoped elsewhere do not apply. Set by the host. */
+	scope?: string;
 }
 
 /** `check_tokens_style`: runs the design-token house-style checks against a token store. */
@@ -207,7 +209,7 @@ export function createTokensStyleToolProvider(store: TokenStore, styles: StyleRe
 		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
 		annotations: { title: 'Check token house style', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 		handler: async () => {
-			const { style, ...report } = await styles.check('tokens', store.getState());
+			const { style, ...report } = await styles.check('tokens', store.getState(), options.scope !== undefined ? { scope: options.scope } : {});
 			return {
 				...report,
 				ok: report.findings.length === 0,
