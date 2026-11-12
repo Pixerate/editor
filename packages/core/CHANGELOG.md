@@ -1,5 +1,29 @@
 # @pixerate/editor
 
+## 0.299.0
+
+### Minor Changes
+
+- 6217143: House style: one-of-a-kind groups and scoped skills (#773).
+
+  - A style skill can join a group (`group: look` in frontmatter, or `group` in store state). Of the switched-on skills in a group only the first applies. `resolver.choose(name, { layer, scope })` switches one on and its rivals off in one write to the most specific writable layer (`StyleStore.setState`), and refuses, writing nothing, for an ungrouped skill, a read-only layer or a rival a required layer keeps on. `resolver.chosen(group)` and `resolver.choices()` read the choice; `StyleSkillInfo` gains `group`, `scope` and `chosen`.
+  - A skill's state can carry `scope: string[]`; scoped skills apply only when `resolve` / `check` / `list` are asked for one of their scopes. The style and check tool providers take a host-set `scope` option.
+  - Agent tools `list_style_choices` and `choose_style`.
+  - React and Svelte: `useStyleChoices(styles, scope?)` for pickers.
+
+## 0.298.0
+
+### Minor Changes
+
+- f6fe15f: House style: an authoring kit for the people who write style skills (#775).
+
+  - `checkStyleSkill(name, files, { domains, tokens })` reads a draft skill exactly as a resolver would and reports `ok`, errors (what would be left out and why), warnings, each file's role, the profile each domain gets and the brand. Agents get it as the `check_style_skill` tool.
+  - `styleProfileSchema(domain)` is a domain's standalone JSON Schema with its checks; profiles may carry `"$schema"` for editor completion (ignored when they load). `StyleDomain.example` gives each domain a valid example (brand, chart, tokens), which `get_style_schema` now returns along with the shared checks.
+  - `scaffoldStyleSkill` starts a skill from the examples; `renderStylePreview` draws a report as an HTML page with brand swatches, fonts, the logo and a sample per domain (`StyleDomain.preview`; charts draw a sample bar chart, `chartStylePreview`).
+  - New `pixerate-style` command: `check` (exit 1 on errors, `--json`, `--tokens`), `init`, `schema` and `preview` (live reload on 127.0.0.1).
+  - `styleStoreConformance` and `STYLE_FIXTURE_SKILLS` test a host's own `StyleStore`.
+  - `StyleResolver.tokens` exposes the token source; `STYLE_SKILL_NAME` is exported.
+
 ## 0.297.0
 
 ### Minor Changes
