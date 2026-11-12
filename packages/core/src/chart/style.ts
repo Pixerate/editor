@@ -4,6 +4,7 @@
  */
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { StyleCheck, StyleDomain, StyleResolver } from '../tools/style.js';
+import { brandColor, brandPalette, type BrandProfile } from '../tools/brand.js';
 import type { ChartSelection, ChartSpec, ChartType } from './types.js';
 import { CHART_PALETTE_SHADES, chartColorDistance, chartContrastRatio, checkChartColors, parseChartColor, shadeChartColor } from './color.js';
 import { chartColorsByCategory, chartSeriesColor, chartSliceColor } from './spec.js';
@@ -187,8 +188,32 @@ export const chartStyleDomain: StyleDomain<ChartSpec> = {
 		},
 		additionalProperties: false
 	},
-	checks: [paletteOnly, distinguishable, minContrast, allowedType]
+	checks: [paletteOnly, distinguishable, minContrast, allowedType],
+	themeFromBrand: (brand) => ({ ...chartStyleFromBrand(brand) }),
+	surface: (spec) => ({ colors: chartColors(spec).map((c) => ({ ...c, use: 'series' as const })) })
 };
+
+/**
+ * The chart profile a brand gives: its palette, and a theme from its colour roles (background,
+ * surface, text, muted text, border for grid and axis, positive, negative) and body font.
+ */
+export function chartStyleFromBrand(brand: BrandProfile): ChartStyleProfile {
+	const palette = brandPalette(brand);
+	const theme: NonNullable<ChartStyleProfile['theme']> = {};
+	const set = (key: keyof typeof theme, value: string | undefined) => {
+		if (value) (theme as Record<string, string>)[key] = value;
+	};
+	set('background', brandColor(brand, 'background'));
+	set('surface', brandColor(brand, 'surface'));
+	set('text', brandColor(brand, 'text'));
+	set('mutedText', brandColor(brand, 'mutedText'));
+	set('grid', brandColor(brand, 'border'));
+	set('axis', brandColor(brand, 'border'));
+	set('positive', brandColor(brand, 'positive'));
+	set('negative', brandColor(brand, 'negative'));
+	set('fontFamily', brand.fonts?.body ?? brand.fonts?.heading);
+	return { ...(palette.length ? { palette } : {}), ...(Object.keys(theme).length ? { theme } : {}) };
+}
 
 /** The spec patch that starts a chart in the house style: the palette and the defaults. */
 export function chartStylePatch(profile: Readonly<Record<string, unknown>>): Partial<ChartSpec> {

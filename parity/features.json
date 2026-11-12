@@ -2505,8 +2505,8 @@
           "swift": "Planned (#533)"
         },
         {
-          "feature": "House-Style Skills (runtime style skills in layers such as org / workspace / user, each a `SKILL.md` of preferences plus per-domain profiles like `chart.json` with `$token` references to design tokens; locked and required layers, per-field merge with sources; checks whose findings target what the write tools edit; `list_styles`, `get_style`, `get_style_file`, `get_style_schema`, `check_chart_style`, `check_tokens_style`; discovery marks toolsets that have a style)",
-          "core": "`createStyleResolver`, `memoryStyleStore`, `createStyleToolProvider` (`/tools`), `chartStyleDomain`, `createChartStyleToolProvider` (`/chart`), `tokensStyleDomain`, `createTokenStyleSource`, `createTokensStyleToolProvider` (`/tokens`)",
+          "feature": "House-Style Skills (runtime style skills in layers such as org / workspace / user, each a `SKILL.md` of preferences plus per-domain profiles like `chart.json` with `$token` references to design tokens; locked and required layers, per-field merge with sources; checks whose findings target what the write tools edit; `list_styles`, `get_style`, `get_style_file`, `get_style_schema`, `check_chart_style`, `check_tokens_style`; discovery marks toolsets that have a style; a shared `brand.json` (colour roles with Office-slot fallbacks, palette, fonts, logo) that every domain derives its profile from, and shared `palette-only` / `min-contrast` / `distinguishable` / `fonts-allowed` checks over each domain's style surface)",
+          "core": "`createStyleResolver`, `memoryStyleStore`, `createStyleToolProvider`, `brandStyleDomain`, `brandColor`, `brandPalette`, `SHARED_STYLE_CHECKS` (`/tools`), `chartStyleDomain`, `createChartStyleToolProvider` (`/chart`), `tokensStyleDomain`, `createTokenStyleSource`, `createTokensStyleToolProvider` (`/tokens`)",
           "react": "`useStyle`, `useStyleFindings`, `<StyleFindings>` & `useAgentToolProvider`",
           "svelte": "`useStyle`, `useStyleFindings`, `<StyleFindings>` & `useAgentToolProvider`",
           "swift": "Planned (#533)"

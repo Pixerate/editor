@@ -7,7 +7,8 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { StyleCheck, StyleDomain, StyleResolver, StyleTokenSource } from '../tools/style.js';
 import { parseColor } from '../color/parse.js';
 import { contrastRatio } from '../color/contrast.js';
-import { findTokenMode, findTokenVariable, getTokenCollection, getTokenVariable, resolveToken } from './model.js';
+import { findTokenMode, findTokenVariable, getTokenCollection, getTokenVariable, resolveToken, resolveTokenInMode } from './model.js';
+import type { StyleSurface, StyleSurfaceColor } from '../tools/style-surface.js';
 import type { TokenState } from './types.js';
 import type { TokenStore } from './store.js';
 
@@ -159,8 +160,24 @@ export const tokensStyleDomain: StyleDomain<TokenState> = {
 		},
 		additionalProperties: false
 	},
-	checks: [requiredVariables, namePattern, requiredModes, contrastPairs]
+	checks: [requiredVariables, namePattern, requiredModes, contrastPairs],
+	surface: tokensStyleSurface
 };
+
+/** Every colour variable's value in each mode of its collection, for the shared checks (`palette-only`, ...). */
+export function tokensStyleSurface(state: TokenState): StyleSurface {
+	const colors: StyleSurfaceColor[] = [];
+	for (const variable of state.variables) {
+		if (variable.type !== 'color') continue;
+		const collection = getTokenCollection(state, variable.collectionId);
+		for (const mode of collection?.modes ?? []) {
+			const value = resolveTokenInMode(state, variable.id, mode.id);
+			if (typeof value !== 'string') continue;
+			colors.push({ color: value, label: `${variable.name} (${mode.name})`, target: { variableId: variable.id, modeId: mode.id } });
+		}
+	}
+	return { colors };
+}
 
 export interface TokensStyleToolProviderOptions {
 	/** Provider id (unique per registry). Default `tokens-style`. */

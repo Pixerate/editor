@@ -11,6 +11,8 @@
 import { validateJsonSchema, type JsonSchema } from './schema.js';
 import { stripPrototypeKeys, isUnsafeJsonKey } from './safe-json.js';
 import { parseSkillFrontmatter, type SkillFiles } from './skills.js';
+import { BRAND_PROFILE_SCHEMA, type BrandProfile } from './brand.js';
+import { SHARED_STYLE_CHECKS, type StyleCheckContext, type StyleSurface } from './style-surface.js';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -79,8 +81,16 @@ export interface StyleCheck<State = unknown> {
 	description: string;
 	/** Schema of its options (validated when a profile loads). Default: no options. */
 	optionsSchema?: JsonSchema;
-	/** The findings for `state` under the resolved `profile`. Throwing reports the check as skipped. */
-	run(state: State, profile: Readonly<Record<string, unknown>>, options: Readonly<Record<string, unknown>>): readonly Omit<StyleFinding, 'check' | 'layer'>[];
+	/**
+	 * The findings for `state` under the resolved `profile` (and the brand, in `context`).
+	 * Throwing reports the check as skipped.
+	 */
+	run(
+		state: State,
+		profile: Readonly<Record<string, unknown>>,
+		options: Readonly<Record<string, unknown>>,
+		context?: StyleCheckContext
+	): readonly Omit<StyleFinding, 'check' | 'layer'>[];
 }
 
 /** An editor domain that can have a house style: its profile file, schema and checks. */
@@ -93,6 +103,33 @@ export interface StyleDomain<State = unknown> {
 	/** Schema of the profile (the `checks` property is validated separately). */
 	profileSchema: JsonSchema & { type: 'object' };
 	checks: readonly StyleCheck<State>[];
+	/**
+	 * This domain's profile derived from the brand (`brand.json`): what a brand-only skill gives
+	 * it. Fields a domain profile sets win; the result is validated against `profileSchema`.
+	 */
+	themeFromBrand?(brand: BrandProfile): Record<string, unknown>;
+	/**
+	 * What `state` draws with, so the shared checks (`palette-only`, `min-contrast`,
+	 * `distinguishable`, `fonts-allowed`) run in this domain. A domain check with the same id wins.
+	 */
+	surface?(state: State): StyleSurface;
+}
+
+/** The `brand` pseudo-domain: `brand.json`, read by every domain. Every resolver includes it. */
+export const brandStyleDomain: StyleDomain<StyleSurface> = {
+	id: 'brand',
+	title: 'Brand',
+	description:
+		'The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.',
+	profileSchema: BRAND_PROFILE_SCHEMA,
+	checks: SHARED_STYLE_CHECKS
+};
+
+/** The checks a domain can turn on: its own, then the shared checks it does not replace (with a surface). */
+export function styleChecksOf<State>(domain: StyleDomain<State>): readonly StyleCheck<any>[] {
+	if (domain.id === 'brand' || !domain.surface) return domain.checks;
+	const own = new Set(domain.checks.map((c) => c.id));
+	return [...domain.checks, ...SHARED_STYLE_CHECKS.filter((c) => !own.has(c.id))];
 }
 
 /** A `$token` reference in a profile: `{ "$token": "brand/primary", "mode": "Dark" }`. */
@@ -149,9 +186,14 @@ export interface ResolvedStyle {
 	skills: ResolvedStyleSkill[];
 	/** The merged profile, with `$token` references replaced by their values. */
 	profile: Record<string, unknown>;
-	/** Which layer set each profile field (`palette`, `theme.fontFamily`). */
+	/**
+	 * Which layer set each profile field (`palette`, `theme.fontFamily`). Fields derived from the
+	 * brand say `<layer> (brand)`; `$brand.checks` names the layer of the brand's checks list.
+	 */
 	sources: Record<string, string>;
 	issues: StyleIssue[];
+	/** The merged brand (`brand.json`) that applies to this domain, if any skill has one. */
+	brand?: BrandProfile;
 }
 
 /** The result of running a domain's checks. */
@@ -299,7 +341,7 @@ function checkListErrors(list: unknown, domain: StyleDomain<any>): string[] {
 			errors.push(`checks[${i}]: expected a check id or { "id": ..., options }.`);
 			return;
 		}
-		const check = domain.checks.find((c) => c.id === id);
+		const check = styleChecksOf(domain).find((c) => c.id === id);
 		if (!check || typeof entry === 'string') return; // unknown ids are reported as skipped when checks run
 		const { id: _id, ...options } = entry as Record<string, unknown>;
 		const schema = check.optionsSchema ?? { type: 'object', properties: {}, additionalProperties: false };
@@ -347,13 +389,22 @@ function mergeProfile(
 	}
 }
 
+/** Records `source` for every leaf field of `value` (objects recurse, arrays are leaves). */
+function recordSources(value: Record<string, unknown>, source: string, sources: Record<string, string>, prefix = '') {
+	for (const [key, next] of Object.entries(value)) {
+		const path = prefix ? `${prefix}.${key}` : key;
+		if (isPlainObject(next) && Object.keys(next).length) recordSources(next, source, sources, path);
+		else sources[path] = source;
+	}
+}
+
 /**
  * Builds a {@link StyleResolver} over layers of style skills. Reads go to the stores on every
  * call, so a host's change shows up at once; `subscribe` tells open views to refresh.
  */
 export function createStyleResolver(options: StyleResolverOptions): StyleResolver {
 	const layers = [...options.layers];
-	const domains = [...options.domains];
+	const domains = options.domains.some((d) => d.id === brandStyleDomain.id) ? [...options.domains] : [...options.domains, brandStyleDomain];
 	const ids = new Set<string>();
 	for (const layer of layers) {
 		if (ids.has(layer.id)) throw new Error(`Two style layers are called "${layer.id}"; give each layer its own id.`);
@@ -416,7 +467,8 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 				const raw = await layer.store.read(name, `${domain.id}.json`);
 				if (raw === undefined) continue;
 				const file = `${domain.id}.json`;
-				if (!applies.has(domain.id)) {
+				if (domain.id === brandStyleDomain.id) applies.add(domain.id); // a brand applies wherever the skill does
+				else if (!applies.has(domain.id)) {
 					skillIssues.push(`${file} is left out: the skill's domains do not include ${domain.id}.`);
 					continue;
 				}
@@ -469,22 +521,50 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 	}
 
 	async function resolve(domainId: string): Promise<ResolvedStyle> {
-		requireDomain(domainId);
+		const domain = requireDomain(domainId);
 		const { skills, issues: loadIssues } = await load();
 		const issues: StyleIssue[] = [...loadIssues];
 		const profile: Record<string, unknown> = {};
 		const sources: Record<string, string> = {};
 		const locked = new Map<string, string>();
+		const brand: Record<string, unknown> = {};
+		const brandSources: Record<string, string> = {};
+		const brandLocked = new Map<string, string>();
+		let brandLayer: string | undefined;
 		const applied: ResolvedStyleSkill[] = [];
+		const own: { skill: LoadedSkill; profile: Record<string, unknown> }[] = [];
 		for (const skill of skills) {
 			if (!skill.applies.has(domainId)) continue;
 			for (const message of skill.info.issues) issues.push({ skill: skill.info.name, layer: skill.info.layer, message });
 			if (!skill.info.enabled) continue;
 			applied.push({ name: skill.info.name, description: skill.info.description, layer: skill.info.layer, body: skill.body });
-			const own = skill.profiles.get(domainId);
-			if (own) mergeProfile(profile, own, layers[skill.layerIndex], skill.info.name, sources, locked, issues);
+			const brandProfile = skill.profiles.get(brandStyleDomain.id);
+			if (brandProfile && domainId !== brandStyleDomain.id) {
+				mergeProfile(brand, brandProfile, layers[skill.layerIndex], skill.info.name, brandSources, brandLocked, issues);
+				brandLayer = skill.info.layer;
+			}
+			const domainProfile = skill.profiles.get(domainId);
+			if (domainProfile) own.push({ skill, profile: domainProfile });
 		}
-		return { domain: domainId, skills: applied, profile, sources, issues };
+		// A domain starts from what it derives from the brand; its own profiles refine that.
+		const hasBrand = Object.keys(brand).length > 0;
+		if (hasBrand && domain.themeFromBrand) {
+			let derived: Record<string, unknown> | undefined;
+			try {
+				derived = stripPrototypeKeys(domain.themeFromBrand(brand as BrandProfile)) as Record<string, unknown>;
+			} catch (error) {
+				issues.push({ message: `The ${domainId} style derived from the brand is left out: ${(error as Error).message}` });
+			}
+			const errors = derived ? validateJsonSchema(derived, domain.profileSchema).map((e) => `${e.path || '(profile)'}: ${e.message}`) : [];
+			if (derived && errors.length) issues.push({ message: `The ${domainId} style derived from the brand is left out: ${errors.join(' ')}` });
+			else if (derived) {
+				Object.assign(profile, structuredClone(derived));
+				recordSources(derived, `${brandLayer} (brand)`, sources);
+			}
+		}
+		for (const { skill, profile: domainProfile } of own) mergeProfile(profile, domainProfile, layers[skill.layerIndex], skill.info.name, sources, locked, issues);
+		if (hasBrand && brandSources.checks) sources['$brand.checks'] = brandSources.checks;
+		return { domain: domainId, skills: applied, profile, sources, issues, ...(hasBrand ? { brand: brand as BrandProfile } : {}) };
 	}
 
 	async function winnerLayer(name: string): Promise<StyleLayer | undefined> {
@@ -526,19 +606,34 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 /** Runs the checks a resolved profile turns on. A check that is unknown or throws is skipped with the reason. */
 export function runStyleChecks<State>(domain: StyleDomain<State>, state: State, style: ResolvedStyle): StyleCheckReport {
 	const report: StyleCheckReport = { findings: [], ran: [], skipped: [] };
-	const list = Array.isArray(style.profile.checks) ? style.profile.checks : [];
-	const layer = style.sources.checks;
-	for (const entry of list) {
-		const id = typeof entry === 'string' ? entry : isPlainObject(entry) && typeof entry.id === 'string' ? entry.id : undefined;
+	const idOf = (entry: unknown) => (typeof entry === 'string' ? entry : isPlainObject(entry) && typeof entry.id === 'string' ? entry.id : undefined);
+	// The domain profile's checks, then the brand's checks the domain profile does not list itself.
+	const own = Array.isArray(style.profile.checks) ? style.profile.checks : [];
+	const ownIds = new Set(own.map(idOf));
+	const fromBrand = (Array.isArray(style.brand?.checks) ? style.brand.checks : []).filter((e) => !ownIds.has(idOf(e)));
+	const list = [...own.map((entry) => ({ entry, layer: style.sources.checks })), ...fromBrand.map((entry) => ({ entry, layer: style.sources['$brand.checks'], brand: true }))];
+	const available = styleChecksOf(domain);
+	const context: StyleCheckContext = style.brand ? { brand: style.brand } : {};
+	let surface: StyleSurface | undefined;
+	for (const { entry, layer, brand } of list as { entry: unknown; layer?: string; brand?: boolean }[]) {
+		const id = idOf(entry);
 		if (!id) continue;
-		const check = domain.checks.find((c) => c.id === id);
+		const check = available.find((c) => c.id === id);
 		if (!check) {
-			report.skipped.push({ check: id, reason: `There is no "${id}" check for ${domain.id}; it has ${domain.checks.map((c) => `"${c.id}"`).join(', ')}.` });
+			report.skipped.push({
+				check: id,
+				reason: brand && !domain.surface
+					? `The brand asks for "${id}", but ${domain.id} cannot be checked against the brand yet.`
+					: `There is no "${id}" check for ${domain.id}; it has ${available.map((c) => `"${c.id}"`).join(', ')}.`
+			});
 			continue;
 		}
 		const { id: _id, ...options } = isPlainObject(entry) ? entry : { id };
 		try {
-			for (const f of check.run(state, style.profile, options)) report.findings.push({ ...f, check: id, ...(layer ? { layer } : {}) });
+			const shared = !domain.checks.includes(check as StyleCheck<State>);
+			if (shared) surface ??= domain.surface!(state);
+			const findings = shared ? (check as StyleCheck<StyleSurface>).run(surface!, style.profile, options, context) : check.run(state, style.profile, options, context);
+			for (const f of findings) report.findings.push({ ...f, check: id, ...(layer ? { layer } : {}) });
 			report.ran.push(id);
 		} catch (error) {
 			report.skipped.push({ check: id, reason: `The check could not run: ${(error as Error).message}` });
@@ -560,5 +655,6 @@ export function renderStyle(style: ResolvedStyle): string {
 		return `<style_skill name="${escapeAttribute(s.name)}" layer="${escapeAttribute(s.layer)}">\n${body}\n</style_skill>`;
 	});
 	const profile = Object.keys(style.profile).length ? `\n\nMerged ${style.domain} profile:\n${JSON.stringify(style.profile, null, 2)}` : '';
-	return `${blocks.join('\n\n')}${profile}`;
+	const brand = style.brand ? `\n\nBrand (brand.json; place the logo as given, never redraw it):\n${JSON.stringify(style.brand, null, 2)}` : '';
+	return `${blocks.join('\n\n')}${profile}${brand}`;
 }

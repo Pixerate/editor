@@ -25,6 +25,16 @@ Charts use the Acme palette, in order: primary for the main series, secondary to
 Prefer bar and line charts; use a pie only for parts of one whole, with at most five slices.
 Write titles in sentence case and say the finding ("Revenue doubled in Q3"), not the topic.
 `,
+  // The brand every domain shares: charts derive their theme from it (chart.json refines it).
+  "acme-brand/brand.json": JSON.stringify(
+    {
+      name: "Acme",
+      colors: { primary: { $token: "brand/primary" }, secondary: { $token: "brand/secondary" }, accent: { $token: "brand/tertiary" }, text: "#1a1a1a", background: "#ffffff" },
+      fonts: { heading: "Inter", body: "Inter" },
+    },
+    null,
+    2,
+  ),
   "acme-brand/chart.json": JSON.stringify(
     {
       palette: [{ $token: "brand/primary" }, { $token: "brand/secondary" }, { $token: "brand/tertiary" }],
