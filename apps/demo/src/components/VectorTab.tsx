@@ -7,6 +7,8 @@ import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { ArrowDownUp, PenTool, Sparkles, Sticker as StickerIcon } from "lucide-react";
 import { useAgentToolProvider } from "@pixerate/editor-react";
+import { createGenerationStyleToolProvider } from "@pixerate/editor/generation";
+import { demoStyles } from "../houseStyles";
 import { StickerInsertPanel } from "@pixerate/editor-react/stickers";
 import { createStickerToolProvider } from "@pixerate/editor/stickers";
 import { createVectorStickerHost } from "@pixerate/editor/vector";
@@ -335,6 +337,8 @@ function VectorDemo() {
   useVectorEffectsTools(demoToolRegistry, controller, { id: "vector-effects", namespace: "vectorfx" });
   // Generative prompts through a pretend offline backend (a host sends them to its models).
   useVectorGenerationTools(demoToolRegistry, controller, { id: "vector-generation", namespace: "vectorgen", models: DEMO_VECTOR_MODELS, generate: demoVectorGenerate });
+  // House style for generation: check_generation_style / apply_generation_style (generationstyle__*), before spending.
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createGenerationStyleToolProvider(demoStyles, { namespace: "generationstyle" }), []));
   // Stickers from the demo's sticker library go in as groups of editable paths (vectorstickers__insert_sticker).
   const stickerHost = useMemo(() => createVectorStickerHost(controller), [controller]);
   const stickerTools = useMemo(() => createStickerToolProvider({ provider: () => demoStickers, insert: stickerHost, id: "vector-stickers", namespace: "vectorstickers" }), [stickerHost]);

@@ -34,6 +34,8 @@ import { createImageStyleToolProvider, imageStyleDomain } from '../src/image-edi
 import { createPaintStyleToolProvider, paintStyleDomain } from '../src/paint-editor/style';
 import { animationStyleDomain, createAnimationStyleToolProvider } from '../src/animation-editor/style';
 import { createVideoStyleToolProvider, videoStyleDomain } from '../src/video-editor/style';
+import { createGenerationStyleToolProvider, generationStyleDomain } from '../src/generation/style';
+import { createParametersStyleToolProvider, parametersStyleDomain } from '../src/parameters/style';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -113,7 +115,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -235,7 +237,8 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-canvas-layout': [],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
-			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
+			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) })),
+			...toolNames(createGenerationStyleToolProvider(styles))
 		],
 		'pixerate-tokens': [
 			...toolNames(createDocumentToolProvider(createTokensEditorDocument(new TokenStore()), { store: documentStore() })),
@@ -246,7 +249,8 @@ function expectedBySkill(): Record<string, string[]> {
 			// parameters.undo / parameters.redo are commands, so the document tools leave undo out.
 			...toolNames(
 				createDocumentToolProvider(createParametersEditorDocument(new ParametersController({ schema: { fields: [] } })), { history: false, store: documentStore() })
-			)
+			),
+			...toolNames(createParametersStyleToolProvider(new ParametersController({ schema: { fields: [] } }), styles))
 		],
 		'pixerate-effect-authoring': (() => {
 			const authoringSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;
@@ -326,8 +330,10 @@ const FACTORIES: Record<string, string> = {
 	// The shared effect tools; each editor that hosts them documents them in its own skill.
 	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor, pixerate-animation-editor, pixerate-vector, pixerate-canvas, pixerate-paint-editor',
 	createGenerationToolProvider: 'pixerate-generation',
+	createGenerationStyleToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
+	createParametersStyleToolProvider: 'pixerate-parameters',
 	createStickerToolProvider: 'pixerate-stickers',
 	createBrushLibraryToolProvider: 'pixerate-brushes',
 	createPaintBrushLibraryToolProvider: 'pixerate-brushes',

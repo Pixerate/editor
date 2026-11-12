@@ -30,7 +30,9 @@ with `list_commands` (query "Parameters").
 4. **Check** the returned `changed` ids and `values`. If a field you set is `visible: false`,
    its value is stored but has no effect until its `showIf` condition holds; set the
    controlling field too.
-5. **Verify visually** with the host's render or view tool when one exists (for example
+5. **House style.** When the host has one (`get_style` with `domain: "parameters"`), run
+   `check_parameters_style`; `fix_parameters_style` sets the house values in one step.
+6. **Verify visually** with the host's render or view tool when one exists (for example
    `view_editor` or the editor's `render_*` tool); parameters themselves have no preview.
 
 ## Best practices
@@ -56,6 +58,8 @@ with `list_commands` (query "Parameters").
 
 | Command | Use it to |
 | --- | --- |
+| `check_parameters_style` | Check the parameters against the house style: house values, numeric ranges, presets, and the brand's colours on colour parameters. Returns findings with a `target` (`{ parameter, value? }` or `{ preset }`) and the checks that `ran` and were `skipped`. |
+| `fix_parameters_style` | Set every certain house value (house values, ranges clamped) as one undo step; read-only parameters are left. Returns what it `set` and the findings `left`. Hidden when read-only. |
 | `parameters.list` | Read every field (id, label, type, description, value, default, visible, keyframe state, and a JSON Schema with ranges, options or vector size), the preset names and the playhead `time` in ms. Read-only; run it first and after schema changes. |
 | `parameters.set` | Set one or more values: `{ "values": { "<id>": value } }`. All-or-nothing and one undo step; its params schema is generated from the current fields, so types and ranges are enforced. Returns `changed` ids and all `values`. Ints are rounded and colours normalised to lower-case hex; any other invalid value refuses the whole call with a sentence naming the field. |
 | `parameters.reset` | Return fields to their defaults: `ids` (default all). Disabled when nothing is modified and no ids are given. Returns `values`. |

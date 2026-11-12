@@ -202,6 +202,22 @@ house styles yet.
 `fix_animation_style` applies the house easings, durations, holds and frame rate, and
 `fix_video_style` the frame rate, title sizes and transitions, each as one undo step.
 
+### `generation.json` and `parameters.json`
+
+```json
+{ "models": ["image-standard"], "aspectRatios": ["1:1", "16:9"], "maxCount": 4,
+  "promptSuffix": "flat vector illustration, soft daylight", "negativeTerms": ["text", "watermark"],
+  "bannedTerms": ["photorealistic"], "checks": ["models", "limits", "prompt-suffix", "negative-terms", "banned-terms"] }
+```
+
+```json
+{ "values": { "grain": 0.2 }, "ranges": { "intensity": { "max": 0.6 } }, "checks": ["house-values", "ranges", "palette-only"] }
+```
+
+Generation is checked before anything is spent: `check_generation_style` and
+`apply_generation_style` take the request (as `plan_generation` does) and the second returns it
+in the house style, without generating. `fix_parameters_style` sets the house values in one step.
+
 ## Layers
 
 A host stacks stores from general to specific, for example `org`, `workspace`, `user`,

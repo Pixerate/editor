@@ -8,6 +8,8 @@ import { imageStyleDomain } from "@pixerate/editor/image-editor";
 import { paintStyleDomain } from "@pixerate/editor/paint-editor";
 import { animationStyleDomain } from "@pixerate/editor/animation-editor";
 import { videoStyleDomain } from "@pixerate/editor/video-editor";
+import { generationStyleDomain } from "@pixerate/editor/generation";
+import { parametersStyleDomain } from "@pixerate/editor/parameters";
 import { TokenStore, createTokenStyleSource, tokensStyleDomain } from "@pixerate/editor/tokens";
 import { richTextStyleDomain } from "@pixerate/editor";
 import { demoToolRegistry } from "./agentTools";
@@ -82,6 +84,16 @@ Calm motion: ease out, nothing faster than 200 ms, hold each shot long enough to
 `,
   "acme-motion/animation-editor.json": JSON.stringify({ easings: ["ease-out", "ease-in-out", "linear"], durations: { min: 150, max: 2000 }, minHold: 400, checks: ["easings", "durations", "holds"] }, null, 2),
   "acme-motion/video-editor.json": JSON.stringify({ fps: [30, 25, 24], titleSizes: { min: 40 }, transitions: ["crossfade", "dip"], maxTransition: 1000, checks: ["fps", "title-sizes", "transitions"] }, null, 2),
+  // The org's rules for generated art (check_generation_style before spending).
+  "acme-generation/SKILL.md": `---
+name: acme-generation
+description: Acme's rules for generated images.
+domains: [generation]
+---
+
+Generated art is flat and calm, never photorealistic, never with text in it.
+`,
+  "acme-generation/generation.json": JSON.stringify({ maxCount: 4, promptSuffix: "flat vector illustration, calm colours", negativeTerms: ["text", "watermark"], bannedTerms: ["photorealistic"], checks: ["limits", "prompt-suffix", "negative-terms", "banned-terms"] }, null, 2),
   // The org's writing style for documents (the Documents tab): checked by check_rich_text_style.
   "acme-writing/SKILL.md": `---
 name: acme-writing
@@ -168,7 +180,7 @@ export const demoStyles = createStyleResolver({
     { id: "org", store: demoOrgStyles, locked: true },
     { id: "user", store: demoUserStyles },
   ],
-  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain],
+  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain, generationStyleDomain, parametersStyleDomain],
   tokens: createTokenStyleSource(demoBrandTokens),
 });
 
