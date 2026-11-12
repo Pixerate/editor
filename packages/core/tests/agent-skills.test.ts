@@ -187,6 +187,7 @@ function expectedBySkill(): Record<string, string[]> {
 		// Workflow skills own no provider (see WORKFLOWS); they have no tool table.
 		'pixerate-image-selection-masking': [],
 		'pixerate-brushes-design': [],
+		'pixerate-style-authoring': [],
 		'pixerate-spreadsheet-clean-import': [],
 		'pixerate-image-photo-correction': [],
 		'pixerate-image-product-photo': [],
@@ -330,6 +331,7 @@ const FACTORIES: Record<string, string> = {
  * reference skill. Its evals (`evals/*.json`) run in `agent-skill-evals.test.ts`.
  */
 const WORKFLOWS: Record<string, string> = {
+	'pixerate-style-authoring': 'pixerate-agent-tools',
 	'pixerate-image-selection-masking': 'pixerate-image-editor',
 	'pixerate-spreadsheet-clean-import': 'pixerate-spreadsheet',
 	'pixerate-image-photo-correction': 'pixerate-image-editor',

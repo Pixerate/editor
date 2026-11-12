@@ -1,0 +1,93 @@
+{
+	"prompt": "Set up our house style as a skill called acme-brand: primary #0b5fff, secondary #ff6a00, dark text #1a1a1a on white, Inter for everything. Charts should only use the brand colours.",
+	"fixture": {
+		"editor": "style",
+		"layers": [
+			{
+				"id": "org",
+				"readOnly": true
+			},
+			{
+				"id": "user"
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the style is saved and loads cleanly",
+			"tool": "list_styles",
+			"expect": {
+				"skills": [
+					{
+						"name": "acme-brand",
+						"issues": []
+					}
+				]
+			}
+		},
+		{
+			"why": "charts get the brand palette and check it",
+			"tool": "get_style",
+			"args": {
+				"domain": "chart"
+			},
+			"expect": {
+				"profile": {
+					"palette": {
+						"$expr": "v[0].toLowerCase() === '#0b5fff' && v[1].toLowerCase() === '#ff6a00'"
+					},
+					"checks": {
+						"$some": "palette-only"
+					}
+				}
+			}
+		},
+		{
+			"why": "the brand has its roles and font",
+			"tool": "get_style",
+			"args": {
+				"domain": "brand"
+			},
+			"expect": {
+				"profile": {
+					"colors": {
+						"$expr": "(v.text || v.dk1 || '').toLowerCase() === '#1a1a1a' && (v.background || v.lt1 || '').toLowerCase() === '#ffffff'"
+					},
+					"fonts": {
+						"body": "Inter"
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_style_schema",
+			"args": {
+				"domain": "brand"
+			}
+		},
+		{
+			"tool": "check_style_skill",
+			"args": {
+				"name": "acme-brand",
+				"files": {
+					"SKILL.md": "---\nname: acme-brand\ndescription: acme-brand house style.\n---\n\nUse the brand colours by role. Never redraw the logo.\n",
+					"brand.json": "{\"name\": \"Acme\", \"colors\": {\"primary\": \"#0b5fff\", \"secondary\": \"#ff6a00\", \"text\": \"#1a1a1a\", \"background\": \"#ffffff\"}, \"fonts\": {\"heading\": \"Inter\", \"body\": \"Inter\"}}",
+					"chart.json": "{\"checks\": [\"palette-only\"]}"
+				}
+			}
+		},
+		{
+			"tool": "save_style",
+			"args": {
+				"name": "acme-brand",
+				"files": {
+					"SKILL.md": "---\nname: acme-brand\ndescription: acme-brand house style.\n---\n\nUse the brand colours by role. Never redraw the logo.\n",
+					"brand.json": "{\"name\": \"Acme\", \"colors\": {\"primary\": \"#0b5fff\", \"secondary\": \"#ff6a00\", \"text\": \"#1a1a1a\", \"background\": \"#ffffff\"}, \"fonts\": {\"heading\": \"Inter\", \"body\": \"Inter\"}}",
+					"chart.json": "{\"checks\": [\"palette-only\"]}"
+				}
+			}
+		}
+	]
+}
