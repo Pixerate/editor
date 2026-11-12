@@ -19,3 +19,4 @@ export * from './rule-ranges';
 export * from './viewport';
 export * from './playback';
 export * from './editorDocument';
+export * from './style';

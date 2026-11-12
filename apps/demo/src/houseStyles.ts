@@ -1,5 +1,7 @@
 import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from "@pixerate/editor/agent";
 import { chartStyleDomain } from "@pixerate/editor/chart";
+import { spreadsheetStyleDomain } from "@pixerate/editor/spreadsheet";
+import { diagramStyleDomain } from "@pixerate/editor/diagram";
 import { TokenStore, createTokenStyleSource, tokensStyleDomain } from "@pixerate/editor/tokens";
 import { richTextStyleDomain } from "@pixerate/editor";
 import { demoToolRegistry } from "./agentTools";
@@ -22,6 +24,25 @@ const look = (name: string, description: string, defaults: Record<string, unknow
 
 /** The org layer: locked, so later layers cannot change what it sets. */
 export const demoOrgStyles = memoryStyleStore({
+  // The org's rules for sheets and diagrams (check_spreadsheet_style, check_diagram_style).
+  "acme-data/SKILL.md": `---
+name: acme-data
+description: Acme's rules for spreadsheets and diagrams.
+domains: [spreadsheet, diagram]
+---
+
+Headers and labels in sentence case. Money with two decimals. Diagrams flow left to right.
+`,
+  "acme-data/spreadsheet.json": JSON.stringify(
+    { headerCase: "sentence", numberFormats: { currency: '"$"#,##0.00', percentage: "0.0%" }, freezeHeader: true, checks: ["header-case", "number-formats", "freeze-header"] },
+    null,
+    2,
+  ),
+  "acme-data/diagram.json": JSON.stringify(
+    { directions: ["LR", "TB"], labelCase: "sentence", maxLabelLength: 40, checks: ["direction", "label-case", "label-length"] },
+    null,
+    2,
+  ),
   // The org's writing style for documents (the Documents tab): checked by check_rich_text_style.
   "acme-writing/SKILL.md": `---
 name: acme-writing
@@ -108,7 +129,7 @@ export const demoStyles = createStyleResolver({
     { id: "org", store: demoOrgStyles, locked: true },
     { id: "user", store: demoUserStyles },
   ],
-  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain],
+  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain],
   tokens: createTokenStyleSource(demoBrandTokens),
 });
 

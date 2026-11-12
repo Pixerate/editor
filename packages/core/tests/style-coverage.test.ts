@@ -12,6 +12,8 @@ import { styleChecksOf, SHARED_STYLE_CHECKS, type StyleDomain } from '../src/too
 import { chartStyleDomain } from '../src/chart';
 import { tokensStyleDomain } from '../src/tokens';
 import { richTextStyleDomain } from '../src/richTextStyle';
+import { spreadsheetStyleDomain } from '../src/spreadsheet/style';
+import { diagramStyleDomain } from '../src/diagram/style';
 
 type Coverage = StyleDomain<any> | { pending: `#${number}` } | { none: string };
 
@@ -21,10 +23,10 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-chart': chartStyleDomain,
 	'pixerate-tokens': tokensStyleDomain,
 	'pixerate-rich-text': richTextStyleDomain,
-	'pixerate-spreadsheet': { pending: '#779' },
+	'pixerate-spreadsheet': spreadsheetStyleDomain,
 	'pixerate-canvas': { pending: '#779' },
 	'pixerate-vector': { pending: '#779' },
-	'pixerate-diagram': { pending: '#779' },
+	'pixerate-diagram': diagramStyleDomain,
 	'pixerate-image-editor': { pending: '#779' },
 	'pixerate-paint-editor': { pending: '#779' },
 	'pixerate-animation-editor': { pending: '#779' },

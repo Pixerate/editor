@@ -40,6 +40,10 @@ the pitfalls, and uses the tools below.
    finish.
 5. **Restructure deliberately.** Use `insert_rows` / `insert_columns` to make room so
    formulas shift with the data; never move data by rewriting it cell by cell.
+6. **House style.** When the host has one (`get_style` with `domain: "spreadsheet"`), run
+   `check_spreadsheet_style` after writing. `fix_spreadsheet_style` applies the certain fixes
+   (header case, the house number format for each kind of value, a frozen header) as one
+   undo step; conditional format colours it reports you change yourself.
 
 ## Best practices
 
@@ -106,6 +110,8 @@ cell was deleted), `#NAME?`, `#N/A` (lookup miss), `#NUM!`, `#CYCLE!` (circular 
 
 | Tool | Use it to |
 | --- | --- |
+| `check_spreadsheet_style` | Check the sheet against the house style: header case, number formats by kind, a frozen header, and the brand's colours on conditional formats. Returns findings with a `target` (`{ cell: "B3" }` with the `numberFormat` or `value` to set when certain, `{ rule }` or `{ sheet: true }`), `fixable`, and the checks that `ran` and were `skipped`. Run after writing and again after fixing. |
+| `fix_spreadsheet_style` | Apply every certain house-style fix as one undo step (read-only cells skipped). Returns `fixed` and the findings `left`. Hidden on a read-only sheet. |
 | `set_range` | Write a 2D block of raw inputs from `start` (top-left cell), row by row, as one undo step. Strings starting with `=` are formulas; `null` or `""` clears a cell; numbers and booleans are stored as typed. Up to 10000 rows by 1000 columns. The sheet grows to fit. All-or-nothing: any read-only target cell fails the whole write. Returns the written `range`, `written` count, `errors` and new `sheet` size. The default write tool. |
 | `set_cell` | Set one cell's raw input (`cell` in A1, `value` string, number or boolean; `=` starts a formula). Returns `raw` and the computed `value`. Fails outside the sheet (it does not grow it; use `set_range` or `insert_rows` first) and on read-only cells. Use for a single fix, not for filling data. |
 | `insert_rows` | Insert `count` (default 1, max 1000) empty rows before row number `before` (1-based; one past the last row appends). Formula references below shift down. |

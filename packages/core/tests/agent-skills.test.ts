@@ -26,6 +26,8 @@ import {
 	type AgentToolProvider
 } from '../src/agent';
 import { createRichTextStyleToolProvider, richTextStyleDomain } from '../src/richTextStyle';
+import { createSpreadsheetStyleToolProvider, spreadsheetStyleDomain } from '../src/spreadsheet/style';
+import { createDiagramStyleToolProvider, diagramStyleDomain } from '../src/diagram/style';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -105,7 +107,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -129,7 +131,8 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-spreadsheet': [
 			...toolNames(createSpreadsheetToolProvider(sheet, { id: 'sheet' })),
 			...commandIds(createSpreadsheetCommands(stub)),
-			...toolNames(createDocumentToolProvider(createSpreadsheetEditorDocument(sheet), { store: documentStore() }))
+			...toolNames(createDocumentToolProvider(createSpreadsheetEditorDocument(sheet), { store: documentStore() })),
+			...toolNames(createSpreadsheetStyleToolProvider(sheet, styles))
 		],
 		'pixerate-canvas': [
 			...toolNames(editorMcp, (n) => n.startsWith('canvas_') || shared.includes(n)),
@@ -157,7 +160,8 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-diagram': [
 			...toolNames(createDiagramToolProvider(new DiagramController(), { id: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) })),
 			// The diagram's own provider has undo_diagram / redo_diagram, so its document tools leave them out.
-			...toolNames(createDocumentToolProvider(createDiagramEditorDocument(new DiagramController()), { history: false, store: documentStore() }))
+			...toolNames(createDocumentToolProvider(createDiagramEditorDocument(new DiagramController()), { history: false, store: documentStore() })),
+			...toolNames(createDiagramStyleToolProvider(new DiagramController(), styles))
 		],
 		'pixerate-image-editor': [
 			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
@@ -265,6 +269,7 @@ const FACTORIES: Record<string, string> = {
 	createTableCommands: 'pixerate-rich-text',
 	createFormatCommands: 'pixerate-rich-text',
 	createSpreadsheetToolProvider: 'pixerate-spreadsheet',
+	createSpreadsheetStyleToolProvider: 'pixerate-spreadsheet',
 	createSpreadsheetCommands: 'pixerate-spreadsheet',
 	createCanvasComponentToolProvider: 'pixerate-canvas',
 	createArrangeCommands: 'pixerate-canvas',
@@ -283,6 +288,7 @@ const FACTORIES: Record<string, string> = {
 	createTokensStyleToolProvider: 'pixerate-tokens',
 	createStyleToolProvider: 'pixerate-agent-tools',
 	createDiagramToolProvider: 'pixerate-diagram',
+	createDiagramStyleToolProvider: 'pixerate-diagram',
 	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
 	createDocumentToolProvider:
 		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens, pixerate-canvas, pixerate-image-editor, pixerate-paint-editor',

@@ -16,7 +16,8 @@ import {
   type SpreadsheetWorkbook,
 } from "@pixerate/editor";
 import { createSpreadsheetToolProvider } from "@pixerate/editor/agent";
-import { createSpreadsheetEditorDocument } from "@pixerate/editor/spreadsheet";
+import { createSpreadsheetEditorDocument, createSpreadsheetStyleToolProvider } from "@pixerate/editor/spreadsheet";
+import { demoStyles } from "../houseStyles";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import {
   Table2,
@@ -264,6 +265,9 @@ const SpreadsheetDemo: React.FC = () => {
     [state.controller]
   );
   useAgentToolProvider(demoToolRegistry, provider);
+  // House style: check_spreadsheet_style / fix_spreadsheet_style join the sheet toolset.
+  const styleProvider = useMemo(() => createSpreadsheetStyleToolProvider(state.controller, demoStyles, { namespace: "sheet" }), [state.controller]);
+  useAgentToolProvider(demoToolRegistry, styleProvider);
   const editorDocument = useDemoEditorDocument(state.controller, createSpreadsheetEditorDocument, { namespace: "sheet", skill: "pixerate-spreadsheet" });
 
   const importFile = async (file: File) => {

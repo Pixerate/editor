@@ -47,6 +47,10 @@ the pitfalls, and uses the tools below.
    on.
 5. **Look.** `render_diagram` (`format: "png"` when offered) after a batch of edits to
    check crossings, crowding and label length. Undo your own mistakes with `undo_diagram`.
+6. **House style.** When the host has one (`get_style` with `domain: "diagram"`), run
+   `check_diagram_style`. `fix_diagram_style` applies the certain fixes (label case, the house
+   direction) as one undo step; fix what it leaves (long labels, too many nodes, other shapes,
+   colours) with the diagram tools, then check again.
 
 ## Best practices
 
@@ -87,6 +91,8 @@ the pitfalls, and uses the tools below.
 | `get_diagram` | Start here. Returns family, editable flag, direction, title, nodes, edges, groups, allowed shapes, settings, data fields (`fields.node`, `fields.edge`, `fields.diagram` with types and ranges), stored positions, parse diagnostics, the selection and the read-only reason. `includeSource` (default false) adds the Mermaid text. |
 | `export_diagram_mermaid` | Get the Mermaid text to hand back to the user or paste into Markdown. `withLayout` (default true) keeps the `%% @pixerate` positions comment; pass false for plain Mermaid. |
 | `find_mermaid_diagrams` | Find every Mermaid diagram in a piece of `text` (fenced ```mermaid blocks, a chat reply or a bare diagram). Returns each source, family and title; pass one source to `load_diagram_mermaid`. Changes nothing. |
+| `check_diagram_style` | Check the diagram against the house style: direction, label case and length, node count, shapes, and the brand's colours and fonts in node styles. Returns findings with a `target` (`{ node | edge | group: id }` with the `label` when certain, or `{ diagram: true }` with the `direction`), `fixable`, and the checks that `ran` and were `skipped`. |
+| `fix_diagram_style` | Apply every certain house-style fix (label case, direction) as one undo step. Returns `fixed` and the findings `left`. Hidden when the diagram cannot be edited. |
 | `render_diagram` | Draw the diagram without changing it: SVG text by default, `format: "png"` when the host can rasterize; `maxWidth` / `maxHeight` fit it in px. Only listed when the host can render. Refuses text-only families. Render after a batch of edits, not after each one. |
 
 ### Write

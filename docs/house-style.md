@@ -133,6 +133,25 @@ total). Skill text reaches models inside `<style_skill>` blocks that name the la
 that tries to close a block is escaped. For a system prompt, `renderStyleCatalog(await
 styles.list())` lists the skills in a few lines and agents read the detail with `get_style`.
 
+### `spreadsheet.json` and `diagram.json`
+
+```json
+{ "headerCase": "sentence", "numberFormats": { "currency": "\"$\"#,##0.00", "percentage": "0.0%" }, "freezeHeader": true,
+  "checks": ["header-case", "number-formats", "freeze-header", "palette-only"] }
+```
+
+```json
+{ "directions": ["LR", "TB"], "labelCase": "sentence", "maxLabelLength": 40, "maxNodes": 25,
+  "shapes": ["rect", "round", "diam", "cyl"], "checks": ["direction", "label-case", "label-length", "max-nodes", "allowed-shapes"] }
+```
+
+Spreadsheet findings target cells in A1 notation (`{ cell: "B3", numberFormat }`), conditional
+format rules (`{ rule }`) whose colours the brand checks, or the sheet. Diagram findings target
+nodes, edges and groups by id (with the `label` to set), or the diagram (with the `direction`).
+`fix_spreadsheet_style` and `fix_diagram_style` apply the certain fixes as one undo step. In
+React and Svelte, `useStyleFindings(styles, "spreadsheet", document)` and `useStyleFindings(styles,
+"diagram", graph)` show the findings; pass a new value after each change.
+
 ## Layers
 
 A host stacks stores from general to specific, for example `org`, `workspace`, `user`,

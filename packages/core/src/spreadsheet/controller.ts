@@ -2039,6 +2039,14 @@ export class SpreadsheetController {
    * Runs `fn` as one undo step: cell writes inside it are batched and
    * recalculated once, then listeners are notified.
    */
+  /**
+   * Runs several edits (cell values, number formats, ...) as one undo step: formulas are
+   * recalculated once and listeners are notified once at the end.
+   */
+  public batch(fn: () => void): void {
+    this.runBatch(fn);
+  }
+
   private runBatch(fn: () => void): void {
     this.recordSnapshot();
     const rowCount = this.document.rows.length;
