@@ -144,7 +144,7 @@ final class PixelSampleTests: XCTestCase {
         for src in [picture(53, 31), picture(9, 7), Self.source, nil] as [EffectPixels?] {
             let request = EffectRenderRequest(time: 0, values: ["k": 2.25], inputs: src.map { ["source": $0] } ?? [:])
             let cpu = try PixelCPURenderer(program: program, description: d, width: 37, height: 23).renderSync(request)
-            let gpu = try PixelMetalRenderer(program: program, description: d, width: 37, height: 23).renderSync(request)
+            let gpu = try PixelMetalRenderer(program: program, description: d, width: 37, height: 23, compileTimeoutMs: gpuParityCompileTimeoutMs).renderSync(request)
             var worst = 0, at = -1
             for i in 0..<cpu.data.count {
                 let diff = abs(Int(cpu.data[i]) - Int(gpu.data[i]))

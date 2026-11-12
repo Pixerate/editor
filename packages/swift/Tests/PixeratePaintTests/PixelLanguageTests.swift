@@ -3,6 +3,11 @@ import PixerateCore
 import XCTest
 @testable import PixeratePaint
 
+/// The compile budget for tests that compare the GPU with the CPU (ms). They check pixels, not
+/// compile speed, and the first kernel on a cold iOS simulator in CI can take longer than
+/// `PixelGPU.defaultCompileTimeoutMs` while Metal's compiler starts (GOTCHAS.md).
+let gpuParityCompileTimeoutMs: Double = 120_000
+
 /// `packages/core/tests/pixel-effects.test.ts` ("compiling" and "evaluating"), the description and
 /// provider, and the Metal renderer against the CPU one.
 final class PixelLanguageTests: XCTestCase {
@@ -205,7 +210,7 @@ final class PixelLanguageTests: XCTestCase {
         let cpu = try PixelCPURenderer(program: program, description: d, width: width, height: height).renderSync(EffectRenderRequest(time: time))
         let gpuRenderer: PixelMetalRenderer
         do {
-            gpuRenderer = try PixelMetalRenderer(program: program, description: d, width: width, height: height)
+            gpuRenderer = try PixelMetalRenderer(program: program, description: d, width: width, height: height, compileTimeoutMs: gpuParityCompileTimeoutMs)
         } catch {
             XCTFail("\(name): \(error)\n\(pixelMSL(program).source)")
             return
@@ -241,7 +246,7 @@ final class PixelLanguageTests: XCTestCase {
         guard PixelGPU.isAvailable else { throw XCTSkip("No Metal device.") }
         let t = try XCTUnwrap(pixelTemplate("pixel.blank"))
         let r = describePixelSource(t.source, meta: t.meta)
-        let gpu = try PixelMetalRenderer(program: r.program!, description: r.description!, width: 1, height: 3)
+        let gpu = try PixelMetalRenderer(program: r.program!, description: r.description!, width: 1, height: 3, compileTimeoutMs: gpuParityCompileTimeoutMs)
         XCTAssertEqual(try gpu.renderSync(EffectRenderRequest(values: ["top": "#000000", "bottom": "#ffffff"])).data, [43, 43, 43, 255, 128, 128, 128, 255, 213, 213, 213, 255])
         XCTAssertThrowsError(try gpu.renderSync(EffectRenderRequest(values: ["top": 3]))) { XCTAssertEqual(($0 as? EffectError)?.code, "invalid_values") }
         // A budget of 0 ms can't compile a new kernel. The source differs on every run: Metal keeps
