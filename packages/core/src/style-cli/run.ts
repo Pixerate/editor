@@ -2,7 +2,7 @@
 /**
  * `pixerate-style`: check, scaffold and preview house-style skills from a terminal.
  *
- *   pixerate-style check <dir> [--json] [--tokens <file>]
+ *   pixerate-style check <dir> [--json] [--tokens <file>]   (a skill that extends another reads it from a sibling folder)
  *   pixerate-style schema <domain> [--out <file>]
  *   pixerate-style init <dir> [--profiles brand,chart] [--description <text>]
  *   pixerate-style preview <dir> [--port <n>] [--tokens <file>]
@@ -14,6 +14,7 @@ import { createServer, type Server } from 'node:http';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 import {
+	STYLE_SKILL_NAME,
 	STYLE_TEXT_FILE,
 	brandStyleDomain,
 	checkStyleSkill,
@@ -89,6 +90,24 @@ export function readStyleSkillFolder(dir: string): { files: Record<string, strin
 	return { files, skipped };
 }
 
+/** The skills a draft `extends`, read from folders beside it (`styles/night` extends `styles/paper`). */
+export function siblingBases(dir: string): { files(name: string): Promise<string[] | undefined>; readFile(name: string, file: string): Promise<string | undefined> } {
+	const folder = (name: string) => {
+		const at = path.join(path.dirname(path.resolve(dir)), name);
+		return STYLE_SKILL_NAME.test(name) && existsSync(at) && lstatSync(at).isDirectory() ? at : undefined;
+	};
+	return {
+		files: async (name) => {
+			const at = folder(name);
+			return at ? Object.keys(readStyleSkillFolder(at).files) : undefined;
+		},
+		readFile: async (name, file) => {
+			const at = folder(name);
+			return at ? readStyleSkillFolder(at).files[file] : undefined;
+		}
+	};
+}
+
 /**
  * Design tokens from a JSON file for `$token` references: a flat map (`{ "brand/primary": "#0b5fff" }`)
  * or nested groups whose leaves are values or `{ "$value": ... }` (`{ "brand": { "primary": { "$value": "#0b5fff" } } }`).
@@ -121,7 +140,7 @@ export interface StyleCliIo {
 }
 
 const USAGE = `Usage:
-  pixerate-style check <dir> [--json] [--tokens <file>]     Report what a host would offer, leave out and why (exit 1 on errors)
+  pixerate-style check <dir> [--json] [--tokens <file>]     Report what a host would offer, leave out and why (exit 1 on errors); a base it extends is read from a sibling folder
   pixerate-style schema <domain> [--out <file>]             Write a profile's JSON Schema (domains: ${STYLE_CLI_DOMAINS.map((d) => d.id).join(', ')})
   pixerate-style init <dir> [--profiles brand,chart] [--description <text>]   Start a skill from example profiles
   pixerate-style preview <dir> [--port <n>] [--tokens <file>]   Serve a live preview on 127.0.0.1
@@ -130,6 +149,7 @@ const USAGE = `Usage:
 function formatReport(report: StyleSkillReport, skipped: string[]): string {
 	const lines = [`${report.ok ? 'ok' : 'not ready'}: ${report.name}${report.manifest?.description ? ` - ${report.manifest.description}` : ''}`];
 	lines.push(`domains: ${report.domains.join(', ') || '(none)'}`);
+	if (report.inherits) lines.push(`extends: ${report.inherits.join(' → ')}`);
 	lines.push('files:');
 	for (const f of report.files) lines.push(`  ${f.path} (${f.role}, ${f.bytes} B)`);
 	for (const s of skipped) lines.push(`  left out: ${s}`);
@@ -159,7 +179,7 @@ export async function runStyleCli(argv: readonly string[], io: StyleCliIo): Prom
 	}
 	const check = async (dir: string) => {
 		const { files, skipped } = readStyleSkillFolder(dir);
-		const report = await checkStyleSkill(path.basename(dir), files, { domains: STYLE_CLI_DOMAINS, ...(tokens ? { tokens } : {}) });
+		const report = await checkStyleSkill(path.basename(dir), files, { domains: STYLE_CLI_DOMAINS, bases: siblingBases(dir), ...(tokens ? { tokens } : {}) });
 		report.warnings.push(...skipped.map((s) => `${s}`));
 		return { report, skipped };
 	};

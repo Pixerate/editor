@@ -273,6 +273,35 @@ apply only when the resolver is asked for that scope (`resolve(domain, { scope }
 `scope` option of the tool providers); unscoped skills apply everywhere. Each scope keeps its own
 choice.
 
+## Variants: `extends`
+
+A skill can build on another and give only what differs:
+
+```markdown
+---
+name: night
+description: The night look, built on paper.
+group: look
+extends: paper
+---
+```
+
+Its profiles merge over the base's (objects field by field, lists and values replace), so
+`night/chart.json` can be `{ "palette": ["#f5c542", "#42a5f5"] }` and keep paper's fonts and
+defaults. The base is the copy in use, found through the layers like any skill: a user-layer
+variant can extend an org-layer base, and overriding the base in a later layer changes every
+skill built on it. A base that is switched off (because a variant was chosen over it) still
+serves as a base. Only profiles inherit, `brand.json` included; the base's prose does not apply
+through the variant.
+
+Each merged profile is checked whole, so a variant's own file may be partial. `list_styles` and
+`get_style` show the chain in `inherits`, nearest first, and `sources` say `<layer> (from paper)`
+for inherited fields. A variant's profiles are left out, with an issue naming the skills, when
+its base is missing, the chain goes round in a circle, or it is more than eight skills deep
+(`MAX_STYLE_INHERITANCE_DEPTH`). `checkStyleSkill(name, files, { bases: resolver })` and
+`save_style` check a draft over the installed base; `pixerate-style check` reads it from a sibling
+folder. `remove_style` reports the skills left without a base in `extendedBy`.
+
 ## In the editors
 
 - **Pickers offer the house colours.** `styleSwatches(style)` lists the profile palette, the
@@ -331,3 +360,33 @@ A `StyleDomain` names its profile file (`<id>.json`), its `profileSchema` and ch
 optionally `themeFromBrand` (its profile from the brand), `surface` (the colours and fonts its
 state uses, so the shared checks run there), an `example` and a `preview`. Map it in
 `packages/core/tests/style-coverage.test.ts`; that test fails for any editor domain without one.
+
+### Changing a profile's shape: versions
+
+Hosts keep the profiles people wrote. When a domain renames or restructures a field, give it a
+`profileVersion` (a whole number, starting at 2 for the first change) and a `migrateProfile`
+that upgrades a profile one step:
+
+```ts
+profileVersion: 2,
+migrateProfile(profile, from, { partial }) {
+	if (from === 1) {
+		const { colors, ...rest } = profile;
+		return { ...rest, ...(colors ? { palette: colors } : {}) };
+	}
+	throw new Error(`no upgrade from version ${from}`);
+}
+```
+
+A profile records its version in a top-level `"version"` (missing means 1). The resolver
+upgrades each copy step by step when it reads it, before `$token` references resolve and bases
+merge; `partial` is true for a variant's copy, so only add defaults when it is false. Nothing is
+written back: the skill's `migrations` (in `list_styles` and `checkStyleSkill`) hold each
+upgraded copy for the host or agent to save. A profile newer than the domain's version, a
+`"version"` that is not a whole number from 1, a missing step, or a migration that throws or
+gives no object leaves that profile out with an issue naming the file. `get_style_schema`,
+`styleProfileSchema` and `scaffoldStyleSkill` include the current version. A domain without
+`profileVersion` treats `"version"` as an ordinary field.
+
+Bump the version only for changes an older profile would fail or be misread under; adding an
+optional field needs no new version.

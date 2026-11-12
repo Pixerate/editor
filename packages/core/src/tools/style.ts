@@ -142,6 +142,34 @@ export interface StyleDomain<State = unknown> {
 	defaults?(profile: Readonly<Record<string, unknown>>): Record<string, unknown>;
 	/** A sample of this domain drawn in `profile` (SVG or HTML markup), for skill previews. */
 	preview?(profile: Readonly<Record<string, unknown>>, brand?: BrandProfile): string;
+	/**
+	 * The profile format's version, a whole number from 1. A profile records the version it was
+	 * written for in a top-level `"version"` (missing means 1); older ones are upgraded with
+	 * {@link migrateProfile} when read, and newer ones are refused. Without it, `"version"` is an
+	 * ordinary field the schema decides on.
+	 */
+	profileVersion?: number;
+	/**
+	 * Upgrades a profile one step, from version `from` to `from + 1`. It gets a copy without
+	 * `"version"` and returns the upgraded profile (also without it). `partial` is true when the
+	 * profile is merged over a base (`extends`), so only fields it sets should change: add defaults
+	 * only when it is false. Throwing leaves the profile out with the message.
+	 */
+	migrateProfile?(profile: Record<string, unknown>, from: number, context: { partial: boolean }): Record<string, unknown>;
+}
+
+/** The most skills an `extends` chain may pass through. */
+export const MAX_STYLE_INHERITANCE_DEPTH = 8;
+
+/** A profile copy upgraded when it was read (nothing is written back; save `profile` to keep it). */
+export interface StyleProfileMigration {
+	domain: string;
+	/** `<domain>.json`, or `frontmatter` for a profile under a frontmatter key. */
+	file: string;
+	from: number;
+	to: number;
+	/** The upgraded profile as it would be saved, with `"version"` and any `$token` references. */
+	profile: Record<string, unknown>;
 }
 
 /** The `brand` pseudo-domain: `brand.json`, read by every domain. Every resolver includes it. */
@@ -209,6 +237,10 @@ export interface StyleSkillInfo {
 	chosen?: boolean;
 	/** Why it, or part of it, is left out. A skill with issues and no usable part is not applied. */
 	issues: string[];
+	/** The skills its profiles build on (`extends`), nearest first. */
+	inherits?: string[];
+	/** Profiles upgraded from an older version when read; save them to stop upgrading on every read. */
+	migrations?: StyleProfileMigration[];
 }
 
 /** Options for reading a resolver in one place of the host. */
@@ -246,6 +278,8 @@ export interface ResolvedStyleSkill {
 	layer: string;
 	/** The `SKILL.md` body (without frontmatter). */
 	body: string;
+	/** The skills its profiles build on (`extends`), nearest first. Their prose does not apply through it. */
+	inherits?: string[];
 }
 
 /** Everything that applies to one domain, merged. */
@@ -257,7 +291,8 @@ export interface ResolvedStyle {
 	profile: Record<string, unknown>;
 	/**
 	 * Which layer set each profile field (`palette`, `theme.fontFamily`). Fields derived from the
-	 * brand say `<layer> (brand)`; `$brand.checks` names the layer of the brand's checks list.
+	 * brand say `<layer> (brand)`; fields a skill inherits say `<layer> (from <base>)`;
+	 * `$brand.checks` names the layer of the brand's checks list.
 	 */
 	sources: Record<string, string>;
 	issues: StyleIssue[];
@@ -455,7 +490,63 @@ interface LoadedSkill {
 	profiles: Map<string, Record<string, unknown>>;
 	/** Domains the skill applies to, after its issues. */
 	applies: Set<string>;
+	/** Per domain, the profile fields that came from a base (`extends`), with that base's name. */
+	inherited: Map<string, Record<string, string>>;
 }
+
+/** A profile copy as read, before inheritance and validation. */
+interface OwnProfile {
+	profile: Record<string, unknown>;
+	/** How issues name it: `chart.json`, or `The frontmatter "chart" profile`. */
+	label: string;
+	/** `$token` references that did not resolve, reported with the merged profile's schema errors. */
+	errors: string[];
+}
+
+/** Merges `value` over `target` (objects field by field; lists and values replace), recording which skill set each leaf. */
+function inheritMerge(target: Record<string, unknown>, value: Record<string, unknown>, origins: Record<string, string>, who: string, prefix = '') {
+	for (const [key, next] of Object.entries(value)) {
+		if (isUnsafeJsonKey(key) || next === undefined) continue;
+		const path = prefix ? `${prefix}.${key}` : key;
+		if (isPlainObject(next)) {
+			// An object merges into an object; it replaces a value (and that value's origin).
+			if (!isPlainObject(target[key])) {
+				target[key] = {};
+				delete origins[path];
+			}
+			inheritMerge(target[key] as Record<string, unknown>, next, origins, who, path);
+		} else {
+			target[key] = structuredClone(next);
+			for (const p of Object.keys(origins)) if (p.startsWith(`${path}.`)) delete origins[p];
+			origins[path] = who;
+		}
+	}
+}
+
+/** Upgrades one profile copy to the domain's version, or says why it cannot be read. */
+function migrateCopy(domain: StyleDomain<any>, parsed: Record<string, unknown>, partial: boolean): { ok: true; profile: Record<string, unknown>; from: number } | { ok: false; message: string } {
+	const current = domain.profileVersion!;
+	const version = parsed.version ?? 1;
+	if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return { ok: false, message: `"version" must be a whole number from 1 (this app reads ${domain.id} profiles up to version ${current}).` };
+	if (version > current) return { ok: false, message: `it is version ${version}; this app reads ${domain.id} profiles up to version ${current}. Update the app, or write a version ${current} profile.` };
+	let profile: Record<string, unknown> = { ...parsed };
+	delete profile.version;
+	for (let from = version; from < current; from++) {
+		if (!domain.migrateProfile) return { ok: false, message: `it is version ${from}, and the ${domain.id} domain cannot upgrade it to version ${current}; rewrite it for version ${current} (get_style_schema).` };
+		let next: unknown;
+		try {
+			next = domain.migrateProfile(structuredClone(profile), from, { partial });
+		} catch (error) {
+			return { ok: false, message: `upgrading it from version ${from} failed: ${(error as Error).message}` };
+		}
+		if (!isPlainObject(next)) return { ok: false, message: `upgrading it from version ${from} did not give a profile object.` };
+		profile = stripPrototypeKeys(next) as Record<string, unknown>;
+		delete profile.version;
+	}
+	return { ok: true, profile, from: version };
+}
+
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Replaces `{ "$token": ... }` objects with their values. */
 function resolveTokens(value: unknown, tokens: StyleTokenSource | undefined, path: string, errors: string[]): unknown {
@@ -530,7 +621,8 @@ function mergeProfile(
 			continue;
 		}
 		if (lockedBy && lockedBy[1] !== layer.id) {
-			issues.push({ skill, layer: layer.id, message: `"${path}" is locked by the ${lockedBy[1]} layer, so this skill's value is ignored.` });
+			// The same value (often inherited from a locked base) changes nothing.
+			if (!sameValue(target[key], next)) issues.push({ skill, layer: layer.id, message: `"${path}" is locked by the ${lockedBy[1]} layer, so this skill's value is ignored.` });
 			continue;
 		}
 		target[key] = Array.isArray(next) ? structuredClone(next) : next;
@@ -575,6 +667,8 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 		const entries = await Promise.all(layers.map(async (layer) => [...(await layer.store.list())]));
 		const names = [...new Set(entries.flat().map((e) => e.name))];
 		const skills: LoadedSkill[] = [];
+		/** Each skill as read: its own profile copies and base, before inheritance and validation. */
+		const read: { skill: LoadedSkill; own: Map<string, OwnProfile>; base?: string }[] = [];
 		for (const name of names) {
 			if (!STYLE_SKILL_NAME.test(name)) {
 				issues.push({ skill: name, message: `"${name}" is not a valid skill name (lowercase letters, digits and hyphens, at most 64).` });
@@ -628,7 +722,15 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 				if (domainIds.includes(d)) applies.add(d);
 				else skillIssues.push(`It names an unknown domain "${d}"; the domains here are ${domainIds.join(', ')}.`);
 			}
-			const profiles = new Map<string, Record<string, unknown>>();
+			// `extends: <skill>` builds this skill's profiles on another's (`null` or absent: none).
+			const extendsValue = fm.error ? frontmatterField(winner.text, 'extends') : fm.data.extends;
+			let base: string | undefined;
+			if (extendsValue !== undefined && extendsValue !== null && extendsValue !== 'null') {
+				if (typeof extendsValue === 'string' && STYLE_SKILL_NAME.test(extendsValue)) base = extendsValue;
+				else skillIssues.push(`"extends" must be the name of another style skill (or null), not ${JSON.stringify(extendsValue)}; its profiles are read without a base.`);
+			}
+			const own = new Map<string, OwnProfile>();
+			const migrations: StyleProfileMigration[] = [];
 			for (const domain of domains) {
 				const fileRaw = await layer.store.read(name, `${domain.id}.json`);
 				// A store that keeps only SKILL.md can carry a profile under a frontmatter key (`chart:`).
@@ -658,7 +760,18 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 					continue;
 				}
 				// Editors read "$schema" for completion; it is not part of the profile.
-				if (typeof parsed.$schema === 'string') delete parsed.$schema;
+				const schemaRef = typeof parsed.$schema === 'string' ? parsed.$schema : undefined;
+				if (schemaRef !== undefined) delete parsed.$schema;
+				// An older profile is upgraded copy by copy, before tokens resolve and bases merge.
+				if (domain.profileVersion !== undefined && domain.id !== brandStyleDomain.id) {
+					const migrated = migrateCopy(domain, parsed, base !== undefined);
+					if (!migrated.ok) {
+						skillIssues.push(`${file} is left out: ${migrated.message}`);
+						continue;
+					}
+					if (migrated.from < domain.profileVersion) migrations.push({ domain: domain.id, file: fileRaw !== undefined ? `${domain.id}.json` : 'frontmatter', from: migrated.from, to: domain.profileVersion, profile: { ...(schemaRef !== undefined ? { $schema: schemaRef } : {}), version: domain.profileVersion, ...migrated.profile } });
+					parsed = migrated.profile;
+				}
 				const errors: string[] = [];
 				const resolved = resolveTokens(parsed, options.tokens, '', errors);
 				// A root `{ "$token": ... }` resolves to a value or to nothing, never to a profile object.
@@ -666,34 +779,91 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 					skillIssues.push(errors.length ? `${file} is left out: ${errors.join(' ')}` : `${file} must hold a JSON object; its token reference resolves to ${JSON.stringify(resolved)}.`);
 					continue;
 				}
-				const { checks, ...rest } = resolved;
-				errors.push(...validateJsonSchema(rest, domain.profileSchema).map((e) => `${e.path || '(profile)'}: ${e.message}`));
-				errors.push(...checkListErrors(checks, domain));
-				if (errors.length) {
-					skillIssues.push(`${file} is left out: ${errors.join(' ')}`);
-					continue;
-				}
-				profiles.set(domain.id, resolved);
+				own.set(domain.id, { profile: resolved, label: file, errors });
 			}
-			skills.push({
+			const skill: LoadedSkill = {
 				info: {
 					name,
 					description,
 					layer: layer.id,
-					domains: [...applies],
-					profiles: [...profiles.keys()],
+					domains: [],
+					profiles: [],
 					enabled,
 					order,
 					...(group ? { group } : {}),
 					...(scope ? { scope } : {}),
-					issues: skillIssues
+					issues: skillIssues,
+					...(migrations.length ? { migrations } : {})
 				},
 				layerIndex: winner.index,
 				body: body.trim(),
-				profiles,
-				applies
-			});
+				profiles: new Map(),
+				applies,
+				inherited: new Map()
+			};
+			read.push({ skill, own, ...(base !== undefined ? { base } : {}) });
 		}
+
+		// Inheritance: each skill's profiles merge over its base chain's, then are validated whole.
+		const byName = new Map(read.map((r) => [r.skill.info.name, r]));
+		for (const r of read) {
+			const { info } = r.skill;
+			const chain: string[] = [];
+			let problem: string | undefined;
+			for (let at = r; at.base !== undefined; ) {
+				const path = [info.name, ...chain, at.base];
+				if (at.base === info.name || chain.includes(at.base)) {
+					problem = `"extends" goes round in a circle: ${path.join(' → ')}.`;
+					break;
+				}
+				const next = byName.get(at.base);
+				if (!next) {
+					const others = [...byName.keys()].filter((n) => n !== info.name);
+					problem = `it extends "${at.base}", which no layer holds${others.length ? `; the skills are ${others.map((n) => `"${n}"`).join(', ')}` : ''}.`;
+					break;
+				}
+				if (chain.length >= MAX_STYLE_INHERITANCE_DEPTH) {
+					problem = `"extends" goes more than ${MAX_STYLE_INHERITANCE_DEPTH} skills deep: ${path.join(' → ')}.`;
+					break;
+				}
+				chain.push(at.base);
+				at = next;
+			}
+			if (chain.length) info.inherits = chain;
+			if (problem) {
+				info.issues.push(`Its profiles are left out: ${problem}`);
+				info.domains = [...r.skill.applies];
+				continue;
+			}
+			// Farthest base first, the skill itself last.
+			const levels = [...chain].reverse().map((n) => byName.get(n)!).concat(r);
+			const ids = new Set(levels.flatMap((l) => [...l.own.keys()]));
+			for (const domain of domains) {
+				if (!ids.has(domain.id)) continue;
+				const fromBase = !r.own.has(domain.id);
+				if (domain.id === brandStyleDomain.id) r.skill.applies.add(domain.id);
+				else if (fromBase && !r.skill.applies.has(domain.id)) continue; // a base's profile for a domain this skill leaves out
+				const profile: Record<string, unknown> = {};
+				const origins: Record<string, string> = {};
+				for (const level of levels) {
+					const copy = level.own.get(domain.id);
+					if (copy) inheritMerge(profile, copy.profile, origins, level.skill.info.name);
+				}
+				const label = r.own.get(domain.id)?.label ?? `The ${domain.id} profile inherited from "${levels.find((l) => l.own.has(domain.id))!.skill.info.name}"`;
+				const { checks, ...rest } = profile;
+				const errors = [...(r.own.get(domain.id)?.errors ?? []), ...validateJsonSchema(rest, domain.profileSchema).map((e) => `${e.path || '(profile)'}: ${e.message}`), ...checkListErrors(checks, domain)];
+				if (errors.length) {
+					info.issues.push(`${label} is left out: ${errors.join(' ')}`);
+					continue;
+				}
+				r.skill.profiles.set(domain.id, profile);
+				const inherited = Object.fromEntries(Object.entries(origins).filter(([, who]) => who !== info.name));
+				if (Object.keys(inherited).length) r.skill.inherited.set(domain.id, inherited);
+			}
+			info.domains = [...r.skill.applies];
+			info.profiles = [...r.skill.profiles.keys()];
+		}
+		for (const r of read) skills.push(r.skill);
 		skills.sort((a, b) => a.layerIndex - b.layerIndex || a.info.order - b.info.order || a.info.name.localeCompare(b.info.name));
 		return { skills, issues };
 	}
@@ -791,7 +961,7 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 			if (!skill.applies.has(domainId) || !inScope(skill.info, opts.scope)) continue;
 			for (const message of skill.info.issues) issues.push({ skill: skill.info.name, layer: skill.info.layer, message });
 			if (!applying.has(skill.info.name)) continue;
-			applied.push({ name: skill.info.name, description: skill.info.description, layer: skill.info.layer, body: skill.body });
+			applied.push({ name: skill.info.name, description: skill.info.description, layer: skill.info.layer, body: skill.body, ...(skill.info.inherits ? { inherits: skill.info.inherits } : {}) });
 			const brandProfile = skill.profiles.get(brandStyleDomain.id);
 			if (brandProfile && domainId !== brandStyleDomain.id) {
 				mergeProfile(brand, brandProfile, layers[skill.layerIndex], skill.info.name, brandSources, brandLocked, issues);
@@ -816,7 +986,12 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 				recordSources(derived, `${brandLayer} (brand)`, sources);
 			}
 		}
-		for (const { skill, profile: domainProfile } of own) mergeProfile(profile, domainProfile, layers[skill.layerIndex], skill.info.name, sources, locked, issues);
+		for (const { skill, profile: domainProfile } of own) {
+			const layer = layers[skill.layerIndex];
+			mergeProfile(profile, domainProfile, layer, skill.info.name, sources, locked, issues);
+			// Fields this skill took from its base say so.
+			for (const [path, base] of Object.entries(skill.inherited.get(domainId) ?? {})) if (sources[path] === layer.id) sources[path] = `${layer.id} (from ${base})`;
+		}
 		if (hasBrand && brandSources.checks) sources['$brand.checks'] = brandSources.checks;
 		return { domain: domainId, skills: applied, profile, sources, issues, ...(hasBrand ? { brand: brand as BrandProfile } : {}) };
 	}

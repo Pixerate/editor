@@ -252,6 +252,23 @@ describe('pixerate-style', () => {
 		expect(a.err.join('')).toMatch(/Unknown domain "video"[\s\S]*missing is not a folder[\s\S]*Unknown command "frobnicate"/);
 	});
 
+	it('check reads a base the skill extends from a sibling folder', async () => {
+		dir = mkdtempSync(path.join(os.tmpdir(), 'pixerate-style-'));
+		mkdirSync(path.join(dir, 'paper'));
+		mkdirSync(path.join(dir, 'night'));
+		writeFileSync(path.join(dir, 'paper', 'SKILL.md'), '---\nname: paper\ndescription: Paper.\n---\n\nPaper.\n');
+		writeFileSync(path.join(dir, 'paper', 'chart.json'), JSON.stringify({ palette: ['#111111', '#222222'], theme: { fontFamily: 'Inter' } }));
+		writeFileSync(path.join(dir, 'night', 'SKILL.md'), '---\nname: night\ndescription: Night.\nextends: paper\n---\n\nNight.\n');
+		writeFileSync(path.join(dir, 'night', 'chart.json'), JSON.stringify({ palette: ['#000000'] }));
+		const a = io();
+		expect((await runStyleCli(['check', 'night', '--json'], a.io)).code).toBe(0);
+		const report = JSON.parse(a.out.join(''));
+		expect(report).toMatchObject({ ok: true, inherits: ['paper'], profiles: { chart: { palette: ['#000000'], theme: { fontFamily: 'Inter' } } } });
+		const b = io();
+		expect((await runStyleCli(['check', 'night'], b.io)).code).toBe(0);
+		expect(b.out.join('')).toContain('extends: paper');
+	});
+
 	it('knows every editor domain the package ships', async () => {
 		dir = mkdtempSync(path.join(os.tmpdir(), 'pixerate-style-'));
 		const a = io();

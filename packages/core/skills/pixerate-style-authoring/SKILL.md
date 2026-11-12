@@ -40,6 +40,9 @@ This skill is the method. `pixerate-agent-tools` has the style tool reference.
 3. **Draft.** Brand colours by role in `brand.json` `colors` (`primary`, `secondary`,
    `accent`, `text`, `background`), fonts in `fonts`; domain rules in `<domain>.json`; turn on
    the checks that enforce them in `checks`. Prose only for taste a check cannot test.
+   A variant of an existing style (a night look, a print look) gets `extends: <that skill>` in
+   its frontmatter and only the fields that differ; write `"version"` in a profile when
+   `get_style_schema` gives one.
    **Check:** `check_style_skill` with all the files: `ok: true`; read its `profiles` to confirm
    each domain gets what the user asked (charts take the brand palette by default).
 4. **Save.** `save_style` with the files (merge by default; `replace: true` to drop files).
@@ -56,6 +59,8 @@ This skill is the method. `pixerate-agent-tools` has the style tool reference.
 | A rule for one editor only | That domain's profile, and `domains` in the frontmatter |
 | A style that "does not apply" | `list_styles` issues: fix the file named there, then `save_style` (merge) |
 | One of several looks | `choose_style`; never edit the other looks to switch |
+| A variant of an existing look | A new skill with `extends: <look>`, the same `group`, and only what differs; then `choose_style` |
+| `list_styles` shows `migrations` | The profile is in an older format: with the user's agreement, `save_style` the upgraded `profile` it gives |
 | The org layer is locked | Save under a new name in the user layer; say the org rule wins |
 | No writable layer (`save_style` missing) | Hand the checked files to the user |
 
@@ -63,6 +68,10 @@ This skill is the method. `pixerate-agent-tools` has the style tool reference.
 
 **A brand style.** `get_style_schema` `brand` → `check_style_skill` `{ name, files: { SKILL.md,
 brand.json, chart.json: { checks: ["palette-only"] } } }` → `save_style` → `get_style` `chart`.
+
+**A variant.** `get_style_file` the base's profile → `check_style_skill` `{ name: "night", files:
+{ SKILL.md (with `group: look` and `extends: paper`), chart.json: { palette: [...] } } }` (its
+`profiles` show the merged result) → `save_style` → `choose_style` `night`.
 
 **Fix a broken profile.** `list_styles` → read the issue (`chart.json is left out: /palette:
 ...`) → `save_style` with only the corrected file → `list_styles` shows none.
@@ -72,6 +81,10 @@ brand.json, chart.json: { checks: ["palette-only"] } } }` → `save_style` → `
 - **Unquoted `#` in frontmatter.** `color: #0b5fff` is a comment; quote colours or use JSON files.
 - **Folder and `name` differ.** The folder name is the id; keep `name` the same.
 - **Rules only in prose.** "Use the brand blue" cannot be checked; put it in a profile.
+- **Copying a base instead of extending it.** A copy drifts when the base changes; `extends`
+  follows it. Keep a variant's profile to the fields that differ.
+- **Extending a skill that is not installed.** The variant's profiles are left out until its
+  base exists; `check_style_skill` reports it.
 - **Saving without checking.** `save_style` refuses what would not load; draft with
   `check_style_skill` so the user sees one clean save.
 
@@ -80,5 +93,5 @@ brand.json, chart.json: { checks: ["palette-only"] } } }` → `save_style` → `
 - `list_styles`, `get_style`, `get_style_file`: read what exists and what applies
 - `get_style_schema`: what a profile can hold, its checks and an example
 - `check_style_skill`: check a draft exactly as it will load
-- `save_style`, `remove_style`: write or delete a skill in a writable layer
+- `save_style`, `remove_style`: write or delete a skill in a writable layer (`extends` for variants)
 - `list_style_choices`, `choose_style`: switch a one-of-a-kind look
