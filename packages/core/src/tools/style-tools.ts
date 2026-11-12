@@ -6,7 +6,7 @@
  */
 import type { AgentTool, AgentToolProvider } from './registry.js';
 import { renderStyle, styleChecksOf, styleSwatches, type StyleResolver } from './style.js';
-import { checkStyleSkill, removeStyleSkill, saveStyleSkill } from './style-authoring.js';
+import { checkStyleSkill, removeStyleSkill, renderStyleDomain, saveStyleSkill } from './style-authoring.js';
 
 /**
  * Prompt text a host can add to an agent's instructions while a house style is active. It is
@@ -109,12 +109,12 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'get_style_schema',
 		title: 'Get a style profile schema',
 		description:
-			'Returns what a house-style profile for a domain can hold: its JSON Schema, the checks it can turn on in its "checks" list with each check\'s options schema (shared checks included), a small valid example when the domain has one, and version: the current version of the profile format, when the domain versions its profiles (write it as a top-level "version"). Domain "brand" describes brand.json, which every domain reads. Use it to explain or write a profile, then check_style_skill on the draft.',
+			'Returns what a house-style profile for a domain can hold: its JSON Schema, the checks it can turn on in its "checks" list with each check\'s options schema (shared checks included), a small valid example when the domain has one, and version: the current version of the profile format, when the domain versions its profiles (write it as a top-level "version"). Domain "brand" describes brand.json, which every domain reads. Its text is the same as a <style_domain> block (where the profile goes, extends, the version, the checks, an example and the schema). Use it to explain or write a profile, then check_style_skill on the draft.',
 		inputSchema: { type: 'object', properties: { domain: DOMAIN }, required: ['domain'], additionalProperties: false },
 		annotations: { title: 'Get a style profile schema', ...READ },
 		handler: ({ domain }) => {
 			const d = styles.domains.find((x) => x.id === domain)!;
-			return {
+			const structured = {
 				domain: d.id,
 				file: `${d.id}.json`,
 				description: d.description,
@@ -123,6 +123,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 				...(d.example ? { example: d.profileVersion !== undefined ? { version: d.profileVersion, ...d.example } : d.example } : {}),
 				...(d.profileVersion !== undefined ? { version: d.profileVersion } : {})
 			};
+			return { content: [{ type: 'text', text: renderStyleDomain(d) }], structuredContent: structured };
 		}
 	};
 

@@ -1087,7 +1087,9 @@ export function runStyleChecks<State>(domain: StyleDomain<State>, state: State, 
 }
 
 /** Text that tries to open or close a `<style_skill>` or `<style_catalog>` block is escaped. */
-const escapeBlocks = (text: string) => text.replace(/<(\/?)(style_skill|style_catalog)/gi, '&lt;$1$2');
+/** Escapes the tags house-style text is wrapped in (`<style_skill>`, `<style_catalog>`, `<style_domain>`), so text cannot close or open one. */
+export const escapeStyleBlocks = (text: string) => text.replace(/<(\/?)(style_skill|style_catalog|style_domain)/gi, '&lt;$1$2');
+const escapeBlocks = escapeStyleBlocks;
 
 const escapeAttribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 

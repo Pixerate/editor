@@ -1,4 +1,4 @@
-import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from "@pixerate/editor/agent";
+import { createStyleResolver, createStyleToolProvider, memoryStyleStore, storageStyleStore } from "@pixerate/editor/agent";
 import { chartStyleDomain } from "@pixerate/editor/chart";
 import { spreadsheetStyleDomain } from "@pixerate/editor/spreadsheet";
 import { diagramStyleDomain } from "@pixerate/editor/diagram";
@@ -182,8 +182,8 @@ Write titles in sentence case and say the finding ("Revenue doubled in Q3"), not
   ),
 });
 
-/** The user layer: a personal preference on top of the org's. */
-export const demoUserStyles = memoryStyleStore({
+/** The user layer: a personal preference on top of the org's, kept in this browser (localStorage). */
+export const demoUserStyles = storageStyleStore({ key: "pixerate-demo-user-styles", initial: {
   "big-labels/SKILL.md": `---
 name: big-labels
 description: My preference for readable charts.
@@ -193,7 +193,7 @@ domains: [chart]
 I read charts on a laptop: turn data labels on and keep the text large.
 `,
   "big-labels/chart.json": JSON.stringify({ theme: { fontSize: 14 }, defaults: { dataLabels: true } }, null, 2),
-});
+} });
 
 /** House styles for the demo's chart and tokens tabs. */
 export const demoStyles = createStyleResolver({
