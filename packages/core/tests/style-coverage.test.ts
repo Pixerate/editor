@@ -18,6 +18,8 @@ import { canvasStyleDomain } from '../src/canvas/style';
 import { typographyStyleDomain } from '../src/typography/style';
 import { imageStyleDomain } from '../src/image-editor/style';
 import { paintStyleDomain } from '../src/paint-editor/style';
+import { animationStyleDomain } from '../src/animation-editor/style';
+import { videoStyleDomain } from '../src/video-editor/style';
 
 type Coverage = StyleDomain<any> | { pending: `#${number}` } | { none: string };
 
@@ -33,8 +35,8 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-diagram': diagramStyleDomain,
 	'pixerate-image-editor': imageStyleDomain,
 	'pixerate-paint-editor': paintStyleDomain,
-	'pixerate-animation-editor': { pending: '#779' },
-	'pixerate-video-editor': { pending: '#779' },
+	'pixerate-animation-editor': animationStyleDomain,
+	'pixerate-video-editor': videoStyleDomain,
 	'pixerate-generation': { pending: '#779' },
 	'pixerate-parameters': { pending: '#779' },
 	'pixerate-effect-authoring': { pending: '#779' },

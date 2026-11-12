@@ -186,6 +186,22 @@ An aspect-ratio finding carries the centred crop that reaches the nearest house 
 paper and brush; strokes already painted stay as they are. The Swift paint editor does not read
 house styles yet.
 
+### `animation-editor.json` and `video-editor.json`
+
+```json
+{ "easings": ["ease-out", "ease-in-out"], "durations": { "min": 200, "max": 1200 }, "minHold": 600,
+  "maxLength": 15000, "fps": [30, 60], "checks": ["easings", "durations", "holds", "max-length", "fps"] }
+```
+
+```json
+{ "aspectRatios": ["16:9", "9:16"], "fps": [30, 25], "maxLength": 60000, "titleSizes": { "min": 48 },
+  "transitions": ["crossfade", "dip"], "maxTransition": 500,
+  "checks": ["aspect-ratio", "fps", "max-length", "title-sizes", "transitions", "min-contrast"] }
+```
+
+`fix_animation_style` applies the house easings, durations, holds and frame rate, and
+`fix_video_style` the frame rate, title sizes and transitions, each as one undo step.
+
 ## Layers
 
 A host stacks stores from general to specific, for example `org`, `workspace`, `user`,

@@ -52,7 +52,9 @@ the pitfalls, and uses the tools below.
    `get_timing_grid`, and give shots `"at": { "beat": n }` or `{ "word": i }`.
 5. **Check.** `check_animation`; fix every error and warning (codes such as `too-fast`,
    `overlap`, `out-of-frame`, `enter-visible`, `cue-missed`). Use `get_motion_path` for
-   spacing and arcs as numbers.
+   spacing and arcs as numbers. With a house style (`get_style` with
+   `domain: "animation-editor"`), run `check_animation_style` too; `fix_animation_style`
+   applies the house easings, durations, holds and frame rate as one undo step.
 6. **Look.** `render_animation_frame` with `shot` + `at: "end"`, or `times` for a contact sheet,
    plus `onion_skin` / `motion_paths` to see motion in one picture. Render after a batch, not
    after every edit. `seek_animation` shows the person a moment.
@@ -105,6 +107,8 @@ the pitfalls, and uses the tools below.
 
 | Tool | Use it to |
 | --- | --- |
+| `check_animation_style` | Check the animation against the house style: easings, command durations, holds per shot, total length, frame rate, and the brand's colours in style commands. Returns findings with a `target` (`{ shot, command }`, `{ shot }` or `{ scene: true }`, with `set` when certain), `fixable`, and the checks that `ran` and were `skipped`. |
+| `fix_animation_style` | Apply every certain house-style fix (easings, durations, holds, frame rate) as one undo step. Returns `fixed` and the findings `left`. Hidden on a read-only animation. |
 | `get_animation` | Start here. Returns name, artwork size, length (ms), loop, elements (id, type, name, parent, bounds, solid paints, live effects with numeric params), every shot with each command's index, start, end and `flairPrimitive`, clips, drivers, controls and an issue summary, plus `readOnly` when edits are refused. `includeElements: false` (default true) skips the element list on large artwork. |
 | `get_shot` | Read one shot as stored (`shot` id) with its start/end and each command's start/end in ms; cheaper than `get_animation` while refining one shot. |
 | `describe_animation_command` | Before writing a command type you have not used yet, or when a write rejects a field: returns the full JSON Schema of each of `types` (e.g. `["enter", "move"]`), with every field's type, range, default and meaning and which are required. The write tools list every command field once in short, prefixed with the types that take it. |

@@ -32,6 +32,8 @@ import { canvasStyleDomain, createCanvasStyleToolProvider } from '../src/canvas/
 import { createTypographyStyleToolProvider, typographyStyleDomain } from '../src/typography/style';
 import { createImageStyleToolProvider, imageStyleDomain } from '../src/image-editor/style';
 import { createPaintStyleToolProvider, paintStyleDomain } from '../src/paint-editor/style';
+import { animationStyleDomain, createAnimationStyleToolProvider } from '../src/animation-editor/style';
+import { createVideoStyleToolProvider, videoStyleDomain } from '../src/video-editor/style';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -111,7 +113,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -185,11 +187,13 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-animation-editor': [
 			...toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
+			...toolNames(createAnimationStyleToolProvider(new AnimationEditorController(), styles)),
 			...toolNames(createAnimationEffectsToolProvider(new AnimationEditorController(), { id: 'animation-effects' })),
 			...toolNames(createDocumentToolProvider(createAnimationEditorDocument(new AnimationEditorController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-video-editor': [
 			...toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
+			...toolNames(createVideoStyleToolProvider(new VideoEditorController(), styles)),
 			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' })),
 			...toolNames(createDocumentToolProvider(createVideoEditorDocument(new VideoEditorController()), { history: false, store: documentStore() }))
 		],
@@ -312,8 +316,10 @@ const FACTORIES: Record<string, string> = {
 	createPaintProposalToolProvider: 'pixerate-paint-editor',
 	createPaintEvolutionToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
+	createAnimationStyleToolProvider: 'pixerate-animation-editor',
 	createAnimationEffectsToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
+	createVideoStyleToolProvider: 'pixerate-video-editor',
 	createVideoEffectsToolProvider: 'pixerate-video-editor',
 	createVideoDialogueToolProvider: 'pixerate-talking-head-edit',
 	createVideoMusicToolProvider: 'pixerate-bgm-alignment',

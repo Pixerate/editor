@@ -6,6 +6,8 @@ import { canvasStyleDomain } from "@pixerate/editor/canvas";
 import { typographyStyleDomain } from "@pixerate/editor/typography";
 import { imageStyleDomain } from "@pixerate/editor/image-editor";
 import { paintStyleDomain } from "@pixerate/editor/paint-editor";
+import { animationStyleDomain } from "@pixerate/editor/animation-editor";
+import { videoStyleDomain } from "@pixerate/editor/video-editor";
 import { TokenStore, createTokenStyleSource, tokensStyleDomain } from "@pixerate/editor/tokens";
 import { richTextStyleDomain } from "@pixerate/editor";
 import { demoToolRegistry } from "./agentTools";
@@ -69,6 +71,17 @@ Photos ship square or 4:5 with a natural look. Paintings on watercolour paper.
 `,
   "acme-pictures/image-editor.json": JSON.stringify({ aspectRatios: ["1:1", "4:5", "16:9"], adjustments: { saturation: { min: -30, max: 30 } }, checks: ["aspect-ratio", "adjustment-ranges"] }, null, 2),
   "acme-pictures/paint-editor.json": JSON.stringify({ papers: ["cold-pressed", "hot-pressed", "rough-watercolor"], maxLayers: 20, checks: ["paper", "max-layers"] }, null, 2),
+  // The org's rules for motion (check_animation_style, check_video_style).
+  "acme-motion/SKILL.md": `---
+name: acme-motion
+description: Acme's rules for animation and video.
+domains: [animation-editor, video-editor]
+---
+
+Calm motion: ease out, nothing faster than 200 ms, hold each shot long enough to read.
+`,
+  "acme-motion/animation-editor.json": JSON.stringify({ easings: ["ease-out", "ease-in-out", "linear"], durations: { min: 150, max: 2000 }, minHold: 400, checks: ["easings", "durations", "holds"] }, null, 2),
+  "acme-motion/video-editor.json": JSON.stringify({ fps: [30, 25, 24], titleSizes: { min: 40 }, transitions: ["crossfade", "dip"], maxTransition: 1000, checks: ["fps", "title-sizes", "transitions"] }, null, 2),
   // The org's writing style for documents (the Documents tab): checked by check_rich_text_style.
   "acme-writing/SKILL.md": `---
 name: acme-writing
@@ -155,7 +168,7 @@ export const demoStyles = createStyleResolver({
     { id: "org", store: demoOrgStyles, locked: true },
     { id: "user", store: demoUserStyles },
   ],
-  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain],
+  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain, spreadsheetStyleDomain, diagramStyleDomain, canvasStyleDomain, typographyStyleDomain, imageStyleDomain, paintStyleDomain, animationStyleDomain, videoStyleDomain],
   tokens: createTokenStyleSource(demoBrandTokens),
 });
 
