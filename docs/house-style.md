@@ -87,6 +87,27 @@ chart:
 more as each editor gains a style domain. `get_style_schema` (or `pixerate-style schema
 <domain>`) describes each one, with its checks and a valid example.
 
+### `rich-text.json` (documents)
+
+```json
+{
+  "headingCase": "sentence",
+  "properNouns": ["Acme", "GitHub"],
+  "maxHeadingLevel": 3,
+  "listItemEnd": "none",
+  "quotes": "curly",
+  "terms": [{ "avoid": "utilize", "use": "use" }],
+  "thousandsSeparator": ",",
+  "dateFormat": "day-month-year",
+  "checks": ["heading-case", "heading-levels", "list-punctuation", "quotes", "terms", "number-format", "date-format"]
+}
+```
+
+`check_rich_text_style` reports each finding with a `{ from, to }` range and, when the fix is
+certain, its `replacement`; `fix_rich_text_style` applies those as one undo step. Text colours
+and fonts set in the document are checked against the brand (`palette-only`, `fonts-allowed`).
+React and Svelte: `useRichTextStyleFindings(styles, editor)`.
+
 ## Limits and safety
 
 A skill is text an agent may read, so the resolver keeps it small and plain: files up to

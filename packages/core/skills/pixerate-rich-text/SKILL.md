@@ -49,6 +49,11 @@ the pitfalls, and uses the tools below.
    `**bold**` or `# Heading`; it is inserted as those characters.
 6. **Check.** `get_text` again (or `find_text` for the new wording) and confirm the result.
    For a prompt, `view_editor` shows how tokens render when layout matters.
+7. **House style.** When the host has one (`get_style` with `domain: "rich-text"`), run
+   `check_rich_text_style` after writing. `fix_rich_text_style` applies every certain fix
+   (heading case, list endings, quotes, terms, numbers, dates) as one undo step; fix what it
+   leaves (`left`: skipped heading levels, ambiguous dates, terms with no replacement) yourself
+   with `replace_range` or `set_block_type`, then check again.
 
 ## Best practices
 
@@ -105,6 +110,8 @@ the pitfalls, and uses the tools below.
 | Tool | Use it to |
 | --- | --- |
 | `replace_range` | Replace the content between `from` and `to` with literal `text` (newlines start new paragraphs). `from === to` inserts; empty `text` deletes. Returns the new `range` and document `size`. The default tool for minimal-diff edits. |
+| `check_rich_text_style` | Check the document against the house style: heading case and levels, list endings, quotation marks, preferred terms, number and date formats, and the brand's text colours and fonts. Returns findings with a `target` `{from, to}` for `replace_range` (with `replacement` when the fix is certain), `fixable`, the checks that `ran` and those `skipped` with the reason. Run after writing and again after fixing. |
+| `fix_rich_text_style` | Apply every certain house-style fix as one undo step (pass `checks` to limit it). Returns `fixed` and the findings `left` for you. Hidden on a read-only document. Run `check_rich_text_style` after. |
 | `replace_text` | Find and replace a phrase in one undo step, keeping the found text's formatting. Replaces all matches unless `occurrence` (1-based) is given. Same `matchCase` / `wholeWord` / `regex` flags as `find_text`. Fails when nothing matches. Returns `{replaced, total, ranges}`. |
 | `insert_text` | Insert literal `text` at `at` (a document position) or at the cursor. Returns the inserted `range`. Use for new sentences or paragraphs; position from `get_text {blocks: true}` (a block's `to` appends to it). |
 | `replace_selection` | Replace the current selection with literal text (empty string deletes). Use after `set_selection`, or when the user asks to change what they selected. |

@@ -47,9 +47,9 @@ This skill is the method. `pixerate-rich-text` has the full tool reference; posi
    earlier positions stay valid (cell positions from `get_text` `blocks`).
    **Check:** the HTML has the header cells and rows in order.
 5. **Charts** for figures: `insert_chart` with the data; edit with `update_chart_in_document`.
-6. **Consistency pass.** Heading case, terms, numbers and dates written one way:
-   `find_text` to find variants, `replace_text` to fix them (see
-   `pixerate-rich-text-revise`).
+6. **Consistency pass.** Heading case, terms, numbers and dates written one way. With a
+   house style, `check_rich_text_style` and `fix_rich_text_style`; otherwise `find_text` to
+   find variants and `replace_text` to fix them (see `pixerate-rich-text-revise`).
    **Check:** `find_text` for the old variants returns no matches.
 7. **Read it through** once as the reader would (`get_text`), and report what changed.
 
@@ -96,3 +96,4 @@ last first.
 - `insert_text`, `replace_range`, `replace_text`: fill cells, write and fix text
 - `insert_chart`, `update_chart_in_document`, `list_document_charts`: charts in the document
 - `undo_rich_text`: take back a step
+- `check_rich_text_style`, `fix_rich_text_style`: the house style's consistency checks and fixes

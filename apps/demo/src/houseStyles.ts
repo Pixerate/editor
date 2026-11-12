@@ -1,6 +1,7 @@
 import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from "@pixerate/editor/agent";
 import { chartStyleDomain } from "@pixerate/editor/chart";
 import { TokenStore, createTokenStyleSource, tokensStyleDomain } from "@pixerate/editor/tokens";
+import { richTextStyleDomain } from "@pixerate/editor";
 import { demoToolRegistry } from "./agentTools";
 
 /** The brand tokens the org style's `$token` references resolve against. */
@@ -21,6 +22,28 @@ const look = (name: string, description: string, defaults: Record<string, unknow
 
 /** The org layer: locked, so later layers cannot change what it sets. */
 export const demoOrgStyles = memoryStyleStore({
+  // The org's writing style for documents (the Documents tab): checked by check_rich_text_style.
+  "acme-writing/SKILL.md": `---
+name: acme-writing
+description: Acme's writing style for documents and reports.
+domains: [rich-text]
+---
+
+Write plainly: short sentences, the finding first. Headings in sentence case.
+`,
+  "acme-writing/rich-text.json": JSON.stringify(
+    {
+      headingCase: "sentence",
+      properNouns: ["Acme", "Pixerate", "Word", "Mermaid"],
+      maxHeadingLevel: 3,
+      quotes: "curly",
+      terms: [{ avoid: "utilize", use: "use" }, { avoid: "click here", note: "link text says where it goes" }],
+      thousandsSeparator: ",",
+      checks: ["heading-case", "heading-levels", "quotes", "terms", "number-format"],
+    },
+    null,
+    2,
+  ),
   ...look("look-calm", "Calm charts: smooth lines, no stacking.", { curve: "smooth", stacking: "none" }),
   ...look("look-dense", "Dense charts: stacked bars and step lines for dashboards.", { curve: "step", stacking: "stacked" }),
   "acme-brand/SKILL.md": `---
@@ -85,7 +108,7 @@ export const demoStyles = createStyleResolver({
     { id: "org", store: demoOrgStyles, locked: true },
     { id: "user", store: demoUserStyles },
   ],
-  domains: [chartStyleDomain, tokensStyleDomain],
+  domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain],
   tokens: createTokenStyleSource(demoBrandTokens),
 });
 

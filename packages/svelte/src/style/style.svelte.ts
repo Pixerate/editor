@@ -1,4 +1,6 @@
 import { styleSwatches } from "@pixerate/editor/tools";
+import { richTextStyleState } from "@pixerate/editor";
+import type { Editor } from "@tiptap/core";
 import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver, StyleSwatch } from "@pixerate/editor/tools";
 
 type MaybeGetter<T> = T | (() => T);
@@ -90,13 +92,14 @@ export function useStyleFindings(
   styles: MaybeGetter<StyleResolver | null | undefined>,
   domain: MaybeGetter<string>,
   subject: MaybeGetter<unknown>,
+  scope?: MaybeGetter<string | undefined>,
 ): SvelteStyleFindings {
   let report = $state.raw<StyleCheckReport | null>(null);
   let style = $state.raw<ResolvedStyle | null>(null);
   let error = $state.raw<string | null>(null);
   resolverTask(
-    () => ({ styles: read(styles), input: { domain: read(domain), value: read(subject) } }),
-    (s, { domain: d, value }) => s.check(d, value),
+    () => ({ styles: read(styles), input: { domain: read(domain), value: read(subject), scope: scope === undefined ? undefined : read(scope) } }),
+    (s, { domain: d, value, scope: sc }) => s.check(d, value, sc !== undefined ? { scope: sc } : {}),
     (result) => {
       if (!result.value) {
         report = null;
@@ -214,4 +217,34 @@ export function useStyleSwatches(
       return error;
     },
   };
+}
+
+/**
+ * Svelte 5 rune: the document house-style findings for a TipTap editor (`rich-text` domain),
+ * re-checked after every edit. Feed `report` to `<StyleFindings>`. Call it during component
+ * initialisation. Parity with React's `useRichTextStyleFindings`.
+ */
+export function useRichTextStyleFindings(
+  styles: MaybeGetter<StyleResolver | null | undefined>,
+  editor: MaybeGetter<Editor | null | undefined>,
+  scope?: MaybeGetter<string | undefined>,
+): SvelteStyleFindings {
+  let doc = $state.raw<unknown>(null);
+  $effect(() => {
+    const ed = read(editor);
+    if (!ed) {
+      doc = null;
+      return;
+    }
+    doc = ed.state.doc;
+    const onUpdate = () => {
+      doc = ed.state.doc;
+    };
+    ed.on("update", onUpdate);
+    return () => {
+      ed.off("update", onUpdate);
+    };
+  });
+  const subject = $derived(doc ? richTextStyleState(doc as never) : null);
+  return useStyleFindings(() => (subject ? read(styles) : null), "rich-text", () => subject, scope);
 }

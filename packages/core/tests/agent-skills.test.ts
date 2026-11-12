@@ -25,6 +25,7 @@ import {
 	createReviewToolProvider,
 	type AgentToolProvider
 } from '../src/agent';
+import { createRichTextStyleToolProvider, richTextStyleDomain } from '../src/richTextStyle';
 import {
 	CommandRegistry,
 	createCommandToolProvider,
@@ -104,7 +105,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
-	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain] });
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -122,7 +123,8 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(editorMcp, (n) => n.startsWith('prompt_') || shared.includes(n)),
 			...commandIds(createFindReplaceCommands(doc)),
 			...commandIds(createTableCommands(doc)),
-			...toolNames(createDocumentToolProvider(createRichTextEditorDocument(doc), { store: documentStore() }))
+			...toolNames(createDocumentToolProvider(createRichTextEditorDocument(doc), { store: documentStore() })),
+			...toolNames(createRichTextStyleToolProvider(doc, styles))
 		],
 		'pixerate-spreadsheet': [
 			...toolNames(createSpreadsheetToolProvider(sheet, { id: 'sheet' })),
@@ -276,6 +278,7 @@ const FACTORIES: Record<string, string> = {
 	createOfficeChartToolProvider: 'pixerate-chart',
 	createChartCommands: 'pixerate-chart',
 	createChartStyleToolProvider: 'pixerate-chart',
+	createRichTextStyleToolProvider: 'pixerate-rich-text',
 	createTokensStyleToolProvider: 'pixerate-tokens',
 	createStyleToolProvider: 'pixerate-agent-tools',
 	createDiagramToolProvider: 'pixerate-diagram',

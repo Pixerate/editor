@@ -11,6 +11,7 @@ import path from 'node:path';
 import { styleChecksOf, SHARED_STYLE_CHECKS, type StyleDomain } from '../src/tools';
 import { chartStyleDomain } from '../src/chart';
 import { tokensStyleDomain } from '../src/tokens';
+import { richTextStyleDomain } from '../src/richTextStyle';
 
 type Coverage = StyleDomain<any> | { pending: `#${number}` } | { none: string };
 
@@ -19,7 +20,7 @@ const COVERAGE: Record<string, Coverage> = {
 	'pixerate-color': { none: 'Colour tools serve every editor; brand.json and the shared checks are its house style.' },
 	'pixerate-chart': chartStyleDomain,
 	'pixerate-tokens': tokensStyleDomain,
-	'pixerate-rich-text': { pending: '#778' },
+	'pixerate-rich-text': richTextStyleDomain,
 	'pixerate-spreadsheet': { pending: '#779' },
 	'pixerate-canvas': { pending: '#779' },
 	'pixerate-vector': { pending: '#779' },
