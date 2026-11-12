@@ -409,6 +409,71 @@ describe("authored effects in the paint editor", () => {
     expect(docs["authored.raw"].document.provider).toEqual(data);
   });
 
+  it("an effect that samples is a filter: apply_effect runs it on a layer's paint", async () => {
+    const t = setup();
+    await t.call("open_effect_authoring", { effect: "pixel.blank" });
+    await t.call("effect_authoring_set_source", {
+      source:
+        "control shift: number = 4 range 0 16 // Pixels to the right the paint moves.\nlet c = sample(uv - vec2(shift, 0) / size)\nout = vec4(1 - c.rgb, c.a)",
+    });
+    const saved = await t.call("save_authored_effect", { name: "Shift" });
+    expect(saved.id).toBe("authored.shift");
+    await t.call("close_effect_authoring");
+
+    const d = await t.call("describe_effect", { effect: "authored.shift" });
+    expect(d.uses).toEqual(["filter"]);
+    expect(d.inputs).toEqual([
+      expect.objectContaining({ name: "source", kind: "image" }),
+    ]);
+    expect(d.paint).toBeUndefined();
+    const light = await t.call("search_effects", {
+      query: "shift",
+      place: "light",
+    });
+    expect(light.effects.map((e: { id: string }) => e.id)).toEqual([
+      "authored.shift",
+    ]);
+    const paint = await t.call("search_effects", {
+      query: "shift",
+      place: "paint",
+    });
+    expect(paint.effects).toEqual([]);
+    expect(
+      await t.fail("set_effect_paint", { effect: "authored.shift" }),
+    ).toMatch(/effect: Expected one of .*got "authored.shift"/);
+    await expect(
+      t.c.setEffectPaint({ effect: "authored.shift" }),
+    ).rejects.toThrow(/is a filter effect.*apply_effect/);
+
+    const layer = t.c.getActiveLayer()!.id;
+    t.c.setColor("#ff0000");
+    t.c.paintStroke({
+      brushId: "ink-pen",
+      brush: HARD,
+      points: [
+        { x: 4, y: 8 },
+        { x: 10, y: 8 },
+      ],
+    });
+    expect(px(t.c, layer, 4, 8)).toEqual([255, 0, 0, 255]);
+    const r = await t.call("apply_effect", {
+      target: layer,
+      effect: "authored.shift",
+      values: { shift: 2 },
+    });
+    expect(r).toMatchObject({ baked: true, target: layer });
+    expect(r.effect).toMatchObject({
+      effect: "authored.shift",
+      provider: "authored",
+      values: { shift: 2 },
+    });
+    // Inverted (red → cyan) and moved 2 px to the right.
+    expect(px(t.c, layer, 10, 8)).toEqual([0, 255, 255, 255]);
+    expect(px(t.c, layer, 18, 8)[3]).toBe(0);
+    t.c.undo();
+    expect(px(t.c, layer, 4, 8)).toEqual([255, 0, 0, 255]);
+  });
+
   it("drops unreadable entries with a problem", () => {
     const t = setup();
     const json = JSON.parse(JSON.stringify(t.c.toJSON()));

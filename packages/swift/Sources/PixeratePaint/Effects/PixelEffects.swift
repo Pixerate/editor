@@ -109,6 +109,7 @@ public func pixelIssueText(_ issues: [EffectAuthoringIssue]) -> String {
 
 /// The description of a compiled program (`pixelDescription`).
 public func pixelDescription(program: PixelProgram, meta: PixelEffectMeta) -> EffectDescription {
+    let filter = pixelProgramSamples(program)
     var properties = JSONObject()
     var defaults = JSONObject()
     for c in program.controls {
@@ -120,7 +121,7 @@ public func pixelDescription(program: PixelProgram, meta: PixelEffectMeta) -> Ef
         "name": .string(meta.name),
         "kind": "shader",
         "category": "authored",
-        "uses": ["generator"],
+        "uses": [.string(filter ? "filter" : "generator")],
         "description": .string(meta.description ?? "An effect written in pixel expressions."),
         "tags": ["authored", "pixel"],
         "transparent": .bool(program.out.size == 4),
@@ -128,13 +129,21 @@ public func pixelDescription(program: PixelProgram, meta: PixelEffectMeta) -> Ef
     ]
     // `...(meta.duration ? { duration } : {})`: 0 and NaN are left out.
     if let d = meta.duration, d != 0, !d.isNaN { o["duration"] = .number(d) }
-    if let p = meta.paint { o["paint"] = p }
+    if let p = meta.paint, !filter { o["paint"] = p }
     o["controls"] = ["type": "object", "properties": .object(properties), "additionalProperties": false]
     o["defaults"] = .object(defaults)
     o["presets"] = []
-    o["inputs"] = []
+    o["inputs"] = filter ? [.object(PIXEL_SOURCE_INPUT)] : []
     return EffectDescription(o)
 }
+
+/// The input of a program that calls `sample` (`PIXEL_SOURCE_INPUT`).
+public let PIXEL_SOURCE_INPUT: JSONObject = [
+    "name": "source",
+    "kind": "image",
+    "description": "The picture sample(p) reads (straight-alpha RGBA8, any size; p is in uv). Without one, sample reads transparent.",
+    "required": true,
+]
 
 /// A compiled source: its description and program, or nil for both with the issues (`describePixelSource`).
 public struct PixelSourceDescription: Sendable {
@@ -172,7 +181,7 @@ public final class PixelCPURenderer: SyncEffectRenderer {
         if disposed { throw EffectError("disposed", "The renderer for \"\(effectId)\" was disposed. Create a new renderer.", effectId: effectId) }
         let values = try resolveEffectValues(description, request.values ?? [:])
         var out = EffectPixels(width: width, height: height)
-        evaluator.render(width: width, height: height, timeMs: request.time, values: values, into: &out.data)
+        evaluator.render(width: width, height: height, timeMs: request.time, values: values, into: &out.data, source: request.inputs["source"])
         return out
     }
 

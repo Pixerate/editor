@@ -18,7 +18,11 @@ import Metal
  * Buffers: `buffer(0)` is `constant float*` uniforms `[width, height, time (s), 0, controls…]`,
  * each control's numbers in declaration order (a colour 3, a vec2 2, a number or bool 1; see
  * `PixelMSLSource.controlOffsets`); `buffer(1)` is `device uchar4*`, width × height straight-alpha
- * RGBA8, row by row from the top. Generated names never collide with MSL keywords: controls are
+ * RGBA8, row by row from the top. A program that calls `sample` (a filter) also takes its source
+ * picture as `buffer(2)` (`const device uchar4*`, the same layout) and the source's width and
+ * height after the controls (`PixelMSLSource.sourceSizeOffset`). `px_sample` reads it with
+ * `pixelSample`'s arithmetic (four reads, colour weighted by alpha, clamp to edge), not a hardware
+ * sampler, so it filters the same way as the CPU. Generated names never collide with MSL keywords: controls are
  * `c<i>`, lets `l<i>`, temporaries `t<i>` and built-ins `b_<name>`.
  */
 
@@ -31,6 +35,8 @@ public struct PixelMSLSource: Sendable, Equatable {
     public var uniformCount: Int
     /// Where each control's numbers start in the uniform buffer, in `program.controls` order.
     public var controlOffsets: [Int]
+    /// For a program that calls `sample`: where the source's width and height are in the uniform buffer (nil otherwise).
+    public var sourceSizeOffset: Int? = nil
 }
 
 public let PIXEL_MSL_ENTRY = "pixel_main"
@@ -88,6 +94,36 @@ static inline float px_noise(float x, float y) {
     float top = a + (b - a) * ux;
     float bottom = c + (d - c) * ux;
     return top + (bottom - top) * uy;
+}
+static inline float4 px_sample(const device uchar4* s, float sw, float sh, float x, float y) {
+    if (!(sw >= 1.0f) || !(sh >= 1.0f)) return float4(0.0f);
+    float tx = x * sw - 0.5f;
+    float ty = y * sh - 0.5f;
+    if (!(tx > -1.0f)) tx = -1.0f; else if (tx > sw) tx = sw;
+    if (!(ty > -1.0f)) ty = -1.0f; else if (ty > sh) ty = sh;
+    float fx0 = floor(tx);
+    float fy0 = floor(ty);
+    float fx = tx - fx0;
+    float fy = ty - fy0;
+    int w = int(sw);
+    int h = int(sh);
+    int ix = int(fx0);
+    int iy = int(fy0);
+    int x0 = clamp(ix, 0, w - 1);
+    int x1 = clamp(ix + 1, 0, w - 1);
+    int y0 = clamp(iy, 0, h - 1);
+    int y1 = clamp(iy + 1, 0, h - 1);
+    float4 c00 = float4(s[y0 * w + x0]);
+    float4 c10 = float4(s[y0 * w + x1]);
+    float4 c01 = float4(s[y1 * w + x0]);
+    float4 c11 = float4(s[y1 * w + x1]);
+    float w00 = (1.0f - fx) * (1.0f - fy) * c00.w;
+    float w10 = fx * (1.0f - fy) * c10.w;
+    float w01 = (1.0f - fx) * fy * c01.w;
+    float w11 = fx * fy * c11.w;
+    float a = w00 + w10 + w01 + w11;
+    float3 rgb = a > 0.0f ? (w00 * c00.xyz + w10 * c10.xyz + w01 * c01.xyz + w11 * c11.xyz) / (a * 255.0f) : float3(0.0f);
+    return float4(rgb, a / 255.0f);
 }
 static inline uchar px_byte(float v) { return v > 0.0f ? (v < 1.0f ? uchar(floor(v * 255.0f + 0.5f)) : uchar(255)) : uchar(0); }
 
@@ -184,6 +220,8 @@ private final class MSLWriter {
                 return temp(n, vec((0..<n).map { i in "(\(len) > 0.0f ? \(comp(a, n, i)) / \(len) : 0.0f)" }))
             case "hash", "noise":
                 return temp(1, "px_\(fn)(\(args[0]).x, \(args[0]).y)")
+            case "sample":
+                return temp(4, "px_sample(src, b_srcSize.x, b_srcSize.y, \(args[0]).x, \(args[0]).y)")
             case "vec2", "vec3", "vec4":
                 if args.count == 1 && sizes[0] == 1 { return temp(n, vec(Array(repeating: args[0], count: n))) }
                 var parts: [String] = []
@@ -199,7 +237,9 @@ private final class MSLWriter {
 /// The Metal Shading Language kernel for a checked program (`PixelMSL`).
 public func pixelMSL(_ program: PixelProgram) -> PixelMSLSource {
     let w = MSLWriter()
-    w.lines.append("kernel void \(PIXEL_MSL_ENTRY)(constant float* u [[buffer(0)]], device uchar4* out [[buffer(1)]], uint2 gid [[thread_position_in_grid]]) {")
+    let samples: Bool = pixelProgramSamples(program)
+    let sourceParam: String = samples ? ", const device uchar4* src [[buffer(2)]]" : ""
+    w.lines.append("kernel void \(PIXEL_MSL_ENTRY)(constant float* u [[buffer(0)]], device uchar4* out [[buffer(1)]]\(sourceParam), uint2 gid [[thread_position_in_grid]]) {")
     w.lines.append("    const uint W = uint(u[0]);")
     w.lines.append("    const uint H = uint(u[1]);")
     w.lines.append("    if (gid.x >= W || gid.y >= H) return;")
@@ -219,6 +259,12 @@ public func pixelMSL(_ program: PixelProgram) -> PixelMSLSource {
         w.lines.append("    const \(mslType(c.size)) \(id) = \(w.vec((0..<c.size).map { "u[\(offset + $0)]" })); // \(c.name)")
         offset += c.size
     }
+    var sourceSizeOffset: Int? = nil
+    if samples {
+        sourceSizeOffset = offset
+        w.lines.append("    const float2 b_srcSize = float2(u[\(offset)], u[\(offset + 1)]);")
+        offset += 2
+    }
     for (i, l) in program.lets.enumerated() {
         let v = w.emit(l.expr)
         let id = "l\(i)"
@@ -232,17 +278,26 @@ public func pixelMSL(_ program: PixelProgram) -> PixelMSLSource {
     default: w.lines.append("    out[gid.y * W + gid.x] = uchar4(px_byte(\(o).x), px_byte(\(o).y), px_byte(\(o).z), px_byte(\(o).w));")
     }
     w.lines.append("}")
-    return PixelMSLSource(source: PIXEL_MSL_PRELUDE + w.lines.joined(separator: "\n") + "\n", entry: PIXEL_MSL_ENTRY, uniformCount: offset, controlOffsets: offsets)
+    return PixelMSLSource(
+        source: PIXEL_MSL_PRELUDE + w.lines.joined(separator: "\n") + "\n", entry: PIXEL_MSL_ENTRY, uniformCount: offset, controlOffsets: offsets,
+        sourceSizeOffset: sourceSizeOffset
+    )
 }
 
-/// The uniforms for one frame: `[width, height, time (s), 0, controls…]`.
-func pixelMSLUniforms(_ program: PixelProgram, _ msl: PixelMSLSource, width: Int, height: Int, timeMs: Double, values: JSONObject) -> [Float] {
+/// The uniforms for one frame: `[width, height, time (s), 0, controls…]`, then the source's size for a filter.
+func pixelMSLUniforms(
+    _ program: PixelProgram, _ msl: PixelMSLSource, width: Int, height: Int, timeMs: Double, values: JSONObject, sourceWidth: Int = 0, sourceHeight: Int = 0
+) -> [Float] {
     var u = [Float](repeating: 0, count: msl.uniformCount)
     u[0] = Float(width)
     u[1] = Float(height)
     u[2] = Float(timeMs / 1000)
     for (i, c) in program.controls.enumerated() {
         for (k, v) in pixelControlNumbers(c, values[c.name]).enumerated() { u[msl.controlOffsets[i] + k] = Float(v) }
+    }
+    if let at = msl.sourceSizeOffset {
+        u[at] = Float(sourceWidth)
+        u[at + 1] = Float(sourceHeight)
     }
     return u
 }
@@ -345,8 +400,21 @@ public final class PixelMetalRenderer: SyncEffectRenderer {
         let values = try resolveEffectValues(description, request.values ?? [:])
         var out = EffectPixels(width: width, height: height)
         if width <= 0 || height <= 0 { return out }
-        let uniforms = pixelMSLUniforms(program, msl, width: width, height: height, timeMs: request.time, values: values)
+        // A filter's source (`sample` reads transparent without one; the kernel still needs a buffer).
+        var source: EffectPixels? = request.inputs["source"]
+        if let s = source, s.width < 1 || s.height < 1 || s.data.count < s.width * s.height * 4 { source = nil }
+        let uniforms = pixelMSLUniforms(
+            program, msl, width: width, height: height, timeMs: request.time, values: values, sourceWidth: source?.width ?? 0, sourceHeight: source?.height ?? 0
+        )
         let device = context.device
+        var sb: MTLBuffer? = nil
+        if msl.sourceSizeOffset != nil {
+            let bytes: [UInt8] = source?.data ?? [0, 0, 0, 0]
+            sb = bytes.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> MTLBuffer? in
+                device.makeBuffer(bytes: raw.baseAddress!, length: raw.count, options: .storageModeShared)
+            }
+            if sb == nil { throw EffectError.unsupported("The GPU could not allocate the source picture; render it on the CPU (PixelCPURenderer).", effectId) }
+        }
         guard let ub = uniforms.withUnsafeBytes({ device.makeBuffer(bytes: $0.baseAddress!, length: $0.count, options: .storageModeShared) }),
               let ob = device.makeBuffer(length: width * height * 4, options: .storageModeShared),
               let cmd = context.queue.makeCommandBuffer(),
@@ -355,6 +423,7 @@ public final class PixelMetalRenderer: SyncEffectRenderer {
         enc.setComputePipelineState(pipeline)
         enc.setBuffer(ub, offset: 0, index: 0)
         enc.setBuffer(ob, offset: 0, index: 1)
+        if let sb { enc.setBuffer(sb, offset: 0, index: 2) }
         let tw = Swift.max(1, pipeline.threadExecutionWidth)
         let th = Swift.max(1, pipeline.maxTotalThreadsPerThreadgroup / tw)
         enc.dispatchThreadgroups(MTLSize(width: (width + tw - 1) / tw, height: (height + th - 1) / th, depth: 1), threadsPerThreadgroup: MTLSize(width: tw, height: th, depth: 1))
