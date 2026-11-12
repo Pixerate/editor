@@ -1578,6 +1578,23 @@ func stickerWithFrame(_ s: Sticker, _ art: StickerArt?) throws -> Sticker {
  */
 public let STICKER_REACH = 64.0
 
+/// The spacing, in sticker diameters, that sticker brushes reach at `STICKER_SPREAD_SIZE` and beyond.
+public let STICKER_LARGE_SPACING = 0.9
+
+/// The sticker size, in pixels, at which a sticker brush's spacing reaches `STICKER_LARGE_SPACING`.
+public let STICKER_SPREAD_SIZE = STICKER_REACH * 4
+
+/**
+ * A sticker brush's spacing, in diameters, for a `density` and sticker `size` (pixels): from the
+ * density up to `STICKER_REACH`, then easing toward `STICKER_LARGE_SPACING` by `STICKER_SPREAD_SIZE`,
+ * so large stickers lie side by side along the path instead of piling onto one another (`stickers.ts`).
+ */
+public func stickerSpacing(density: Double, size: Double) -> Double {
+    let base = Swift.max(0.05, 1 / Swift.max(0.05, density * 4))
+    let t = Swift.min(1, Swift.max(0, (size - STICKER_REACH) / (STICKER_SPREAD_SIZE - STICKER_REACH)))
+    return base + (Swift.max(base, STICKER_LARGE_SPACING) - base) * t
+}
+
 /// The stickers a sticker brush sprays along a stroke (`StickerSpray`).
 final class StickerSpray {
     var dabCount = 0
@@ -1624,10 +1641,9 @@ final class StickerSpray {
         frameMode = st["frameMode"]?.stringValue == "random" ? "random" : "perform"
         smoother = PenSmoother(brush.tip.smoothing, brush.pressureSmoothing)
         self.copies = copies.isEmpty ? [IDENTITY_COPY] : copies
-        // One walked dab per sticker: spacing from the density, in diameters up to STICKER_REACH
-        // pixels and in STICKER_REACH-pixel steps beyond, so large stickers still trace the path.
+        // One walked dab per sticker: spacing from the density, spreading large stickers out (`stickerSpacing`).
         var walk = brush
-        walk.tip.spacing = Swift.max(0.05, 1 / Swift.max(0.05, density * 4)) * Swift.min(1, STICKER_REACH / Swift.max(1, brush.tip.size))
+        walk.tip.spacing = stickerSpacing(density: density, size: brush.tip.size)
         walk.dynamics.scatter = 0
         walk.dynamics.sizeJitter = 0
         walk.dynamics.angleJitter = 0

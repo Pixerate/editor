@@ -370,12 +370,6 @@ func sprayDroplets(_ d: PenDab, _ spray: SpraySettings, _ seed: Int) -> [PenDab]
     return out
 }
 
-/// Refuses brushes whose marks this port does not draw yet (provider stickers have no art here).
-struct UnportedBrushError: Error, LocalizedError {
-    let message: String
-    var errorDescription: String? { message }
-}
-
 /**
  * One dab-engine stroke (dab and eraser brushes): smoothing, the dab walk of every copy, grain and
  * build-up in a shared coverage map.

@@ -377,8 +377,6 @@ final class PaintStrokeSession: PaintTileTarget {
         let dabByDab = brush.engine == "mixer" || brush.engine == "blender" || brush.engine == "smudge" || usesPaintExchange(brush, i.paint != nil)
         if dabByDab {
             dry = nil
-        } else if brush.engine == "dab" || brush.engine == "eraser" {
-            dry = DryStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, effect: i.effect?.pixels, stampArt: i.stampArt)
         } else if brush.engine == "particle" || brush.engine == "bristle" {
             let m: MarkStroke = brush.engine == "particle"
                 ? ParticleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
@@ -387,7 +385,9 @@ final class PaintStrokeSession: PaintTileTarget {
             m.stampArt = i.stampArt
             dry = m
         } else {
-            throw UnportedBrushError(message: "The \(brush.name) brush paints with the \(brush.engine) engine, which the Swift paint editor does not paint with yet.")
+            // Every other engine lays plain dabs here, as in `stroke.ts`: for example the light twin
+            // of a thick-paint brush (glow gel), which paints the light channel without thick channels.
+            dry = DryStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, effect: i.effect?.pixels, stampArt: i.stampArt)
         }
         if dabByDab {
             wet = PaintDabStroke(brush, target: self, load: i.mixerLoad, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels, stampArt: i.stampArt)

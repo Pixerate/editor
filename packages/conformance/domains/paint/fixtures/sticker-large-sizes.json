@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "sticker-large-sizes",
-  "description": "Large sticker brushes trace the path: spacing and scatter stop growing past the sticker reach, and the stroke always ends with a sticker at its end.",
+  "description": "Large sticker brushes trace the path and lie side by side: scatter stops growing past the sticker reach, spacing eases toward 0.9 diameters by four times the reach, and the stroke always ends with a sticker at its end.",
   "setup": {
     "width": 480,
     "height": 320
@@ -242,12 +242,12 @@
       "expect": {
         "result": {
           "bounds": {
-            "height": 448,
-            "width": 610,
+            "height": 396,
+            "width": 592,
             "x": -71,
-            "y": -48
+            "y": -18
           },
-          "dabs": 13,
+          "dabs": 4,
           "layerId": "@1",
           "strokeId": "s1"
         }
@@ -281,8 +281,8 @@
               "seed": 852791122,
               "size": 200,
               "stamp": "star",
-              "x": 60.52,
-              "y": 155.96
+              "x": 156.95,
+              "y": 83.45
             },
             {
               "color": "#e11d48",
@@ -293,8 +293,8 @@
               "seed": 86207222,
               "size": 200,
               "stamp": "star",
-              "x": 65.6,
-              "y": 96.9
+              "x": 262.68,
+              "y": 153.11
             },
             {
               "color": "#e11d48",
@@ -305,116 +305,8 @@
               "seed": 400336551,
               "size": 200,
               "stamp": "star",
-              "x": 139.07,
-              "y": 74.72
-            },
-            {
-              "color": "#e11d48",
-              "id": "st5",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 134646897,
-              "size": 200,
-              "stamp": "star",
-              "x": 174.82,
-              "y": 53.78
-            },
-            {
-              "color": "#e11d48",
-              "id": "st6",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 885918047,
-              "size": 200,
-              "stamp": "star",
-              "x": 217.42,
-              "y": 79.11
-            },
-            {
-              "color": "#e11d48",
-              "id": "st7",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 965602861,
-              "size": 200,
-              "stamp": "star",
-              "x": 256.65,
-              "y": 109.16
-            },
-            {
-              "color": "#e11d48",
-              "id": "st8",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 473612837,
-              "size": 200,
-              "stamp": "star",
-              "x": 273.86,
-              "y": 121.45
-            },
-            {
-              "color": "#e11d48",
-              "id": "st9",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 697932831,
-              "size": 200,
-              "stamp": "star",
-              "x": 285.2,
-              "y": 188.33
-            },
-            {
-              "color": "#e11d48",
-              "id": "st10",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 823952358,
-              "size": 200,
-              "stamp": "star",
-              "x": 362.05,
-              "y": 201.81
-            },
-            {
-              "color": "#e11d48",
-              "id": "st11",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 403309777,
-              "size": 200,
-              "stamp": "star",
-              "x": 368.39,
-              "y": 246.48
-            },
-            {
-              "color": "#e11d48",
-              "id": "st12",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 148020297,
-              "size": 200,
-              "stamp": "star",
-              "x": 419.72,
-              "y": 298.9
-            },
-            {
-              "color": "#e11d48",
-              "id": "st13",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 626927558,
-              "size": 200,
-              "stamp": "star",
-              "x": 437.99,
-              "y": 258.78
+              "x": 419.17,
+              "y": 277
             }
           ]
         }
@@ -508,10 +400,10 @@
       "expect": {
         "result": {
           "bounds": {
-            "height": 39,
-            "width": 234,
-            "x": 27,
-            "y": 271
+            "height": 49,
+            "width": 227,
+            "x": 31,
+            "y": 268
           },
           "dabs": 13,
           "layerId": "@2",
@@ -529,6 +421,114 @@
           "stickers": [
             {
               "color": "#2563eb",
+              "id": "st5",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 847111875,
+              "size": 24,
+              "stamp": "star",
+              "x": 44.97,
+              "y": 289.39
+            },
+            {
+              "color": "#2563eb",
+              "id": "st6",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 116613618,
+              "size": 24,
+              "stamp": "star",
+              "x": 58.73,
+              "y": 296.68
+            },
+            {
+              "color": "#2563eb",
+              "id": "st7",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 619142593,
+              "size": 24,
+              "stamp": "star",
+              "x": 74.1,
+              "y": 300.78
+            },
+            {
+              "color": "#2563eb",
+              "id": "st8",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 729967005,
+              "size": 24,
+              "stamp": "star",
+              "x": 94.33,
+              "y": 281.76
+            },
+            {
+              "color": "#2563eb",
+              "id": "st9",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 544574381,
+              "size": 24,
+              "stamp": "star",
+              "x": 113.98,
+              "y": 295.05
+            },
+            {
+              "color": "#2563eb",
+              "id": "st10",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 360725882,
+              "size": 24,
+              "stamp": "star",
+              "x": 114.04,
+              "y": 287.4
+            },
+            {
+              "color": "#2563eb",
+              "id": "st11",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 79053136,
+              "size": 24,
+              "stamp": "star",
+              "x": 132.78,
+              "y": 290.9
+            },
+            {
+              "color": "#2563eb",
+              "id": "st12",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 921752572,
+              "size": 24,
+              "stamp": "star",
+              "x": 155.96,
+              "y": 303.27
+            },
+            {
+              "color": "#2563eb",
+              "id": "st13",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 896436244,
+              "size": 24,
+              "stamp": "star",
+              "x": 184,
+              "y": 298.94
+            },
+            {
+              "color": "#2563eb",
               "id": "st14",
               "opacity": 1,
               "ref": "editor:star",
@@ -536,8 +536,8 @@
               "seed": 430578031,
               "size": 24,
               "stamp": "star",
-              "x": 40.86,
-              "y": 289.28
+              "x": 194.9,
+              "y": 290.18
             },
             {
               "color": "#2563eb",
@@ -548,8 +548,8 @@
               "seed": 905057422,
               "size": 24,
               "stamp": "star",
-              "x": 62.87,
-              "y": 291.46
+              "x": 216.9,
+              "y": 290.41
             },
             {
               "color": "#2563eb",
@@ -560,8 +560,8 @@
               "seed": 676420701,
               "size": 24,
               "stamp": "star",
-              "x": 73.39,
-              "y": 295.92
+              "x": 227.42,
+              "y": 292.92
             },
             {
               "color": "#2563eb",
@@ -572,116 +572,8 @@
               "seed": 941856389,
               "size": 24,
               "stamp": "star",
-              "x": 93.13,
-              "y": 290.45
-            },
-            {
-              "color": "#2563eb",
-              "id": "st18",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 734398174,
-              "size": 24,
-              "stamp": "star",
-              "x": 110.32,
-              "y": 294.3
-            },
-            {
-              "color": "#2563eb",
-              "id": "st19",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 181394041,
-              "size": 24,
-              "stamp": "star",
-              "x": 125.4,
-              "y": 295.07
-            },
-            {
-              "color": "#2563eb",
-              "id": "st20",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 308684180,
-              "size": 24,
-              "stamp": "star",
-              "x": 133.28,
-              "y": 290.77
-            },
-            {
-              "color": "#2563eb",
-              "id": "st21",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 168772244,
-              "size": 24,
-              "stamp": "star",
-              "x": 166.78,
-              "y": 284.15
-            },
-            {
-              "color": "#2563eb",
-              "id": "st22",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 832668073,
-              "size": 24,
-              "stamp": "star",
-              "x": 163.48,
-              "y": 296.12
-            },
-            {
-              "color": "#2563eb",
-              "id": "st23",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 231750299,
-              "size": 24,
-              "stamp": "star",
-              "x": 198.75,
-              "y": 292.46
-            },
-            {
-              "color": "#2563eb",
-              "id": "st24",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 357757978,
-              "size": 24,
-              "stamp": "star",
-              "x": 201.28,
-              "y": 292.93
-            },
-            {
-              "color": "#2563eb",
-              "id": "st25",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 467316616,
-              "size": 24,
-              "stamp": "star",
-              "x": 217.13,
-              "y": 290.14
-            },
-            {
-              "color": "#2563eb",
-              "id": "st26",
-              "opacity": 1,
-              "ref": "editor:star",
-              "rotation": 0,
-              "seed": 732213813,
-              "size": 24,
-              "stamp": "star",
-              "x": 247.98,
-              "y": 288.22
+              "x": 244.78,
+              "y": 285.65
             }
           ]
         },
