@@ -109,7 +109,7 @@ extension PaintEditorController {
         let current = culturePreview.flatMap { $0.shown === doc ? $0 : nil }
         let base = current?.base ?? doc
         var events = current?.events ?? OrderedMap()
-        let (nextDoc, _, stepped, dirty) = stepCulturesInternal(targetIds, steps)
+        let (nextDoc, _, stepped, dirty) = stepCulturesInternal(targetIds, steps, summaries: false)
         if nextDoc === doc { return false }
         for (lid, ev) in stepped {
             if var cur = events.get(lid) {
