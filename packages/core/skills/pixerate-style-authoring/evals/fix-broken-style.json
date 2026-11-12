@@ -1,0 +1,82 @@
+{
+	"prompt": "Our 'report' style isn't being applied to charts. Fix it so report charts use #123456 then #abcdef, and keep everything else about the style.",
+	"fixture": {
+		"editor": "style",
+		"layers": [
+			{
+				"id": "user",
+				"files": {
+					"report/SKILL.md": "---\nname: report\ndescription: report house style.\n---\n\nLead with the finding.\n",
+					"report/chart.json": "{\"palette\": [], \"defaults\": {\"dataLabels\": true}}",
+					"report/references/tone.md": "Short sentences."
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the style loads without issues",
+			"tool": "list_styles",
+			"expect": {
+				"skills": [
+					{
+						"name": "report",
+						"issues": []
+					}
+				]
+			}
+		},
+		{
+			"why": "charts get the new palette and keep the defaults",
+			"tool": "get_style",
+			"args": {
+				"domain": "chart"
+			},
+			"expect": {
+				"profile": {
+					"palette": [
+						"#123456",
+						"#abcdef"
+					],
+					"defaults": {
+						"dataLabels": true
+					}
+				}
+			}
+		},
+		{
+			"why": "the other files are kept",
+			"tool": "get_style_file",
+			"args": {
+				"name": "report",
+				"file": "references/tone.md"
+			},
+			"expect": {
+				"files": {
+					"$some": "references/tone.md"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "list_styles"
+		},
+		{
+			"tool": "get_style_file",
+			"args": {
+				"name": "report",
+				"file": "chart.json"
+			}
+		},
+		{
+			"tool": "save_style",
+			"args": {
+				"name": "report",
+				"files": {
+					"chart.json": "{\"palette\": [\"#123456\", \"#abcdef\"], \"defaults\": {\"dataLabels\": true}}"
+				}
+			}
+		}
+	]
+}

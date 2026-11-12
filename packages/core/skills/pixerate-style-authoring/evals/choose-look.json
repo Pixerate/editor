@@ -1,0 +1,60 @@
+{
+	"prompt": "Switch our charts to the dense look.",
+	"fixture": {
+		"editor": "style",
+		"layers": [
+			{
+				"id": "org",
+				"readOnly": true,
+				"files": {
+					"look-calm/SKILL.md": "---\nname: look-calm\ndescription: The look-calm chart look.\ndomains: [chart]\ngroup: look\n---\n\nThe look-calm look.\n",
+					"look-calm/chart.json": "{\"defaults\": {\"curve\": \"smooth\"}}",
+					"look-dense/SKILL.md": "---\nname: look-dense\ndescription: The look-dense chart look.\ndomains: [chart]\ngroup: look\n---\n\nThe look-dense look.\n",
+					"look-dense/chart.json": "{\"defaults\": {\"stacking\": \"stacked\"}}"
+				}
+			},
+			{
+				"id": "user"
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the dense look is the one that applies",
+			"tool": "list_style_choices",
+			"expect": {
+				"groups": [
+					{
+						"group": "look",
+						"chosen": "look-dense"
+					}
+				]
+			}
+		},
+		{
+			"why": "charts get the dense defaults",
+			"tool": "get_style",
+			"args": {
+				"domain": "chart"
+			},
+			"expect": {
+				"profile": {
+					"defaults": {
+						"stacking": "stacked"
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "list_style_choices"
+		},
+		{
+			"tool": "choose_style",
+			"args": {
+				"name": "look-dense"
+			}
+		}
+	]
+}

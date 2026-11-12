@@ -24,6 +24,7 @@ import {
 	parseStyleDomains,
 	styleChecksOf,
 	type StyleDomain,
+	type StyleResolver,
 	type StyleTokenSource
 } from './style.js';
 
@@ -275,4 +276,82 @@ export function renderStylePreview(
 	const style = `body{font:14px/1.5 system-ui,sans-serif;margin:0 auto;max-width:960px;padding:16px;color:#1a1a1a;background:#fff}h1{margin:0}small{color:#666;font-weight:normal}.ok{color:#11753a}.bad{color:#b3261e}.warn{color:#8a5a00}.swatches{display:flex;flex-wrap:wrap;gap:12px}.swatch{margin:0;width:96px}.swatch span{display:block;height:48px;border-radius:6px;border:1px solid #0002}.swatch figcaption{font-size:12px}.logo{max-width:240px;max-height:120px}.sample{overflow:auto;border:1px solid #ddd;border-radius:6px;padding:8px}pre{overflow:auto;background:#f6f6f6;padding:8px}td{padding:2px 12px 2px 0}@media (prefers-color-scheme:dark){body{background:#151515;color:#eee}pre{background:#222}}`;
 	const csp = `default-src 'none'; img-src data:; style-src 'unsafe-inline'${options.reload ? "; script-src 'self'; connect-src 'self'" : ''}`;
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}"><title>${escapeHtml(report.name)} · house style</title><style>${style}</style>${options.reload ? '<script src="/reload.js"></script>' : ''}</head><body>${parts.join('')}</body></html>`;
+}
+
+/** What `saveStyleSkill` did. */
+export interface SavedStyleSkill {
+	name: string;
+	/** The layer written. */
+	layer: string;
+	/** The skill's files after the save. */
+	files: string[];
+	/** Whether the skill was new in that layer. */
+	created: boolean;
+	/** The domains it applies to, and the profile each gets from it. */
+	domains: string[];
+	profiles: Record<string, Record<string, unknown>>;
+	/** Loads, but probably a mistake. */
+	warnings: string[];
+}
+
+const writableLayer = (styles: StyleResolver, verb: 'save' | 'remove', layer?: string) => {
+	const writable = styles.layers.filter((l) => (verb === 'save' ? l.store.save : l.store.remove));
+	const target = layer !== undefined ? styles.layers.find((l) => l.id === layer) : writable[writable.length - 1];
+	if (!target) {
+		throw new Error(layer !== undefined ? `There is no layer "${layer}"; the layers are ${styles.layers.map((l) => `"${l.id}"`).join(', ')}.` : 'Every style store here is read-only, so skills cannot be saved or removed.');
+	}
+	if (!(verb === 'save' ? target.store.save : target.store.remove)) {
+		throw new Error(`The ${target.id} layer is read-only; use one of ${writable.map((l) => `"${l.id}"`).join(', ') || '(none: every style store is read-only)'}.`);
+	}
+	return target;
+};
+
+/**
+ * Saves a house-style skill to a writable layer (default: the most specific one), after
+ * checking it exactly as the resolver will load it. With `replace`, the given files become the
+ * whole skill; otherwise they are merged over the layer's copy, so editing `SKILL.md` keeps the
+ * profiles. Writes nothing and throws with every error when the result would not load cleanly,
+ * or when an earlier locked layer holds the skill (a copy here would be ignored).
+ */
+export async function saveStyleSkill(styles: StyleResolver, name: string, files: Readonly<Record<string, string>>, options: { layer?: string; replace?: boolean } = {}): Promise<SavedStyleSkill> {
+	if (!STYLE_SKILL_NAME.test(name)) throw new Error(`"${name}" is not a valid skill name: use lowercase letters, digits and hyphens, at most 64.`);
+	const target = writableLayer(styles, 'save', options.layer);
+	const index = styles.layers.indexOf(target);
+	for (const l of styles.layers.slice(0, index)) {
+		if (l.locked && (await l.store.read(name, 'SKILL.md')) !== undefined) {
+			throw new Error(`The ${l.id} layer locks "${name}", so a copy in the ${target.id} layer would be ignored; choose another name.`);
+		}
+	}
+	const existing = (await target.store.read(name, 'SKILL.md')) !== undefined;
+	const merged: Record<string, string> = {};
+	if (existing && !options.replace) for (const f of await target.store.files(name)) merged[f] = (await target.store.read(name, f)) ?? '';
+	for (const [f, text] of Object.entries(files)) merged[normalize(f)] = text;
+	const report = await checkStyleSkill(name, merged, { domains: styles.domains, limits: styles.limits, ...(styles.tokens ? { tokens: styles.tokens } : {}) });
+	if (!report.ok) throw new Error(`"${name}" was not saved: ${report.errors.join(' ')}`);
+	await target.store.save!(name, merged, { replace: true });
+	return { name, layer: target.id, files: report.files.filter((f) => f.role !== 'left-out').map((f) => f.path), created: !existing, domains: report.domains, profiles: report.profiles, warnings: report.warnings };
+}
+
+/**
+ * Removes a skill's copy from a writable layer (default: the most specific writable layer that
+ * holds it). Copies in other layers stay, and apply again if this one was in front of them.
+ */
+export async function removeStyleSkill(styles: StyleResolver, name: string, options: { layer?: string } = {}): Promise<{ name: string; layer: string; stillProvidedBy?: string }> {
+	let target;
+	if (options.layer !== undefined) target = writableLayer(styles, 'remove', options.layer);
+	else {
+		const holders = [];
+		for (const l of styles.layers) if (l.store.remove && (await l.store.read(name, 'SKILL.md')) !== undefined) holders.push(l);
+		target = holders[holders.length - 1];
+		if (!target) {
+			const anywhere = [];
+			for (const l of styles.layers) if ((await l.store.read(name, 'SKILL.md')) !== undefined) anywhere.push(l.id);
+			throw new Error(anywhere.length ? `"${name}" is only in read-only layers (${anywhere.join(', ')}); switch it off with its state instead.` : `There is no house-style skill "${name}".`);
+		}
+	}
+	if ((await target.store.read(name, 'SKILL.md')) === undefined) throw new Error(`The ${target.id} layer has no "${name}" to remove.`);
+	await target.store.remove!(name);
+	let stillProvidedBy: string | undefined;
+	for (const l of styles.layers) if ((await l.store.read(name, 'SKILL.md')) !== undefined) stillProvidedBy = l.id;
+	return { name, layer: target.id, ...(stillProvidedBy ? { stillProvidedBy } : {}) };
 }

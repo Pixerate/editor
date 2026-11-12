@@ -23,7 +23,7 @@ export interface SkillEvalCheck extends SkillEvalToolCall {
 
 export interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture | GenerationEvalFixture | EffectEvalFixture | CanvasEvalFixture | BrushesEvalFixture;
+	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture | GenerationEvalFixture | EffectEvalFixture | CanvasEvalFixture | BrushesEvalFixture | StyleEvalFixture;
 	checks: SkillEvalCheck[];
 	solution: SkillEvalToolCall[];
 }
@@ -124,6 +124,25 @@ export interface BrushesEvalFixture {
 	host?: 'paint' | 'image' | 'canvas' | 'vector';
 	/** Tool calls that prepare the library (saved or imported brushes), run in order. */
 	setup?: SkillEvalToolCall[];
+}
+
+/**
+ * House-style skills in layers, behind the `style` tools (chart, tokens and rich-text domains).
+ * Checks read them back with `list_styles`, `get_style` and `list_style_choices`.
+ */
+export interface StyleEvalFixture {
+	editor: 'style';
+	/** General to specific. */
+	layers: {
+		id: string;
+		/** Skill files keyed `<skill>/<file>`. */
+		files?: Record<string, string>;
+		/** State by skill name. */
+		state?: Record<string, { enabled?: boolean; order?: number; group?: string; scope?: string[] }>;
+		locked?: boolean;
+		/** The layer cannot be written (no `save`, `remove` or `setState`). */
+		readOnly?: boolean;
+	}[];
 }
 
 /** One eval file of a skill. */

@@ -55,6 +55,13 @@ export interface StyleStore {
 	subscribe?(listener: () => void): () => void;
 	/** Records (or with `undefined`, clears) state for a skill; a store without it is read-only. */
 	setState?(name: string, state: StyleSkillState | undefined): MaybePromise<void>;
+	/**
+	 * Writes a skill's files. With `replace`, files not given are deleted; otherwise they are
+	 * kept. A store without it cannot take new or changed skills (see `saveStyleSkill`).
+	 */
+	save?(name: string, files: Readonly<Record<string, string>>, options?: { replace?: boolean }): MaybePromise<void>;
+	/** Deletes a skill's files and state from this store. */
+	remove?(name: string): MaybePromise<void>;
 }
 
 /** A layer of style skills, from general (first) to specific (last). */
@@ -284,6 +291,8 @@ export interface StyleResolver {
 	readonly domains: readonly StyleDomain<any>[];
 	/** The token source `$token` references resolve against, if any. */
 	readonly tokens?: StyleTokenSource;
+	/** The file limits in force. */
+	readonly limits: Readonly<StyleLimits>;
 	/** Every style skill across layers (switched-off ones too), general to specific. */
 	list(options?: { domain?: string } & StyleScopeOptions): Promise<StyleSkillInfo[]>;
 	/** The resolved style for a domain. Throws for an unknown domain. */
@@ -386,8 +395,11 @@ export function memoryStyleStore(
 	state: Readonly<Record<string, StyleSkillState>> = {}
 ): StyleStore & {
 	set(name: string, files: Readonly<Record<string, string>>): void;
+	save(name: string, files: Readonly<Record<string, string>>, options?: { replace?: boolean }): void;
 	remove(name: string): void;
 	setState(name: string, state: StyleSkillState | undefined): void;
+	/** Everything the store holds, to save with a document (`memoryStyleStore(json.files, json.state)` restores it). */
+	toJSON(): { files: Record<string, string>; state: Record<string, StyleSkillState> };
 } {
 	const files = new Map<string, Map<string, string>>();
 	const states = new Map<string, StyleSkillState>(Object.entries(state));
@@ -410,6 +422,17 @@ export function memoryStyleStore(
 		set(name, skillFiles) {
 			files.set(name, new Map(Object.entries(skillFiles)));
 			notify();
+		},
+		save(name, skillFiles, options = {}) {
+			const next = options.replace ? new Map<string, string>() : new Map(files.get(name) ?? []);
+			for (const [file, text] of Object.entries(skillFiles)) next.set(file, text);
+			files.set(name, next);
+			notify();
+		},
+		toJSON() {
+			const out: Record<string, string> = {};
+			for (const [name, map] of [...files.entries()].sort(([a], [b]) => a.localeCompare(b))) for (const [file, text] of [...map.entries()].sort(([a], [b]) => a.localeCompare(b))) out[`${name}/${file}`] = text;
+			return { files: out, state: Object.fromEntries([...states.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, { ...v }])) };
 		},
 		remove(name) {
 			files.delete(name);
@@ -809,6 +832,7 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 		layers,
 		domains,
 		...(options.tokens ? { tokens: options.tokens } : {}),
+		limits,
 		async list(opts = {}) {
 			if (opts.domain !== undefined) requireDomain(opts.domain);
 			const { skills } = await load();

@@ -108,6 +108,21 @@ certain, its `replacement`; `fix_rich_text_style` applies those as one undo step
 and fonts set in the document are checked against the brand (`palette-only`, `fonts-allowed`).
 React and Svelte: `useRichTextStyleFindings(styles, editor)`.
 
+## Saving, removing and a document layer
+
+A store that implements `save` and `remove` can take new and changed skills.
+`saveStyleSkill(styles, name, files, { layer, replace })` checks the result exactly as the
+resolver will load it and writes nothing unless it loads cleanly; files merge over the layer's
+copy unless `replace`. `removeStyleSkill` deletes a layer's copy (another layer's copy applies
+again). Agents get `save_style` and `remove_style`, offered only when a layer can be written.
+
+Put a **document layer** last, so a file keeps its own look for every reader: a
+`memoryStyleStore` saved with the document (`store.toJSON()`) and restored with
+`memoryStyleStore(json.files, json.state)`. A locked org layer still wins over it.
+
+The `pixerate-style-authoring` skill is the agent's method for writing, fixing and saving
+styles with the user.
+
 ## Limits and safety
 
 A skill is text an agent may read, so the resolver keeps it small and plain: files up to

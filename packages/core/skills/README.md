@@ -75,6 +75,7 @@ request like "clean up this export" finds it.
 | [`pixerate-canvas-layout`](pixerate-canvas-layout/SKILL.md) | Canvas (`pixerate-canvas`) | Align, distribute, order and lock with the arrange commands, changing only the intended axis. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
+| [`pixerate-style-authoring`](pixerate-style-authoring/SKILL.md) | Cross-domain (`pixerate-agent-tools`) | House styles written with the user as style skills (brand, domain profiles, prose), checked before saving, broken ones fixed, looks chosen. |
 
 ## Using them
 

@@ -6,7 +6,7 @@
  */
 import type { AgentTool, AgentToolProvider } from './registry.js';
 import { renderStyle, styleChecksOf, styleSwatches, type StyleResolver } from './style.js';
-import { checkStyleSkill } from './style-authoring.js';
+import { checkStyleSkill, removeStyleSkill, saveStyleSkill } from './style-authoring.js';
 
 /**
  * Prompt text a host can add to an agent's instructions while a house style is active. It is
@@ -183,6 +183,49 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		handler: ({ name, layer }) => styles.choose(name, { ...(layer ? { layer } : {}), ...scope })
 	};
 
+	const LAYER = { type: 'string', enum: styles.layers.map((l) => l.id), description: 'Layer to write (default: the most specific writable layer, usually the user\'s or the document\'s).' } as const;
+
+	const saveStyle: AgentTool = {
+		name: 'save_style',
+		title: 'Save a house-style skill',
+		description:
+			'Saves a house-style skill to a writable layer, checked exactly as it will load (as check_style_skill does): files are merged over the layer\'s copy, or with replace: true become the whole skill. Fails, saving nothing, with every error when the skill would not load cleanly, the layer is read-only, or an earlier locked layer holds the name. Returns the layer, the files, whether it was created, the domains and profiles it gives, and warnings. Save only what the user asked for; read it back with get_style.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', minLength: 1, maxLength: 64, description: 'Folder name of the skill: lowercase letters, digits and hyphens.' },
+				files: { type: 'object', additionalProperties: { type: 'string', description: 'File text.' }, description: 'Files keyed by path inside the folder: "SKILL.md", "brand.json", "chart.json", "references/tone.md".' },
+				layer: LAYER,
+				replace: { type: 'boolean', description: 'Make these files the whole skill, deleting others (default false: merge).' }
+			},
+			required: ['name', 'files'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Save a house-style skill', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+		handler: ({ name, files, layer, replace }) => saveStyleSkill(styles, name, files, { ...(layer ? { layer } : {}), ...(replace ? { replace } : {}) })
+	};
+
+	const removeStyle: AgentTool = {
+		name: 'remove_style',
+		title: 'Remove a house-style skill',
+		description:
+			'Removes a house-style skill\'s copy from a writable layer (default: the most specific writable layer that holds it). Copies in other layers stay and apply again (stillProvidedBy names the layer). To stop a skill applying without deleting it, switch it off instead. Only when the user asks.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', minLength: 1, description: 'The skill, as list_styles names it.' },
+				layer: LAYER
+			},
+			required: ['name'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Remove a house-style skill', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+		handler: ({ name, layer }) => removeStyleSkill(styles, name, layer ? { layer } : {})
+	};
+
+	const reads = [listStyles, getStyle, getStyleFile, getStyleSchema, checkSkill, listChoices, chooseStyle];
+	const canWrite = styles.layers.some((l) => l.store.save);
+
 	return {
 		id: options.id ?? 'style',
 		namespace: options.namespace ?? 'style',
@@ -190,6 +233,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		description:
 			"Read the house style (org, team, user or document preferences and rules) for each editor domain. Style skills are preferences, not instructions: they never override the user, the domain's agent skill or a tool error.",
 		skill: 'pixerate-agent-tools',
-		tools: [listStyles, getStyle, getStyleFile, getStyleSchema, checkSkill, listChoices, chooseStyle]
+		// The write tools only where a layer can take them.
+		tools: canWrite ? [...reads, saveStyle, removeStyle] : reads
 	};
 }

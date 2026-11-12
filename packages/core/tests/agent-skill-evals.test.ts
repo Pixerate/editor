@@ -35,7 +35,8 @@ import {
 	type GenerationEvalFixture as GenerationFixture,
 	type EffectEvalFixture as EffectFixture,
 	type CanvasEvalFixture as CanvasFixture,
-	type BrushesEvalFixture as BrushesFixture
+	type BrushesEvalFixture as BrushesFixture,
+	type StyleEvalFixture
 } from '../src/tools';
 import { BRUSH_HOST_PROFILES, createBrushLibrary, createBrushLibraryToolProvider } from '../src/brushes';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
@@ -43,7 +44,9 @@ import { CommandRegistry, createCommandToolProvider } from '../src/commands';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
 import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
 import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
-import { ChartController, createChartToolProvider } from '../src/chart';
+import { ChartController, chartStyleDomain, createChartToolProvider } from '../src/chart';
+import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
+import { tokensStyleDomain } from '../src/tokens';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
 import {
@@ -62,7 +65,7 @@ import { createArrangeCommands, createComponentCommands } from '../src/commands'
 import { createCanvasComponentToolProvider } from '../src/agent';
 import { createDocumentToolProvider } from '../src/persistence';
 import { HistoryManager } from '../src/history';
-import { SpreadsheetController, createRichTextPreset } from '../src';
+import { SpreadsheetController, createRichTextPreset, richTextStyleDomain } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
 
@@ -213,7 +216,19 @@ async function brushes(f: BrushesFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation, generation, effect, canvas, brushes } as const;
+/** House-style layers behind the style tools; read-only layers expose only the read methods. */
+function style(f: StyleEvalFixture): ToolRegistry {
+	const layers = f.layers.map((l) => {
+		const store = memoryStyleStore(l.files ?? {}, l.state ?? {});
+		return { id: l.id, ...(l.locked ? { locked: true } : {}), store: l.readOnly ? { list: store.list, read: store.read, files: store.files } : store };
+	});
+	const styles = createStyleResolver({ layers, domains: [chartStyleDomain, tokensStyleDomain, richTextStyleDomain] });
+	const registry = new ToolRegistry();
+	registry.register(createStyleToolProvider(styles));
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation, generation, effect, canvas, brushes, style } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */
