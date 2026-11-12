@@ -354,7 +354,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Vector editor</strong> (43)</summary>
+<summary><strong>Vector editor</strong> (44)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -401,6 +401,7 @@ Every feature is available from core and from both framework packages, except wh
 | Vector SVG Import / Export & Agent Commands | `parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands` | `useVectorCommands` | `useVectorCommands` | Agent commands ✅ (`createVectorCommands`: every command with its contract metadata, enablement and Swift run), SVG export and import ✅ headless (`vectorDocumentToSvg`, `parseVectorSvg`); the views: Planned (#533) |
 | Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools) | `vectorEffectGroups`, `createVectorEffectsToolProvider` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` | ✅ headless (`addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups`, `createVectorEffectsToolProvider`); the views: Planned (#533) |
 | Callouts and Label Placement (labels placed near their anchors and clear of the art, marks and each other, stepping outwards from preferred sides and wrapping when that fits better, with leader lines: `placeLabels` for any editor; `vector.placeCallouts` moves label nodes and draws leaders as one undo step; chart callouts and diagram SVG edge labels use it) | `placeLabels`, `labelHull` (`/tools`), `vector.placeCallouts` | ✅ (`vector.placeCallouts` in the command palette and agent tools) | ✅ (`vector.placeCallouts` in the command palette and agent tools) | ✅ (`placeLabels` in PixerateRaster, chart callouts, `vector.placeCallouts`) |
+| Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: "isometric"` draws a diagram as blocks on group tiles with edges on the floor) | `isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `mermaidToSvg` `projection` | ✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection) | ✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection) | ✅ (`IsoProjector` in PixerateGeometry, `vector.addIsoBoxes`); the isometric diagram export: Planned (#533) |
 
 </details>
 

@@ -170,6 +170,7 @@
                   "vector.align",
                   "vector.distribute",
                   "vector.placeCallouts",
+                  "vector.addIsoBoxes",
                   "vector.arrange",
                   "vector.moveLayer",
                   "vector.group",

@@ -137,6 +137,7 @@ import {
 	VECTOR_EFFECT_LABELS
 } from './appearance.js';
 import { isIdentityMatrix } from '../geom/affine.js';
+import { isoBoxProblems, isoFaceColors, isoOrder, isoProjector, isoShade, type IsoBox, type IsoProjector } from '../geom/iso.js';
 import { placeLabels, type LabelObstacle, type LabelSide } from '../geom/labels.js';
 import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
@@ -4103,6 +4104,78 @@ export class VectorEditorController {
 			if (leaders.length) this.setDoc([...this.doc.nodes, ...leaders]);
 		});
 		return { ok: true, placed: out, clashes: placed.reduce((n, p) => n + p.clashes, 0) };
+	}
+
+	/**
+	 * Adds isometric blocks (#799): each box in grid units (`i0..i1`, `j0..j1`, `k0..k1`) as a group
+	 * of editable face paths (left, right, top; a flat tile has only its top), shaded from one fill
+	 * or given per face, with optional grid lines, all in one group drawn back to front. `scale` is
+	 * document units per grid unit; `origin` is where (0, 0, 0) lands (default: the blocks centred
+	 * on the artboard). One undo step. Refuses, adding nothing, a bad box, angle or scale.
+	 */
+	addIsoBoxes(
+		boxes: readonly (IsoBox & { fill?: string | { top: string; left: string; right: string }; stroke?: string | null; name?: string })[],
+		options: { angle?: number; scale?: number; origin?: Vec2; grid?: number; name?: string } = {}
+	): VectorActionResult & { id?: string; boxes?: { id: string; faces: { top: string; left?: string; right?: string }; grid?: string; outline: Vec2[] }[] } {
+		if (!boxes.length) return { ok: false, message: 'Give at least one box.' };
+		for (const [i, b] of boxes.entries()) {
+			const problems = isoBoxProblems(b);
+			if (problems.length) return { ok: false, message: `Box ${i}: ${problems.join('; ')}.` };
+		}
+		if (options.grid !== undefined && !(options.grid > 0)) return { ok: false, message: `The grid step must be a positive number of grid units, not ${options.grid}.` };
+		let projector: IsoProjector;
+		try {
+			projector = isoProjector({ angle: options.angle, scale: options.scale, origin: { x: 0, y: 0 } });
+			if (!options.origin) {
+				// Centre the blocks on the artboard.
+				const all = boxes.flatMap((b) => projector.box(b).outline);
+				const minX = Math.min(...all.map((p) => p.x));
+				const maxX = Math.max(...all.map((p) => p.x));
+				const minY = Math.min(...all.map((p) => p.y));
+				const maxY = Math.max(...all.map((p) => p.y));
+				projector = isoProjector({ angle: options.angle, scale: options.scale, origin: { x: this.doc.width / 2 - (minX + maxX) / 2, y: this.doc.height / 2 - (minY + maxY) / 2 } });
+			} else projector = isoProjector({ angle: options.angle, scale: options.scale, origin: options.origin });
+		} catch (error) {
+			return { ok: false, message: (error as Error).message };
+		}
+		const face = (id: string, name: string, pts: readonly Vec2[], fill: string, stroke: string | null): VectorPathNode =>
+			({ id, type: 'path', name, fill, stroke, strokeWidth: 1, subpaths: [{ closed: true, anchors: pts.map((p) => ({ x: p.x, y: p.y })) }] }) as VectorPathNode;
+		const rootId = this.newId();
+		const order = isoOrder(boxes, projector);
+		const made: { id: string; faces: { top: string; left?: string; right?: string }; grid?: string; outline: Vec2[] }[] = new Array(boxes.length);
+		const children: VectorNode[] = [];
+		for (const index of order) {
+			const b = boxes[index];
+			const faces = projector.box(b);
+			const colors = typeof b.fill === 'object' && b.fill ? b.fill : isoFaceColors(b.fill ?? '#cbd5e1');
+			const strokeOf = (c: string) => (b.stroke === null ? null : (b.stroke ?? isoShade(c, 0.25)));
+			const groupId = this.newId();
+			const parts: VectorNode[] = [];
+			const ids: { top: string; left?: string; right?: string } = { top: '' };
+			if (faces.left.length) {
+				ids.left = this.newId();
+				parts.push(face(ids.left, 'Left', faces.left, colors.left, strokeOf(colors.left)));
+			}
+			if (faces.right.length) {
+				ids.right = this.newId();
+				parts.push(face(ids.right, 'Right', faces.right, colors.right, strokeOf(colors.right)));
+			}
+			ids.top = this.newId();
+			parts.push(face(ids.top, 'Top', faces.top, colors.top, strokeOf(colors.top)));
+			let gridId: string | undefined;
+			if (options.grid !== undefined) {
+				const lines = projector.gridLines(b, options.grid);
+				const all = [...lines.left, ...lines.right, ...lines.top];
+				if (all.length) {
+					gridId = this.newId();
+					parts.push({ id: gridId, type: 'path', name: 'Grid', fill: null, stroke: isoShade(colors.right, 0.2), strokeWidth: 0.5, subpaths: all.map(([a, e]) => ({ closed: false, anchors: [{ x: a.x, y: a.y }, { x: e.x, y: e.y }] })) } as VectorPathNode);
+				}
+			}
+			children.push({ id: groupId, type: 'group', name: b.name ?? `Block ${index + 1}`, children: parts } as VectorGroupNode);
+			made[index] = { id: groupId, faces: ids, ...(gridId ? { grid: gridId } : {}), outline: faces.outline.map((p) => ({ x: p.x, y: p.y })) };
+		}
+		const id = this.addNode({ id: rootId, type: 'group', name: options.name ?? 'Isometric', children } as VectorGroupNode, { label: 'Add Isometric Blocks' });
+		return { ok: true, id, boxes: made };
 	}
 
 	// -------------------------------------------------------------------------

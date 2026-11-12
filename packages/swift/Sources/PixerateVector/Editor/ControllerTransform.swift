@@ -314,6 +314,107 @@ extension VectorEditorController {
     }
 }
 
+// MARK: - Isometric blocks (`addIsoBoxes`, `geom/iso.ts`)
+
+/// One isometric block to add: its box in grid units, colours and name.
+public struct VectorIsoBoxRequest: Sendable {
+    public var box: IsoBox
+    /// One colour (sides shaded darker) or one per face.
+    public var fill: String?
+    public var faces: (top: String, left: String, right: String)?
+    /// Edge colour; `.some(nil)` for none, `nil` for a shade of each face.
+    public var stroke: String??
+    public var name: String?
+    public init(box: IsoBox, fill: String? = nil, faces: (top: String, left: String, right: String)? = nil, stroke: String?? = nil, name: String? = nil) {
+        self.box = box; self.fill = fill; self.faces = faces; self.stroke = stroke; self.name = name
+    }
+}
+
+extension VectorEditorController {
+    /// Adds isometric blocks as one group of face paths, back to front, as one undo step
+    /// (`addIsoBoxes` in `controller.ts`). Returns the result and the JSON the command returns.
+    public func addIsoBoxes(_ boxes: [VectorIsoBoxRequest], angle: Double? = nil, scale: Double? = nil, origin: Vec2? = nil, grid: Double? = nil, name: String? = nil) throws -> (result: VectorActionResult, json: JSONValue?) {
+        if boxes.isEmpty { return (.failure("Give at least one box."), nil) }
+        for (i, b) in boxes.enumerated() {
+            let problems = isoBoxProblems(b.box)
+            if !problems.isEmpty { return (.failure("Box \(i): \(problems.joined(separator: "; "))."), nil) }
+        }
+        if let grid, !(grid > 0) { return (.failure("The grid step must be a positive number of grid units, not \(grid)."), nil) }
+        var projector: IsoProjector
+        do {
+            projector = try IsoProjector(angle: angle, scale: scale, origin: PixerateRaster.Vec2(x: 0, y: 0))
+            if let origin {
+                projector = try IsoProjector(angle: angle, scale: scale, origin: PixerateRaster.Vec2(x: origin.x, y: origin.y))
+            } else {
+                let all = boxes.flatMap { projector.box($0.box).outline }
+                let minX = all.map(\.x).reduce(Double.infinity) { JS.min($0, $1) }
+                let maxX = all.map(\.x).reduce(-Double.infinity) { JS.max($0, $1) }
+                let minY = all.map(\.y).reduce(Double.infinity) { JS.min($0, $1) }
+                let maxY = all.map(\.y).reduce(-Double.infinity) { JS.max($0, $1) }
+                projector = try IsoProjector(angle: angle, scale: scale, origin: PixerateRaster.Vec2(x: doc.width / 2 - (minX + maxX) / 2, y: doc.height / 2 - (minY + maxY) / 2))
+            }
+        } catch let error as IsoError {
+            return (.failure(error.description), nil)
+        }
+        func path(_ id: String, _ name: String, _ pts: [PixerateRaster.Vec2], _ fill: String, _ stroke: String?) -> VectorNode {
+            VectorNode(
+                props: JSONObject([("id", .string(id)), ("type", "path"), ("name", .string(name)), ("fill", .string(fill)), ("stroke", stroke.map { .string($0) } ?? .null), ("strokeWidth", 1)]),
+                subpaths: [VectorSubpath(anchors: pts.map { VectorAnchor(x: $0.x, y: $0.y) }, closed: true)]
+            )
+        }
+        let rootId = newId()
+        let order = isoOrder(boxes.map(\.box), projector)
+        var made = [JSONValue?](repeating: nil, count: boxes.count)
+        var children: [VectorNode] = []
+        for index in order {
+            let b = boxes[index]
+            let faces = projector.box(b.box)
+            let colors = b.faces ?? isoFaceColors(b.fill ?? "#cbd5e1")
+            func strokeOf(_ c: String) -> String? {
+                if let s = b.stroke { return s }
+                return isoShade(c, 0.25)
+            }
+            let groupId = newId()
+            var parts: [VectorNode] = []
+            var ids: [(String, JSONValue)] = [("top", "")]
+            var leftId: String?
+            var rightId: String?
+            if !faces.left.isEmpty {
+                leftId = newId()
+                parts.append(path(leftId!, "Left", faces.left, colors.left, strokeOf(colors.left)))
+            }
+            if !faces.right.isEmpty {
+                rightId = newId()
+                parts.append(path(rightId!, "Right", faces.right, colors.right, strokeOf(colors.right)))
+            }
+            let topId = newId()
+            parts.append(path(topId, "Top", faces.top, colors.top, strokeOf(colors.top)))
+            ids[0] = ("top", .string(topId))
+            if let leftId { ids.append(("left", .string(leftId))) }
+            if let rightId { ids.append(("right", .string(rightId))) }
+            var gridId: String?
+            if let grid {
+                let lines = try projector.gridLines(b.box, step: grid)
+                let all = lines.left + lines.right + lines.top
+                if !all.isEmpty {
+                    gridId = newId()
+                    parts.append(VectorNode(
+                        props: JSONObject([("id", .string(gridId!)), ("type", "path"), ("name", "Grid"), ("fill", .null), ("stroke", .string(isoShade(colors.right, 0.2))), ("strokeWidth", 0.5)]),
+                        subpaths: all.map { VectorSubpath(anchors: [VectorAnchor(x: $0.0.x, y: $0.0.y), VectorAnchor(x: $0.1.x, y: $0.1.y)], closed: false) }
+                    ))
+                }
+            }
+            children.append(VectorNode(props: JSONObject([("id", .string(groupId)), ("type", "group"), ("name", .string(b.name ?? "Block \(index + 1)"))]), children: parts))
+            var entry: [(String, JSONValue)] = [("id", .string(groupId)), ("faces", .object(JSONObject(ids)))]
+            if let gridId { entry.append(("grid", .string(gridId))) }
+            entry.append(("outline", .array(faces.outline.map { .object(JSONObject([("x", .number($0.x)), ("y", .number($0.y))])) })))
+            made[index] = .object(JSONObject(entry))
+        }
+        let id = try addNode(VectorNode(props: JSONObject([("id", .string(rootId)), ("type", "group"), ("name", .string(name ?? "Isometric"))]), children: children), AddVectorNodeOptions(label: "Add Isometric Blocks"))
+        return (.success, .object(JSONObject([("id", .string(id)), ("boxes", .array(made.map { $0 ?? .null }))])))
+    }
+}
+
 // MARK: - Free Distort (`distort.ts`, `geom/homography.ts`, `pathMap.ts`)
 
 /// Default tolerance (document units) of Free Distort's adaptive path mapping.
