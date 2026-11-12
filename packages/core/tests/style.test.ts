@@ -220,6 +220,23 @@ describe('$token references', () => {
 		const noTokens = createStyleResolver({ layers: [{ id: 'org', store }], domains: [chartStyleDomain] });
 		expect((await noTokens.resolve('chart')).issues[0].message).toMatch(/no design tokens to resolve it/);
 	});
+
+	it('leaves out a profile that is itself a token reference, instead of throwing (#768)', async () => {
+		const store = memoryStyleStore({
+			'house/SKILL.md': skill('house', 'x'),
+			'house/chart.json': JSON.stringify({ $token: 'brand/primary' })
+		});
+		const noTokens = createStyleResolver({ layers: [{ id: 'org', store }], domains: [chartStyleDomain] });
+		const unresolved = await noTokens.resolve('chart');
+		expect(unresolved.profile).toEqual({});
+		expect(unresolved.issues[0].message).toBe('chart.json is left out: profile: "brand/primary" is a token reference, but this host has no design tokens to resolve it.');
+		expect((await noTokens.check('chart', { type: 'bar', categories: [], series: [] })).findings).toEqual([]);
+
+		const withTokens = createStyleResolver({ layers: [{ id: 'org', store }], domains: [chartStyleDomain], tokens: createTokenStyleSource(tokens()) });
+		const scalar = await withTokens.resolve('chart');
+		expect(scalar.profile).toEqual({});
+		expect(scalar.issues[0].message).toMatch(/^chart\.json must hold a JSON object; its token reference resolves to "#/);
+	});
 });
 
 describe('style tools', () => {
