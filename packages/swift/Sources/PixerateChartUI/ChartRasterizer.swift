@@ -6,38 +6,46 @@ import PixerateCore
 import PixerateRaster
 import SwiftUI
 
-/// Parses a CSS paint (`#rgb`, `#rrggbb`, `rgb(...)`, `rgba(...)`) and optional mark opacity into
-/// normalized `(r, g, b, a)` components, or `nil` for `"none"` / `"transparent"` / empty.
+/// Parses a CSS paint as an SVG renderer reads it (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, named
+/// colours, `rgb()` / `rgba()` with an optional alpha, also as a percentage or after `/`) times an optional
+/// opacity into normalized `(r, g, b, a)` components, or `nil` for `"none"` / `"transparent"` / empty.
+/// The RGB comes from `parseChartColor`, which ignores alpha (it compares colours); the alpha is read here.
 public func parseChartRGBA(_ css: String?, opacity: Double? = nil) -> (r: Double, g: Double, b: Double, a: Double)? {
-    guard let raw = css?.trimmingCharacters(in: .whitespacesAndNewlines),
-          !raw.isEmpty,
-          raw != "none",
-          raw != "transparent" else { return nil }
-    let op = Swift.max(0.0, Swift.min(1.0, opacity ?? 1.0))
-    if raw.lowercased().hasPrefix("rgba(") {
-        let inner = raw.dropFirst(5).dropLast(raw.hasSuffix(")") ? 1 : 0)
-        let parts = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        if parts.count == 4,
-           let r = Double(parts[0]),
-           let g = Double(parts[1]),
-           let b = Double(parts[2]),
-           let a = Double(parts[3]) {
-            return (
-                r: Swift.max(0.0, Swift.min(1.0, r / 255.0)),
-                g: Swift.max(0.0, Swift.min(1.0, g / 255.0)),
-                b: Swift.max(0.0, Swift.min(1.0, b / 255.0)),
-                a: Swift.max(0.0, Swift.min(1.0, a * op))
-            )
+    guard let raw = css?.jsTrimmed.jsLowercased, !raw.isEmpty, raw != "none", raw != "transparent" else { return nil }
+    let op = opacity.map { $0.isNaN ? 1 : Swift.max(0.0, Swift.min(1.0, $0)) } ?? 1.0
+    let units = Array(raw.utf16)
+    func hexDigit(_ u: UInt16) -> Double? {
+        switch u {
+        case 0x30...0x39: return Double(u - 0x30)
+        case 0x61...0x66: return Double(u - 0x61 + 10)
+        default: return nil
+        }
+    }
+    if units.first == 0x23, units.count == 5 || units.count == 9, let digits = Optional(units.dropFirst().map(hexDigit)), !digits.contains(where: { $0 == nil }) {
+        let d = digits.map { $0! }
+        let c: [Double] = units.count == 5 ? d.map { ($0 * 16 + $0) / 255 } : stride(from: 0, to: 8, by: 2).map { (d[$0] * 16 + d[$0 + 1]) / 255 }
+        return (r: c[0], g: c[1], b: c[2], a: c[3] * op)
+    }
+    var alpha = 1.0
+    if raw.hasPrefix("rgb"), let open = raw.firstIndex(of: "("), raw.hasSuffix(")") {
+        let inner = raw[raw.index(after: open)..<raw.index(before: raw.endIndex)]
+        let parts = inner.split(whereSeparator: { $0 == "," || $0 == "/" || $0 == " " }).map(String.init)
+        if parts.count == 4 {
+            let a = parts[3]
+            if a.hasSuffix("%"), let v = Double(a.dropLast()) { alpha = v / 100 } else if let v = Double(a) { alpha = v }
+            alpha = Swift.max(0, Swift.min(1, alpha))
         }
     }
     guard let rgb = parseChartColor(raw), rgb.count >= 3 else { return nil }
-    return (
-        // parseChartColor already returns components in 0...1.
-        r: rgb[0],
-        g: rgb[1],
-        b: rgb[2],
-        a: op
-    )
+    // parseChartColor already returns components in 0...1.
+    return (r: rgb[0], g: rgb[1], b: rgb[2], a: alpha * op)
+}
+
+/// A mark's `opacity` as SVG applies it: to the fill and stroke drawn together, not to each one.
+/// `nil` when the mark is drawn at full opacity (no group needed).
+public func chartMarkGroupOpacity(_ mark: ChartMark) -> Double? {
+    guard let op = mark.opacity, !op.isNaN, op < 1 else { return nil }
+    return Swift.max(0, op)
 }
 
 public func chartSwiftUIColor(_ css: String?, opacity: Double? = nil) -> Color? {
@@ -56,8 +64,8 @@ public func parseChartDash(_ dash: String?) -> [CGFloat] {
 /// flipped by this function).
 public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContext, scale: Double = 1.0) {
     let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-    func makeCGColor(_ css: String?, _ opacity: Double?) -> CGColor? {
-        guard let c = parseChartRGBA(css, opacity: opacity) else { return nil }
+    func makeCGColor(_ css: String?) -> CGColor? {
+        guard let c = parseChartRGBA(css) else { return nil }
         let comps: [CGFloat] = [CGFloat(c.r), CGFloat(c.g), CGFloat(c.b), CGFloat(c.a)]
         return CGColor(colorSpace: colorSpace, components: comps)
     }
@@ -70,6 +78,19 @@ public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContex
     ctx.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
 
     for mark in scene.marks {
+        // SVG's `opacity` composites the mark's fill and stroke as one group.
+        let group = chartMarkGroupOpacity(mark)
+        if let group {
+            ctx.saveGState()
+            ctx.setAlpha(CGFloat(group))
+            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        }
+        defer {
+            if group != nil {
+                ctx.endTransparencyLayer()
+                ctx.restoreGState()
+            }
+        }
         switch mark {
         case .rect(let m):
             let rect = CGRect(x: m.x, y: m.y, width: m.width, height: m.height)
@@ -80,14 +101,14 @@ public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContex
             } else {
                 cgPath = CGPath(rect: rect, transform: nil)
             }
-            if let fill = makeCGColor(m.fill, m.opacity) {
+            if let fill = makeCGColor(m.fill) {
                 ctx.saveGState()
                 ctx.addPath(cgPath)
                 ctx.setFillColor(fill)
                 ctx.fillPath()
                 ctx.restoreGState()
             }
-            if let stroke = makeCGColor(m.stroke, m.opacity) {
+            if let stroke = makeCGColor(m.stroke) {
                 ctx.saveGState()
                 ctx.addPath(cgPath)
                 ctx.setStrokeColor(stroke)
@@ -101,14 +122,14 @@ public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContex
 
         case .path(let m):
             let cgPath = parseChartCGPath(m.d)
-            if let fill = makeCGColor(m.fill, m.opacity) {
+            if let fill = makeCGColor(m.fill) {
                 ctx.saveGState()
                 ctx.addPath(cgPath)
                 ctx.setFillColor(fill)
                 ctx.fillPath()
                 ctx.restoreGState()
             }
-            if let stroke = makeCGColor(m.stroke, m.opacity) {
+            if let stroke = makeCGColor(m.stroke) {
                 ctx.saveGState()
                 ctx.addPath(cgPath)
                 ctx.setStrokeColor(stroke)
@@ -126,13 +147,13 @@ public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContex
 
         case .circle(let m):
             let rect = CGRect(x: m.cx - m.r, y: m.cy - m.r, width: m.r * 2.0, height: m.r * 2.0)
-            if let fill = makeCGColor(m.fill, m.opacity) {
+            if let fill = makeCGColor(m.fill) {
                 ctx.saveGState()
                 ctx.setFillColor(fill)
                 ctx.fillEllipse(in: rect)
                 ctx.restoreGState()
             }
-            if let stroke = makeCGColor(m.stroke, m.opacity) {
+            if let stroke = makeCGColor(m.stroke) {
                 ctx.saveGState()
                 ctx.setStrokeColor(stroke)
                 ctx.setLineWidth(CGFloat(m.strokeWidth ?? 1.0))
@@ -141,7 +162,7 @@ public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContex
             }
 
         case .line(let m):
-            guard let stroke = makeCGColor(m.stroke, m.opacity) else { break }
+            guard let stroke = makeCGColor(m.stroke) else { break }
             ctx.saveGState()
             ctx.setStrokeColor(stroke)
             ctx.setLineWidth(CGFloat(m.strokeWidth ?? 1.0))
@@ -155,7 +176,7 @@ public func drawChartSceneInCGContext(_ scene: ChartScene, context ctx: CGContex
             ctx.restoreGState()
 
         case .text(let m):
-            guard !m.text.isEmpty, let fill = makeCGColor(m.fill, m.opacity) else { break }
+            guard !m.text.isEmpty, let fill = makeCGColor(m.fill) else { break }
             let ctFont = makeChartCTFont(size: m.size, weight: m.weight)
             let attrs: [NSAttributedString.Key: Any] = [
                 NSAttributedString.Key(kCTFontAttributeName as String): ctFont,
@@ -198,6 +219,10 @@ public func rasterizeChartScene(
     maxSize: Double = CHART_RASTER_MAX_SIZE
 ) throws -> ChartRasterImage {
     let size = try chartRasterSize(scene.width, scene.height, scale: scale, maxSize: maxSize)
+    // A browser canvas silently turns a NaN or huge size into 0; a CGContext cannot, so say so.
+    guard size.width.isFinite, size.height.isFinite, size.width * size.height * 4 <= Double(Int32.max) else {
+        throw ChartRasterError("A chart image of \(JSONValue.jsString(size.width)) × \(JSONValue.jsString(size.height)) pixels can't be drawn; pass a finite maxSize.")
+    }
     let outW = Int(size.width)
     let outH = Int(size.height)
     let effectiveScale = outW > 0 && scene.width > 0 ? Double(outW) / scene.width : 1.0

@@ -245,7 +245,7 @@ public func r2(_ n: Double) -> Double {
 }
 
 internal func r2s(_ n: Double) -> String {
-    JSONValue.jsNumber(r2(n))
+    JSONValue.jsString(r2(n))
 }
 
 /// Shared state while one scene is laid out.

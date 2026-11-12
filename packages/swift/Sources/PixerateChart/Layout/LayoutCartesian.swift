@@ -1126,7 +1126,7 @@ internal func layoutCartesian(_ ctx: LayoutCtx, _ area: ChartRect, _ visible: [C
                 guard let v = pointValue(i), i < s.values.count, s.values[i] != nil else { continue }
                 let (cx, cy) = map(Pt(c: catCenter(Double(i)), v: valuePx(v)))
                 if thinMarkers {
-                    let cell = "\(JSONValue.jsNumber(JS.round(cx / 2.0))),\(JSONValue.jsNumber(JS.round(cy / 2.0)))"
+                    let cell = "\(JSONValue.jsString(JS.round(cx / 2.0))),\(JSONValue.jsString(JS.round(cy / 2.0)))"
                     if cells.contains(cell) { continue }
                     cells.insert(cell)
                 }
@@ -1478,7 +1478,7 @@ internal func layoutXy(_ ctx: LayoutCtx, _ area: ChartRect, _ visible: [ChartSer
             let cx = xPx(p.x)
             let cy = yPx(p.y)
             if pts.count > MAX_CHART_MARKERS {
-                let cell = "\(JSONValue.jsNumber(JS.round(cx / 2.0))),\(JSONValue.jsNumber(JS.round(cy / 2.0)))"
+                let cell = "\(JSONValue.jsString(JS.round(cx / 2.0))),\(JSONValue.jsString(JS.round(cy / 2.0)))"
                 if cells.contains(cell) { continue }
                 cells.insert(cell)
             }

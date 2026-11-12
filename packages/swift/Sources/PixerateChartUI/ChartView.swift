@@ -57,105 +57,120 @@ public struct ChartView: View {
 /// Draws every mark of a `ChartScene` onto a SwiftUI `GraphicsContext`.
 public func drawChartSceneInCanvas(_ scene: ChartScene, context ctx: inout GraphicsContext) {
     for mark in scene.marks {
-        switch mark {
-        case .rect(let m):
-            let rect = CGRect(x: m.x, y: m.y, width: m.width, height: m.height)
-            let path: Path
-            if let r = m.radius, r > 0 {
-                let cr = CGFloat(Swift.min(r, Swift.min(m.width, m.height) / 2.0))
-                path = Path(roundedRect: rect, cornerRadius: cr)
-            } else {
-                path = Path(rect)
+        // SVG's `opacity` composites the mark's fill and stroke as one group: draw them into a layer
+        // that the context composites at that opacity.
+        if let group = chartMarkGroupOpacity(mark) {
+            var outer = ctx
+            outer.opacity *= group
+            outer.drawLayer { layer in
+                var inner = layer
+                drawChartMarkInCanvas(mark, context: &inner)
             }
-            if let fill = chartSwiftUIColor(m.fill, opacity: m.opacity) {
-                ctx.fill(path, with: .color(fill))
-            }
-            if let stroke = chartSwiftUIColor(m.stroke, opacity: m.opacity) {
-                let dash: [CGFloat] = m.role == .selection ? [3, 2] : []
-                ctx.stroke(
-                    path,
-                    with: .color(stroke),
-                    style: StrokeStyle(lineWidth: CGFloat(m.strokeWidth ?? 1.0), dash: dash)
-                )
-            }
+        } else {
+            drawChartMarkInCanvas(mark, context: &ctx)
+        }
+    }
+}
 
-        case .path(let m):
-            let path = parseChartPath(m.d)
-            if let fill = chartSwiftUIColor(m.fill, opacity: m.opacity) {
-                ctx.fill(path, with: .color(fill))
-            }
-            if let stroke = chartSwiftUIColor(m.stroke, opacity: m.opacity) {
-                // chartSceneToSvg strokes every path with round joins and caps.
-                let dash = parseChartDash(m.dash)
-                ctx.stroke(
-                    path,
-                    with: .color(stroke),
-                    style: StrokeStyle(
-                        lineWidth: CGFloat(m.strokeWidth ?? 1.0),
-                        lineCap: .round,
-                        lineJoin: .round,
-                        dash: dash
-                    )
-                )
-            }
+private func drawChartMarkInCanvas(_ mark: ChartMark, context ctx: inout GraphicsContext) {
+    switch mark {
+    case .rect(let m):
+        let rect = CGRect(x: m.x, y: m.y, width: m.width, height: m.height)
+        let path: Path
+        if let r = m.radius, r > 0 {
+            let cr = CGFloat(Swift.min(r, Swift.min(m.width, m.height) / 2.0))
+            path = Path(roundedRect: rect, cornerRadius: cr)
+        } else {
+            path = Path(rect)
+        }
+        if let fill = chartSwiftUIColor(m.fill) {
+            ctx.fill(path, with: .color(fill))
+        }
+        if let stroke = chartSwiftUIColor(m.stroke) {
+            let dash: [CGFloat] = m.role == .selection ? [3, 2] : []
+            ctx.stroke(
+                path,
+                with: .color(stroke),
+                style: StrokeStyle(lineWidth: CGFloat(m.strokeWidth ?? 1.0), dash: dash)
+            )
+        }
 
-        case .circle(let m):
-            let rect = CGRect(x: m.cx - m.r, y: m.cy - m.r, width: m.r * 2.0, height: m.r * 2.0)
-            let path = Path(ellipseIn: rect)
-            if let fill = chartSwiftUIColor(m.fill, opacity: m.opacity) {
-                ctx.fill(path, with: .color(fill))
-            }
-            if let stroke = chartSwiftUIColor(m.stroke, opacity: m.opacity) {
-                ctx.stroke(
-                    path,
-                    with: .color(stroke),
-                    style: StrokeStyle(lineWidth: CGFloat(m.strokeWidth ?? 1.0))
-                )
-            }
-
-        case .line(let m):
-            guard let stroke = chartSwiftUIColor(m.stroke, opacity: m.opacity) else { break }
-            var path = Path()
-            path.move(to: CGPoint(x: m.x1, y: m.y1))
-            path.addLine(to: CGPoint(x: m.x2, y: m.y2))
+    case .path(let m):
+        let path = parseChartPath(m.d)
+        if let fill = chartSwiftUIColor(m.fill) {
+            ctx.fill(path, with: .color(fill))
+        }
+        if let stroke = chartSwiftUIColor(m.stroke) {
+            // chartSceneToSvg strokes every path with round joins and caps.
+            let dash = parseChartDash(m.dash)
             ctx.stroke(
                 path,
                 with: .color(stroke),
                 style: StrokeStyle(
                     lineWidth: CGFloat(m.strokeWidth ?? 1.0),
-                    dash: parseChartDash(m.dash)
+                    lineCap: .round,
+                    lineJoin: .round,
+                    dash: dash
                 )
             )
+        }
 
-        case .text(let m):
-            guard !m.text.isEmpty, let fill = chartSwiftUIColor(m.fill, opacity: m.opacity) else { break }
-            let weight: Font.Weight = {
-                guard let w = m.weight else { return .regular }
-                if w >= 700 { return .bold }
-                if w >= 600 { return .semibold }
-                if w >= 500 { return .medium }
-                return .regular
-            }()
-            let tabular = m.role == .tickLabel || m.role == .dataLabel || m.role == .dragReadout || m.role == .raceTime
-            var textView = Text(m.text)
-                .font(.system(size: CGFloat(m.size), weight: weight))
-                .foregroundColor(fill)
-            if tabular {
-                textView = textView.monospacedDigit()
+    case .circle(let m):
+        let rect = CGRect(x: m.cx - m.r, y: m.cy - m.r, width: m.r * 2.0, height: m.r * 2.0)
+        let path = Path(ellipseIn: rect)
+        if let fill = chartSwiftUIColor(m.fill) {
+            ctx.fill(path, with: .color(fill))
+        }
+        if let stroke = chartSwiftUIColor(m.stroke) {
+            ctx.stroke(
+                path,
+                with: .color(stroke),
+                style: StrokeStyle(lineWidth: CGFloat(m.strokeWidth ?? 1.0))
+            )
+        }
+
+    case .line(let m):
+        guard let stroke = chartSwiftUIColor(m.stroke) else { break }
+        var path = Path()
+        path.move(to: CGPoint(x: m.x1, y: m.y1))
+        path.addLine(to: CGPoint(x: m.x2, y: m.y2))
+        ctx.stroke(
+            path,
+            with: .color(stroke),
+            style: StrokeStyle(
+                lineWidth: CGFloat(m.strokeWidth ?? 1.0),
+                dash: parseChartDash(m.dash)
+            )
+        )
+
+    case .text(let m):
+        guard !m.text.isEmpty, let fill = chartSwiftUIColor(m.fill) else { break }
+        let weight: Font.Weight = {
+            guard let w = m.weight else { return .regular }
+            if w >= 700 { return .bold }
+            if w >= 600 { return .semibold }
+            if w >= 500 { return .medium }
+            return .regular
+        }()
+        let tabular = m.role == .tickLabel || m.role == .dataLabel || m.role == .dragReadout || m.role == .raceTime
+        var textView = Text(m.text)
+            .font(.system(size: CGFloat(m.size), weight: weight))
+            .foregroundColor(fill)
+        if tabular {
+            textView = textView.monospacedDigit()
+        }
+        let resolved = ctx.resolve(textView)
+        let anchorX: CGFloat = m.anchor == .start ? 0.0 : (m.anchor == .end ? 1.0 : 0.5)
+        let anchorY: CGFloat = m.baseline == .top ? 0.0 : (m.baseline == .bottom ? 1.0 : 0.5)
+        let unitAnchor = UnitPoint(x: anchorX, y: anchorY)
+        if let rot = m.rotate, rot != 0 {
+            ctx.drawLayer { layer in
+                layer.translateBy(x: CGFloat(m.x), y: CGFloat(m.y))
+                layer.rotate(by: .degrees(rot))
+                layer.draw(resolved, at: .zero, anchor: unitAnchor)
             }
-            let resolved = ctx.resolve(textView)
-            let anchorX: CGFloat = m.anchor == .start ? 0.0 : (m.anchor == .end ? 1.0 : 0.5)
-            let anchorY: CGFloat = m.baseline == .top ? 0.0 : (m.baseline == .bottom ? 1.0 : 0.5)
-            let unitAnchor = UnitPoint(x: anchorX, y: anchorY)
-            if let rot = m.rotate, rot != 0 {
-                ctx.drawLayer { layer in
-                    layer.translateBy(x: CGFloat(m.x), y: CGFloat(m.y))
-                    layer.rotate(by: .degrees(rot))
-                    layer.draw(resolved, at: .zero, anchor: unitAnchor)
-                }
-            } else {
-                ctx.draw(resolved, at: CGPoint(x: m.x, y: m.y), anchor: unitAnchor)
-            }
+        } else {
+            ctx.draw(resolved, at: CGPoint(x: m.x, y: m.y), anchor: unitAnchor)
         }
     }
 }

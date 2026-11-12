@@ -21,6 +21,54 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/chart] The Chart's Fallback XML Parser Decodes `&toString;` and Throws on `&#x110000;`
+
+- **Issue / Symptom**: In the fallback `DOMParser` the chart contracts and conformance host use in Node (`FallbackXmlDomParser` in `chart/contract.ts`), `&toString;` in chart XML decodes to `function toString() { [native code] }`, and a character reference past U+10FFFF makes `parseFromString` throw `RangeError: Invalid code point 1114112`. `chartFromOoxml` catches it (`The chart XML could not be read: Invalid code point 1114112`), but in a drawing, slide or rels part it escapes `extractOfficeCharts` unwrapped, not as an `OfficeChartsError`. The Swift port left both entities as text.
+- **Root Cause**: `XML_ENTITIES[code] ?? match` looks the name up in a plain object, which finds `Object.prototype` members (`constructor`, `toString`, `valueOf`, …), and `String.fromCodePoint` throws for code points out of range. A lone surrogate reference (`&#xD800;`) gives a JS string Swift cannot hold.
+- **Solution / Workaround**: The Swift port matches TS (`decodeXmlEntities` in `OoxmlRead.swift` lists the seven inherited names and throws `ChartXmlRangeError` with the V8 message, numbers written with `JSONValue.jsString`); a lone surrogate becomes U+FFFD. Fixing the TS (an own-property lookup, a range check that leaves the reference as text) needs the vectors in `swift-chart-office-vectors.test.ts` and the Swift port changed with it.
+
+### [core|swift] `validateJsonSchema` Lets `Object.prototype` Names Through `additionalProperties: false`
+
+- **Issue / Symptom**: A tool argument or style profile with a `toString`, `valueOf`, `hasOwnProperty` or `__defineGetter__` key passes a schema with `additionalProperties: false`; Swift reported `Unknown property "toString"`.
+- **Root Cause**: `tools/schema.ts` tests `key in properties`, and `properties` is a plain object, so inherited names count as declared; it then validates the value against a function, which checks nothing. (`required: ["toString"]` is likewise always met.)
+- **Solution / Workaround**: Swift's `validateJSONSchema` skips those twelve names (`OBJECT_PROTOTYPE_NAMES` in `Schema.swift`) to match. The `required` case is not mirrored (no schema requires such a name). A TS fix (`Object.hasOwn(properties, key)`) must change both.
+
+### [core|swift/chart] A House-Style Profile That Is Itself a `$token` Reference Throws While Loading
+
+- **Issue / Symptom**: With `chart.json` set to `{ "$token": "…" }`, every `createStyleResolver` call (`check_chart_style`, `get_style`) fails with `Cannot destructure property 'checks' of 'resolved' as it is undefined.`
+- **Root Cause**: `resolveTokens` turns a root token reference into `undefined`, and `const { checks, ...rest } = resolved` cannot destructure it, so the profile is never left out with an issue like other bad profiles.
+- **Solution / Workaround**: The Swift `ChartStyleResolver(skill:layer:chartJson:)` records the same message as `loadFailure` and `check_chart_style` throws it (`style-token-root` scenario). A TS fix would report it as `chart.json is left out: profile: …` instead.
+
+### [swift] Two ZIP Readers: `readZip` (`import/zip.ts`) and `readBrushZip` (`brushes/import/zip.ts`)
+
+- **Issue / Symptom**: The Swift chart port read Office files with a ZIP reader whose messages, limits and rules (last duplicate wins, `./` stripped, control characters refused, the size limit summed over declared sizes) were not the TS core's, so `This is not an Office file: …` errors differed and a deck with a large video failed.
+- **Root Cause**: The TS core has two readers with different contracts: `import/zip.ts` (async, ZIP64, `unsafePaths: "error" | "skip"`, the size limit counted on bytes actually read, first duplicate wins) for DOCX / Office files, and `brushes/import/zip.ts` (sync, no ZIP64, per-entry limits) for brush packs. The Swift file mixed them.
+- **Solution / Workaround**: `PixerateCore/Zip.swift` is a line-by-line port of `import/zip.ts` (`readZip`, `ZipArchive`, `ZipEntry`, `ZipUnsafePaths.error/.skip`), and `PixeratePaint/Brushes/Import/Zip.swift` ports the brush reader as `readBrushZip` / `BrushZipEntry` / `BrushZipError`. `swift-chart-office-vectors.test.ts` covers the first, including malformed and ZIP64 archives, with stored blocks and fixed deflate bytes written out so Node's zlib version cannot change the fixture.
+
+### [swift] Swift `String` Keys Merge NFC and NFD Spellings That JS Keeps Apart
+
+- **Issue / Symptom**: An archive with both `é.txt` (NFC) and `é.txt` (NFD) had one entry in Swift's lookup; `uniqueStrings` dropped one of two unsupported-feature names that differ only by normalisation.
+- **Root Cause**: Swift `String` equality and hashing use canonical equivalence; a JS `Map` or `Set` compares UTF-16 code units. See also "`String.contains`, `hasPrefix` and `replacingOccurrences` Compare Characters".
+- **Solution / Workaround**: Key ported `Map`s and `Set`s of text that comes from files or users by `JSKey` (`PixerateCore/JSString.swift`), which hashes code units: ZIP `byName`, the Office reader's relationships and seen parts, `uniqueStrings`, open-file names. Other chart sets (link node names, tree names, map regions) still use `String` keys.
+
+### [swift] `JSONValue.jsNumber` Writes Non-Finite Numbers as `null`; Template Text Needs `jsString`
+
+- **Issue / Symptom**: A NaN or infinite value reached SVG and OOXML text as `null`, where TS writes `NaN` / `Infinity`; `chartRasterSize` trapped on `Int(NaN)`; a NaN `rotate` produced `rotate(null …)` instead of no transform.
+- **Root Cause**: `jsNumber` is `JSON.stringify`'s number format. `${n}` and `String(n)` are `Number.prototype.toString`, which spells out non-finite numbers; `mark.rotate ? … : undefined` treats NaN as false; `Math.min` / `Math.max` return NaN when either argument is NaN, where `Swift.min` / `Swift.max` do not.
+- **Solution / Workaround**: Use `JSONValue.jsString(n)` for numbers interpolated into text (all of `PixerateChart` now does). `ChartRasterSize` holds JS numbers (`Double`), computed with NaN-propagating min/max, and `rasterizeChartScene` refuses a non-finite size with an error instead of trapping.
+
+### [swift] `Data(base64Encoded:)` Rejects Unpadded Base64 That `atob` Accepts
+
+- **Issue / Symptom**: The Swift chart conformance host silently dropped setup files whose base64 had a `data:` prefix, line breaks or no `=` padding; the TS host decodes them.
+- **Root Cause**: `atob` is the forgiving-base64 decode (white space ignored, padding optional); Foundation requires padding.
+- **Solution / Workaround**: `jsAtob` and `jsDecodeBase64DataUrl` (`PixerateCore/JSString.swift`) implement it; the conformance host and the Office chart tools use them, and the host throws `The string to be decoded is not correctly encoded.` where `atob` throws (`office-base64-forms` scenario).
+
+### [swift/chart] SVG's `opacity` Composites Fill and Stroke Together
+
+- **Issue / Symptom**: The CoreGraphics PNG and SwiftUI canvas drew a half-transparent mark's fill and stroke each at the mark's opacity, so where the stroke overlaps the fill it was darker than in the SVG export; `#rrggbbaa` and `rgb(… / a)` alpha was ignored.
+- **Root Cause**: The SVG writer sets `opacity` on the element, which renders fill and stroke into one group and fades the group. `parseChartColor` deliberately drops alpha (it compares colours).
+- **Solution / Workaround**: Both renderers draw a mark with opacity < 1 into a transparency layer (`beginTransparencyLayer` / `GraphicsContext.drawLayer`) composited at that opacity (`chartMarkGroupOpacity`), and `parseChartRGBA` reads `#rgba`, `#rrggbbaa` and `rgb()` alpha.
+
 ### [monorepo] Vitest Says "Cannot find native binding" When an Intel Tool Launches It on Apple Silicon
 
 - **Issue / Symptom**: `vitest run` fails at startup with `Cannot find native binding … Cannot find module '@rolldown/binding-wasm32-wasi'`, although `@rolldown/binding-darwin-arm64` is installed and loads in plain `node`.

@@ -355,6 +355,12 @@ class FallbackXmlDomParser {
 	}
 }
 
+/**
+ * The small XML parser the chart contracts and conformance host use where the host has no
+ * `DOMParser` (Node). The Swift chart port mirrors it, so test vectors read OOXML with it.
+ */
+export const chartFallbackDomParser = FallbackXmlDomParser as unknown as { new (): DOMParser };
+
 function defaultDomParser(): { new (): DOMParser } {
 	return (globalThis as { DOMParser?: { new (): DOMParser } }).DOMParser ?? (FallbackXmlDomParser as unknown as { new (): DOMParser });
 }

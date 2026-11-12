@@ -42,12 +42,14 @@ public struct ChartRasterImage: Sendable, Equatable {
     }
 }
 
+/// JS numbers, as `chartRasterSize` returns them: a non-finite size or scale gives `NaN` / `Infinity`
+/// here rather than a trap (`rasterizeChartScene` refuses those).
 public struct ChartRasterSize: Sendable, Equatable {
-    public var width: Int
-    public var height: Int
+    public var width: Double
+    public var height: Double
     public var scale: Double
 
-    public init(width: Int, height: Int, scale: Double) {
+    public init(width: Double, height: Double, scale: Double) {
         self.width = width
         self.height = height
         self.scale = scale
@@ -55,8 +57,8 @@ public struct ChartRasterSize: Sendable, Equatable {
 
     public func toJSON() -> JSONValue {
         return .object(JSONObject([
-            ("width", .number(Double(width))),
-            ("height", .number(Double(height))),
+            ("width", .number(width)),
+            ("height", .number(height)),
             ("scale", .number(scale)),
         ]))
     }
@@ -76,12 +78,13 @@ public func chartRasterSize(
     maxSize: Double = CHART_RASTER_MAX_SIZE
 ) throws -> ChartRasterSize {
     if !(width > 0) || !(height > 0) {
-        throw ChartRasterError("A chart image needs a positive width and height; got \(JSONValue.jsNumber(width)) × \(JSONValue.jsNumber(height)).")
+        throw ChartRasterError("A chart image needs a positive width and height; got \(JSONValue.jsString(width)) × \(JSONValue.jsString(height)).")
     }
-    let factor = Swift.min(scale > 0 ? scale : 1, maxSize / Swift.max(width, height))
-    let w = Swift.max(1, Int(JS.round(width * factor)))
-    let h = Swift.max(1, Int(JS.round(height * factor)))
-    return ChartRasterSize(width: w, height: h, scale: factor)
+    // Math.min / Math.max: NaN wins, unlike Swift.min / Swift.max.
+    func jsMin(_ a: Double, _ b: Double) -> Double { a.isNaN || b.isNaN ? .nan : Swift.min(a, b) }
+    func jsMax(_ a: Double, _ b: Double) -> Double { a.isNaN || b.isNaN ? .nan : Swift.max(a, b) }
+    let factor = jsMin(scale > 0 ? scale : 1, maxSize / jsMax(width, height))
+    return ChartRasterSize(width: jsMax(1, JS.round(width * factor)), height: jsMax(1, JS.round(height * factor)), scale: factor)
 }
 
 /// Index just past the `)` closing the parenthesis opened at `open`, or -1.

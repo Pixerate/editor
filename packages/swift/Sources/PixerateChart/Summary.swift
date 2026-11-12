@@ -357,7 +357,7 @@ public func describeChart(_ spec: ChartSpec, _ seriesInput: [ChartSeriesSummary]
         let log = a.scale == .log && name != "category axis"
         if log || a.reverse == true {
             var traits: [String] = []
-            if log { traits.append("logarithmic (base \(JSONValue.jsNumber(a.logBase ?? 10)))") }
+            if log { traits.append("logarithmic (base \(JSONValue.jsString(a.logBase ?? 10)))") }
             if a.reverse == true { traits.append("reversed") }
             parts.append("The \(name) is \(traits.joined(separator: " and ")).")
         }

@@ -14,8 +14,9 @@ public func chartTextBaseline(_ baseline: ChartTextBaseline) -> String {
 
 /// SVG `transform` for a rotated text mark, if any.
 public func chartTextTransform(_ mark: ChartTextMark) -> String? {
-    guard let rotate = mark.rotate, rotate != 0 else { return nil }
-    return "rotate(\(JSONValue.jsNumber(rotate)) \(JSONValue.jsNumber(mark.x)) \(JSONValue.jsNumber(mark.y)))"
+    // `mark.rotate ? … : undefined`: 0 and NaN are falsy.
+    guard let rotate = mark.rotate, rotate != 0, !rotate.isNaN else { return nil }
+    return "rotate(\(JSONValue.jsString(rotate)) \(JSONValue.jsString(mark.x)) \(JSONValue.jsString(mark.y)))"
 }
 
 private func escapeSvg(_ text: String) -> String {
@@ -71,7 +72,7 @@ private func markParts(_ mark: ChartMark, _ fontFamily: String) -> MarkParts {
                 }
             case .num(let n):
                 if let n {
-                    let s = JSONValue.jsNumber(n)
+                    let s = JSONValue.jsString(n)
                     if !s.isEmpty {
                         ordered.append((k, s))
                     }
@@ -196,8 +197,8 @@ public func chartSceneToSvg(_ scene: ChartScene, _ options: ChartSvgOptions = Ch
     let titleXml = label.map { "<title id=\"chart-title\">\(escapeSvg($0))</title>" } ?? ""
     let descXml = desc.map { "<desc id=\"chart-desc\">\(escapeSvg($0))</desc>" } ?? ""
     let head = "\(titleXml)\(descXml)"
-    let wStr = JSONValue.jsNumber(scene.width)
-    let hStr = JSONValue.jsNumber(scene.height)
+    let wStr = JSONValue.jsString(scene.width)
+    let hStr = JSONValue.jsString(scene.height)
     let ariaLabelAttr = label.map { " aria-label=\"\(escapeSvg($0))\"" } ?? ""
     let ariaLabelledByAttr = !labelled.isEmpty ? " aria-labelledby=\"\(labelled)\"" : ""
     return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"\(wStr)\" height=\"\(hStr)\" viewBox=\"0 0 \(wStr) \(hStr)\" role=\"img\"\(ariaLabelAttr)\(ariaLabelledByAttr)>\(head)\(body)</svg>"
@@ -331,8 +332,8 @@ public func chartSceneToDomSpec(
         let markChildren: [ChartDomChild] = parts.text.map { [.text($0)] } ?? []
         children.append(.element(ChartDomSpec(tag: nsTag(parts.tag), orderedAttrs: parts.orderedAttrs, children: markChildren)))
     }
-    let wStr = JSONValue.jsNumber(scene.width)
-    let hStr = JSONValue.jsNumber(scene.height)
+    let wStr = JSONValue.jsString(scene.width)
+    let hStr = JSONValue.jsString(scene.height)
     var rootAttrs: [(String, String)] = [
         ("width", wStr),
         ("height", hStr),

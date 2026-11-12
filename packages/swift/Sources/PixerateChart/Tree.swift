@@ -38,7 +38,7 @@ public func normalizeChartTree(
             let name: String
             switch obj["name"] {
             case .number(let n)?:
-                name = JSONValue.jsNumber(n)
+                name = JSONValue.jsString(n)
             case .string(let s)?:
                 name = s.jsTrimmed
             default:

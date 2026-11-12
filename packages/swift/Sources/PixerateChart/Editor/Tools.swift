@@ -298,8 +298,8 @@ final class ChartToolProviderImpl: @unchecked Sendable {
                         let note = !warnings.isEmpty
                             ? "Layout warnings: \(warnings.map { $0.message }.joined(separator: " "))"
                             : "No layout warnings."
-                        let wStr = JSONValue.jsNumber(width)
-                        let hStr = JSONValue.jsNumber(height)
+                        let wStr = JSONValue.jsString(width)
+                        let hStr = JSONValue.jsString(height)
                         return .result(McpToolResult(
                             content: [
                                 .image(data: image.data, mimeType: image.mimeType),
@@ -559,15 +559,11 @@ public struct OfficeChartToolProviderOptions {
 }
 
 private func decodeOfficeBase64(_ input: String) throws -> [UInt8] {
-    var clean = input
-    if let range = clean.range(of: #"^data:[^,]*,"#, options: [.regularExpression]) {
-        clean.removeSubrange(range)
-    }
-    clean = clean.replacingOccurrences(of: #"\s+"#, with: "", options: .regularExpression)
-    guard let data = Data(base64Encoded: clean) else {
+    // `atob` accepts base64 without padding, which `Data(base64Encoded:)` rejects.
+    guard let data = jsDecodeBase64DataUrl(input) else {
         throw ToolExecutionError("\"data\" is not valid base64. Pass the whole .xlsx, .pptx or .docx file encoded as base64 (a data: URL prefix is fine).")
     }
-    return [UInt8](data)
+    return data
 }
 
 public func createOfficeChartToolProvider(
@@ -605,7 +601,7 @@ private final class OfficeChartToolProviderImpl: @unchecked Sendable {
             }
             let files = options.files?() ?? []
             let fileName = args["file"]?.stringValue ?? "undefined"
-            guard let file = files.first(where: { $0.name == fileName }) else {
+            guard let file = files.first(where: { JSKey($0.name) == JSKey(fileName) }) else {
                 let listDesc = files.isEmpty
                     ? "(none; ask the user to open an .xlsx, .pptx or .docx file)"
                     : files.map { "\"\($0.name)\"" }.joined(separator: ", ")

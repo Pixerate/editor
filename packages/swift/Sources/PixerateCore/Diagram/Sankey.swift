@@ -189,6 +189,10 @@ private struct CsvRecord {
 }
 
 private func readCsvRecords(_ lines: [(text: String, line: Int)]) -> Result<[CsvRecord], DiagramDataError> {
+    // `readRecords` in `diagram/sankey/index.ts`, over UTF-16 code units as JS indexes strings: a quote
+    // or comma followed by a combining mark is still a quote or comma.
+    func text(_ units: [UInt16]) -> String { String(decoding: units, as: UTF16.self) }
+    func trimmed(_ units: [UInt16]) -> String { text(units).jsTrimmed }
     var records: [CsvRecord] = []
     var i = 0
     while i < lines.count {
@@ -198,66 +202,55 @@ private func readCsvRecords(_ lines: [(text: String, line: Int)]) -> Result<[Csv
             continue
         }
         var fields: [String] = []
-        var chars = Array(start.text)
+        var chars = Array(start.text.utf16)
         var pos = 0
-        var field = ""
+        var field: [UInt16] = []
         var quoted = false
         while true {
             if quoted {
-                var close = -1
-                var scan = pos
-                while scan < chars.count {
-                    if chars[scan] == "\"" {
-                        close = scan
-                        break
-                    }
-                    scan += 1
-                }
-                if close < 0 {
-                    if pos < chars.count {
-                        field += String(chars[pos...])
-                    }
+                guard let close = chars[pos...].firstIndex(of: 0x22) else {
+                    // The quoted field carries on over the next line.
+                    field += chars[pos...]
                     i += 1
                     if i >= lines.count {
                         return .failure(DiagramDataError(error: "A quoted field is never closed.", line: start.line))
                     }
-                    field += "\n"
-                    chars = Array(lines[i].text)
+                    field.append(0x0A)
+                    chars = Array(lines[i].text.utf16)
                     pos = 0
                     continue
                 }
-                if pos < close {
-                    field += String(chars[pos..<close])
-                }
-                if close + 1 < chars.count && chars[close + 1] == "\"" {
-                    field.append("\"")
+                field += chars[pos..<close]
+                if close + 1 < chars.count && chars[close + 1] == 0x22 {
+                    field.append(0x22)
                     pos = close + 2
                     continue
                 }
                 quoted = false
                 pos = close + 1
-                while pos < chars.count && (chars[pos] == " " || chars[pos] == "\t") {
+                // Only spaces may sit between a closing quote and the next comma.
+                while pos < chars.count && (chars[pos] == 0x20 || chars[pos] == 0x09) {
                     pos += 1
                 }
-                if pos < chars.count && chars[pos] != "," {
+                if pos < chars.count && chars[pos] != 0x2C {
                     return .failure(DiagramDataError(error: "Unexpected text after a quoted field.", line: lines[i].line))
                 }
                 continue
             }
             if pos >= chars.count {
-                fields.append(field.jsTrimmed)
+                fields.append(trimmed(field))
                 break
             }
             let ch = chars[pos]
-            if ch == "," {
-                fields.append(field.jsTrimmed)
-                field = ""
+            if ch == 0x2C {
+                fields.append(trimmed(field))
+                field = []
                 pos += 1
-            } else if ch == "\"" && field.jsTrimmed.isEmpty {
+            } else if ch == 0x22 && trimmed(field).isEmpty {
                 quoted = true
-                field = ""
+                field = []
                 pos += 1
-            } else if ch == "\"" {
+            } else if ch == 0x22 {
                 return .failure(DiagramDataError(error: "A quote inside an unquoted field.", line: lines[i].line))
             } else {
                 field.append(ch)
