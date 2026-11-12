@@ -137,6 +137,7 @@ import {
 	VECTOR_EFFECT_LABELS
 } from './appearance.js';
 import { isIdentityMatrix } from '../geom/affine.js';
+import { placeLabels, type LabelObstacle, type LabelSide } from '../geom/labels.js';
 import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
 import {
@@ -4037,6 +4038,71 @@ export class VectorEditorController {
 			}
 		});
 		return { ok: true };
+	}
+
+	/**
+	 * Places labels (text or any node) near what they describe, clear of the other art and of each
+	 * other (`placeLabels`), with a leader line from each anchor when the label is apart from it.
+	 * An anchor is a point, or a node (the top centre of its bounds). One undo step. Refuses,
+	 * changing nothing, an unknown or locked label, an unknown anchor node, or a label without one.
+	 */
+	placeCallouts(
+		labels: readonly { id: string; anchor?: Vec2; anchorId?: string }[],
+		options: { prefer?: readonly LabelSide[]; leader?: boolean; gap?: number; distance?: number; leaderStroke?: string } = {}
+	): VectorActionResult & { placed?: { id: string; x: number; y: number; width: number; height: number; side: LabelSide; ok: boolean; leader?: string }[]; clashes?: number } {
+		if (!labels.length) return { ok: false, message: 'Give at least one label.' };
+		const seen = new Set<string>();
+		const items: { id: string; b: VectorBounds; anchor: Vec2 }[] = [];
+		for (const [i, l] of labels.entries()) {
+			const node = this.getNode(l.id);
+			if (!node) return { ok: false, message: `Label ${i}: there is no node "${l.id}"; vector.list lists them.` };
+			if (node.locked) return { ok: false, message: `Label ${i}: "${l.id}" is locked; unlock it first.` };
+			if (seen.has(l.id)) return { ok: false, message: `Label ${i}: "${l.id}" is listed twice.` };
+			seen.add(l.id);
+			const b = this.boundsOf([l.id]);
+			if (!b) return { ok: false, message: `Label ${i}: "${l.id}" draws nothing, so it has no size to place.` };
+			let anchor = l.anchor;
+			if (l.anchorId !== undefined) {
+				if (l.anchorId === l.id) return { ok: false, message: `Label ${i}: a label cannot point at itself.` };
+				const ab = this.getNode(l.anchorId) ? this.boundsOf([l.anchorId]) : null;
+				if (!ab) return { ok: false, message: `Label ${i}: there is no node "${l.anchorId}" with a size to point at.` };
+				anchor = { x: ab.x + ab.width / 2, y: ab.y };
+			}
+			if (!anchor || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return { ok: false, message: `Label ${i}: give an anchor { x, y } or an anchorId.` };
+			items.push({ id: l.id, b, anchor });
+		}
+		// Everything else on the page is an obstacle: top-level art that is not a label or a group holding one.
+		const holds = (n: VectorNode): boolean => seen.has(n.id) || (n.type === 'group' && n.children.some(holds));
+		const obstacles: LabelObstacle[] = [];
+		for (const n of this.doc.nodes) {
+			if (n.visible === false || holds(n)) continue;
+			const b = this.boundsOf([n.id]);
+			if (b) obstacles.push({ box: b });
+		}
+		const leader = options.leader !== false;
+		const placed = placeLabels(
+			items.map((it) => ({ anchor: it.anchor, width: it.b.width, height: it.b.height })),
+			{ obstacles, bounds: { x: 0, y: 0, width: this.doc.width, height: this.doc.height }, leader, ...(options.prefer ? { prefer: options.prefer } : {}), ...(options.gap !== undefined ? { gap: options.gap } : {}), ...(options.distance !== undefined ? { distance: options.distance } : {}) }
+		);
+		const out: { id: string; x: number; y: number; width: number; height: number; side: LabelSide; ok: boolean; leader?: string }[] = [];
+		this.change('Place Callouts', () => {
+			const leaders: VectorNode[] = [];
+			items.forEach((it, k) => {
+				const p = placed[k];
+				const dx = p.x - it.b.x;
+				const dy = p.y - it.b.y;
+				if (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9) this.doc = this.transformed(this.doc, new Set([it.id]), translateMatrix(dx, dy));
+				let leaderId: string | undefined;
+				if (p.leader) {
+					leaderId = this.newId();
+					const [a, e] = p.leader;
+					leaders.push({ id: leaderId, type: 'path', name: `Leader: ${this.getNode(it.id)?.name ?? it.id}`, fill: null, stroke: options.leaderStroke ?? '#6b7280', strokeWidth: 1, subpaths: [{ closed: false, anchors: [{ x: a.x, y: a.y }, { x: e.x, y: e.y }] }] } as VectorPathNode);
+				}
+				out.push({ id: it.id, x: p.x, y: p.y, width: p.width, height: p.height, side: p.side, ok: p.ok, ...(leaderId ? { leader: leaderId } : {}) });
+			});
+			if (leaders.length) this.setDoc([...this.doc.nodes, ...leaders]);
+		});
+		return { ok: true, placed: out, clashes: placed.reduce((n, p) => n + p.clashes, 0) };
 	}
 
 	// -------------------------------------------------------------------------

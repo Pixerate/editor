@@ -1,0 +1,444 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "callouts",
+  "description": "Labels placed clear of the art and each other with leader lines, and the refusals (#792).",
+  "setup": {
+    "width": 400,
+    "height": 300
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 150,
+          "y": 100,
+          "width": 100,
+          "height": 150,
+          "fill": "#3b82f6"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 140,
+          "y": 40,
+          "width": 60,
+          "height": 40,
+          "fill": "#22c55e"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M0 0 L70 0 L70 14 L0 14 Z",
+          "fill": "#111111"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M0 0 L50 0 L50 14 L0 14 Z",
+          "fill": "#111111"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.placeCallouts",
+        "params": {
+          "labels": [
+            {
+              "id": "n3",
+              "anchorId": "n1"
+            },
+            {
+              "id": "n4",
+              "anchor": {
+                "x": 200,
+                "y": 175
+              }
+            }
+          ]
+        }
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.placeCallouts",
+          "ok": true,
+          "result": {
+            "clashes": 0,
+            "placed": [
+              {
+                "height": 14,
+                "id": "n3",
+                "leader": "n5",
+                "ok": true,
+                "side": "above",
+                "width": 70,
+                "x": 165,
+                "y": 26
+              },
+              {
+                "height": 14,
+                "id": "n4",
+                "leader": "n6",
+                "ok": true,
+                "side": "right",
+                "width": 50,
+                "x": 254,
+                "y": 168
+              }
+            ]
+          }
+        },
+        "document": {
+          "document": {
+            "height": 300,
+            "nodes": [
+              {
+                "fill": "#3b82f6",
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 150,
+                        "y": 100
+                      },
+                      {
+                        "x": 250,
+                        "y": 100
+                      },
+                      {
+                        "x": 250,
+                        "y": 250
+                      },
+                      {
+                        "x": 150,
+                        "y": 250
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#22c55e",
+                "id": "n2",
+                "name": "Rectangle",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 140,
+                        "y": 40
+                      },
+                      {
+                        "x": 200,
+                        "y": 40
+                      },
+                      {
+                        "x": 200,
+                        "y": 80
+                      },
+                      {
+                        "x": 140,
+                        "y": 80
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#111111",
+                "id": "n3",
+                "name": "Path",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 165,
+                        "y": 26
+                      },
+                      {
+                        "x": 235,
+                        "y": 26
+                      },
+                      {
+                        "x": 235,
+                        "y": 40
+                      },
+                      {
+                        "x": 165,
+                        "y": 40
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#111111",
+                "id": "n4",
+                "name": "Path",
+                "stroke": "#18181b",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 254,
+                        "y": 168
+                      },
+                      {
+                        "x": 304,
+                        "y": 168
+                      },
+                      {
+                        "x": 304,
+                        "y": 182
+                      },
+                      {
+                        "x": 254,
+                        "y": 182
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": null,
+                "id": "n5",
+                "name": "Leader: Path",
+                "stroke": "#6b7280",
+                "strokeWidth": 1,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 200,
+                        "y": 100
+                      },
+                      {
+                        "x": 200,
+                        "y": 40
+                      }
+                    ],
+                    "closed": false
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": null,
+                "id": "n6",
+                "name": "Leader: Path",
+                "stroke": "#6b7280",
+                "strokeWidth": 1,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 200,
+                        "y": 175
+                      },
+                      {
+                        "x": 254,
+                        "y": 175
+                      }
+                    ],
+                    "closed": false
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 400
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.placeCallouts",
+        "params": {
+          "labels": [
+            {
+              "id": "n3",
+              "anchor": {
+                "x": 10,
+                "y": 10
+              }
+            }
+          ],
+          "prefer": [
+            "center",
+            "below"
+          ],
+          "leader": false,
+          "gap": 4,
+          "distance": 6
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.placeCallouts",
+          "ok": true,
+          "result": {
+            "clashes": 0,
+            "placed": [
+              {
+                "height": 14,
+                "id": "n3",
+                "ok": true,
+                "side": "center",
+                "width": 70,
+                "x": 0,
+                "y": 3
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.placeCallouts",
+        "params": {
+          "labels": [
+            {
+              "id": "nope",
+              "anchor": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "Label 0: there is no node \"nope\"; vector.list lists them."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.placeCallouts",
+        "params": {
+          "labels": [
+            {
+              "id": "n3"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "Label 0: give an anchor { x, y } or an anchorId."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.placeCallouts",
+        "params": {
+          "labels": [
+            {
+              "id": "n3",
+              "anchorId": "n3"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "Label 0: a label cannot point at itself."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

@@ -11,7 +11,7 @@ import XCTest
 final class VectorConformanceTests: XCTestCase {
     func testVectorScenarios() async throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        XCTAssertEqual(scenarios.count, 15)
+        XCTAssertEqual(scenarios.count, 16)
         var passed: [String] = []
         var skipped: [(String, String)] = []
         var failures: [ConformanceMismatch] = []

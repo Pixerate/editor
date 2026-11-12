@@ -1,6 +1,7 @@
 // Thumbnails and PNG export follow Ursula's MermaidThumbnail and src/react/export.ts
 // (`downloadCanvasPng`, a longest-side bound on snapshots), drawn from the layout as standalone
 // SVG instead of capturing the DOM, so they work without the canvas mounted.
+import { placeLabels, type LabelObstacle } from '../../geom/labels.js';
 import type { DiagramGraph, MermaidDocument } from '../../diagram/types.js';
 import { ensureDiagramLayout, type DiagramLayout, type DiagramLayoutOptions } from './layout.js';
 import { mermaidEdgeMarker, mermaidLabelLines, mermaidNodeMembers, mermaidShapePaths } from './shapes.js';
@@ -144,15 +145,29 @@ export function mermaidToSvg(doc: MermaidDocument, options: DiagramSvgOptions = 
 		);
 	}
 
-	// Edges under nodes.
+	// Edges under nodes; their labels sit on the edge unless a node or another label is there.
+	const drawn: { e: (typeof graph.edges)[number]; p: { x: number; y: number }; q: { x: number; y: number }; text?: string; w: number }[] = [];
 	for (const e of graph.edges) {
 		const a = boxOf(e.source);
 		const b = boxOf(e.target);
 		if (!a || !b || e.pattern === 'invisible') continue;
 		const ca = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
 		const cb = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-		const p = exitPoint(a, cb);
-		const q = exitPoint(b, ca);
+		const text = e.label ? mermaidLabelLines(e.label).join(' ') : undefined;
+		drawn.push({ e, p: exitPoint(a, cb), q: exitPoint(b, ca), ...(text ? { text } : {}), w: text ? text.length * fs * 0.55 + 10 : 0 });
+	}
+	const labelled = drawn.filter((d) => d.text);
+	const nodeBoxes: LabelObstacle[] = [];
+	for (const node of graph.nodes) {
+		const b = boxOf(node.id);
+		if (b) nodeBoxes.push({ box: b, pad: 2 });
+	}
+	const spots = placeLabels(
+		labelled.map((d) => ({ anchor: { x: (d.p.x + d.q.x) / 2, y: (d.p.y + d.q.y) / 2 }, width: d.w, height: fs * 1.5 })),
+		{ obstacles: nodeBoxes, prefer: ['center', 'above', 'below', 'right', 'left'], distance: 4, reach: 40 }
+	);
+	for (const d of drawn) {
+		const { e, p, q } = d;
 		const st = resolveMermaidStyles(e.classes, e.styles, graph.classDefs);
 		const end = mermaidEdgeMarker(e.arrowEnd);
 		const start = mermaidEdgeMarker(e.arrowStart);
@@ -161,14 +176,11 @@ export function mermaidToSvg(doc: MermaidDocument, options: DiagramSvgOptions = 
 		out.push(
 			`<line data-edge="${esc(e.id)}" x1="${n(p.x)}" y1="${n(p.y)}" x2="${n(q.x)}" y2="${n(q.y)}" stroke="${esc(st.stroke ?? theme.edge)}" stroke-width="${e.pattern === 'thick' ? 3 : 1.5}"${dash ? ` stroke-dasharray="${dash}"` : ''}${end ? ` marker-end="${marker(end)}"` : ''}${start ? ` marker-start="${marker(start)}"` : ''}/>`
 		);
-		if (e.label) {
-			const text = mermaidLabelLines(e.label).join(' ');
-			const w = text.length * fs * 0.55 + 10;
-			const mx = (p.x + q.x) / 2;
-			const my = (p.y + q.y) / 2;
+		if (d.text) {
+			const spot = spots[labelled.indexOf(d)];
 			out.push(
-				`<rect x="${n(mx - w / 2)}" y="${n(my - fs * 0.75)}" width="${n(w)}" height="${n(fs * 1.5)}" rx="3" fill="${esc(theme.edgeLabelBackground)}"/>`,
-				`<text x="${n(mx)}" y="${n(my)}" text-anchor="middle" dominant-baseline="central" fill="${esc(st.color ?? theme.text)}" font-size="${fs - 1}">${esc(text)}</text>`
+				`<rect x="${n(spot.x)}" y="${n(spot.y)}" width="${n(spot.width)}" height="${n(spot.height)}" rx="3" fill="${esc(theme.edgeLabelBackground)}"/>`,
+				`<text x="${n(spot.x + spot.width / 2)}" y="${n(spot.y + spot.height / 2)}" text-anchor="middle" dominant-baseline="central" fill="${esc(st.color ?? theme.text)}" font-size="${fs - 1}">${esc(d.text)}</text>`
 			);
 		}
 	}

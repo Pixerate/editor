@@ -192,6 +192,32 @@ function edgeAndHelperEntries(): Entry[] {
 
   // 2. Single point, negative values, gaps, log scale with skipped values
   const edgeSpecs: Array<{ spec: ChartSpec; options?: ChartLayoutOptions }> = [
+    // Crowded callouts (#792): every column, beside every horizontal bar, and on points, placed together.
+    {
+      spec: specOf({
+        type: "bar",
+        categories: ["A", "B", "C", "D", "E", "F"],
+        series: [{ id: "s1", name: "Sales", values: [80, 95, 90, 100, 98, 60], callouts: ["Launch week", "Promo", "Steady", "Record high", "Close second", "Dip"] }],
+      }),
+    },
+    {
+      spec: specOf({
+        type: "bar",
+        orientation: "horizontal",
+        categories: ["North", "South", "East", "West"],
+        series: [{ id: "s1", name: "Reach", values: [120, 118, 40, 119], callouts: ["Best region by far", "Close behind", null, "Also close"] }],
+      }),
+    },
+    {
+      spec: specOf({
+        type: "line",
+        categories: ["1", "2", "3", "4", "5"],
+        series: [
+          { id: "s1", name: "A", values: [10, 12, 11, 13, 12], showMarkers: true, callouts: ["a1", null, "a3", null, "a5"] },
+          { id: "s2", name: "B", values: [11, 12.5, 11.2, 12.8, 12.1], showMarkers: true, callouts: [null, "b2", "b3", "b4", null] },
+        ],
+      }),
+    },
     {
       spec: specOf({
         type: "line",
