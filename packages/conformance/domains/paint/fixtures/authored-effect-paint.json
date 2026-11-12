@@ -258,7 +258,7 @@
           "file": "png/authored-effect-paint.8.png",
           "width": 48,
           "height": 32,
-          "sha256": "75114e40d1b144194bb99e323d7363bdfb043fce953567005c5621198999d48e",
+          "sha256": "ab79fa67da79527c5658611c9bbf06f47fd63492e191902dfb50cfe3488254f7",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -333,7 +333,7 @@
           "file": "png/authored-effect-paint.10.png",
           "width": 48,
           "height": 32,
-          "sha256": "14b1da85dadb7f77f7fb821119b7bb97898d3c4ecbd61e872c800f1cc0a587a3",
+          "sha256": "bbd41edb2a418596b3365e1fceb34a76e6a23b50baaa62dbab2b712d3ff4b295",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -403,7 +403,7 @@
           "file": "png/authored-effect-paint.12.png",
           "width": 48,
           "height": 32,
-          "sha256": "3d81987aec7383f22083152b7ee0a27c25c50d5846efff95dae9a30b0fe07d37",
+          "sha256": "beb7963a39c9023b1a6345d90a3d3dd61f589b34168c5750a2012e2fa35eb273",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -535,7 +535,7 @@
           "document": {
             "activeLayerId": "@2",
             "assets": {
-              "@1": "pixerate-asset:342-27rv3bp9bcp",
+              "@1": "pixerate-asset:35y-4zuxabkn61",
               "@2": "pixerate-asset:3g2-cscmf9lgxm"
             },
             "authoredEffects": {
@@ -843,7 +843,7 @@
           "file": "png/authored-effect-paint.16.png",
           "width": 48,
           "height": 32,
-          "sha256": "f0597a317f37a0b2a0d1a1fd67b854daf02a04594077a239186af6006d97c246",
+          "sha256": "56c1fc50d0efdf90384bcf64f2cb4a938dbbb913addbb74a33eb8e45756287cd",
           "maxDelta": 2,
           "meanDelta": 0.1
         }
@@ -907,7 +907,7 @@
           "file": "png/authored-effect-paint.18.png",
           "width": 48,
           "height": 32,
-          "sha256": "6f28fdcab9b13d81411ce52c157783a235fb6a00c76ba6d3cdb72d6ba15ab737",
+          "sha256": "928319c8109b070d60eab32c1fd193c001f149b5ca62c7a9b1a1f614e40fe6a7",
           "maxDelta": 2,
           "meanDelta": 0.1
         }

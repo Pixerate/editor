@@ -115,6 +115,7 @@ class MarkStroke: CoverageStroke {
     /// Thin-film coat buffer for iridescent particle and bristle strokes.
     var film: FilmBuffer?
     private var field: [Float] = []
+    private var limits: [Float] = []
 
     init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?) {
         self.brush = brush
@@ -249,8 +250,11 @@ class MarkStroke: CoverageStroke {
         }
         if let effect {
             if field.count < n * 3 { field = [Float](repeating: 0, count: n * 3) }
-            sampleEffectField(effect, rect, &vals, &field, pen.map(EffectDabPlace.init))
-            coverage.accumulate(rect, vals, opacity, field: field)
+            if limits.count < n { limits = [Float](repeating: 0, count: n) }
+            limits.withUnsafeMutableBufferPointer { l in
+                sampleEffectField(effect, rect, &vals, &field, pen.map(EffectDabPlace.init), limits: l.baseAddress)
+            }
+            coverage.accumulate(rect, vals, opacity, field: field, limits: limits)
         } else {
             let color = markColor(x, y)
             if let color, color.alpha < 1 { for k in 0..<n { vals[k] = Float(Double(vals[k]) * color.alpha) } }

@@ -91,6 +91,7 @@ abstract class MarkStroke implements CoverageStroke {
   protected readonly depth: number;
   private buf = new Float32Array(0);
   private field = new Float32Array(0);
+  private limits = new Float32Array(0);
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
   protected readonly seed: number;
@@ -235,9 +236,11 @@ abstract class MarkStroke implements CoverageStroke {
     }
     if (this.options.effect) {
       if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
+      if (this.limits.length < n) this.limits = new Float32Array(n);
       const field = this.field.subarray(0, n * 3);
-      sampleEffectField(this.options.effect, rect, vals, field, this.pen);
-      this.coverage.accumulate(rect, vals, opacity, null, field);
+      const limits = this.limits.subarray(0, n);
+      sampleEffectField(this.options.effect, rect, vals, field, this.pen, limits);
+      this.coverage.accumulate(rect, vals, opacity, null, field, limits);
     } else {
       const color = this.markColor(x, y);
       if (color && color.alpha < 1) for (let k = 0; k < n; k++) vals[k] *= color.alpha;

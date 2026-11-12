@@ -396,6 +396,7 @@ export class DryStroke {
   private readonly depth: number;
   private buf = new Float32Array(0);
   private field = new Float32Array(0);
+  private limits = new Float32Array(0);
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
 
@@ -471,12 +472,15 @@ export class DryStroke {
       }
     }
     let field: Float32Array | null = null;
+    let limits: Float32Array | null = null;
     if (this.options.effect) {
       if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
+      if (this.limits.length < n) this.limits = new Float32Array(n);
       field = this.field.subarray(0, n * 3);
-      sampleEffectField(this.options.effect, rect, vals, field, d);
+      limits = this.limits.subarray(0, n);
+      sampleEffectField(this.options.effect, rect, vals, field, d, limits);
     }
-    this.coverage.accumulate(rect, vals, m.opacity, null, field);
+    this.coverage.accumulate(rect, vals, m.opacity, null, field, limits);
     if (this.options.film) {
       if (this.brush.engine === 'eraser') this.options.film.erase(rect, vals, m.opacity * this.brush.tip.opacity);
       else if (this.brush.iridescence) this.options.film.deposit(rect, vals, m.opacity * this.brush.tip.opacity, this.brush.iridescence, d.pressure);

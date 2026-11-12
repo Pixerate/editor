@@ -47,6 +47,11 @@ export interface PaintEffectStrokeMap {
   length: number;
   /** Past the strip's end: start again, run back (mirror), or hold the last colour (clamp). */
   repeat: 'repeat' | 'mirror' | 'clamp';
+  /**
+   * The strip's rendered width in px, 16..4096 (default `length`). A host keeps the effect's
+   * proportions across the tip by setting `length` to `width × tip size / EFFECT_STRIP_HEIGHT`.
+   */
+  width?: number;
 }
 
 /** Effect paint whose own path control (`format: 'svg-path'`) receives each stroke's centreline in canvas pixels. */
@@ -137,7 +142,7 @@ export function withStrokePath(paint: PaintEffectPaint, points: readonly { x: nu
 
 /** The size an effect paint renders at: the canvas, or its strip when bent along the stroke. */
 export function effectPaintSize(p: PaintEffectPaint, canvas: { width: number; height: number }): { width: number; height: number } {
-  return p.map?.by === 'stroke' ? { width: p.map.length, height: EFFECT_STRIP_HEIGHT } : { width: canvas.width, height: canvas.height };
+  return p.map?.by === 'stroke' ? { width: p.map.width ?? p.map.length, height: EFFECT_STRIP_HEIGHT } : { width: canvas.width, height: canvas.height };
 }
 
 /** A stroke or path map checked and rounded; throws a sentence naming the bad field. */
@@ -151,7 +156,9 @@ export function readEffectStrokeMap(raw: unknown): PaintEffectMap | undefined {
   if (!(Number.isFinite(length) && length >= 16 && length <= 4096)) throw new Error(`map.length ${JSON.stringify(r.length)} is out of range; use 16..4096 px of stroke per repeat.`);
   const repeat = r.repeat === undefined ? 'repeat' : r.repeat;
   if (!EFFECT_MAP_REPEATS.includes(repeat as never)) throw new Error(`map.repeat ${JSON.stringify(r.repeat)} is not a repeat mode; use ${EFFECT_MAP_REPEATS.join(', ')}.`);
-  return { by: 'stroke', length: Math.round(length), repeat: repeat as PaintEffectStrokeMap['repeat'] };
+  const width = r.width === undefined || r.width === null ? undefined : Number(r.width);
+  if (width !== undefined && !(Number.isFinite(width) && width >= 16 && width <= 4096)) throw new Error(`map.width ${JSON.stringify(r.width)} is out of range; use 16..4096 px of rendered strip.`);
+  return { by: 'stroke', length: Math.round(length), repeat: repeat as PaintEffectStrokeMap['repeat'], ...(width !== undefined ? { width: Math.round(width) } : {}) };
 }
 
 /**
@@ -233,10 +240,11 @@ export function readPaintEffectPaint(raw: unknown): PaintEffectPaint | null {
 
 /**
  * Takes a dab's colours from the effect: fills `field` (sRGB 0..1, 3 per pixel of `rect`, a
- * document rectangle) with the effect's colour at each pixel and multiplies `vals` by its alpha.
- * Pixels off the canvas paint nothing.
+ * document rectangle) with the effect's colour at each pixel. Its alpha goes into `limits` when
+ * given (a per-pixel ceiling for `CoverageBuffer.accumulate`, so overlapping dabs build up to the
+ * effect's own alpha and no further), or else multiplies `vals`. Pixels off the canvas paint nothing.
  */
-export function sampleEffectField(img: EffectPaintPixels, rect: RasterRect, vals: Float32Array, field: Float32Array, dab?: EffectDabPlace | null): void {
+export function sampleEffectField(img: EffectPaintPixels, rect: RasterRect, vals: Float32Array, field: Float32Array, dab?: EffectDabPlace | null, limits?: Float32Array | null): void {
   const { width, height, data } = img;
   if (img.map && dab) {
     for (let yy = 0, k = 0; yy < rect.height; yy++) {
@@ -244,7 +252,8 @@ export function sampleEffectField(img: EffectPaintPixels, rect: RasterRect, vals
         const i = stripIndex(img, img.map, dab, rect.x + xx + 0.5, rect.y + yy + 0.5);
         const f = k * 3;
         const a = data[i + 3];
-        if (a < 255) vals[k] *= a / 255;
+        if (limits) limits[k] = a / 255;
+        else if (a < 255) vals[k] *= a / 255;
         field[f] = data[i] / 255;
         field[f + 1] = data[i + 1] / 255;
         field[f + 2] = data[i + 2] / 255;
@@ -260,12 +269,14 @@ export function sampleEffectField(img: EffectPaintPixels, rect: RasterRect, vals
       const f = k * 3;
       if (!inY || x < 0 || x >= width) {
         vals[k] = 0;
+        if (limits) limits[k] = 0;
         field[f] = field[f + 1] = field[f + 2] = 0;
         continue;
       }
       const i = (y * width + x) * 4;
       const a = data[i + 3];
-      if (a < 255) vals[k] *= a / 255;
+      if (limits) limits[k] = a / 255;
+      else if (a < 255) vals[k] *= a / 255;
       field[f] = data[i] / 255;
       field[f + 1] = data[i + 1] / 255;
       field[f + 2] = data[i + 2] / 255;
