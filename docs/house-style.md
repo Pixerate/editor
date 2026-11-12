@@ -132,6 +132,9 @@ hidden files, no `..` or absolute paths. Files outside the limits are left out w
 total). Skill text reaches models inside `<style_skill>` blocks that name the layer, and text
 that tries to close a block is escaped. For a system prompt, `renderStyleCatalog(await
 styles.list())` lists the skills in a few lines and agents read the detail with `get_style`.
+When an agent will write or edit a skill for one domain, `renderStyleDomain(domain)` gives a
+`<style_domain>` block: where its profile goes, `extends`, the format version, the checks it can
+turn on, an example and the schema (`get_style_schema` returns the same text).
 
 ### `spreadsheet.json` and `diagram.json`
 
@@ -353,6 +356,35 @@ for (const c of styleStoreConformance((seed) => myStore(seed))) it(c.name, c.run
 
 `STYLE_FIXTURE_SKILLS` holds the skills the cases seed: a brand with a reference file, a
 preferences-only skill and a broken one.
+
+### In the browser
+
+`storageStyleStore()` keeps a store in `localStorage` (or any `storage` with `getItem`,
+`setItem` and `removeItem`, such as `sessionStorage`) as one JSON value under one key
+(`pixerate-styles` by default; give each store its own `key`). It can take, save, switch and
+remove skills, so `save_style` and `choose_style` work over it.
+
+```ts
+import { createStyleResolver, storageStyleStore } from '@pixerate/editor/tools';
+
+const user = storageStyleStore({ key: 'acme-user-styles', initial: starterSkills });
+const styles = createStyleResolver({ layers: [{ id: 'org', store: orgStore, locked: true }, { id: 'user', store: user }], domains });
+```
+
+- **Every read checks the value again.** Any script on the page can change browser storage, so
+  names, paths, file types and sizes are checked on each read. What fails is left out, and
+  `problems()` says what and why.
+- **Unreadable data is never overwritten.** A value that is not JSON or not this store's
+  format throws, naming the key, on reads and writes alike, so a later save cannot wipe the
+  user's skills. Remove the key to start again.
+- **Quota.** A site gets about 5 MB. A write past it throws "Browser storage refused the
+  write", which `save_style` reports.
+- **Tabs.** Reads go to storage on every call, so each tab sees the others' writes. Subscribers
+  hear about writes through the store and, where there is a window, other tabs' changes to the
+  key (the `storage` event; `watchOtherTabs: false` turns that off).
+- **`initial`** gives the skills a new user starts with; nothing is written until the first
+  change.
+- **No storage** (a server or worker, or storage blocked) throws on first use; pass `storage`.
 
 ## Adding a style domain (contributors)
 

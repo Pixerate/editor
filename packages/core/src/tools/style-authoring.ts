@@ -18,6 +18,7 @@ import {
 	MAX_STYLE_INHERITANCE_DEPTH,
 	STYLE_SKILL_NAME,
 	brandStyleDomain,
+	escapeStyleBlocks,
 	styleFilePathProblem,
 	type StyleLimits,
 	type StyleProfileMigration,
@@ -233,6 +234,32 @@ export interface ScaffoldStyleSkillOptions {
 	domains: readonly StyleDomain<any>[];
 	/** Name the domains in frontmatter (default: no list, so the skill applies everywhere). */
 	limitDomains?: boolean;
+}
+
+/**
+ * One domain's profile described for a model about to write or edit a skill for it, as a
+ * `<style_domain>` block: what it covers, where its profile goes, whether a variant can extend a
+ * base, the format version, the checks it can turn on, an example and the profile's JSON Schema.
+ * Put it in a system prompt next to {@link renderStyleCatalog}; `get_style_schema` returns it too.
+ */
+export function renderStyleDomain(domain: StyleDomain<any>): string {
+	const checks = styleChecksOf(domain);
+	const version = domain.profileVersion;
+	const example = domain.example ? (version !== undefined ? { version, ...domain.example } : domain.example) : undefined;
+	const lines = [
+		`${domain.title}: ${domain.description}`,
+		'',
+		`Where it goes: ${domain.id}.json in the skill folder, or under a "${domain.id}:" key in the SKILL.md frontmatter (not both). ${domain.id === brandStyleDomain.id ? 'Every domain a skill covers reads its brand.' : `It applies when the skill's frontmatter "domains" includes ${domain.id}, or names none.`}`,
+		'A variant can build on another skill with "extends: <skill>" in its frontmatter and give only the fields that differ; objects merge field by field, lists and values replace.',
+		...(version !== undefined ? [`Version: write "version": ${version} at the top of the profile. Older versions are upgraded when read; newer ones are refused.`] : []),
+		...(checks.length ? ['', 'Checks it can turn on in "checks" (an id, or { "id": ..., options }):', ...checks.map((c) => `- ${c.id}: ${c.description.replace(/\s+/g, ' ').trim()}`)] : []),
+		...(example ? ['', 'Example:', JSON.stringify(example, null, 2)] : []),
+		'',
+		'Schema:',
+		JSON.stringify(styleProfileSchema(domain))
+	];
+	const attr = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+	return `<style_domain id="${attr(domain.id)}" file="${attr(domain.id)}.json"${version !== undefined ? ` version="${version}"` : ''}>\n${escapeStyleBlocks(lines.join('\n'))}\n</style_domain>`;
 }
 
 /** A new style skill's files: SKILL.md with frontmatter and a body to edit, and example profiles. */
