@@ -7,7 +7,8 @@ import type { StyleCheck, StyleDomain, StyleResolver } from '../tools/style.js';
 import { brandColor, brandPalette, type BrandProfile } from '../tools/brand.js';
 import type { ChartSelection, ChartSpec, ChartType } from './types.js';
 import { CHART_PALETTE_SHADES, chartColorDistance, chartContrastRatio, checkChartColors, parseChartColor, shadeChartColor } from './color.js';
-import { chartColorsByCategory, chartSeriesColor, chartSliceColor } from './spec.js';
+import { chartColorsByCategory, chartSeriesColor, chartSliceColor, createChartSpec } from './spec.js';
+import { chartToSvg } from './svg.js';
 import { CHART_COLOR_SCHEMES, CHART_LAYOUT_PRESETS } from './presets.js';
 import type { ChartController } from './controller.js';
 
@@ -190,6 +191,13 @@ export const chartStyleDomain: StyleDomain<ChartSpec> = {
 	},
 	checks: [paletteOnly, distinguishable, minContrast, allowedType],
 	themeFromBrand: (brand) => ({ ...chartStyleFromBrand(brand) }),
+	example: {
+		palette: ['#0b5fff', '#ff6a00', '#12a150'],
+		theme: { text: '#1a1a1a', mutedText: '#5c5c5c', fontFamily: 'Inter, system-ui, sans-serif', fontSize: 12 },
+		defaults: { dataLabels: false, curve: 'smooth' },
+		checks: ['palette-only', 'distinguishable', { id: 'min-contrast', ratio: 4.5 }, { id: 'allowed-type', types: ['bar', 'line', 'area'] }]
+	},
+	preview: (profile) => chartStylePreview(profile),
 	surface: (spec) => ({ colors: chartColors(spec).map((c) => ({ ...c, use: 'series' as const })) })
 };
 
@@ -211,8 +219,26 @@ export function chartStyleFromBrand(brand: BrandProfile): ChartStyleProfile {
 	set('axis', brandColor(brand, 'border'));
 	set('positive', brandColor(brand, 'positive'));
 	set('negative', brandColor(brand, 'negative'));
-	set('fontFamily', brand.fonts?.body ?? brand.fonts?.heading);
+	const font = brand.fonts?.body ?? brand.fonts?.heading;
+	// A brand names one family; charts need a stack that still reads where it is not installed.
+	set('fontFamily', font && !font.includes(',') ? `${/\s/.test(font) ? JSON.stringify(font) : font}, system-ui, sans-serif` : font);
 	return { ...(palette.length ? { palette } : {}), ...(Object.keys(theme).length ? { theme } : {}) };
+}
+
+/** A sample bar chart drawn in a chart profile (palette, theme, defaults), as SVG. */
+export function chartStylePreview(profile: Readonly<Record<string, unknown>>, size: { width: number; height: number } = { width: 560, height: 300 }): string {
+	const spec = createChartSpec({
+		type: 'bar',
+		title: 'Sample: revenue by region',
+		categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+		series: [
+			{ id: 'north', name: 'North', values: [42, 48, 51, 60] },
+			{ id: 'south', name: 'South', values: [30, 35, 33, 41] },
+			{ id: 'west', name: 'West', values: [18, 26, 31, 29] }
+		],
+		...chartStylePatch(profile)
+	} as Partial<ChartSpec>);
+	return chartToSvg(spec, { ...size, theme: (profile as ChartStyleProfile).theme ?? {} });
 }
 
 /** The spec patch that starts a chart in the house style: the palette and the defaults. */

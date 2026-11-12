@@ -39,6 +39,7 @@ export default defineConfig({
     "stickers/index": "src/stickers/index.ts",
     "bridge/index": "src/bridge/index.ts",
     "bridge/cli": "src/bridge/cli.ts",
+    "style-cli/cli": "src/style-cli/cli.ts",
   },
   format: ["esm", "cjs"],
   // Declarations come from `tsc -p tsconfig.build.json` (see the build script): tsup's bundled DTS worker ran out of memory.

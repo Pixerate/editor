@@ -485,7 +485,8 @@
     }
   },
   "bin": {
-    "pixerate-mcp-bridge": "./dist/bridge/cli.js"
+    "pixerate-mcp-bridge": "./dist/bridge/cli.js",
+    "pixerate-style": "./dist/style-cli/cli.js"
   },
   "files": [
     "dist",

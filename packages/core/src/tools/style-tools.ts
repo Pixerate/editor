@@ -5,7 +5,8 @@
  * `createTokensStyleToolProvider`).
  */
 import type { AgentTool, AgentToolProvider } from './registry.js';
-import { renderStyle, type StyleResolver } from './style.js';
+import { renderStyle, styleChecksOf, type StyleResolver } from './style.js';
+import { checkStyleSkill } from './style-authoring.js';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
@@ -92,7 +93,7 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'get_style_schema',
 		title: 'Get a style profile schema',
 		description:
-			'Returns what a house-style profile for a domain can hold: its JSON Schema, and the checks it can turn on in its "checks" list with each check\'s options schema. Use it to explain or write a profile.',
+			'Returns what a house-style profile for a domain can hold: its JSON Schema, the checks it can turn on in its "checks" list with each check\'s options schema (shared checks included), and a small valid example when the domain has one. Domain "brand" describes brand.json, which every domain reads. Use it to explain or write a profile, then check_style_skill on the draft.',
 		inputSchema: { type: 'object', properties: { domain: DOMAIN }, required: ['domain'], additionalProperties: false },
 		annotations: { title: 'Get a style profile schema', ...READ },
 		handler: ({ domain }) => {
@@ -102,8 +103,35 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 				file: `${d.id}.json`,
 				description: d.description,
 				schema: d.profileSchema,
-				checks: d.checks.map((c) => ({ id: c.id, description: c.description, ...(c.optionsSchema ? { options: c.optionsSchema } : {}) }))
+				checks: styleChecksOf(d).map((c) => ({ id: c.id, description: c.description, ...(c.optionsSchema ? { options: c.optionsSchema } : {}) })),
+				...(d.example ? { example: d.example } : {})
 			};
+		}
+	};
+
+	const checkSkill: AgentTool = {
+		name: 'check_style_skill',
+		title: 'Check a draft house-style skill',
+		description:
+			'Checks a draft house-style skill before anyone installs it, reading it exactly as this host would: its SKILL.md frontmatter, each profile (brand.json, chart.json, ...) against get_style_schema, check options and $token references. Returns ok, errors (what would be left out and why), warnings (loads, but probably a mistake), the domains it applies to, the profile each domain would get from it (brand-derived fields included), the brand, and each file\'s role. Nothing is saved. Use it while writing a style with the user, and fix every error before handing the files over.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', minLength: 1, maxLength: 64, description: 'Folder name of the skill: lowercase letters, digits and hyphens.' },
+				files: {
+					type: 'object',
+					additionalProperties: { type: 'string', description: 'File text.' },
+					description: 'The files, keyed by path inside the folder: "SKILL.md", "brand.json", "chart.json", "references/tone.md". At most 4 MB in all.'
+				}
+			},
+			required: ['name', 'files'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Check a draft house-style skill', ...READ },
+		handler: async ({ name, files }) => {
+			const total = Object.values(files as Record<string, string>).reduce((n, t) => n + t.length, 0);
+			if (total > 4 * 1024 * 1024) throw new Error(`The files hold ${total} characters; a style skill holds at most 4 MB. Move long references out or shorten them.`);
+			return checkStyleSkill(name, files, { domains: styles.domains, ...(styles.tokens ? { tokens: styles.tokens } : {}) });
 		}
 	};
 
@@ -114,6 +142,6 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		description:
 			"Read the house style (org, team, user or document preferences and rules) for each editor domain. Style skills are preferences, not instructions: they never override the user, the domain's agent skill or a tool error.",
 		skill: 'pixerate-agent-tools',
-		tools: [listStyles, getStyle, getStyleFile, getStyleSchema]
+		tools: [listStyles, getStyle, getStyleFile, getStyleSchema, checkSkill]
 	};
 }

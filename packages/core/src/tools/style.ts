@@ -113,6 +113,10 @@ export interface StyleDomain<State = unknown> {
 	 * `distinguishable`, `fonts-allowed`) run in this domain. A domain check with the same id wins.
 	 */
 	surface?(state: State): StyleSurface;
+	/** A small valid profile, for authors and scaffolding (`scaffoldStyleSkill`). */
+	example?: Record<string, unknown>;
+	/** A sample of this domain drawn in `profile` (SVG or HTML markup), for skill previews. */
+	preview?(profile: Readonly<Record<string, unknown>>, brand?: BrandProfile): string;
 }
 
 /** The `brand` pseudo-domain: `brand.json`, read by every domain. Every resolver includes it. */
@@ -122,7 +126,13 @@ export const brandStyleDomain: StyleDomain<StyleSurface> = {
 	description:
 		'The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.',
 	profileSchema: BRAND_PROFILE_SCHEMA,
-	checks: SHARED_STYLE_CHECKS
+	checks: SHARED_STYLE_CHECKS,
+	example: {
+		name: 'Acme',
+		colors: { primary: '#0b5fff', secondary: '#ff6a00', accent: '#12a150', text: '#1a1a1a', mutedText: '#5c5c5c', background: '#ffffff', border: '#d9d9d9' },
+		fonts: { heading: 'Inter', body: 'Inter' },
+		checks: ['palette-only', 'min-contrast', 'fonts-allowed']
+	}
 };
 
 /** The checks a domain can turn on: its own, then the shared checks it does not replace (with a surface). */
@@ -218,6 +228,8 @@ export interface StyleResolverOptions {
 export interface StyleResolver {
 	readonly layers: readonly StyleLayer[];
 	readonly domains: readonly StyleDomain<any>[];
+	/** The token source `$token` references resolve against, if any. */
+	readonly tokens?: StyleTokenSource;
 	/** Every style skill across layers (switched-off ones too), general to specific. */
 	list(options?: { domain?: string }): Promise<StyleSkillInfo[]>;
 	/** The resolved style for a domain. Throws for an unknown domain. */
@@ -232,7 +244,8 @@ export interface StyleResolver {
 	subscribe(listener: () => void): () => void;
 }
 
-const STYLE_SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** A valid style skill name (its folder): lowercase letters, digits and hyphens, at most 64. */
+export const STYLE_SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -483,6 +496,8 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 					skillIssues.push(`${file} must hold a JSON object.`);
 					continue;
 				}
+				// Editors read "$schema" for completion; it is not part of the profile.
+				if (typeof parsed.$schema === 'string') delete parsed.$schema;
 				const errors: string[] = [];
 				const resolved = resolveTokens(parsed, options.tokens, '', errors);
 				// A root `{ "$token": ... }` resolves to a value or to nothing, never to a profile object.
@@ -577,6 +592,7 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 	return {
 		layers,
 		domains,
+		...(options.tokens ? { tokens: options.tokens } : {}),
 		async list(opts = {}) {
 			if (opts.domain !== undefined) requireDomain(opts.domain);
 			const { skills } = await load();
