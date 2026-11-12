@@ -799,7 +799,9 @@ public struct ChartSpec: Sendable, Equatable {
     }
 
     public func toJSON() -> JSONValue {
-        return .object(JSONObject([
+        // Built as a typed list and appended to: one long literal joined with the optional
+        // `view3d` entry is too much for the type checker in CI.
+        var fields: [(String, JSONValue)] = [
             ("version", .number(Double(version))),
             ("type", .string(type.rawValue)),
             ("title", .string(title)),
@@ -843,7 +845,9 @@ public struct ChartSpec: Sendable, Equatable {
             ("map", .string(map)),
             ("mapSteps", .number(Double(mapSteps))),
             ("mapThresholds", .array(mapThresholds.map(JSONValue.number)))
-        ] + (view3d.map { [("view3d", $0.toJSON())] } ?? [])))
+        ]
+        if let view3d { fields.append(("view3d", view3d.toJSON())) }
+        return .object(JSONObject(fields))
     }
 
     public init(json: JSONValue) {
