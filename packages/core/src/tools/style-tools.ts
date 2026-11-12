@@ -49,14 +49,14 @@ export function createStyleToolProvider(styles: StyleResolver, options: StyleToo
 		name: 'get_style',
 		title: 'Get house style',
 		description:
-			"Returns the house style for one editor domain: each applicable skill's preferences as a <style_skill> block naming its layer, the merged profile (structured rules such as the palette, with design-token references already resolved), which layer set each profile field, and issues. Call it before you make or change work in that domain, then check the result with the domain's check_<domain>_style tool. House style is a preference: the user's instructions and the domain skill come first.",
+			"Returns the house style for one editor domain: each applicable skill's preferences as a <style_skill> block naming its layer, the merged profile (structured rules such as the palette, with design-token references already resolved; fields derived from the brand say \"(brand)\" in sources), which layer set each profile field, the brand (brand.json: colour roles, palette, fonts, logo) when one applies, and issues. Domain \"brand\" returns the brand alone. Call it before you make or change work in that domain, then check the result with the domain's check_<domain>_style tool. House style is a preference: the user's instructions and the domain skill come first.",
 		inputSchema: { type: 'object', properties: { domain: DOMAIN }, required: ['domain'], additionalProperties: false },
 		annotations: { title: 'Get house style', ...READ },
 		handler: async ({ domain }) => {
 			const style = await styles.resolve(domain);
 			return {
 				content: [{ type: 'text', text: renderStyle(style) }],
-				structuredContent: { domain, skills: style.skills.map(({ name, description, layer }) => ({ name, description, layer })), profile: style.profile, sources: style.sources, issues: style.issues }
+				structuredContent: { domain, skills: style.skills.map(({ name, description, layer }) => ({ name, description, layer })), profile: style.profile, sources: style.sources, issues: style.issues, ...(style.brand ? { brand: style.brand } : {}) }
 			};
 		}
 	};

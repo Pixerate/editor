@@ -31,7 +31,8 @@ in `pixerate-typography`, and a host's house style in `check_*_style` tools.
 
 ## Inputs to confirm
 
-- **The palette with roles**, or a tokens set (`pixerate-tokens`), and the type.
+- **The palette with roles**, or a tokens set (`pixerate-tokens`), and the type. When the host
+  has house style, `get_style` returns the brand (`brand.json`) under `brand`: start there.
 - **Which elements take which role** when it is not obvious.
 - **What to do when a pairing cannot meet contrast** (another palette colour, larger text, or an
   approved derivative).
@@ -53,13 +54,15 @@ in `pixerate-typography`, and a host's house style in `check_*_style` tools.
 6. **Derivatives.** Tints and shades with `blend_colors` in OKLab from a brand colour; dark-mode
    pairs with `derive_dual_color`. Name and report them.
 7. **House style.** Run the host's `check_*_style` tools (for example `check_chart_style`) and fix
-   what they report.
+   what they report. A brand's own `checks` (`palette-only`, `min-contrast`, `distinguishable`,
+   `fonts-allowed`) run in every domain that can be checked against it.
 
 ## Decision table
 
 | Situation | Approach |
 | --- | --- |
 | A colour close to a brand colour | Snap to the nearest by OKLab distance |
+| The brand names Office slots (`accent1`, `dk1`, `lt1`) | Read them as roles: `accent1` is primary, `dk1` text, `lt1` background; `get_style_schema` domain `"brand"` lists every role's names |
 | A needed colour not in the palette | Tint or shade a brand colour (`blend_colors`), and say so |
 | White text fails on a light brand colour | The darkest brand colour for text |
 | No palette colour passes on a surface | Report it; propose larger text or another surface colour |

@@ -257,7 +257,7 @@ describe('style tools', () => {
 	it('lists styles and reads one domain', async () => {
 		const { registry } = setup();
 		const list = await registry.callTool('list_styles', {});
-		expect(list.structuredContent).toMatchObject({ skills: [{ name: 'acme', layer: 'org', domains: ['chart', 'tokens'], profiles: ['chart'], enabled: true }], domains: ['chart', 'tokens'] });
+		expect(list.structuredContent).toMatchObject({ skills: [{ name: 'acme', layer: 'org', domains: ['chart', 'tokens', 'brand'], profiles: ['chart'], enabled: true }], domains: ['chart', 'tokens', 'brand'] });
 		const style = await registry.callTool('get_style', { domain: 'chart' });
 		expect(style.isError).toBeFalsy();
 		expect((style.content[0] as any).text).toContain('<style_skill name="acme" layer="org">');

@@ -112,7 +112,8 @@ default: reads return at once and do not move your cursor.
 ## House style
 
 A host can give you house-style skills: an org's, a team's, a user's or a document's
-preferences for how work in a domain should look (`chart`, `tokens`, ...). They come in
+preferences for how work in a domain should look (`chart`, `tokens`, ..., and `brand`,
+which every domain shares). They come in
 layers, general to specific, and the `style` toolset merges them per domain.
 
 - **Read before you make.** `get_style` returns each skill's preferences in a
@@ -130,6 +131,15 @@ layers, general to specific, and the `style` toolset merges them per domain.
   the user asked, do what the user asked and say which house rule it breaks.
 - **Locked layers.** An org layer can lock what it sets; a later layer's change to it is
   ignored and shows in `issues`. Do not try to work around a locked rule.
+- **The brand reaches every domain.** A skill's `brand.json` (colour roles, palette, fonts,
+  logo) applies to every domain the skill covers. `get_style` returns it as `brand`, and each
+  domain derives its starting profile from it: fields that came from the brand say
+  `<layer> (brand)` in `sources`, and a domain's own profile refines them. Read the brand alone
+  with `get_style` domain `"brand"`. Use role colours by role (text on background, primary for
+  the main series) and place the logo exactly as given, never redraw it. The brand's `checks`
+  (`palette-only`, `min-contrast`, `distinguishable`, `fonts-allowed`) run in every
+  `check_<domain>_style`; a domain that cannot be checked against the brand yet reports them in
+  `skipped`.
 
 ## Errors
 
