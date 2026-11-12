@@ -78,7 +78,7 @@ describe('brand roles', () => {
 	it('gives charts a palette and theme from the brand', () => {
 		expect(chartStyleFromBrand(ACME)).toEqual({
 			palette: ['#0b5fff', '#ff6a00', '#12a150'],
-			theme: { background: '#ffffff', surface: '#ffffff', text: '#111111', grid: '#d0d0d0', axis: '#d0d0d0', fontFamily: 'Source Serif' }
+			theme: { background: '#ffffff', surface: '#ffffff', text: '#111111', grid: '#d0d0d0', axis: '#d0d0d0', fontFamily: '"Source Serif", system-ui, sans-serif' }
 		});
 		expect(chartStyleFromBrand({})).toEqual({});
 	});

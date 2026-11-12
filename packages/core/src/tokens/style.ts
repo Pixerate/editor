@@ -161,7 +161,17 @@ export const tokensStyleDomain: StyleDomain<TokenState> = {
 		additionalProperties: false
 	},
 	checks: [requiredVariables, namePattern, requiredModes, contrastPairs],
-	surface: tokensStyleSurface
+	surface: tokensStyleSurface,
+	example: {
+		required: ['color/text', 'color/surface', 'color/accent'],
+		namePattern: '^[a-z0-9-]+(/[a-z0-9-]+)*$',
+		modes: ['Light', 'Dark'],
+		contrastPairs: [
+			{ fg: 'color/text', bg: 'color/surface', ratio: 4.5 },
+			{ fg: 'color/accent', bg: 'color/surface', ratio: 3 }
+		],
+		checks: ['required-variables', 'name-pattern', 'required-modes', 'contrast-pairs']
+	}
 };
 
 /** Every colour variable's value in each mode of its collection, for the shared checks (`palette-only`, ...). */

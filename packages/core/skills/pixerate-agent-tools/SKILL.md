@@ -131,6 +131,10 @@ layers, general to specific, and the `style` toolset merges them per domain.
   the user asked, do what the user asked and say which house rule it breaks.
 - **Locked layers.** An org layer can lock what it sets; a later layer's change to it is
   ignored and shows in `issues`. Do not try to work around a locked rule.
+- **Writing a style with the user.** Start from `get_style_schema` (its `example`), put
+  preferences in `SKILL.md` (frontmatter `name`, a `description` saying when it applies, an
+  optional `domains` list) and structured rules in one profile per domain, with the brand in
+  `brand.json`. Run `check_style_skill` on the draft until `ok` is true; the host installs it.
 - **The brand reaches every domain.** A skill's `brand.json` (colour roles, palette, fonts,
   logo) applies to every domain the skill covers. `get_style` returns it as `brand`, and each
   domain derives its starting profile from it: fields that came from the brand say
@@ -169,7 +173,8 @@ Never repeat an identical failing call. Never work around a read-only refusal; t
 | `list_styles` | See the house-style skills here, general layer first: name, description, layer, the domains each applies to, which have a profile, whether each is on, and issues that leave all or part of one out. Pass `domain` to see one domain's. Follow with `get_style`. |
 | `get_style` | Read the house style for a `domain` before you make or change work there: each skill's preferences as a `<style_skill>` block naming its layer, the merged profile (tokens resolved), `sources` (which layer set each field) and `issues`. Then check your work with the domain's `check_<domain>_style`. |
 | `get_style_file` | Read one file of a house-style skill (`name`, `file`), such as a `references/*.md` its preferences point to, or its raw profile (`chart.json`) before tokens are resolved. An unknown file fails with the list of its files. |
-| `get_style_schema` | See what a domain's profile can hold: its JSON Schema and the checks it can turn on (with each check's options). Use it to explain a profile to the user or to write one. |
+| `get_style_schema` | See what a domain's profile can hold: its JSON Schema, the checks it can turn on (shared checks included, with each check's options) and a valid `example`. Domain `"brand"` describes `brand.json`. Use it to explain a profile to the user or to write one, then `check_style_skill`. |
+| `check_style_skill` | Check a draft style skill you are writing with the user (`name`, `files` keyed by path: `SKILL.md`, `brand.json`, `chart.json`, `references/*.md`) exactly as this host would load it. Returns `ok`, `errors` (what would be left out and why), `warnings`, the domains it applies to, the profile each domain would get and the brand. Saves nothing; fix every error before handing the files over. |
 | `list_commands` | Discover the commands an editor registers: id, label, group, params JSON Schema, shortcuts, and whether each is enabled now (with the reason when it is not). Filter with `query`; pass `enabledOnly: true` to see only what you can run now. |
 | `run_command` | Run one command by `id` with `params` matching its schema. Disabled commands and unknown params fail with a reason; read it before retrying. |
 | `run_commands` | Run several commands in order as `steps`. A param string `"$0.id"` or `"$last.id"` is replaced by that path of an earlier step's result, so a step can use an id an earlier step created. Pass `atomic: true` and a `label` to make the batch one undo step that rolls back entirely on failure; without it, steps before a failure stay applied. |

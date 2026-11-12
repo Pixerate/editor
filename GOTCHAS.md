@@ -4576,3 +4576,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A brand's `palette-only` check gives different findings in `check_chart_style` than in a new domain's check tool, or a shared check throws `Cannot read properties of undefined` when a domain calls `check.run(state, ...)` itself.
 - **Root Cause**: `SHARED_STYLE_CHECKS` take a `StyleSurface` (from `StyleDomain.surface(state)`), not the domain's state, and `styleChecksOf(domain)` lists a domain's own checks first: chart keeps its own `palette-only`, `distinguishable` and `min-contrast` (with palette shades and chart-specific targets), so only `fonts-allowed` comes from the shared set there.
 - **Solution / Workaround**: Run checks through `resolver.check(domain, state)` / `runStyleChecks`, which build the surface lazily and pick the right `run` signature. When adding a domain, implement `surface` (and `themeFromBrand` for a branded default), and only add a same-id check when the shared one cannot target the domain's edits well. Derived brand fields are defaults, never locked: a domain profile at any layer refines them.
+
+### [core/style] A Brand Font Needs a Fallback Stack Before It Reaches a Chart Theme
+
+- **Issue / Symptom**: A chart derived from `brand.json` (`fonts.body: "Inter"`) drew its labels in a serif face in the `pixerate-style preview` page and in SVG exports on machines without Inter.
+- **Root Cause**: A brand names one family, but SVG `font-family` with a single unavailable family falls back to the user agent's default, which is a serif.
+- **Solution / Workaround**: `chartStyleFromBrand` turns a single family into a stack (`Inter, system-ui, sans-serif`, quoting names with spaces); a brand font that is already a stack is kept as is. Do the same in any `themeFromBrand` that writes a CSS font family.
