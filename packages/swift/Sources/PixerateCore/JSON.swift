@@ -91,6 +91,20 @@ extension JSONValue {
 
     /// The member `key` of an object, or `nil`.
     public subscript(key: String) -> JSONValue? { objectValue?[key] }
+
+    /// The value as `JSON.parse(JSON.stringify(value))` gives it back: NaN and ±Infinity (which a
+    /// document may hold in memory, as TS objects do) become `null`; everything else is unchanged.
+    public var asJSON: JSONValue {
+        switch self {
+        case .number(let n): return n.isFinite ? self : .null
+        case .array(let a): return .array(a.map(\.asJSON))
+        case .object(let o):
+            var out = JSONObject()
+            for (k, v) in o { out[k] = v.asJSON }
+            return .object(out)
+        default: return self
+        }
+    }
 }
 
 // MARK: - Parsing

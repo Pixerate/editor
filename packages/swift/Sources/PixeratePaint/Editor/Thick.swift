@@ -800,16 +800,99 @@ func thickToJSON(_ ch: ThickChannels) -> JSONValue? {
     return .object(out)
 }
 
-/// The layer-space origin of a saved channel's `rect` (`{ x, y, … }`), or nil when it has none.
-func savedRectOrigin(_ rect: JSONValue?) -> (x: Int, y: Int)? {
-    guard let r = rect?.objectValue, let x = r["x"]?.finite, let y = r["y"]?.finite,
-          abs(x) < 1e9, abs(y) < 1e9 else { return nil }
-    return (Int(x), Int(y))
+/// `Number(v)` of a saved value (ToNumber): null 0, booleans 0 / 1, strings and arrays through their text, objects NaN.
+func jsToNumber(_ v: JSONValue) -> Double {
+    switch v {
+    case .null: return 0
+    case .bool(let b): return b ? 1 : 0
+    case .number(let n): return n
+    case .string(let s): return s.jsToNumber
+    case .array: return jsTemplate(v).jsToNumber
+    case .object: return .nan
+    }
+}
+
+/// One coordinate of a saved channel's `rect` as `surfaceFromPixels(…, rect.x, rect.y)` uses it
+/// unchecked: where it starts (`Number(x)`) and where `x + width` ends (a string, array or object
+/// concatenates: `"1" + 2` is `"12"`). A missing coordinate is the parameter's default, 0.
+private func savedCoordinate(_ v: JSONValue?, _ size: Int) -> (start: Double, end: Double) {
+    guard let v else { return (0, Double(size)) }
+    switch v {
+    case .string, .array, .object: return (jsToNumber(v), (jsTemplate(v) + jsText(Double(size))).jsToNumber)
+    default:
+        let n = jsToNumber(v)
+        return (n, n + Double(size))
+    }
+}
+
+/// `subarray`'s relative index: truncated toward zero (NaN 0), counted from the end when negative, clamped to `count`.
+private func relativeIndex(_ v: Double, _ count: Int) -> Int {
+    let t = v.isNaN ? 0 : v.rounded(.towardZero)
+    if t < 0 { return Int(Swift.max(Double(count) + t, 0)) }
+    return Int(Swift.min(t, Double(count)))
+}
+
+/**
+ * `surfaceFromPixels(pixels, channels, rect.x, rect.y)` with a saved channel's `rect` read as the
+ * TS core reads it, unchecked (`writeRegion` in doubles): a missing or `null` coordinate is 0, a
+ * boolean 0 or 1, a fractional one writes at the offsets typed-array `set` truncates to, a string
+ * concatenates, and NaN writes nothing. Throws "offset is out of bounds" where `set` would.
+ */
+func surfaceAtSavedRect(_ rect: JSONValue?, width w: Int, height h: Int, data: [UInt8], channels ch: Int) throws -> TiledSurface {
+    let r = rect?.objectValue
+    let (x, xEnd) = savedCoordinate(r?["x"], w)
+    let (y, yEnd) = savedCoordinate(r?["y"], h)
+    return try surfaceAtCoordinates(x: x, xEnd: xEnd, y: y, yEnd: yEnd, width: w, height: h, data: data, channels: ch)
+}
+
+/// `writeRegion(emptySurface(ch), { x, y, width, height }, data)` in doubles, with `rect.x + width` given as `xEnd`.
+func surfaceAtCoordinates(x: Double, xEnd: Double, y: Double, yEnd: Double, width w: Int, height h: Int, data: [UInt8], channels ch: Int) throws -> TiledSurface {
+    let surface = emptySurface(ch, 0)
+    if w <= 0 || h <= 0 { return surface }
+    let T = Double(TILE)
+    let tx0 = JS.floor(x / T), ty0 = JS.floor(y / T)
+    let tx1 = JS.floor((xEnd - 1) / T), ty1 = JS.floor((yEnd - 1) / T)
+    // Tile keys are exact in doubles up to here (`tileKey`); TS goes on past it with rounded keys.
+    let limit = 1e10
+    if Swift.abs(tx0) > limit || Swift.abs(tx1) > limit || Swift.abs(ty0) > limit || Swift.abs(ty1) > limit {
+        throw PaintEditorError("the channel lies too far off the canvas to read")
+    }
+    let draft = SurfaceDraft(surface)
+    let tilePixels = TILE * TILE
+    var ty = ty0
+    while ty <= ty1 {
+        var tx = tx0
+        while tx <= tx1 {
+            let ox = tx * T, oy = ty * T
+            let x0 = JS.max(x, ox), y0 = JS.max(y, oy)
+            let x1 = JS.min(xEnd, ox + T), y1 = JS.min(yEnd, oy + T)
+            let full = x0 == ox && y0 == oy && x1 == ox + T && y1 == oy + T
+            let buf = full ? TileBuffer([UInt8](repeating: 0, count: tilePixels * ch)) : draft.tile(Int(tx), Int(ty))
+            let span = (x1 - x0) * Double(ch)
+            var yy = y0
+            while yy < y1 {
+                let s = ((yy - y) * Double(w) + (x0 - x)) * Double(ch)
+                let d = ((yy - oy) * T + (x0 - ox)) * Double(ch)
+                let begin = relativeIndex(s, data.count)
+                let end = relativeIndex(s + span, data.count)
+                let count = Swift.max(end - begin, 0)
+                let offset = d.isNaN ? 0 : d.rounded(.towardZero)
+                if offset < 0 || Double(count) + offset > Double(buf.data.count) { throw PaintEditorError("offset is out of bounds") }
+                let o = Int(offset)
+                for k in 0 ..< count { buf.data[o + k] = data[begin + k] }
+                yy += 1
+            }
+            if full { draft.replace(Int(tx), Int(ty), buf.data) }
+            tx += 1
+        }
+        ty += 1
+    }
+    return draft.commit()
 }
 
 /// Saved form → channels (`thickFromJSON`); throws a sentence when it cannot be read.
 func thickFromJSON(_ raw: JSONValue) throws -> ThickChannels {
-    guard let r = raw.objectValue, let o = savedRectOrigin(r["rect"]),
+    guard let r = raw.objectValue, jsTruthy(r["rect"]),
           let heightUrl = r["height"]?.stringValue, let materialUrl = r["material"]?.stringValue
     else { throw PaintEditorError("not saved thick-paint channels") }
     func decode(_ url: String, _ gray: Bool) throws -> DecodedPng {
@@ -822,11 +905,11 @@ func thickFromJSON(_ raw: JSONValue) throws -> ThickChannels {
     var film = emptySurface(4, 0)
     if let filmUrl = r["film"]?.stringValue {
         let f = try decode(filmUrl, false)
-        film = surfaceFromPixels(width: f.width, height: f.height, data: f.data, channels: 4, x: o.x, y: o.y)
+        film = try surfaceAtSavedRect(r["rect"], width: f.width, height: f.height, data: f.data, channels: 4)
     }
     return ThickChannels(
-        height: surfaceFromPixels(width: h.width, height: h.height, data: hd, channels: 1, x: o.x, y: o.y),
-        material: surfaceFromPixels(width: m.width, height: m.height, data: m.data, channels: 4, x: o.x, y: o.y),
+        height: try surfaceAtSavedRect(r["rect"], width: h.width, height: h.height, data: hd, channels: 1),
+        material: try surfaceAtSavedRect(r["rect"], width: m.width, height: m.height, data: m.data, channels: 4),
         film: film
     )
 }

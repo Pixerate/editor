@@ -1145,7 +1145,10 @@ func closestStickerRefs(_ wanted: String, _ candidates: [String], _ n: Int = 3) 
         }
         return w.isEmpty ? b.count : d[b.count]
     }
-    return candidates.map { ($0, dist(Array($0.lowercased().utf16))) }.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 < $1.0 }.prefix(n).map(\.0)
+    // Typed steps: the one-line chain took seconds to type-check (CI's limit is close).
+    let scored: [(String, Int)] = candidates.map { (c: String) -> (String, Int) in (c, dist(Array(c.lowercased().utf16))) }
+    let sorted: [(String, Int)] = scored.sorted { (a: (String, Int), b: (String, Int)) -> Bool in a.1 != b.1 ? a.1 < b.1 : a.0 < b.0 }
+    return sorted.prefix(n).map { (p: (String, Int)) -> String in p.0 }
 }
 
 /// Parses a ref strictly (`parseStickerRef` in `stickers/helpers.ts`), throwing what is wrong.

@@ -39,6 +39,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The spray's spacing and scatter were fractions of the sticker's diameter, so both grew without limit with the size.
 - **Solution / Workaround**: Both scale with `min(diameter, STICKER_REACH)` (64 px), and `PenDabWalker.layEnd` lays a last sticker at the stroke's end. Keep any change to these in step in `paint-editor/stickers.ts` and `Stickers/Stickers.swift`: the conformance scenario `sticker-large-sizes` records the positions.
 
+### [swift] CI Fails With "Unable to Type-Check This Expression in Reasonable Time" When Local Builds Pass
+
+- **Issue / Symptom**: `swift build` passes locally, but a CI job (Swift macOS tests or the demo app) fails with `error: the compiler is unable to type-check this expression in reasonable time`. Seen on a one-line `PenPoint(...)` map in a test and on a byte-assembly `|`/`<<` chain in `Deserialize.swift`.
+- **Root Cause**: The type checker's time limit is wall-clock, and the CI runners are slower than a developer Mac. Long untyped closures mixing integer literals, `Double(...)`, `sin`, `.pi` or several `|`/`<<` operators sit just under the limit locally and over it on CI.
+- **Solution / Workaround**: Break such expressions into `let` steps with explicit types, and give closures explicit parameter and return types. To find them before pushing, build with `-Xswiftc -Xfrontend -Xswiftc -warn-long-expression-type-checking=1000` and fix any expression it reports.
+
 ### [swift] A `nil` in a Ternary Becomes `JSONValue.null`
 
 - **Issue / Symptom**: After a source edit dropped an authored effect's paint hint, the exported Swift document had `"paint": null`, and reopening it was refused (`/paint: must be an object`); TS left the field out.
@@ -84,8 +90,20 @@ All contributors and AI assistants should check this file before starting work a
 ### [swift/paint] Save → Load Conformance: Clocks, Asset Hashes and Fields Swift Doesn't Model
 
 - **Issue / Symptom**: Adding a `reload` step to every paint scenario (save, then `loadJSON`, then compare the document) failed in three ways that were not loader bugs. (1) `culture` was not deterministic between two TS runs. (2) `culture-replay` matched pixels within tolerance but its document differed in one asset reference. (3) A hand-written wet event with a field outside `data` came back in TS but not in Swift.
-- **Root Cause**: (1) `cultures.lastGrownAt` is wall-clock time, written on save when `growWhileClosed` is on. (2) Editor-document asset references are content hashes of the PNG bytes (`pixerate-asset:<len>-<hash>`), so a layer one level off anywhere changes the reference even though pixel comparison tolerates it. (3) TS keeps a saved event object verbatim; Swift's `WetEvent` / `PaintEvent` keep only the fields they model (`clock`, `at`, `kind`, `layerId`, `data`).
+- **Root Cause**: (1) `cultures.lastGrownAt` is wall-clock time, written on save when `growWhileClosed` is on. (2) Editor-document asset references are content hashes of the PNG bytes (`pixerate-asset:<len>-<hash>`), so a layer one level off anywhere changes the reference even though pixel comparison tolerates it. (3) TS keeps a saved event object verbatim; Swift's `WetEvent` / `PaintEvent` kept only the fields they model (`clock`, `at`, `kind`, `layerId`, `data`). They now keep the object they were read from (`saved`) and write it back with only changed fields set over it, as `{ ...e, data }` does (#742).
 - **Solution / Workaround**: Leave `document` off a reload step whose document carries a clock (`culture`) or whose pixels already differ within tolerance (`culture-replay`); keep `pixels` and `expect.loaded` on it. Write test documents in the schema's shape (event payloads under `data`). Any other document difference after a reload is a real loader gap. The cross-implementation comparison only proves a feature survives saving because each side also checks its own save → load → save at every reload step (the save after reopening equals the save opened, same pixels; `lastGrownAt` aside): `reopens what it saved unchanged` in `paint-conformance.test.ts` and `RoundTripHost` in `PaintConformanceTests.swift`. Those also cover the two reload steps without a document comparison.
+
+### [swift/paint] Saved Channel Rects Are Read Unchecked: `"1" + 2` Is `"12"`
+
+- **Issue / Symptom**: A saved `light` / `fluor` / `thermo` / `layerChannels` / `ferro` channel whose `rect` had a missing, `null`, boolean, fractional or text coordinate (or was not an object at all) loaded in TS but was refused in Swift ("not a saved light channel").
+- **Root Cause**: TS checks only that `rect` is truthy and passes `rect.x` / `rect.y` straight to `surfaceFromPixels`, so `writeRegion` runs in JavaScript arithmetic: a missing coordinate takes the parameter default 0, `null` is 0, `true` is 1, a string concatenates in `rect.x + width` (`"1" + 2` is `"12"`, so the rows run 11 pixels wide and read past each source row), a fractional one writes where typed-array `subarray` / `set` truncate their indices, and `set` can throw "offset is out of bounds".
+- **Solution / Workaround**: `surfaceAtSavedRect` (`Editor/Thick.swift`) runs `writeRegion` in doubles with those rules (`surfaceAtCoordinates`; culture occupancy uses it with `Math.round`ed coordinates, where NaN writes nothing). Tile coordinates past ±10¹⁰ are still refused: TS goes on there with rounded tile keys. `document-load-readers` records the cases.
+
+### [swift] A Paint Document Can Hold NaN in Memory; Compare It as JSON
+
+- **Issue / Symptom**: After a culture tip with a field that is not a number loaded, Swift's save → load → save check failed (`null` came back as 0), and the recorded document compared unequal although both printed `null`.
+- **Root Cause**: TS reads the field as NaN (`Math.round(undefined)`) and keeps it; `toJSON()` returns an object, so a reload in the same session sees NaN again, and only `JSON.stringify` prints it as `null`. `JSONValue.number(.nan)` is not equal to itself or to `.null`.
+- **Solution / Workaround**: `CultureTip.nonFinite` keeps the NaN / ±Infinity bit patterns and `json` writes them as numbers (which print as `null`). Conformance values are compared as `JSON.parse(JSON.stringify(v))` would give them: `normalizeConformanceValue` and the round-trip host use `JSONValue.asJSON` (non-finite numbers become `null`).
 
 ### [swift/paint] `loadJSON` Pairs With `toJSON`, Not `editorDocument()`
 
