@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "style-token-root",
-  "description": "A chart.json that is itself a token reference has nothing to resolve it with; the TS resolver then fails to load the profile, and check_chart_style returns that error.",
+  "description": "A chart.json that is itself a token reference has nothing to resolve it with, so the profile is left out with an issue (#768) and check_chart_style still runs.",
   "setup": {
     "width": 640,
     "height": 400,
@@ -32,12 +32,18 @@
       "arguments": {},
       "expect": {
         "result": {
-          "error": {
-            "code": "tool_failed",
-            "message": "Cannot destructure property 'checks' of 'resolved' as it is undefined."
-          }
-        },
-        "isError": true
+          "findings": [],
+          "issues": [
+            {
+              "layer": "org",
+              "message": "chart.json is left out: profile: \"house/chart\" is a token reference, but this host has no design tokens to resolve it.",
+              "skill": "house"
+            }
+          ],
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
       }
     }
   ]

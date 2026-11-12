@@ -45,11 +45,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `tools/schema.ts` tests `key in properties`, and `properties` is a plain object, so inherited names count as declared; it then validates the value against a function, which checks nothing. (`required: ["toString"]` is likewise always met.)
 - **Solution / Workaround**: Swift's `validateJSONSchema` skips those twelve names (`OBJECT_PROTOTYPE_NAMES` in `Schema.swift`) to match. The `required` case is not mirrored (no schema requires such a name). A TS fix (`Object.hasOwn(properties, key)`) must change both.
 
-### [core|swift/chart] A House-Style Profile That Is Itself a `$token` Reference Throws While Loading
+### [core|swift/chart] A House-Style Profile That Is Itself a `$token` Reference
 
-- **Issue / Symptom**: With `chart.json` set to `{ "$token": "…" }`, every `createStyleResolver` call (`check_chart_style`, `get_style`) fails with `Cannot destructure property 'checks' of 'resolved' as it is undefined.`
-- **Root Cause**: `resolveTokens` turns a root token reference into `undefined`, and `const { checks, ...rest } = resolved` cannot destructure it, so the profile is never left out with an issue like other bad profiles.
-- **Solution / Workaround**: The Swift `ChartStyleResolver(skill:layer:chartJson:)` records the same message as `loadFailure` and `check_chart_style` throws it (`style-token-root` scenario). A TS fix would report it as `chart.json is left out: profile: …` instead.
+- **Issue / Symptom**: With `chart.json` set to `{ "$token": "…" }`, every `createStyleResolver` call (`check_chart_style`, `get_style`) used to fail with `Cannot destructure property 'checks' of 'resolved' as it is undefined.` (#768).
+- **Root Cause**: `resolveTokens` turns a root token reference into `undefined` (or into a scalar such as a colour), and `const { checks, ...rest } = resolved` assumed an object.
+- **Solution / Workaround**: The loader checks the resolved value is a plain object first. Unresolved, the profile is left out as `chart.json is left out: profile: …`; resolved to a scalar, as `chart.json must hold a JSON object; its token reference resolves to …`. Swift's `loadChartStyleProfile` does the same (scenario `style-token-root`); its `loadFailure` throw path is gone. Root-level token errors say `profile`, not an empty path.
 
 ### [swift] Two ZIP Readers: `readZip` (`import/zip.ts`) and `readBrushZip` (`brushes/import/zip.ts`)
 

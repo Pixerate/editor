@@ -87,8 +87,6 @@ public final class ChartStyleResolver: @unchecked Sendable {
     public var styleIssues: [JSONValue]
     /// Whether a style skill applies to charts (without one, `check_chart_style` adds a note).
     public var hasSkills: Bool
-    /// The error the TS resolver throws while loading the profile, which `check_chart_style` returns.
-    public var loadFailure: String?
 
     public init(profile: JSONObject = JSONObject(), layer: String? = "org", styleIssues: [JSONValue] = []) {
         self.profile = profile
@@ -108,7 +106,6 @@ public final class ChartStyleResolver: @unchecked Sendable {
         self.layer = self.profile["checks"] != nil ? layer : nil
         self.styleIssues = issues
         self.hasSkills = true
-        self.loadFailure = loaded.thrown
     }
 
     public func check(_ spec: ChartSpec) -> ChartStyleCheckReport {
@@ -176,7 +173,7 @@ private func resolveStyleTokens(_ value: JSONValue, _ path: String, _ pointer: S
                 errors.append("\(path.isEmpty ? "profile" : path): a token reference is { \"$token\": \"<variable name or id>\", \"mode\"?: \"<mode>\" }.")
                 return nil
             }
-            errors.append("\(path): \"\(token!.stringValue!)\" is a token reference, but this host has no design tokens to resolve it.")
+            errors.append("\(path.isEmpty ? "profile" : path): \"\(token!.stringValue!)\" is a token reference, but this host has no design tokens to resolve it.")
             return nil
         }
         var out = JSONObject()
@@ -222,21 +219,22 @@ private func chartCheckListErrors(_ list: JSONValue?, _ undefinedPaths: Set<Stri
 }
 
 /// Loads a style skill's `chart.json` as `createStyleResolver` does: the profile, or why it is left out.
-public func loadChartStyleProfile(_ raw: JSONValue, file: String = "chart.json") -> (profile: JSONObject?, error: String?, thrown: String?) {
-    guard case .object = stripPrototypeKeys(raw) else { return (nil, "\(file) must hold a JSON object.", nil) }
+public func loadChartStyleProfile(_ raw: JSONValue, file: String = "chart.json") -> (profile: JSONObject?, error: String?) {
+    guard case .object = stripPrototypeKeys(raw) else { return (nil, "\(file) must hold a JSON object.") }
     var errors: [String] = []
     var undefinedPaths = Set<String>()
-    // A root `{ "$token": ... }` resolves to undefined, which `const { checks, ...rest } = resolved` cannot
-    // destructure: the TS resolver throws a TypeError (a TS bug, see GOTCHAS), and so does this port.
+    // A root `{ "$token": ... }` resolves to a value or to nothing, never to a profile object: the
+    // profile is left out with the reason, as `createStyleResolver` does (#768).
+    // With no token source here, it always resolves to nothing and an error says why.
     guard case .object(let resolved)? = resolveStyleTokens(stripPrototypeKeys(raw), "", "", &errors, &undefinedPaths) else {
-        return (nil, nil, "Cannot destructure property 'checks' of 'resolved' as it is undefined.")
+        return (nil, "\(file) is left out: \(errors.joined(separator: " "))")
     }
     var rest = resolved
     rest["checks"] = Optional<JSONValue>.none
     errors += styleSchemaErrors(.object(rest), CHART_STYLE_PROFILE_SCHEMA, undefinedPaths).map { "\($0.path.isEmpty ? "(profile)" : $0.path): \($0.message)" }
     errors += chartCheckListErrors(resolved["checks"], undefinedPaths)
-    if !errors.isEmpty { return (nil, "\(file) is left out: \(errors.joined(separator: " "))", nil) }
-    return (resolved, nil, nil)
+    if !errors.isEmpty { return (nil, "\(file) is left out: \(errors.joined(separator: " "))") }
+    return (resolved, nil)
 }
 
 private struct DrawnColorItem {
@@ -445,7 +443,6 @@ public func createChartStyleToolProvider(
             openWorldHint: false
         ),
         handler: { _, _ in
-            if let failure = style.loadFailure { throw ToolExecutionError(failure) }
             let report = style.check(controller.getSpec())
             var out = JSONObject([
                 ("findings", .array(report.findings.map { $0.toJSON() })),

@@ -276,11 +276,11 @@ function resolveTokens(value: unknown, tokens: StyleTokenSource | undefined, pat
 			return undefined;
 		}
 		if (!tokens) {
-			errors.push(`${path}: "${token}" is a token reference, but this host has no design tokens to resolve it.`);
+			errors.push(`${path || 'profile'}: "${token}" is a token reference, but this host has no design tokens to resolve it.`);
 			return undefined;
 		}
 		const resolved = tokens.resolve({ token, ...(mode ? { mode } : {}) });
-		if (!resolved.ok) errors.push(`${path}: ${resolved.message}`);
+		if (!resolved.ok) errors.push(`${path || 'profile'}: ${resolved.message}`);
 		return resolved.ok ? resolved.value : undefined;
 	}
 	const out: Record<string, unknown> = {};
@@ -432,7 +432,12 @@ export function createStyleResolver(options: StyleResolverOptions): StyleResolve
 					continue;
 				}
 				const errors: string[] = [];
-				const resolved = resolveTokens(parsed, options.tokens, '', errors) as Record<string, unknown>;
+				const resolved = resolveTokens(parsed, options.tokens, '', errors);
+				// A root `{ "$token": ... }` resolves to a value or to nothing, never to a profile object.
+				if (!isPlainObject(resolved)) {
+					skillIssues.push(errors.length ? `${file} is left out: ${errors.join(' ')}` : `${file} must hold a JSON object; its token reference resolves to ${JSON.stringify(resolved)}.`);
+					continue;
+				}
 				const { checks, ...rest } = resolved;
 				errors.push(...validateJsonSchema(rest, domain.profileSchema).map((e) => `${e.path || '(profile)'}: ${e.message}`));
 				errors.push(...checkListErrors(checks, domain));
