@@ -76,7 +76,8 @@ the pitfalls, and uses the tools below.
    the source.
 6. **Check.** Read the `warnings` that `get_chart` and `render_chart` return (hidden or
    thinned labels, crowded legend, skipped values) and run `check_chart_colors`. With a house
-   style, also run `check_chart_style` and fix each finding with `update_chart_series` or
+   style, start a new chart with `apply_chart_style`, pick series colours from `get_style`'s
+   `swatches`, then run `check_chart_style` and fix each finding with `update_chart_series` or
    `update_chart` (its `target` names the series or point). Fix every problem.
 7. **Look once.** `render_chart` with `format: "png"` after a batch of edits, at the size
    the chart will be shown, to check overlap and legibility. Use `undo_chart` for your own
@@ -161,6 +162,7 @@ the pitfalls, and uses the tools below.
 | `get_chart` | Start here. Returns spec, data table, selection, issues and a summary (min / max / mean / trend, axes as drawn, layout warnings, colour check, description) at `width` x `height` px (default 640 x 400). Also says why when the chart is read-only. Cheaper than rendering. |
 | `render_chart` | Draw without changing anything: SVG text by default, or `format: "png"` for an image (only when the host can rasterize; otherwise it fails and says to use SVG). Returns the layout warnings too. Images cost tokens: render after a batch of edits, at the display size, to check overlapping or cut-off labels, a crowded legend and unreadable colours. |
 | `check_chart_style` | Check the chart against the house style (`get_style` with `domain: "chart"`): runs the checks its profile turns on (`palette-only`, `distinguishable`, `min-contrast`, `allowed-type`). Returns `ok`, findings (severity, a sentence saying how to fix it, a `target` selection such as `{ kind: "series", seriesId }`, and the layer that asked), the checks that `ran` and those `skipped` with the reason. Run after a batch of edits and again after fixing. |
+| `apply_chart_style` | Start a new chart from the house style, or bring one in line when the user asks: sets the house palette and the defaults the style names, as one undo step. Returns `applied` (the patch) and the new spec. It leaves data, titles and hand-set series colours alone, so run `check_chart_style` after. Fails when no style applies or the chart is read-only. |
 | `check_chart_colors` | Check the chart's series (or slice) colours, or a `colors` list, for normal vision, protanopia, deuteranopia and tritanopia, and contrast against `surface` (default white). Returns the closest pair per vision and problems as sentences. Run after any colour change. |
 | `recommend_chart` | Ranked chart types with a reason each, from `csv` when given, else the current data (series count, points, dates, negative values). Use before choosing a type. |
 | `get_chart_trendline` | Read a trendline's fit (`series`, `index`): coefficients, R2, equation and point count, or the moving-average points. Fails when the fit needs more or positive values. |

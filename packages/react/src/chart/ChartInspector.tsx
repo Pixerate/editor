@@ -49,6 +49,8 @@ export interface ChartInspectorProps {
   /** Which sections to show (default: all that apply to the chart). */
   sections?: readonly ChartInspectorSection[];
   className?: string;
+  /** House colours offered beside the series colour (e.g. from `useStyleSwatches`). */
+  swatches?: readonly string[];
 }
 
 export type ChartInspectorSection = 'type' | 'style' | 'titles' | 'options' | 'legend' | 'axes' | 'annotations' | 'series';
@@ -268,7 +270,7 @@ function ErrorBarFields({ controller, series, which, idBase }: { controller: Cha
  * Settings for a chart controller: type, titles, stacking and line options, legend, both
  * axes and the selected series. Every change is one undo step.
  */
-export function ChartInspector({ controller, sections, className }: ChartInspectorProps) {
+export function ChartInspector({ controller, sections, className, swatches }: ChartInspectorProps) {
   const { spec, selectedSeries, selection, raceFrame, racePlaying } = useChartState(controller);
   const idBase = useId();
   const show = (section: ChartInspectorSection) => !sections || sections.includes(section);
@@ -632,6 +634,22 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
                 </button>
               )}
             </div>
+            {swatches && swatches.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1" role="group" aria-label="House colours" data-option="series.swatches">
+                {swatches.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    title={color}
+                    aria-label={`Use ${color}`}
+                    aria-pressed={chartColorInputValue(chartSeriesColor(spec, seriesIndex)) === chartColorInputValue(color)}
+                    className="h-5 w-5 rounded border border-border"
+                    style={{ background: color }}
+                    onClick={() => controller.updateSeries(selectedSeries.id, { color })}
+                  />
+                ))}
+              </div>
+            )}
           </Field>
           {cartesian && (
             <Field label="Draw as" htmlFor={`${idBase}-series-type`}>

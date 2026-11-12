@@ -581,7 +581,7 @@ export function createChartConformanceHost(setup: ChartConformanceSetup & Record
 			measureText: conformanceChartTextMeasure
 		})
 	);
-	registry.register(createChartStyleToolProvider(controller, styles, { namespace: '' }));
+	registry.register(createChartStyleToolProvider(controller, styles, { namespace: '', readOnly: setup.readOnly }));
 	registry.register(
 		createOfficeChartToolProvider({
 			namespace: '',

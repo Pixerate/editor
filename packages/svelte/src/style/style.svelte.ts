@@ -1,4 +1,5 @@
-import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver } from "@pixerate/editor/tools";
+import { styleSwatches } from "@pixerate/editor/tools";
+import type { ResolvedStyle, StyleCheckReport, StyleChoiceGroup, StyleChoiceResult, StyleResolver, StyleSwatch } from "@pixerate/editor/tools";
 
 type MaybeGetter<T> = T | (() => T);
 const read = <T>(value: MaybeGetter<T>): T => (typeof value === "function" ? (value as () => T)() : value);
@@ -164,6 +165,53 @@ export function useStyleChoices(styles: MaybeGetter<StyleResolver | null | undef
         error = message(e);
         throw e;
       }
+    },
+  };
+}
+
+export interface SvelteStyleSwatches {
+  /** The house colours, in picker order (feed `ColorPicker`'s `swatches` or `ChartEditor`'s) (reactive). */
+  readonly colors: string[];
+  /** The same colours with what each is for (`primary`, `palette 2`, ...) (reactive). */
+  readonly swatches: StyleSwatch[];
+  /** The house fonts (reactive). */
+  readonly fonts: string[];
+  /** Why the last resolve failed, or `null` (reactive). */
+  readonly error: string | null;
+}
+
+/**
+ * Svelte 5 rune: the colours and fonts the house style offers for one domain, for pickers. The
+ * agent's `get_style` returns the same list. Parity with React's `useStyleSwatches`.
+ */
+export function useStyleSwatches(
+  styles: MaybeGetter<StyleResolver | null | undefined>,
+  domain: MaybeGetter<string>,
+  scope?: MaybeGetter<string | undefined>,
+): SvelteStyleSwatches {
+  let style = $state.raw<ResolvedStyle | null>(null);
+  let error = $state.raw<string | null>(null);
+  resolverTask(
+    () => ({ styles: read(styles), input: { domain: read(domain), scope: scope === undefined ? undefined : read(scope) } }),
+    (s, { domain: d, scope: sc }) => s.resolve(d, sc !== undefined ? { scope: sc } : {}),
+    (result) => {
+      style = result.value;
+      error = result.error;
+    },
+  );
+  const swatches = $derived(style ? styleSwatches(style) : { colors: [] as StyleSwatch[], fonts: [] as string[] });
+  return {
+    get colors() {
+      return swatches.colors.map((c) => c.color);
+    },
+    get swatches() {
+      return swatches.colors;
+    },
+    get fonts() {
+      return swatches.fonts;
+    },
+    get error() {
+      return error;
     },
   };
 }

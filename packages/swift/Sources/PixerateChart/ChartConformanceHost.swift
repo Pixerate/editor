@@ -146,7 +146,7 @@ public final class ChartConformanceHost: ConformanceHost {
         _ = try registry.register(createChartStyleToolProvider(
             controller,
             style,
-            ChartStyleToolProviderOptions(namespace: "")
+            ChartStyleToolProviderOptions(namespace: "", readOnly: readOnlyFn)
         ))
         _ = try registry.register(createOfficeChartToolProvider(
             OfficeChartToolProviderOptions(

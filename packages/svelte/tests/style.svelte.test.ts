@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { createStyleResolver, memoryStyleStore, type StyleDomain, type StyleCheckReport, type StyleResolver } from "@pixerate/editor/tools";
-import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, type SvelteStyle, type SvelteStyleChoices, type SvelteStyleFindings } from "../src/style";
+import { StyleFindings, useStyle, useStyleChoices, useStyleFindings, useStyleSwatches, type SvelteStyleSwatches, type SvelteStyle, type SvelteStyleChoices, type SvelteStyleFindings } from "../src/style";
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -209,5 +209,24 @@ describe("useStyleChoices (Svelte)", () => {
     expect(link.groups?.[0].chosen).toBe("tight");
     await expect(link.choose("nope")).rejects.toThrow(/no house-style skill "nope"/);
     expect(link.error).toMatch(/no house-style skill "nope"/);
+  });
+});
+
+describe("useStyleSwatches (Svelte)", () => {
+  it("offers the brand's colours and fonts, and follows the store", async () => {
+    const store = memoryStyleStore({});
+    store.set("acme", { "SKILL.md": "---\nname: acme\ndescription: Acme.\n---\nUse it.", "brand.json": JSON.stringify({ colors: { primary: "#0b5fff", text: "#111111" }, fonts: { body: "Inter" } }) });
+    const styles = createStyleResolver({ layers: [{ id: "org", store }], domains: [listDomain] });
+    let link!: SvelteStyleSwatches;
+    cleanups.push($effect.root(() => {
+      link = useStyleSwatches(styles, "list");
+    }));
+    await settle();
+    expect(link.colors).toEqual(["#0b5fff", "#111111"]);
+    expect(link.swatches[1]).toEqual({ color: "#111111", label: "text" });
+    expect(link.fonts).toEqual(["Inter"]);
+    store.set("acme", { "SKILL.md": "---\nname: acme\ndescription: Acme.\n---\nUse it.", "brand.json": JSON.stringify({ colors: { primary: "#e4002b" } }) });
+    await settle();
+    expect(link.colors).toEqual(["#e4002b"]);
   });
 });
