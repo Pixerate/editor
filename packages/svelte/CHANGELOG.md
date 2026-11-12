@@ -1,5 +1,52 @@
 # @pixerate/editor-svelte
 
+## 0.218.0
+
+### Minor Changes
+
+- dfd74a5: House style in the editors (#776).
+
+  - `styleSwatches(style)` lists the colours (profile palette, brand palette, brand roles) and fonts a house style offers, in picker order; `get_style` returns them as `swatches`, so agents pick from the same set as people.
+  - `StyleDomain.defaults` and `styleDefaults(domain, style)` give new work its starting patch; charts use `chartStylePatch`. New agent tool `apply_chart_style` applies it as one undo step (refused on a read-only chart, `readOnly` option).
+  - `STYLE_AGENT_INSTRUCTIONS`: domain-neutral prompt text for hosts while a house style is active.
+  - React and Svelte: `useStyleSwatches(styles, domain, scope?)`, and `ChartEditor` / `ChartInspector` take `swatches` shown beside each series colour.
+  - Swift: `apply_chart_style` in `createChartStyleToolProvider` (hidden on a read-only chart, `ChartStyleToolProviderOptions.readOnly`), with the `style-apply` scenario.
+
+### Patch Changes
+
+- Updated dependencies [dfd74a5]
+  - @pixerate/editor@0.301.0
+
+## 0.217.1
+
+### Patch Changes
+
+- Updated dependencies [52bbc40]
+  - @pixerate/editor@0.300.0
+
+## 0.217.0
+
+### Minor Changes
+
+- 6217143: House style: one-of-a-kind groups and scoped skills (#773).
+
+  - A style skill can join a group (`group: look` in frontmatter, or `group` in store state). Of the switched-on skills in a group only the first applies. `resolver.choose(name, { layer, scope })` switches one on and its rivals off in one write to the most specific writable layer (`StyleStore.setState`), and refuses, writing nothing, for an ungrouped skill, a read-only layer or a rival a required layer keeps on. `resolver.chosen(group)` and `resolver.choices()` read the choice; `StyleSkillInfo` gains `group`, `scope` and `chosen`.
+  - A skill's state can carry `scope: string[]`; scoped skills apply only when `resolve` / `check` / `list` are asked for one of their scopes. The style and check tool providers take a host-set `scope` option.
+  - Agent tools `list_style_choices` and `choose_style`.
+  - React and Svelte: `useStyleChoices(styles, scope?)` for pickers.
+
+### Patch Changes
+
+- Updated dependencies [6217143]
+  - @pixerate/editor@0.299.0
+
+## 0.216.8
+
+### Patch Changes
+
+- Updated dependencies [f6fe15f]
+  - @pixerate/editor@0.298.0
+
 ## 0.216.7
 
 ### Patch Changes
