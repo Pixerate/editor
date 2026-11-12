@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.296.2
+
+### Patch Changes
+
+- 979e41f: House style: a style profile that is itself a `$token` reference (`chart.json` set to `{ "$token": "…" }`) no longer crashes `createStyleResolver`. The profile is left out with an issue saying why, and `get_style` / `check_chart_style` keep working (#768).
+
 ## 0.296.1
 
 ### Patch Changes
