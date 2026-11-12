@@ -22,8 +22,14 @@ public func parseChartRGBA(_ css: String?, opacity: Double? = nil) -> (r: Double
         }
     }
     if units.first == 0x23, units.count == 5 || units.count == 9, let digits = Optional(units.dropFirst().map(hexDigit)), !digits.contains(where: { $0 == nil }) {
-        let d = digits.map { $0! }
-        let c: [Double] = units.count == 5 ? d.map { ($0 * 16 + $0) / 255 } : stride(from: 0, to: 8, by: 2).map { (d[$0] * 16 + d[$0 + 1]) / 255 }
+        let d: [Double] = digits.map { (v: Double?) -> Double in v! }
+        // Typed steps: the one-line ternary of two maps timed out CI's type checker.
+        var c: [Double] = []
+        if units.count == 5 {
+            for v in d { let doubled: Double = v * 16 + v; c.append(doubled / 255) }
+        } else {
+            for i in stride(from: 0, to: 8, by: 2) { let pair: Double = d[i] * 16 + d[i + 1]; c.append(pair / 255) }
+        }
         return (r: c[0], g: c[1], b: c[2], a: c[3] * op)
     }
     var alpha = 1.0
