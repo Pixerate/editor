@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BRUSH_PRESETS, normalizeBrushSpec, resolveBrush, resolveCategory, resolveFamily, type Brush } from '../src/brushes';
 import { brushTakesPaint, BUILTIN_BRUSHES, PAINT_BRUSH_CATEGORIES, PAINT_FAMILIES, PAINT_GROUPINGS, paintBrushGroup } from '../src/paint-editor/brushes';
-import { PaintEditorController, STICKER_REACH, type PaintPixelLayer } from '../src/paint-editor';
+import { PaintEditorController, STICKER_LARGE_SPACING, STICKER_REACH, STICKER_SPREAD_SIZE, stickerSpacing, type PaintPixelLayer } from '../src/paint-editor';
 import { readPixel } from '../src/raster/surface';
 
 const preset = (id: string) => BRUSH_PRESETS.find((b) => b.id === id)!;
@@ -144,11 +144,29 @@ describe('sticker brushes at large sizes', () => {
     return best;
   };
 
-  it('keeps spacing and scatter at the reach past it, so 200px stickers trace the path', () => {
+  it('keeps scatter at the reach past it, so 200px stickers trace the path', () => {
     const big = spray(200);
-    expect(big.length).toBeGreaterThanOrEqual(10);
+    expect(big.length).toBeGreaterThanOrEqual(3);
     for (const s of big) expect(distanceToPath(s.x, s.y)).toBeLessThanOrEqual(0.6 * STICKER_REACH + 1);
-    for (let i = 1; i < big.length; i++) expect(Math.hypot(big[i].x - big[i - 1].x, big[i].y - big[i - 1].y)).toBeLessThan(STICKER_REACH * 2);
+  });
+
+  it('spreads large stickers out so they lie side by side instead of piling up', () => {
+    const big = spray(200);
+    // All but the closing sticker (laid at the stroke's end) are a walked step apart, give or take scatter.
+    for (let i = 1; i < big.length - 1; i++) {
+      expect(Math.hypot(big[i].x - big[i - 1].x, big[i].y - big[i - 1].y)).toBeGreaterThan(200 * 0.6);
+    }
+  });
+
+  it('eases the spacing from the density toward STICKER_LARGE_SPACING past the reach', () => {
+    expect(stickerSpacing(0.35, 24)).toBeCloseTo(1 / 1.4);
+    expect(stickerSpacing(0.35, STICKER_REACH)).toBeCloseTo(1 / 1.4);
+    expect(stickerSpacing(0.35, STICKER_SPREAD_SIZE)).toBeCloseTo(STICKER_LARGE_SPACING);
+    expect(stickerSpacing(0.35, 1000)).toBeCloseTo(STICKER_LARGE_SPACING);
+    expect(stickerSpacing(0.35, 160)).toBeGreaterThan(1 / 1.4);
+    expect(stickerSpacing(0.35, 160)).toBeLessThan(STICKER_LARGE_SPACING);
+    // A sparse brush already spaced wider keeps its own spacing.
+    expect(stickerSpacing(0.1, 1000)).toBeCloseTo(2.5);
   });
 
   it('starts and ends the stroke with a sticker', () => {

@@ -316,6 +316,23 @@ export interface StickerSprayInit {
  */
 export const STICKER_REACH = 64;
 
+/** The spacing, in sticker diameters, that sticker brushes reach at `STICKER_SPREAD_SIZE` and beyond. */
+export const STICKER_LARGE_SPACING = 0.9;
+
+/** The sticker size, in pixels, at which a sticker brush's spacing reaches `STICKER_LARGE_SPACING`. */
+export const STICKER_SPREAD_SIZE = STICKER_REACH * 4;
+
+/**
+ * A sticker brush's spacing, in diameters, for a `density` and sticker `size` (pixels): from the
+ * density up to `STICKER_REACH`, then easing toward `STICKER_LARGE_SPACING` by `STICKER_SPREAD_SIZE`,
+ * so large stickers lie side by side along the path instead of piling onto one another.
+ */
+export function stickerSpacing(density: number, size: number): number {
+  const base = Math.max(0.05, 1 / Math.max(0.05, density * 4));
+  const t = Math.min(1, Math.max(0, (size - STICKER_REACH) / (STICKER_SPREAD_SIZE - STICKER_REACH)));
+  return base + (Math.max(base, STICKER_LARGE_SPACING) - base) * t;
+}
+
 export class StickerSpray {
   dabCount = 0;
   readonly stickers: Sticker[] = [];
@@ -333,9 +350,8 @@ export class StickerSpray {
     const b = init.brush;
     this.smoother = new PenSmoother(b.tip.smoothing, b.pressureSmoothing);
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
-    // One walked dab per sticker: spacing from the density, in diameters up to STICKER_REACH
-    // pixels and in STICKER_REACH-pixel steps beyond, so large stickers still trace the path.
-    const spacing = Math.max(0.05, 1 / Math.max(0.05, b.sticker.density * 4)) * Math.min(1, STICKER_REACH / Math.max(1, b.tip.size));
+    // One walked dab per sticker: spacing from the density, spreading large stickers out (`stickerSpacing`).
+    const spacing = stickerSpacing(b.sticker.density, b.tip.size);
     const walk: PaintBrush = { ...b, tip: { ...b.tip, spacing }, dynamics: { ...b.dynamics, scatter: 0, sizeJitter: 0, angleJitter: 0 } };
     this.walkers = this.copies.map((c, i) => new PenDabWalker(walk, (init.seed + i * 7919) | 0, c.linear));
     this.medium = new TileMedium(init.target, {});
