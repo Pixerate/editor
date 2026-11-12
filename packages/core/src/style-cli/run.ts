@@ -14,6 +14,7 @@ import { createServer, type Server } from 'node:http';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 import {
+	STYLE_TEXT_FILE,
 	brandStyleDomain,
 	checkStyleSkill,
 	renderStylePreview,
@@ -29,7 +30,6 @@ import { tokensStyleDomain } from '../tokens/style.js';
 /** The domains the command knows. */
 export const STYLE_CLI_DOMAINS: readonly StyleDomain<any>[] = [chartStyleDomain, tokensStyleDomain, brandStyleDomain];
 
-const TEXT_FILE = /\.(md|txt|json|ya?ml|csv|tsv|svg|css|html|xml)$/i;
 
 /** A skill folder's text files keyed by relative path, and what was left out. */
 export function readStyleSkillFolder(dir: string): { files: Record<string, string>; skipped: string[] } {
@@ -47,7 +47,7 @@ export function readStyleSkillFolder(dir: string): { files: Record<string, strin
 			else if (stat.isDirectory()) {
 				if (depth >= 4) skipped.push(`${relPath}: folders more than four deep are left out.`);
 				else walk(relPath, depth + 1);
-			} else if (!TEXT_FILE.test(entry)) skipped.push(`${relPath}: only text files (md, json, yaml, svg, ...) are offered to agents.`);
+			} else if (!STYLE_TEXT_FILE.test(entry)) skipped.push(`${relPath}: only text files (md, json, yaml, svg, ...) are offered to agents.`);
 			else files[relPath] = readFileSync(path.join(dir, relPath), 'utf8');
 		}
 	};
