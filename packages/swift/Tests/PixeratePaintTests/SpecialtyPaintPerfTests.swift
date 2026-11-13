@@ -511,4 +511,28 @@ final class SpecialtyPaintPerfTests: XCTestCase {
         c.litCaches = [:]
         XCTAssertTrue(c.compositePixels(wet: "display").data == first.data)
     }
+
+    func testOnlyTilesThePatternAdvancedInAreShadedAgain() throws {
+        let paper = WetPaperInput(absorption: 0.5, permeability: 0.5, roughness: 0.5, color: [250, 248, 240], heightAt: { _, _ in 0.5 })
+        let w = try WetWorld(width: 1024, height: 300, paper: paper)
+        try w.ensureLane("a")
+        let pigment = pigmentOf([0.2, 0.4, 0.7], 0.1).map { $0 * 0.05 }
+        // A wash with a pattern in the first tile, and a damp speck in the last that dries at once.
+        try w.paint("a", RasterRect(x: 20, y: 20, width: 200, height: 200), nil, water: 0.8, pigment: pigment)
+        try w.paint("a", RasterRect(x: 800, y: 100, width: 6, height: 6), nil, water: 0.002, pigment: pigment)
+        try w.setLivePatterns("a", ["pattern": "spots"])
+        XCTAssertGreaterThan(try w.seedLivePatterns("a", 120, 120, 30, 4), 0)
+        _ = try w.display("a")
+        var quiet = 0, patternShaded = 0
+        for _ in 0..<30 {
+            w.step(1)
+            let d = try w.display("a")
+            let speckLive = try w.activeRects("a").contains { $0.x == 768 }
+            if speckLive && !d.changed.contains(where: { $0.x == 768 }) { quiet += 1 }
+            if d.changed.contains(where: { $0.x == 0 }) { patternShaded += 1 }
+        }
+        // The pattern's tile is shaded after every step; the dry tile waiting to be freed is left alone.
+        XCTAssertEqual(patternShaded, 30)
+        XCTAssertGreaterThan(quiet, 0)
+    }
 }

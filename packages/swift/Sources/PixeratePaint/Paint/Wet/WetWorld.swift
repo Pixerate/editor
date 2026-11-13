@@ -874,7 +874,9 @@ public final class WetWorld {
                 threads: threads
             )
             if changed {
-                for key in active where laneIndexOf(key) == lane.index {
+                // Only the tiles the pattern advanced in can show something new (a tile's shading reads its own pattern tile).
+                let stepped = Set(lane.livePatterns.steppedTiles)
+                for key in active where laneIndexOf(key) == lane.index && stepped.contains(tileKeyOf(key)) {
                     slotStamp[key] += 1
                 }
             }
