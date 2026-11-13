@@ -603,10 +603,9 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 		spec.note ? 'the note' : ''
 	].filter(Boolean);
 	if (annotations.length) issues.push(`${annotations.join(', ').replace(/^./, (c) => c.toUpperCase())} ${annotations.length === 1 && !annotations[0].endsWith('s') ? 'is' : 'are'} not written: DrawingML has no equivalent.`);
-	if (spec.view3d) issues.push('The 3-D view is not written: the chart is saved flat.');
 	if (visible.length < spec.series.length) issues.push(`${spec.series.length - visible.length} hidden series ${spec.series.length - visible.length === 1 ? 'is' : 'are'} left out.`);
 	const grouping = spec.stacking === 'stacked' ? 'stacked' : spec.stacking === 'percent' ? 'percentStacked' : 'standard';
-	const ids = { cat: 500000001, val: 500000002, cat2: 500000003, val2: 500000004 };
+	const ids = { cat: 500000001, val: 500000002, cat2: 500000003, val2: 500000004, ser: 500000005 };
 	const xy = family === 'xy' || type === 'scatter' || type === 'bubble';
 	const pieLike = type === 'pie' || type === 'donut';
 	const typed = (s: ChartSeries) => (pieLike || type === 'radar' ? type : type === 'bubble' ? 'bubble' : xy ? 'scatter' : chartSeriesType({ type }, s));
@@ -620,6 +619,10 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 		g.series.push({ s, index: spec.series.indexOf(s) });
 	});
 	if (pieLike && visible.length > 1) issues.push('Only the first series of a pie is drawn; the others are kept in the part.');
+	// A 3-D view is written as Office's bar3D / line3D / area3D chart (#795): one group on one value axis.
+	const view = spec.view3d && !xy && !pieLike && groups.length === 1 && ['bar', 'line', 'area'].includes(groups[0].kind) && !groups[0].secondary ? spec.view3d : undefined;
+	if (spec.view3d && !view)
+		issues.push(groups.length > 1 || groups.some((g) => g.secondary) ? 'The 3-D view is not written: Office draws one 3-D group on one value axis, so a chart with mixed series types or a secondary axis is saved flat.' : 'The 3-D view is not written: the chart is saved flat.');
 	const catLit = strLit(spec.categories);
 	let order = 0;
 	const serXml = (kind: string, s: ChartSeries, index: number) => {
@@ -677,6 +680,12 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 	const groupXml = groups.map((g) => {
 		const axes = g.secondary ? `<c:axId val="${ids.cat2}"/><c:axId val="${ids.val2}"/>` : `<c:axId val="${ids.cat}"/><c:axId val="${ids.val}"/>`;
 		const sers = g.series.map(({ s, index }) => serXml(g.kind, s, index)).join('');
+		if (view && g.kind === 'bar') {
+			const gapPct = Math.round(Math.min(500, (spec.gapWidth / Math.max(0.01, 1 - spec.gapWidth)) * 100));
+			return `<c:bar3DChart><c:barDir val="${spec.orientation === 'horizontal' ? 'bar' : 'col'}"/><c:grouping val="${spec.stacking === 'none' ? 'clustered' : grouping}"/><c:varyColors val="${vary}"/>${sers}${dLbls}<c:gapWidth val="${gapPct}"/><c:shape val="box"/>${axes}</c:bar3DChart>`;
+		}
+		if (view && g.kind === 'line') return `<c:line3DChart><c:grouping val="standard"/><c:varyColors val="${vary}"/>${sers}${dLbls}${axes}<c:axId val="${ids.ser}"/></c:line3DChart>`;
+		if (view && g.kind === 'area') return `<c:area3DChart><c:grouping val="${grouping}"/><c:varyColors val="${vary}"/>${sers}${dLbls}${axes}</c:area3DChart>`;
 		switch (g.kind) {
 			case 'bar': {
 				const n = g.series.length;
@@ -724,16 +733,20 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 			axes = catAx(ids.cat, ids.val, spec.xAxis, catPos) + valAx(ids.val, ids.cat, spec.yAxis, valPos, 'autoZero');
 		}
 		if (groups.some((g) => g.secondary)) axes += catAx(ids.cat2, ids.val2, spec.xAxis, catPos, true) + valAx(ids.val2, ids.cat2, spec.yAxis2, horizontal ? 't' : 'r', 'max');
+		// A 3-D line chart has a third (series) axis; it is hidden, as Office draws the series in depth.
+		if (view && groups[0].kind === 'line') axes += `<c:serAx><c:axId val="${ids.ser}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${ids.val}"/><c:crosses val="autoZero"/></c:serAx>`;
 	}
 	const legendPos = { bottom: 'b', top: 't', left: 'l', right: 'r' }[spec.legend.position];
 	const legend = spec.legend.show ? `<c:legend><c:legendPos val="${legendPos}"/><c:overlay val="0"/></c:legend>` : '';
 	const titleXml = spec.title ? `<c:title>${rich(spec.title)}</c:title><c:autoTitleDeleted val="0"/>` : '<c:autoTitleDeleted val="1"/>';
 	if (spec.subtitle) issues.push('The subtitle is left out: DrawingML charts have one title.');
+	// CT_View3D: rotX (eye height), rotY (turn), depthPercent; Office stores whole numbers.
+	const view3dXml = view ? `<c:view3D><c:rotX val="${Math.round(view.elevation)}"/><c:rotY val="${Math.round(view.azimuth) % 360}"/><c:depthPercent val="${Math.max(20, Math.min(2000, Math.round(view.depth * 100)))}"/><c:rAngAx val="0"/></c:view3D>` : '';
 	if (family === 'radar' && spec.series.some((s) => s.trendlines?.length)) issues.push('Trendlines on a radar chart are left out.');
 	const xml =
 		`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 		`<c:chartSpace xmlns:c="${CHART_OOXML_NS}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
-		`<c:roundedCorners val="0"/><c:chart>${titleXml}<c:plotArea><c:layout/>${groupXml.join('')}${axes}</c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
+		`<c:roundedCorners val="0"/><c:chart>${titleXml}${view3dXml}<c:plotArea><c:layout/>${groupXml.join('')}${axes}</c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
 		`<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${Math.round(10 * 100)}"/></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr></c:chartSpace>`;
 	return { xml, issues: [...new Set(issues)] };
 }
