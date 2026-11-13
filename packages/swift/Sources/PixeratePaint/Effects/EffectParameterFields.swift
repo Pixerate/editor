@@ -72,6 +72,32 @@ public func isEffectFontControl(_ schema: JSONObject) -> Bool {
     typeOf(schema) == "string" && (schema["format"]?.stringValue == "font" || schema["x-pixerate-control"]?.stringValue == "font")
 }
 
+/// `flowSpeed`, `flow_speed` or `uFlowSpeed` → "Flow speed" (`humanizeParameterId`).
+public func humanizeParameterId(_ id: String) -> String {
+    var chars = Array(id)
+    if chars.count > 1, chars[0] == "u", chars[1].isUppercase { chars.removeFirst() }
+    var out = ""
+    var previous: Character?
+    for c in chars {
+        if c == "_" || c == "-" {
+            if previous != " " { out.append(" ") }
+            previous = " "
+            continue
+        }
+        if c.isUppercase, let p = previous, p.isLowercase || p.isNumber { out.append(" ") }
+        out.append(c)
+        previous = c
+    }
+    let words = out.trimmingCharacters(in: .whitespaces).lowercased()
+    return words.prefix(1).uppercased() + words.dropFirst()
+}
+
+/// The label a control shows: its schema `title`, else its name made readable (`parameterLabel`).
+public func effectControlLabel(_ name: String, _ schema: JSONObject) -> String {
+    if let title = schema["title"]?.stringValue, !title.isEmpty { return title }
+    return humanizeParameterId(name)
+}
+
 /// One control as a parameter field (`effectControlField`), or nil for a control no field can edit.
 public func effectControlField(_ name: String, _ schema: JSONObject, _ fallback: JSONValue?, fonts: [EffectFieldFont] = SYSTEM_FONT_FAMILIES) -> JSONObject? {
     var f: JSONObject = ["id": .string(name)]

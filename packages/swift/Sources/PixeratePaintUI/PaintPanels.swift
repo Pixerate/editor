@@ -102,6 +102,46 @@ struct PanelHeading: View {
     }
 }
 
+/// One choice of a `PaintPickerRow`.
+struct PaintPickerOption: Hashable {
+    let value: String
+    let label: String
+}
+
+/**
+ * A menu of choices with its label on the left and the picked choice on the right, in the row's
+ * font. A bare menu `Picker` drops its label on iPadOS, draws its value in body text whatever the
+ * font, and wraps when squeezed into a row.
+ */
+struct PaintPickerRow: View {
+    let label: String
+    let options: [PaintPickerOption]
+    let selection: Binding<String>
+
+    var body: some View {
+        let current = options.first { $0.value == selection.wrappedValue }?.label ?? selection.wrappedValue
+        HStack(spacing: 8) {
+            Text(label).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+            Spacer(minLength: 0)
+            Menu {
+                Picker(label, selection: selection) {
+                    ForEach(options, id: \.value) { o in Text(o.label).tag(o.value) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(current).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down").imageScale(.small)
+                }
+            }
+            .fixedSize()
+            .accessibilityLabel(label)
+            .accessibilityValue(current)
+        }
+    }
+}
+
 /// The blend menu (`PaintUITables.blendMenu`) as a picker with a section per group.
 struct BlendMenuPicker: View {
     let label: String
@@ -889,30 +929,45 @@ public struct PaintStrokePanel: View {
  */
 public struct PaintEffectsPanel: View {
     let model: PaintEditorModel
-    public init(model: PaintEditorModel) { self.model = model }
+    let showsHeading: Bool
+    /// `showsHeading: false` leaves out the "Layer styles" heading, for hosts that title the panel themselves.
+    public init(model: PaintEditorModel, showsHeading: Bool = true) {
+        self.model = model
+        self.showsHeading = showsHeading
+    }
 
     public var body: some View {
         if let layer = model.activeLayer {
             let fx = model.layerEffects ?? LayerEffects(enabled: true, items: [])
+            let styled = layer.type == "pixel" || layer.type == "group"
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    PanelHeading("Layer style")
-                    Spacer()
-                    Toggle("On", isOn: Binding(get: { fx.enabled }, set: { model.setEffectsEnabled($0) })).toggleStyle(.switch).controlSize(.mini)
+                if showsHeading { PanelHeading("Layer styles") }
+                if fx.items.isEmpty {
+                    Text(styled ? "No styles on this layer yet." : "Styles go on pixel layers and groups.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Toggle("Show styles", isOn: Binding(get: { fx.enabled }, set: { model.setEffectsEnabled($0) }))
+                        .font(.caption)
+                        .help("Turn all of this layer's styles on or off")
                 }
-                Menu("Add style") {
-                    ForEach(model.tables.layerEffects, id: \.kind) { e in Button(e.label) { model.addEffect(e.kind) } }
-                }
-                .disabled(layer.type != "pixel" && layer.type != "group")
                 ForEach(fx.items, id: \.id) { e in
-                    HStack {
+                    HStack(spacing: 10) {
                         Toggle(layerEffectLabel(e.kind), isOn: Binding(get: { e.enabled }, set: { model.setEffectControl(e, "enabled", .bool($0)) }))
-                        Spacer()
-                        Button { model.selectedEffect = model.selectedEffect == e.id ? nil : e.id } label: { Image(systemName: "slider.horizontal.3") }.buttonStyle(.plain).accessibilityLabel("Edit \(layerEffectLabel(e.kind))")
+                        Button { model.selectedEffect = model.selectedEffect == e.id ? nil : e.id } label: { Image(systemName: "slider.horizontal.3") }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(model.selectedEffect == e.id ? Color.accentColor : Color.primary)
+                            .accessibilityLabel("Edit \(layerEffectLabel(e.kind))")
                         Button { model.removeEffect(e.id) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).accessibilityLabel("Remove \(layerEffectLabel(e.kind))")
                     }
+                    .font(.caption)
                     if model.selectedEffect == e.id { EffectControlsView(model: model, effect: e) }
                 }
+                Menu {
+                    ForEach(model.tables.layerEffects, id: \.kind) { e in Button(e.label) { model.addEffect(e.kind) } }
+                } label: {
+                    Label("Add style", systemImage: "plus")
+                }
+                .font(.subheadline)
+                .disabled(!styled)
             }
         }
     }
@@ -934,9 +989,7 @@ struct EffectControlsView: View {
                 case let .checkbox(key, label, value):
                     Toggle(label, isOn: Binding(get: { value }, set: { model.setEffectControl(effect, key, .bool($0)) }))
                 case let .select(key, label, value, options):
-                    Picker(label, selection: Binding(get: { value }, set: { model.setEffectControl(effect, key, .string($0)) })) {
-                        ForEach(options, id: \.value) { o in Text(o.label).tag(o.value) }
-                    }
+                    PaintPickerRow(label: label, options: options.map { PaintPickerOption(value: $0.value, label: $0.label) }, selection: Binding(get: { value }, set: { model.setEffectControl(effect, key, .string($0)) }))
                 }
             }
         }
