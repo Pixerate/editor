@@ -204,6 +204,28 @@ public struct LivePatternFieldSnapshot {
 
 public typealias WetCellPredicate = (_ tx: Int, _ ty: Int, _ lx: Int, _ ly: Int) -> Bool
 
+/**
+ * `WetCellPredicate` for a whole pattern tile at once: sets `mask[ly * PATTERN_TILE + lx]` to 1 for
+ * every wet cell with `lx < width` and `ly < height` (the mask starts as zeros) and returns whether
+ * any cell is wet. It must agree with the predicate cell for cell.
+ */
+public typealias WetTileMask = (_ tx: Int, _ ty: Int, _ width: Int, _ height: Int, _ mask: UnsafeMutablePointer<UInt8>) -> Bool
+
+/// Runs `body` for 0..<count on up to `workers` threads (inline for one).
+private func patternParallel(_ count: Int, _ workers: Int, _ body: (Int) -> Void) {
+    if workers <= 1 || count <= 1 {
+        for i in 0..<count { body(i) }
+        return
+    }
+    let chunks = Swift.min(count, workers)
+    withoutActuallyEscaping(body) { body in
+        nonisolated(unsafe) let fn = body
+        DispatchQueue.concurrentPerform(iterations: chunks) { c in
+            for i in stride(from: c, to: count, by: chunks) { fn(i) }
+        }
+    }
+}
+
 /// Per-wet-layer Gray-Scott reaction-diffusion field `(U, V)` stored in `128 × 128` tiles.
 public final class LivePatternField {
     public var width: Int
@@ -213,6 +235,8 @@ public final class LivePatternField {
     public var settings: LivePatternsSettings = DEFAULT_LIVE_PATTERNS
     public var enabled = false
     public var tiles = OrderedMap<TileKey, LivePatternTileState>()
+    /// The tiles the last `step` advanced (those with wet cells): only their pattern can have changed.
+    public private(set) var steppedTiles: [TileKey] = []
 
     public init(width: Int, height: Int, settings: JSONObject? = nil) {
         self.width = Swift.max(1, width)
@@ -322,9 +346,15 @@ public final class LivePatternField {
     /**
      * Advances the Gray-Scott reaction-diffusion field for `wetSteps` wet simulation steps.
      * Only cells where `isWetCell(tx, ty, lx, ly)` is true update; dry cells have zero rate and freeze.
+     *
+     * `wetTile`, when given, answers `isWetCell` for a whole tile at once (see `WetTileMask`).
+     * Within a substep each tile reads the fields as they were before it (its own and its
+     * neighbours') and writes only its own next fields, so tiles run on up to `threads` threads
+     * and give the same bits as one. `steppedTiles` then lists the tiles that had wet cells.
      */
     @discardableResult
-    public func step(_ wetSteps: Int, isWetCell: WetCellPredicate, canWakeTile: ((Int, Int) -> Bool)? = nil) -> Bool {
+    public func step(_ wetSteps: Int, isWetCell: WetCellPredicate, canWakeTile: ((Int, Int) -> Bool)? = nil, wetTile: WetTileMask? = nil, threads: Int = Swift.max(1, ProcessInfo.processInfo.activeProcessorCount)) -> Bool {
+        steppedTiles = []
         if !enabled || tiles.isEmpty || wetSteps <= 0 { return false }
         let totalSubsteps = Swift.max(1, wetSteps) * PATTERN_SUBSTEPS
         let F = settings.feed
@@ -339,11 +369,13 @@ public final class LivePatternField {
         for (key, tile) in initialEntries {
             let (tx, ty) = tileCoord(key)
             var top = false, bottom = false, left = false, right = false
-            for i in 0..<PATTERN_TILE {
-                if tile.v[i] > PATTERN_V_EPS || tile.v[PATTERN_TILE + i] > PATTERN_V_EPS { top = true }
-                if tile.v[(PATTERN_TILE - 1) * PATTERN_TILE + i] > PATTERN_V_EPS || tile.v[(PATTERN_TILE - 2) * PATTERN_TILE + i] > PATTERN_V_EPS { bottom = true }
-                if tile.v[i * PATTERN_TILE] > PATTERN_V_EPS || tile.v[i * PATTERN_TILE + 1] > PATTERN_V_EPS { left = true }
-                if tile.v[i * PATTERN_TILE + PATTERN_TILE - 1] > PATTERN_V_EPS || tile.v[i * PATTERN_TILE + PATTERN_TILE - 2] > PATTERN_V_EPS { right = true }
+            tile.v.withUnsafeBufferPointer { v in
+                for i in 0..<PATTERN_TILE {
+                    if v[i] > PATTERN_V_EPS || v[PATTERN_TILE + i] > PATTERN_V_EPS { top = true }
+                    if v[(PATTERN_TILE - 1) * PATTERN_TILE + i] > PATTERN_V_EPS || v[(PATTERN_TILE - 2) * PATTERN_TILE + i] > PATTERN_V_EPS { bottom = true }
+                    if v[i * PATTERN_TILE] > PATTERN_V_EPS || v[i * PATTERN_TILE + 1] > PATTERN_V_EPS { left = true }
+                    if v[i * PATTERN_TILE + PATTERN_TILE - 1] > PATTERN_V_EPS || v[i * PATTERN_TILE + PATTERN_TILE - 2] > PATTERN_V_EPS { right = true }
+                }
             }
             func wake(_ nx: Int, _ ny: Int) {
                 if nx < 0 || ny < 0 || nx >= tilesX || ny >= tilesY { return }
@@ -356,154 +388,167 @@ public final class LivePatternField {
             if right { wake(tx + 1, ty) }
         }
 
-        final class StepEntry {
-            let key: TileKey
-            let tx: Int
-            let ty: Int
-            var u: [Double]
-            var v: [Double]
-            var nextU: [Double]
-            var nextV: [Double]
-            let wet: [UInt8]
-            let hasWet: Bool
-
-            init(key: TileKey, tx: Int, ty: Int, u: [Double], v: [Double], wet: [UInt8], hasWet: Bool) {
-                self.key = key
-                self.tx = tx
-                self.ty = ty
-                self.u = u
-                self.v = v
-                self.nextU = u
-                self.nextV = v
-                self.wet = wet
-                self.hasWet = hasWet
-            }
-        }
-
-        var entries: [StepEntry] = []
-        var byKey: [TileKey: StepEntry] = [:]
+        // Which cells are wet, tile by tile (the same for every substep).
+        let count = tiles.count
+        let keys = tiles.keys
+        let coords = keys.map(tileCoord)
+        let masks = UnsafeMutablePointer<UInt8>.allocate(capacity: count * PATTERN_CELLS)
+        masks.initialize(repeating: 0, count: count * PATTERN_CELLS)
+        defer { masks.deallocate() }
+        var hasWet = [Bool](repeating: false, count: count)
         var anyWet = false
         let maxHalfW = Int(JS.ceil(Double(width) * 0.5))
         let maxHalfH = Int(JS.ceil(Double(height) * 0.5))
-
-        for (key, tile) in tiles {
-            let (tx, ty) = tileCoord(key)
-            var wet = [UInt8](repeating: 0, count: PATTERN_CELLS)
-            var hasWet = false
+        for i in 0..<count {
+            let (tx, ty) = coords[i]
             let tileW = Swift.min(PATTERN_TILE, maxHalfW - tx * PATTERN_TILE)
             let tileH = Swift.min(PATTERN_TILE, maxHalfH - ty * PATTERN_TILE)
-            if tileH > 0 && tileW > 0 {
+            if tileH <= 0 || tileW <= 0 { continue }
+            let mask = masks + i * PATTERN_CELLS
+            if let wetTile {
+                hasWet[i] = wetTile(tx, ty, tileW, tileH, mask)
+            } else {
                 for ly in 0..<tileH {
-                    for lx in 0..<tileW {
-                        if isWetCell(tx, ty, lx, ly) {
-                            wet[ly * PATTERN_TILE + lx] = 1
-                            hasWet = true
-                            anyWet = true
-                        }
+                    for lx in 0..<tileW where isWetCell(tx, ty, lx, ly) {
+                        mask[ly * PATTERN_TILE + lx] = 1
+                        hasWet[i] = true
                     }
                 }
             }
-            let e = StepEntry(key: key, tx: tx, ty: ty, u: tile.u, v: tile.v, wet: wet, hasWet: hasWet)
-            entries.append(e)
-            byKey[key] = e
+            if hasWet[i] { anyWet = true }
         }
 
         if !anyWet { return false }
 
-        func sampleUV(_ entry: StepEntry, _ lx: Int, _ ly: Int) -> (Double, Double) {
-            if lx >= 0 && lx < PATTERN_TILE && ly >= 0 && ly < PATTERN_TILE {
-                let idx = ly * PATTERN_TILE + lx
-                return (entry.u[idx], entry.v[idx])
+        // Each tile's fields, `U` then `V`: the current ones, and for a tile with wet cells the
+        // next ones too. The two swap after every substep. A dry cell never changes, so both hold
+        // its value from the start and a substep writes the wet cells only.
+        let fieldSize = 2 * PATTERN_CELLS
+        var current: [UnsafeMutablePointer<Double>] = []
+        var next = [UnsafeMutablePointer<Double>?](repeating: nil, count: count)
+        current.reserveCapacity(count)
+        var index: [TileKey: Int] = [:]
+        for i in 0..<count {
+            let tile = tiles.get(keys[i])!
+            let cur = UnsafeMutablePointer<Double>.allocate(capacity: fieldSize)
+            tile.u.withUnsafeBufferPointer { cur.initialize(from: $0.baseAddress!, count: PATTERN_CELLS) }
+            tile.v.withUnsafeBufferPointer { (cur + PATTERN_CELLS).initialize(from: $0.baseAddress!, count: PATTERN_CELLS) }
+            current.append(cur)
+            if hasWet[i] {
+                let n = UnsafeMutablePointer<Double>.allocate(capacity: fieldSize)
+                n.initialize(from: cur, count: fieldSize)
+                next[i] = n
             }
-            var ntx = entry.tx
-            var nty = entry.ty
-            var nlx = lx
-            var nly = ly
-            if nlx < 0 {
-                ntx -= 1
-                nlx += PATTERN_TILE
-            } else if nlx >= PATTERN_TILE {
-                ntx += 1
-                nlx -= PATTERN_TILE
-            }
-            if nly < 0 {
-                nty -= 1
-                nly += PATTERN_TILE
-            } else if nly >= PATTERN_TILE {
-                nty += 1
-                nly -= PATTERN_TILE
-            }
-            guard let nb = byKey[tileKey(ntx, nty)] else {
-                let cx = Swift.min(PATTERN_TILE - 1, Swift.max(0, lx))
-                let cy = Swift.min(PATTERN_TILE - 1, Swift.max(0, ly))
-                let idx = cy * PATTERN_TILE + cx
-                return (entry.u[idx], entry.v[idx])
-            }
-            let idx = nly * PATTERN_TILE + nlx
-            return (nb.u[idx], nb.v[idx])
+            index[keys[i]] = i
         }
+        defer {
+            for c in current { c.deallocate() }
+            for n in next { n?.deallocate() }
+        }
+        // The eight tiles around each tile (row by row, itself in the middle), or -1.
+        var around = [Int](repeating: -1, count: count * 9)
+        for i in 0..<count {
+            let (tx, ty) = coords[i]
+            for dy in -1...1 {
+                for dx in -1...1 {
+                    around[i * 9 + (dy + 1) * 3 + dx + 1] = index[tileKey(tx + dx, ty + dy)] ?? -1
+                }
+            }
+        }
+        let wetEntries = (0..<count).filter { hasWet[$0] }
+        let workers = Swift.max(1, Swift.min(threads, wetEntries.count))
+        let last = PATTERN_TILE - 1
 
         for _ in 0..<totalSubsteps {
-            for e in entries where e.hasWet {
-                for ly in 0..<PATTERN_TILE {
-                    let row = ly * PATTERN_TILE
-                    let interiorY = ly > 0 && ly < PATTERN_TILE - 1
-                    for lx in 0..<PATTERN_TILE {
-                        let idx = row + lx
-                        if e.wet[idx] == 0 {
-                            e.nextU[idx] = e.u[idx]
-                            e.nextV[idx] = e.v[idx]
-                            continue
+            current.withUnsafeBufferPointer { current in
+                next.withUnsafeBufferPointer { next in
+                    around.withUnsafeBufferPointer { around in
+                        nonisolated(unsafe) let masks = masks
+                        patternParallel(wetEntries.count, workers) { w in
+                            let i = wetEntries[w]
+                            let u = UnsafePointer(current[i]), v = u + PATTERN_CELLS
+                            let nextU = next[i]!, nextV = nextU + PATTERN_CELLS
+                            let wet = masks + i * PATTERN_CELLS
+                            let nb = around.baseAddress! + i * 9
+                            // `U` and `V` at a cell that may lie in a neighbouring tile (the tile's own edge cell where there is none).
+                            func sampleUV(_ lx: Int, _ ly: Int) -> (Double, Double) {
+                                let dx = lx < 0 ? -1 : lx > last ? 1 : 0
+                                let dy = ly < 0 ? -1 : ly > last ? 1 : 0
+                                if dx == 0 && dy == 0 {
+                                    let idx = ly * PATTERN_TILE + lx
+                                    return (u[idx], v[idx])
+                                }
+                                let n = nb[(dy + 1) * 3 + dx + 1]
+                                if n < 0 {
+                                    let cx = Swift.min(last, Swift.max(0, lx))
+                                    let cy = Swift.min(last, Swift.max(0, ly))
+                                    let idx = cy * PATTERN_TILE + cx
+                                    return (u[idx], v[idx])
+                                }
+                                let nu = UnsafePointer(current[n])
+                                let idx = (ly - dy * PATTERN_TILE) * PATTERN_TILE + (lx - dx * PATTERN_TILE)
+                                return (nu[idx], nu[PATTERN_CELLS + idx])
+                            }
+                            for ly in 0..<PATTERN_TILE {
+                                let row = ly * PATTERN_TILE
+                                let interiorY = ly > 0 && ly < last
+                                for lx in 0..<PATTERN_TILE {
+                                    let idx = row + lx
+                                    if wet[idx] == 0 { continue }
+                                    let uc = u[idx]
+                                    let vc = v[idx]
+                                    var lapU = -uc
+                                    var lapV = -vc
+                                    if interiorY && lx > 0 && lx < last {
+                                        let n = idx - PATTERN_TILE
+                                        let so = idx + PATTERN_TILE
+                                        lapU += 0.2 * (u[idx - 1] + u[idx + 1] + u[n] + u[so]) +
+                                            0.05 * (u[n - 1] + u[n + 1] + u[so - 1] + u[so + 1])
+                                        lapV += 0.2 * (v[idx - 1] + v[idx + 1] + v[n] + v[so]) +
+                                            0.05 * (v[n - 1] + v[n + 1] + v[so - 1] + v[so + 1])
+                                    } else {
+                                        let (uW, vW) = sampleUV(lx - 1, ly)
+                                        lapU += 0.2 * uW; lapV += 0.2 * vW
+                                        let (uE, vE) = sampleUV(lx + 1, ly)
+                                        lapU += 0.2 * uE; lapV += 0.2 * vE
+                                        let (uN, vN) = sampleUV(lx, ly - 1)
+                                        lapU += 0.2 * uN; lapV += 0.2 * vN
+                                        let (uS, vS) = sampleUV(lx, ly + 1)
+                                        lapU += 0.2 * uS; lapV += 0.2 * vS
+                                        let (uNW, vNW) = sampleUV(lx - 1, ly - 1)
+                                        lapU += 0.05 * uNW; lapV += 0.05 * vNW
+                                        let (uNE, vNE) = sampleUV(lx + 1, ly - 1)
+                                        lapU += 0.05 * uNE; lapV += 0.05 * vNE
+                                        let (uSW, vSW) = sampleUV(lx - 1, ly + 1)
+                                        lapU += 0.05 * uSW; lapV += 0.05 * vSW
+                                        let (uSE, vSE) = sampleUV(lx + 1, ly + 1)
+                                        lapU += 0.05 * uSE; lapV += 0.05 * vSE
+                                    }
+                                    let uvv = uc * vc * vc
+                                    let nu = uc + Du * lapU - uvv + F * (1 - uc)
+                                    let nv = vc + Dv * lapV + uvv - fk * vc
+                                    nextU[idx] = nu < 0 ? 0 : nu > 1 ? 1 : nu
+                                    nextV[idx] = nv < 0 ? 0 : nv > 1 ? 1 : nv
+                                }
+                            }
                         }
-                        let uc = e.u[idx]
-                        let vc = e.v[idx]
-                        var lapU = -uc
-                        var lapV = -vc
-                        if interiorY && lx > 0 && lx < PATTERN_TILE - 1 {
-                            let n = idx - PATTERN_TILE
-                            let so = idx + PATTERN_TILE
-                            lapU += 0.2 * (e.u[idx - 1] + e.u[idx + 1] + e.u[n] + e.u[so]) +
-                                0.05 * (e.u[n - 1] + e.u[n + 1] + e.u[so - 1] + e.u[so + 1])
-                            lapV += 0.2 * (e.v[idx - 1] + e.v[idx + 1] + e.v[n] + e.v[so]) +
-                                0.05 * (e.v[n - 1] + e.v[n + 1] + e.v[so - 1] + e.v[so + 1])
-                        } else {
-                            let (uW, vW) = sampleUV(e, lx - 1, ly)
-                            lapU += 0.2 * uW; lapV += 0.2 * vW
-                            let (uE, vE) = sampleUV(e, lx + 1, ly)
-                            lapU += 0.2 * uE; lapV += 0.2 * vE
-                            let (uN, vN) = sampleUV(e, lx, ly - 1)
-                            lapU += 0.2 * uN; lapV += 0.2 * vN
-                            let (uS, vS) = sampleUV(e, lx, ly + 1)
-                            lapU += 0.2 * uS; lapV += 0.2 * vS
-                            let (uNW, vNW) = sampleUV(e, lx - 1, ly - 1)
-                            lapU += 0.05 * uNW; lapV += 0.05 * vNW
-                            let (uNE, vNE) = sampleUV(e, lx + 1, ly - 1)
-                            lapU += 0.05 * uNE; lapV += 0.05 * vNE
-                            let (uSW, vSW) = sampleUV(e, lx - 1, ly + 1)
-                            lapU += 0.05 * uSW; lapV += 0.05 * vSW
-                            let (uSE, vSE) = sampleUV(e, lx + 1, ly + 1)
-                            lapU += 0.05 * uSE; lapV += 0.05 * vSE
-                        }
-                        let uvv = uc * vc * vc
-                        let nu = uc + Du * lapU - uvv + F * (1 - uc)
-                        let nv = vc + Dv * lapV + uvv - fk * vc
-                        e.nextU[idx] = nu < 0 ? 0 : nu > 1 ? 1 : nu
-                        e.nextV[idx] = nv < 0 ? 0 : nv > 1 ? 1 : nv
                     }
                 }
             }
-            for e in entries where e.hasWet {
-                e.u = e.nextU
-                e.v = e.nextV
+            for i in wetEntries {
+                let c = current[i]
+                current[i] = next[i]!
+                next[i] = c
             }
         }
 
-        for e in entries where e.hasWet {
-            if var tile = tiles.get(e.key) {
-                tile.u = e.u
-                tile.v = e.v
-                tiles.set(e.key, tile)
+        for i in wetEntries {
+            if var tile = tiles.get(keys[i]) {
+                tile.u = [Double](UnsafeBufferPointer(start: current[i], count: PATTERN_CELLS))
+                tile.v = [Double](UnsafeBufferPointer(start: current[i] + PATTERN_CELLS, count: PATTERN_CELLS))
+                tiles.set(keys[i], tile)
             }
+            steppedTiles.append(keys[i])
         }
         return true
     }

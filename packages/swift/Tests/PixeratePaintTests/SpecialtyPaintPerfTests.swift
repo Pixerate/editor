@@ -174,4 +174,232 @@ final class SpecialtyPaintPerfTests: XCTestCase {
         c.lightCaches = [:]
         XCTAssertTrue(c.compositePixels(wet: "display").data == first.data)
     }
+
+    // MARK: Live patterns
+
+    /// `LivePatternField.step` as it was: one thread, a closure call per cell, the fields copied every substep.
+    private func referenceStep(_ field: LivePatternField, _ wetSteps: Int, isWetCell: WetCellPredicate, canWakeTile: ((Int, Int) -> Bool)? = nil) -> Bool {
+        if !field.enabled || field.tiles.isEmpty || wetSteps <= 0 { return false }
+        let totalSubsteps = Swift.max(1, wetSteps) * PATTERN_SUBSTEPS
+        let F = field.settings.feed
+        let k = field.settings.kill
+        let fk = F + k
+        let scaleClamped = Swift.min(2.2, Swift.max(0.4, field.settings.scale))
+        let Du = 0.16 * scaleClamped
+        let Dv = 0.08 * scaleClamped
+        for (key, tile) in Array(field.tiles) {
+            let (tx, ty) = tileCoord(key)
+            var top = false, bottom = false, left = false, right = false
+            for i in 0..<PATTERN_TILE {
+                if tile.v[i] > PATTERN_V_EPS || tile.v[PATTERN_TILE + i] > PATTERN_V_EPS { top = true }
+                if tile.v[(PATTERN_TILE - 1) * PATTERN_TILE + i] > PATTERN_V_EPS || tile.v[(PATTERN_TILE - 2) * PATTERN_TILE + i] > PATTERN_V_EPS { bottom = true }
+                if tile.v[i * PATTERN_TILE] > PATTERN_V_EPS || tile.v[i * PATTERN_TILE + 1] > PATTERN_V_EPS { left = true }
+                if tile.v[i * PATTERN_TILE + PATTERN_TILE - 1] > PATTERN_V_EPS || tile.v[i * PATTERN_TILE + PATTERN_TILE - 2] > PATTERN_V_EPS { right = true }
+            }
+            func wake(_ nx: Int, _ ny: Int) {
+                if nx < 0 || ny < 0 || nx >= field.tilesX || ny >= field.tilesY { return }
+                if let canWakeTile, !canWakeTile(nx, ny) { return }
+                let nk = tileKey(nx, ny)
+                if !field.tiles.has(nk) {
+                    field.tiles.set(nk, LivePatternTileState(u: [Double](repeating: 1, count: PATTERN_CELLS), v: [Double](repeating: 0, count: PATTERN_CELLS), bakedV: [Double](repeating: 0, count: PATTERN_CELLS)))
+                }
+            }
+            if top { wake(tx, ty - 1) }
+            if bottom { wake(tx, ty + 1) }
+            if left { wake(tx - 1, ty) }
+            if right { wake(tx + 1, ty) }
+        }
+        final class StepEntry {
+            let key: TileKey, tx: Int, ty: Int
+            var u: [Double], v: [Double], nextU: [Double], nextV: [Double]
+            let wet: [UInt8]
+            let hasWet: Bool
+            init(key: TileKey, tx: Int, ty: Int, u: [Double], v: [Double], wet: [UInt8], hasWet: Bool) {
+                self.key = key; self.tx = tx; self.ty = ty
+                self.u = u; self.v = v; nextU = u; nextV = v
+                self.wet = wet; self.hasWet = hasWet
+            }
+        }
+        var entries: [StepEntry] = []
+        var byKey: [TileKey: StepEntry] = [:]
+        var anyWet = false
+        let maxHalfW = Int(JS.ceil(Double(field.width) * 0.5))
+        let maxHalfH = Int(JS.ceil(Double(field.height) * 0.5))
+        for (key, tile) in field.tiles {
+            let (tx, ty) = tileCoord(key)
+            var wet = [UInt8](repeating: 0, count: PATTERN_CELLS)
+            var hasWet = false
+            let tileW = Swift.min(PATTERN_TILE, maxHalfW - tx * PATTERN_TILE)
+            let tileH = Swift.min(PATTERN_TILE, maxHalfH - ty * PATTERN_TILE)
+            if tileH > 0 && tileW > 0 {
+                for ly in 0..<tileH {
+                    for lx in 0..<tileW where isWetCell(tx, ty, lx, ly) {
+                        wet[ly * PATTERN_TILE + lx] = 1
+                        hasWet = true
+                        anyWet = true
+                    }
+                }
+            }
+            let e = StepEntry(key: key, tx: tx, ty: ty, u: tile.u, v: tile.v, wet: wet, hasWet: hasWet)
+            entries.append(e)
+            byKey[key] = e
+        }
+        if !anyWet { return false }
+        func sampleUV(_ entry: StepEntry, _ lx: Int, _ ly: Int) -> (Double, Double) {
+            if lx >= 0 && lx < PATTERN_TILE && ly >= 0 && ly < PATTERN_TILE {
+                let idx = ly * PATTERN_TILE + lx
+                return (entry.u[idx], entry.v[idx])
+            }
+            var ntx = entry.tx, nty = entry.ty, nlx = lx, nly = ly
+            if nlx < 0 { ntx -= 1; nlx += PATTERN_TILE } else if nlx >= PATTERN_TILE { ntx += 1; nlx -= PATTERN_TILE }
+            if nly < 0 { nty -= 1; nly += PATTERN_TILE } else if nly >= PATTERN_TILE { nty += 1; nly -= PATTERN_TILE }
+            guard let nb = byKey[tileKey(ntx, nty)] else {
+                let cx = Swift.min(PATTERN_TILE - 1, Swift.max(0, lx))
+                let cy = Swift.min(PATTERN_TILE - 1, Swift.max(0, ly))
+                let idx = cy * PATTERN_TILE + cx
+                return (entry.u[idx], entry.v[idx])
+            }
+            let idx = nly * PATTERN_TILE + nlx
+            return (nb.u[idx], nb.v[idx])
+        }
+        for _ in 0..<totalSubsteps {
+            for e in entries where e.hasWet {
+                for ly in 0..<PATTERN_TILE {
+                    let row = ly * PATTERN_TILE
+                    let interiorY = ly > 0 && ly < PATTERN_TILE - 1
+                    for lx in 0..<PATTERN_TILE {
+                        let idx = row + lx
+                        if e.wet[idx] == 0 {
+                            e.nextU[idx] = e.u[idx]
+                            e.nextV[idx] = e.v[idx]
+                            continue
+                        }
+                        let uc = e.u[idx]
+                        let vc = e.v[idx]
+                        var lapU = -uc
+                        var lapV = -vc
+                        if interiorY && lx > 0 && lx < PATTERN_TILE - 1 {
+                            let n = idx - PATTERN_TILE
+                            let so = idx + PATTERN_TILE
+                            lapU += 0.2 * (e.u[idx - 1] + e.u[idx + 1] + e.u[n] + e.u[so]) +
+                                0.05 * (e.u[n - 1] + e.u[n + 1] + e.u[so - 1] + e.u[so + 1])
+                            lapV += 0.2 * (e.v[idx - 1] + e.v[idx + 1] + e.v[n] + e.v[so]) +
+                                0.05 * (e.v[n - 1] + e.v[n + 1] + e.v[so - 1] + e.v[so + 1])
+                        } else {
+                            let (uW, vW) = sampleUV(e, lx - 1, ly)
+                            lapU += 0.2 * uW; lapV += 0.2 * vW
+                            let (uE, vE) = sampleUV(e, lx + 1, ly)
+                            lapU += 0.2 * uE; lapV += 0.2 * vE
+                            let (uN, vN) = sampleUV(e, lx, ly - 1)
+                            lapU += 0.2 * uN; lapV += 0.2 * vN
+                            let (uS, vS) = sampleUV(e, lx, ly + 1)
+                            lapU += 0.2 * uS; lapV += 0.2 * vS
+                            let (uNW, vNW) = sampleUV(e, lx - 1, ly - 1)
+                            lapU += 0.05 * uNW; lapV += 0.05 * vNW
+                            let (uNE, vNE) = sampleUV(e, lx + 1, ly - 1)
+                            lapU += 0.05 * uNE; lapV += 0.05 * vNE
+                            let (uSW, vSW) = sampleUV(e, lx - 1, ly + 1)
+                            lapU += 0.05 * uSW; lapV += 0.05 * vSW
+                            let (uSE, vSE) = sampleUV(e, lx + 1, ly + 1)
+                            lapU += 0.05 * uSE; lapV += 0.05 * vSE
+                        }
+                        let uvv = uc * vc * vc
+                        let nu = uc + Du * lapU - uvv + F * (1 - uc)
+                        let nv = vc + Dv * lapV + uvv - fk * vc
+                        e.nextU[idx] = nu < 0 ? 0 : nu > 1 ? 1 : nu
+                        e.nextV[idx] = nv < 0 ? 0 : nv > 1 ? 1 : nv
+                    }
+                }
+            }
+            for e in entries where e.hasWet {
+                e.u = e.nextU
+                e.v = e.nextV
+            }
+        }
+        for e in entries where e.hasWet {
+            if var tile = field.tiles.get(e.key) {
+                tile.u = e.u
+                tile.v = e.v
+                field.tiles.set(e.key, tile)
+            }
+        }
+        return true
+    }
+
+    /// A field over 3 × 3 tiles (the canvas ends inside the last ones) seeded so that patterns cross tile edges and reach tiles with no neighbour.
+    private func seededField() -> LivePatternField {
+        let f = LivePatternField(width: 700, height: 600, settings: ["pattern": "coral"])
+        for (i, p) in [(250.0, 250.0), (258.0, 120.0), (500.0, 262.0), (8.0, 8.0), (690.0, 590.0), (380.0, 380.0)].enumerated() {
+            f.seedDisc(cx: p.0, cy: p.1, radius: 30, seed: 5 + i)
+        }
+        return f
+    }
+
+    private func assertSameField(_ a: LivePatternField, _ b: LivePatternField, _ message: String, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(a.tiles.keys, b.tiles.keys, "\(message): tiles", file: file, line: line)
+        for (key, t) in a.tiles {
+            guard let o = b.tiles.get(key) else { continue }
+            XCTAssertTrue(t.u.elementsEqual(o.u) { $0.bitPattern == $1.bitPattern }, "\(message): U of \(tileCoord(key))", file: file, line: line)
+            XCTAssertTrue(t.v.elementsEqual(o.v) { $0.bitPattern == $1.bitPattern }, "\(message): V of \(tileCoord(key))", file: file, line: line)
+        }
+    }
+
+    func testLivePatternStepHasTheBitsOfTheSerialStep() {
+        // Wet in blobs and bands, dry between them; tile (2, 1) is never wet and tile (0, 2) may not wake.
+        let wet: WetCellPredicate = { tx, ty, lx, ly in
+            if tx == 2 && ty == 1 { return false }
+            let gx = tx * PATTERN_TILE + lx, gy = ty * PATTERN_TILE + ly
+            return (gx / 23 + gy / 17) % 5 != 0
+        }
+        let canWake: (Int, Int) -> Bool = { tx, ty in !(tx == 0 && ty == 2) }
+        let mask: WetTileMask = { tx, ty, w, h, m in
+            var any = false
+            for ly in 0..<h { for lx in 0..<w where wet(tx, ty, lx, ly) { m[ly * PATTERN_TILE + lx] = 1; any = true } }
+            return any
+        }
+        let reference = seededField()
+        let variants: [(name: String, field: LivePatternField, mask: WetTileMask?, threads: Int)] = [
+            ("one thread, cell predicate", seededField(), nil, 1),
+            ("one thread, tile mask", seededField(), mask, 1),
+            ("eight threads, tile mask", seededField(), mask, 8),
+        ]
+        // Several calls: the tiles a call wakes take part in the next.
+        for round in 0..<6 {
+            let steps = 1 + round % 3
+            XCTAssertTrue(referenceStep(reference, steps, isWetCell: wet, canWakeTile: canWake))
+            for v in variants {
+                XCTAssertTrue(v.field.step(steps, isWetCell: wet, canWakeTile: canWake, wetTile: v.mask, threads: v.threads))
+                assertSameField(v.field, reference, "\(v.name), round \(round)")
+                XCTAssertEqual(Set(v.field.steppedTiles), Set(reference.tiles.keys.filter { tileCoord($0) != (2, 1) }), "\(v.name): stepped tiles")
+            }
+        }
+        XCTAssertGreaterThan(reference.tiles.count, 6)
+        // Nothing wet: nothing steps.
+        let dry = seededField()
+        XCTAssertFalse(dry.step(2, isWetCell: { _, _, _, _ in false }))
+        XCTAssertTrue(dry.steppedTiles.isEmpty)
+        assertSameField(dry, seededField(), "dry field")
+    }
+
+    func testPatternLaneStepsTheSameOnOneThreadAndMany() throws {
+        func run(threads: Int) throws -> (TiledSurface, LivePatternFieldSnapshot) {
+            let paper = WetPaperInput(absorption: 0.5, permeability: 0.5, roughness: 0.5, color: [250, 248, 240], heightAt: { x, y in 0.5 + 0.25 * sin(x * 0.7) * cos(y * 0.9) })
+            let w = try WetWorld(width: 600, height: 520, paper: paper)
+            w.threads = threads
+            try w.ensureLane("a")
+            try w.paint("a", RasterRect(x: 40, y: 60, width: 480, height: 380), nil, water: 0.8, pigment: pigmentOf([0.2, 0.4, 0.7], 0.1).map { $0 * 0.05 })
+            try w.setLivePatterns("a", ["pattern": "stripes"])
+            for (i, p) in [(250.0, 250.0), (258.0, 120.0), (420.0, 262.0)].enumerated() { _ = try w.seedLivePatterns("a", p.0, p.1, 28, 9 + i) }
+            w.step(40)
+            return (try w.display("a").surface, try w.livePatternField("a").snapshot())
+        }
+        let (one, onePattern) = try run(threads: 1)
+        let (many, manyPattern) = try run(threads: 8)
+        assertSameSurface(one, many, "display")
+        XCTAssertEqual(onePattern.tiles.keys, manyPattern.tiles.keys)
+        for (key, t) in onePattern.tiles {
+            XCTAssertTrue(t.v.elementsEqual(manyPattern.tiles.get(key)!.v) { $0.bitPattern == $1.bitPattern }, "V of \(tileCoord(key))")
+        }
+        XCTAssertGreaterThan(onePattern.tiles.values.reduce(0) { $0 + $1.v.filter { $0 > PATTERN_V_EPS }.count }, 500)
+    }
 }
