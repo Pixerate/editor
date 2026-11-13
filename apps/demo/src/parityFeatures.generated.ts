@@ -1729,6 +1729,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`ChartStream`, `blendChartScenes`, `planChartCommand`, `chartPointAnchor`, `layoutSparkline`"
       },
       {
+        "feature": "Charts as UI Components (`uiComponents()`: `sparkline` and `bar-chart` as `data-visual` `UiDescriptor`s for a component registry, with a data JSON Schema, colour roles, accessibility, sizing, example data and a stable `contentHash`; `render` draws data to accessible SVG in light or dark with role colours)",
+        "core": "`uiComponents`, `ChartUiComponent`, `UiDescriptor` (`/chart`)",
+        "react": "Via core",
+        "svelte": "Via core",
+        "swift": "Planned (#819): the Swift chart package does not list UI components yet"
+      },
+      {
         "feature": "Chart Summaries & Accessibility (per-series min / max / mean / trend, layout warnings, plain-language description, SVG `<title>` and `<desc>`, recommendations from table shape)",
         "core": "`summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable`",
         "react": "Via core",

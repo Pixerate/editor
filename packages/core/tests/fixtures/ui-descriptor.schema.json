@@ -1,0 +1,260 @@
+{
+  "$comment": "Copied from @pixerate/schemas json-schema/genui/UiDescriptor.json (Pixerate/schemas#80). Refresh it when that schema changes; tests/chart-ui-components.test.ts validates descriptors against it.",
+  "$ref": "#/definitions/UiDescriptor",
+  "definitions": {
+    "JsonSchemaDocument": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { … } }"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "PlatformTarget": {
+      "type": "string",
+      "enum": [
+        "svelte",
+        "react",
+        "webcomponent",
+        "swiftui",
+        "compose",
+        "html-page"
+      ]
+    },
+    "UiA11y": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "ARIA role, e.g. 'switch', 'progressbar', 'img', 'figure'"
+        },
+        "keyboard": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Key → what it does, e.g. { Space: 'toggle', Enter: 'toggle' }"
+        },
+        "labelFrom": {
+          "type": "string",
+          "enum": [
+            "prop",
+            "children",
+            "aria-label",
+            "content"
+          ],
+          "description": "Where the accessible name comes from; 'content' means a description built from the data"
+        },
+        "reducedMotionAt": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Progress (0–1) to show, still, under prefers-reduced-motion; 1 is the rest state"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UiColorRole": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "A colour role, e.g. surface, ink, accent, track-on (see UI_COLOR_ROLES)"
+    },
+    "UiComponentGroup": {
+      "type": "string",
+      "enum": [
+        "baseline",
+        "data-visual",
+        "paradigm"
+      ],
+      "description": "baseline: the shadcn set; data-visual: charts and diagrams whose layout follows the data; paradigm: new kinds of UI (3-D, instruments)"
+    },
+    "UiDescriptor": {
+      "type": "object",
+      "properties": {
+        "implements": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The component type id it implements, e.g. 'switch', or a new type such as 'gauge'"
+        },
+        "group": {
+          "$ref": "#/definitions/UiComponentGroup",
+          "description": "For a new type: which group it belongs to"
+        },
+        "contract": {
+          "type": "object",
+          "properties": {
+            "props": {
+              "$ref": "#/definitions/JsonSchemaDocument",
+              "description": "JSON Schema for props (or, for an engine, its data)"
+            },
+            "state": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UiStateField"
+              },
+              "default": []
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UiEvent"
+              },
+              "default": []
+            },
+            "a11y": {
+              "$ref": "#/definitions/UiA11y"
+            },
+            "colorRoles": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UiColorRole"
+              },
+              "default": [],
+              "description": "The colour roles the component draws with"
+            },
+            "motion": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether it follows the page motion contract (PageMotionInfoSchema)"
+            },
+            "sizing": {
+              "$ref": "#/definitions/UiSizing"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Overrides or additions to the type's contract"
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlatformTarget"
+          },
+          "default": [],
+          "description": "Platforms the provider can render it on"
+        },
+        "swiftReady": {
+          "type": "boolean"
+        },
+        "example": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          },
+          "description": "Example props or data, for previews and checks"
+        },
+        "contentHash": {
+          "type": "string",
+          "description": "Changes whenever the item's output changes, so a sync can tell"
+        }
+      },
+      "required": [
+        "implements"
+      ],
+      "additionalProperties": false
+    },
+    "UiEvent": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "e.g. 'change', 'select', 'open'"
+        },
+        "payload": {
+          "$ref": "#/definitions/JsonSchemaDocument",
+          "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { … } }"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "UiSizing": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "intrinsic",
+            "fill"
+          ],
+          "default": "intrinsic"
+        },
+        "minWidth": {
+          "type": "number",
+          "minimum": 0,
+          "description": "CSS px"
+        },
+        "minHeight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "CSS px"
+        },
+        "aspectRatio": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "width / height, for components that keep a shape"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UiStateField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The controlled value's prop name, e.g. 'checked', 'value', 'progress'"
+        },
+        "schema": {
+          "$ref": "#/definitions/JsonSchemaDocument",
+          "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { … } }"
+        },
+        "event": {
+          "type": "string",
+          "description": "The event fired when it changes, e.g. 'change'"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -304,6 +304,18 @@ several charts may register them with another prefix.
 | `chart.undo` | Undo the last chart edit. |
 | `chart.redo` | Redo the last undone chart edit. |
 
+## Charts as UI components
+
+Hosts that build pages from a component library can take a chart type as a component instead
+of an editable chart: `uiComponents()` (from `@pixerate/editor/chart`) lists `sparkline` and
+`bar-chart` with a `UiDescriptor` (data JSON Schema, colour roles, accessibility, sizing,
+example, `contentHash`) and a `render(data, { width, height, theme, colors })` that returns
+accessible SVG. There is no agent tool for it: when a page only needs a fixed picture of simple
+data in the page's own colours, the host's component does the job; reach for the chart tools when
+the user wants to edit, annotate or restyle the chart itself. Bar chart roles: `accent` is the first
+series, `surface` the background, `ink` the title and legend, `ink-muted` ticks and axes, `border`
+the grid. Sparkline: `accent` is the line.
+
 ## Pitfalls
 
 - With agent playback on, value changes and selections are dragged by the chart's director, and other changes are clicked on the inspector option, data grid or toolbar they belong to. Results are unchanged.
