@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.315.0
+
+### Minor Changes
+
+- 84bbd38: Pixel expression effects draw their live view frames on the GPU in TypeScript (#753). `pixelGLSL` generates a GLSL ES 3.0 shader from a checked `PixelProgram` with the CPU evaluator's semantics (straight-line code, explicit broadcasting, the same `mod`, `sqrt`, `select`, NaN, `hash` / `noise` and `sample` arithmetic), and `PixelWebGL` compiles it on one WebGL2 context within a 2 s budget and reads frames back within 2/255 of the CPU. The paint editor uses it only for live effect paint frames (the new `authoredEffectsGPU` option, default on, the same switch as Swift's): frames drawn on the GPU are dropped once shown, so documents, exports, replays, saved pixels and conformance stay on the CPU. Without WebGL2 (Node, workers without OffscreenCanvas, jsdom), on a shader that doesn't compile or compiles too slowly, or after context loss, frames render on the CPU, and `authoredEffectsGPUStatus` reports which renderer drew the last live frame and why it fell back. React's `usePaintEditor` and Svelte's `createReactivePaintEditor` pass the option through, and `PaintCanvas` plays the GPU frames in both.
+
 ## 0.314.0
 
 ### Minor Changes
