@@ -1,5 +1,19 @@
 # @pixerate/editor
 
+## 0.318.0
+
+### Minor Changes
+
+- 497133b: Smart object UI in React and Svelte, in parity. A new `<SmartObjectPanel>` shows the active smart object's contents (name, size, linked instances) with Edit Contents, Replace Contents… (an image or a PSD), Export Contents, New via Copy and Rasterize; its smart filter stack (add Develop or Blur, the stack switch, each filter's eye, order, remove, and blend mode, opacity and settings when expanded, a slider drag being one undo step); and the filter mask (add, from selection, enable, link, paint, remove). `<LayersPanel>` shows it for smart objects (`smartObjects` prop, default true), badges smart object thumbnails (linked instances marked; double-click to Edit Contents), lists the smart filters under the row with their eyes and the filter mask thumbnail, enables Fill for smart objects, and shows a bar with Save & Close / Discard while contents are open. The layer menu gains Convert to Smart Object, Edit Contents, New Smart Object via Copy and Add Smart Filter Mask. Core adds the shared view model (`smartObjectPanel`, `smartObjectBadge`, `smartFilterControls`, `SMART_FILTER_MENU`), the file helpers `replaceSmartObjectContentsFromFile` and `downloadSmartObjectContents`, and `getLayerThumbnail({ filterMask: true })`. The `set_active_layer` agent tool now takes `target: "filter-mask"` (the panel's Paint button), refused with a reason when the layer has no smart filter mask, and `list_layers` documents the smart object fields it already returned.
+
+## 0.317.1
+
+### Patch Changes
+
+- dcfa8fc: Swift paint documents with external assets and their agent tools (#742). `PixeratePaint` adds external asset stores (`PaintAssetStore`, `PaintEditorController.toJSONExternal` and `loadJSONAsync`, with the TS core's asset ids, references and problems), `createPaintEditorDocument` (the `pixerate.editor-document` contract of kind `paint`: images as content-addressed asset references, revisions from the controller's new `documentRevision`, opening clears the history, read-only mid-stroke), `editorDocument(assets:name:)` / `openEditorDocument(_:assets:)` so an envelope reopens in Swift, and `createPaintDocumentToolProvider` with `get_paint_document` / `load_paint_document` (also registered by `PaintEditorModel`). `PixerateCore` adds `EditorAssetRegistry`, `externalizeAssets`, `internalizeAssets`, `collectAssetRefs`, `persistEditorAssets` / `preloadEditorAssets` over an `EditorStorage` (`MemoryEditorStorage`), `EditorDocumentSpec` `subscribe` and `assets`, `EditorDocument.destroy()`, and `createDocumentToolProvider` (`get_<kind>_document`, `load_<kind>_document`, `undo_<kind>`, `redo_<kind>`; `EditorDocumentHistory` now reports `documentHistoryState()`).
+
+  The paint contracts list the `paint-document` provider (`get_paint_document`, `load_paint_document`), `createPaintConformanceHost` registers it, and the new `document-tools` paint scenario calls both tools.
+
 ## 0.317.0
 
 ### Minor Changes

@@ -1924,9 +1924,9 @@ export const PARITY_AREAS: ParityArea[] = [
       },
       {
         "feature": "Image Smart Objects (convert layers to a smart object whose contents, raster pixels or a nested layer document, are kept and shared by linked copies or copied unlinked; Free Transform and warp stored non-destructively and re-rendered from the contents; smart filters with one filter mask, reorder and enable / disable; edit, replace, export and rasterize contents; PSD placed layers, embedded and linked; `convert_to_smart_object`, `get_smart_object`, `edit_smart_object_contents`, `close_smart_object_contents`, `replace_smart_object_contents`, `export_smart_object_contents`, `copy_smart_object`, `rasterize_smart_object`, `set_smart_object_transform`, `add_smart_filter`, `update_smart_filter`, `move_smart_filter`, `remove_smart_filter`, `set_smart_filter_mask`, `set_smart_filters_enabled` agent tools)",
-        "core": "`convertToSmartObject`, `copySmartObject`, `rasterizeSmartObject`, `renderSmartObject` & `createImageSmartObjectTools`",
-        "react": "`<LayersPanel>` layer menu (Convert to Smart Object, Edit Contents, New Smart Object via Copy, Add Smart Filter Mask)",
-        "svelte": "`<LayersPanel>` layer menu (Convert to Smart Object, Edit Contents, New Smart Object via Copy, Add Smart Filter Mask)",
+        "core": "`convertToSmartObject`, `copySmartObject`, `rasterizeSmartObject`, `renderSmartObject`, `createImageSmartObjectTools` & the panel view model (`smartObjectPanel`, `smartObjectBadge`, `smartFilterControls`)",
+        "react": "`<SmartObjectPanel>` (contents, smart filter stack, filter mask) and `<LayersPanel>` (smart object badge, smart filter rows, Edit Contents bar with Save & Close / Discard, layer menu: Convert to Smart Object, Edit Contents, New Smart Object via Copy, Add Smart Filter Mask)",
+        "svelte": "`<SmartObjectPanel>` (contents, smart filter stack, filter mask) and `<LayersPanel>` (smart object badge, smart filter rows, Edit Contents bar with Save & Close / Discard, layer menu: Convert to Smart Object, Edit Contents, New Smart Object via Copy, Add Smart Filter Mask)",
         "swift": "Planned (#533)"
       },
       {

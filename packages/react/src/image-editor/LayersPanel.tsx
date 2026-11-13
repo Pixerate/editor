@@ -3,6 +3,7 @@ import type { ImageEditorController, ImageLayer, LayerMenuAction, LayerPanelRow,
 import { LayerEffectsPanel } from './LayerEffectsPanel';
 import { EdgeColorPanel } from './EdgeColorPanel';
 import { VectorMaskEdgesPanel } from './VectorMaskEdgesPanel';
+import { SmartObjectPanel } from './SmartObjectPanel';
 import {
   BIT_DEPTH_OPTIONS,
   BLEND_MODES,
@@ -18,6 +19,8 @@ import {
   layerBadge,
   layerHasThumbnail,
   layerWarning,
+  smartFilterRows,
+  smartObjectBadge,
   layerEffectsBadge,
   layerMenu,
   layerPanelRows,
@@ -35,6 +38,8 @@ export interface LayersPanelProps {
   psdFileName?: string;
   /** Show the active layer's effects section (default true). */
   effects?: boolean;
+  /** Show the active smart object's contents and smart filters section (default true). */
+  smartObjects?: boolean;
   className?: string;
 }
 const rowClass = (active: boolean) =>
@@ -81,9 +86,12 @@ const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: str
  * as the selection, Alt-click to show it alone in grey, Alt+Shift-click as a red overlay; Ctrl/⌘-click a layer thumbnail to select its pixels), drag to reorder or drop
  * into a group, opacity / fill / blend / clipping for the active layer, and the layer menu
  * (right-click a row, or the ⋯ button), an fx badge on rows with effects (click to switch them
- * on or off) and the active layer's effects. Every action is one undo step on the controller.
+ * on or off) and the active layer's effects. Smart objects show a badge on their thumbnail
+ * (double-click it to edit the contents), their smart filters under the row (each with its eye)
+ * and the smart object section; while contents are open a bar says so, with Save and Discard.
+ * Every action is one undo step on the controller.
  */
-export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailSize = 32, psd = true, psdFileName = 'image', effects = true, className }) => {
+export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailSize = 32, psd = true, psdFileName = 'image', effects = true, smartObjects = true, className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +151,8 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
     if (placement) attempt(() => controller.moveLayer(id, placement));
   };
 
-  const thumb = (layer: ImageLayer) => (layerHasThumbnail(layer) ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null);
+  const thumb = (layer: ImageLayer) => (layerHasThumbnail(layer) || layer.type === 'smart' ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null);
+  const editing = state.editingContents ?? [];
   const maskThumb = (layer: ImageLayer) => (layer.mask && !layer.mask.source ? controller.getLayerThumbnail(layer.id, { maxSide: 64, mask: true }) : null);
   const vectorThumb = (layer: ImageLayer) =>
     layer.vectorMask ? vectorMaskThumbnail(layer.vectorMask, state.imageDimensions.width, state.imageDimensions.height, 64) : null;
@@ -152,6 +161,17 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
 
   return (
     <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="layers-panel" onClick={() => menu && setMenu(null)}>
+      {editing.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded bg-primary/15 px-2 py-1 text-foreground ring-1 ring-primary/40" role="status" data-testid="smart-editing">
+          <span className="flex-1 min-w-0 truncate">Editing contents: {editing.map((e) => e.name).join(' › ')}</span>
+          <button type="button" className={imageIconButtonClass} onClick={() => attempt(() => controller.closeSmartObjectContents(true))}>
+            Save &amp; Close
+          </button>
+          <button type="button" className={imageIconButtonClass} onClick={() => attempt(() => controller.closeSmartObjectContents(false))}>
+            Discard
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Layer actions">
         <button type="button" className={imageIconButtonClass} onClick={() => run('new-layer')}>New Layer</button>
         <button type="button" className={imageIconButtonClass} onClick={() => run('new-group')}>New Group</button>
@@ -231,14 +251,14 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
             />
           </label>
           <label className="flex flex-col gap-0.5">
-            <span className="text-muted-foreground">Fill {Math.round(((active.type === 'pixel' ? active.fillOpacity : undefined) ?? 1) * 100)}%</span>
+            <span className="text-muted-foreground">Fill {Math.round(((active.type === 'pixel' || active.type === 'smart' ? active.fillOpacity : undefined) ?? 1) * 100)}%</span>
             <input
               type="range"
               min={0}
               max={100}
               aria-label="Layer fill"
-              disabled={active.type !== 'pixel'}
-              value={Math.round(((active.type === 'pixel' ? active.fillOpacity : undefined) ?? 1) * 100)}
+              disabled={active.type !== 'pixel' && active.type !== 'smart'}
+              value={Math.round(((active.type === 'pixel' || active.type === 'smart' ? active.fillOpacity : undefined) ?? 1) * 100)}
               {...sliderEvents}
               onChange={(e) => prop('fillOpacity', Number(e.target.value) / 100)}
               className="accent-primary disabled:opacity-40"
@@ -287,14 +307,17 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
       )}
       {active?.vectorMask && <VectorMaskEdgesPanel controller={controller} layer={active} className="border-t border-border pt-1.5" />}
 
+      {smartObjects && active?.type === 'smart' && <SmartObjectPanel controller={controller} className="border-t border-border pt-1.5" />}
       {effects && active && active.type !== 'adjustment' && <LayerEffectsPanel controller={controller} className="border-t border-border pt-1.5" />}
 
       <ul className="flex flex-col gap-0.5" role="tree" aria-label="Layers">
         {rows.map((row) => {
           const { layer } = row;
+          const badge = smartObjectBadge(state.layers, layer);
+          const filterRows = smartFilterRows(layer);
           return (
+            <React.Fragment key={layer.id}>
             <li
-              key={layer.id}
               role="treeitem"
               aria-selected={row.active}
               aria-level={row.depth + 1}
@@ -372,6 +395,37 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                     </span>
                   )}
                 </span>
+              ) : badge ? (
+                <span
+                  className="relative shrink-0"
+                  title={`${badge.label}. Double-click to edit its contents.`}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    attempt(() => controller.editSmartObjectContents(layer.id));
+                  }}
+                >
+                  <Thumbnail
+                    pixels={thumb(layer)}
+                    size={thumbnailSize}
+                    label={`${row.label} pixels`}
+                    testId="layer-thumbnail"
+                    selected={row.active && state.activeTarget === 'pixels' && Boolean(layer.mask)}
+                    onClick={(e) => {
+                      if (e.ctrlKey || e.metaKey) {
+                        e.stopPropagation();
+                        attempt(() => layerThumbnailClick(controller, layer, e));
+                      }
+                    }}
+                  />
+                  <span
+                    className="absolute -bottom-1 -right-1 rounded bg-accent px-0.5 text-[8px] font-bold leading-tight text-foreground ring-1 ring-background"
+                    role="img"
+                    aria-label={badge.label}
+                    data-testid="smart-object-badge"
+                  >
+                    {badge.instances > 1 ? '⧉' : '▣'}
+                  </span>
+                </span>
               ) : (
                 <span
                   className="shrink-0 grid place-items-center rounded bg-muted text-[9px] text-muted-foreground ring-1 ring-border"
@@ -380,7 +434,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   {layerBadge(layer)}
                 </span>
               )}
-              {layer.mask && !layer.mask.source && layer.type === 'pixel' && (
+              {layer.mask && !layer.mask.source && (layer.type === 'pixel' || layer.type === 'smart') && (
                 <button
                   type="button"
                   aria-label={`${layer.mask.linked === false ? 'Link' : 'Unlink'} ${row.label} mask`}
@@ -473,6 +527,65 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
               {locked(layer) && <span aria-label="Locked" className="text-muted-foreground">🔒</span>}
               {layer.blend !== 'normal' && layer.blend !== 'pass-through' && <span className="text-[9px] text-muted-foreground">{layer.blend}</span>}
             </li>
+            {layer.type === 'smart' && (filterRows.length > 0 || layer.smartFilters?.mask) && (
+              <li
+                role="treeitem"
+                aria-level={row.depth + 2}
+                aria-selected={false}
+                className="flex items-center gap-1.5 px-1.5 py-0.5 text-muted-foreground"
+                style={{ paddingLeft: 26 + row.depth * 14 }}
+                data-testid="smart-filters-row"
+              >
+                <button
+                  type="button"
+                  aria-label={layer.smartFilters?.enabled === false ? `Show smart filters of ${row.label}` : `Hide smart filters of ${row.label}`}
+                  aria-pressed={layer.smartFilters?.enabled !== false}
+                  className="w-4 text-center"
+                  onClick={() => attempt(() => controller.setSmartFiltersEnabled(layer.id, layer.smartFilters?.enabled === false))}
+                >
+                  {layer.smartFilters?.enabled === false ? '○' : '●'}
+                </button>
+                {layer.smartFilters?.mask && (
+                  <Thumbnail
+                    pixels={controller.getLayerThumbnail(layer.id, { maxSide: 64, filterMask: true })}
+                    size={Math.round(thumbnailSize * 0.75)}
+                    label={`${row.label} filter mask${layer.smartFilters.mask.enabled === false ? ' (disabled)' : ''}`}
+                    testId="smart-filter-mask-thumbnail"
+                    selected={row.active && state.activeTarget === 'filter-mask'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (e.shiftKey) attempt(() => controller.setSmartFilterMask(layer.id, 'keep', { enabled: layer.smartFilters!.mask!.enabled === false }));
+                      else attempt(() => controller.setActiveLayer(layer.id, 'filter-mask'));
+                    }}
+                  />
+                )}
+                <span>Smart Filters</span>
+              </li>
+            )}
+            {filterRows.map((f) => (
+              <li
+                key={f.filter.id}
+                role="treeitem"
+                aria-level={row.depth + 2}
+                aria-selected={false}
+                className={`flex items-center gap-1.5 px-1.5 py-0.5 ${f.filter.enabled && layer.type === 'smart' && layer.smartFilters?.enabled !== false ? 'text-foreground' : 'text-muted-foreground'}`}
+                style={{ paddingLeft: 40 + row.depth * 14 }}
+                data-filter-id={f.filter.id}
+              >
+                <button
+                  type="button"
+                  aria-label={f.filter.enabled ? `Hide ${f.label}` : `Show ${f.label}`}
+                  aria-pressed={f.filter.enabled}
+                  className="w-4 text-center"
+                  onClick={() => attempt(() => controller.updateSmartFilter(layer.id, f.filter.id, { enabled: !f.filter.enabled }))}
+                >
+                  {f.filter.enabled ? '●' : '○'}
+                </button>
+                <span className="flex-1 min-w-0 truncate">{f.label}</span>
+                {f.filter.blend !== 'normal' && <span className="text-[9px] text-muted-foreground">{f.filter.blend}</span>}
+              </li>
+            ))}
+            </React.Fragment>
           );
         })}
       </ul>
