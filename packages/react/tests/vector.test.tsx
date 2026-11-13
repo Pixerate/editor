@@ -1274,6 +1274,10 @@ describe("VectorPerspectivePanel (react)", () => {
     expect(container.querySelector('[data-vector-perspective-plane="left"][data-active]')).not.toBeNull();
     await act(async () => (Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Remove") as HTMLButtonElement).click());
     expect(c.getPerspective()).toBeNull();
+    // The Iso preset adds an isometric grid (#799).
+    await act(async () => (container.querySelector('[data-vector-perspective-preset="isometric"]') as HTMLButtonElement).click());
+    expect(c.getPerspective()).toMatchObject({ vanishingPoints: [], isometric: { angle: 30 } });
+    expect(container.querySelector('[data-vector-perspective-preset="isometric"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 });
 

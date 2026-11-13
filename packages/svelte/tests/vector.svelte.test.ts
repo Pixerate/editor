@@ -1202,6 +1202,11 @@ describe("VectorPerspectivePanel (svelte)", () => {
     expect(canvas.querySelector('[data-vector-perspective-plane="left"][data-active]')).not.toBeNull();
     click(Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Remove")!);
     expect(c.getPerspective()).toBeNull();
+    // The Iso preset adds an isometric grid (#799).
+    click(el.querySelector('[data-vector-perspective-preset="isometric"]'));
+    flushSync();
+    expect(c.getPerspective()).toMatchObject({ vanishingPoints: [], isometric: { angle: 30 } });
+    expect(el.querySelector('[data-vector-perspective-preset="isometric"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 });
 

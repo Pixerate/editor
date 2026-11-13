@@ -313,7 +313,7 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | Command | Use it to |
 | --- | --- |
 | `vector.getPerspective` | Read the grid (`vanishingPoints`, `origin`, `gridSize`, `extent`, `visible`), its `planes` and `drawingOn`. |
-| `vector.setPerspective` | Set a 1-, 2- or 3-point grid: vanishing points on the horizon, the origin below where the planes meet. Returns the grid. |
+| `vector.setPerspective` | Set a 1-, 2- or 3-point grid: vanishing points on the horizon, the origin below where the planes meet. Returns the grid. For isometric art (blocks, isometric icons and maps) give `isometric: { angle: 30 }` and no vanishing points: planes floor, left and right, and nothing recedes. |
 | `vector.removePerspective` | Remove the grid (art stays). |
 | `vector.setPerspectivePlane` | Make the rectangle, ellipse, polygon and star tools (the user's drags) draw on a plane, or flat with `null`. |
 | `vector.attachToPerspective` | Project objects onto a plane: draw them flat next to the origin (x right, y up from it), then attach. Use for signs on walls, tiles on floors, windows. Returns `{ ids }`. |

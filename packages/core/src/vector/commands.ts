@@ -1485,7 +1485,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			id: `${prefix}getPerspective`,
 			label: 'Perspective Grid',
 			keywords: ['perspective', 'grid', 'vanishing point', 'horizon'],
-			description: 'Reads the document\'s perspective grid: { perspective: { vanishingPoints, origin, gridSize, extent, visible } or null, planes (the planes it has), drawingOn (the plane new shapes are drawn on, or null) }.',
+			description: 'Reads the document\'s perspective grid: { perspective: { vanishingPoints, origin, isometric? ({ angle } for an isometric grid), gridSize, extent, visible } or null, planes (the planes it has), drawingOn (the plane new shapes are drawn on, or null) }.',
 			params: { type: 'object', properties: {}, additionalProperties: false },
 			run: () => perspectiveResult()
 		},
@@ -1495,22 +1495,23 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Perspective Grid…',
 			keywords: ['perspective', 'grid', 'vanishing point', 'one point', 'two point', 'three point', 'horizon', 'drawing in perspective'],
 			description:
-				'Sets the document\'s perspective grid (CorelDRAW\'s Perspective Drawing): 1 vanishing point (planes floor, side, front), 2 (floor, left, right; walls recede to the first and second) or 3 (the third is where the walls\' verticals meet). Put the vanishing points on the horizon line and the origin below it, where the planes meet. One undo step. Returns the grid as vector.getPerspective does.',
+				'Sets the document\'s perspective grid (CorelDRAW\'s Perspective Drawing): 1 vanishing point (planes floor, side, front), 2 (floor, left, right; walls recede to the first and second) or 3 (the third is where the walls\' verticals meet). Put the vanishing points on the horizon line and the origin below it, where the planes meet. For an isometric grid (planes floor, left, right, nothing recedes) give isometric: { angle } (30 is true isometric) and no vanishing points. One undo step. Returns the grid as vector.getPerspective does.',
 			params: {
 				type: 'object',
 				properties: {
-					vanishingPoints: { type: 'array', minItems: 1, maxItems: 3, items: { ...POINT, description: 'A vanishing point (document units).' }, description: '1 to 3 vanishing points, document units.' },
+					vanishingPoints: { type: 'array', maxItems: 3, items: { ...POINT, description: 'A vanishing point (document units).' }, description: '1 to 3 vanishing points, document units; leave it out (or []) for an isometric grid.' },
+					isometric: { type: 'object', properties: { angle: { type: 'number', minimum: 1, maximum: 89, description: 'Angle of the floor axes above the horizontal, in degrees (true isometric is thirty).' } }, required: ['angle'], additionalProperties: false, description: 'An isometric grid instead of vanishing points: parallel lines stay parallel.' },
 					origin: { ...POINT, description: 'Where the planes meet (document units), not on a vanishing point.' },
 					gridSize: { type: 'number', exclusiveMinimum: 0, description: 'Grid cell size at the origin, document units (default 20).' },
 					extent: { type: 'integer', minimum: 1, maximum: 100, description: 'Cells drawn out from the origin along each axis (default 12).' },
 					visible: { type: 'boolean', description: 'Show the grid on the canvas (default true).' }
 				},
-				required: ['vanishingPoints', 'origin'],
+				required: ['origin'],
 				additionalProperties: false
 			},
 			undoable: true,
 			run: (_ctx: unknown, params: VectorPerspective) => {
-				check(controller.setPerspective(params));
+				check(controller.setPerspective({ ...params, vanishingPoints: params.vanishingPoints ?? [] }));
 				return perspectiveResult();
 			}
 		},

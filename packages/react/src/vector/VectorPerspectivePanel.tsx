@@ -1,5 +1,5 @@
 import React from 'react';
-import { vectorPerspectivePlanes, vectorPerspectivePreset, type VectorEditorController, type VectorPerspectivePlane } from '@pixerate/editor/vector';
+import { vectorIsometricPerspectivePreset, vectorPerspectivePlanes, vectorPerspectivePreset, type VectorEditorController, type VectorPerspectivePlane } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 
 const buttonClass =
@@ -29,10 +29,13 @@ export function VectorPerspectivePanel({ controller, className }: VectorPerspect
       <div className="flex flex-wrap items-center gap-1">
         <span className="w-16 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Perspective</span>
         {([1, 2, 3] as const).map((n) => (
-          <button key={n} type="button" className={buttonClass} aria-pressed={grid?.vanishingPoints.length === n} data-vector-perspective-preset={n} title={`A ${n}-point perspective grid for the page`} onClick={() => add(n)}>
+          <button key={n} type="button" className={buttonClass} aria-pressed={!grid?.isometric && grid?.vanishingPoints.length === n} data-vector-perspective-preset={n} title={`A ${n}-point perspective grid for the page`} onClick={() => add(n)}>
             {n}-pt
           </button>
         ))}
+        <button type="button" className={buttonClass} aria-pressed={!!grid?.isometric} data-vector-perspective-preset="isometric" title="An isometric grid for the page: parallel lines stay parallel" onClick={() => controller.setPerspective(vectorIsometricPerspectivePreset(state.document.width, state.document.height))}>
+          Iso
+        </button>
       </div>
       {grid && (
         <div className="flex flex-wrap items-center gap-1">
