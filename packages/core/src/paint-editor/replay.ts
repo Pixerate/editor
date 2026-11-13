@@ -25,7 +25,8 @@ import { toVideoFfmpeg, type VideoFfmpegExport } from '../video-editor/export';
 import type { PaintDocumentState, PaintLayer, PaintPixelLayer } from './document';
 import type { PaintEditorController, PixelImage } from './controller';
 import type { PenPoint } from './engine';
-import { IDENTITY_AFFINE, varyStroke, type Affine, type RecordedStroke } from './strokes';
+import { varyStroke, type Affine, type RecordedStroke } from './strokes';
+import type { PaintStrokeSession } from './stroke';
 import type { WetEvent } from './wet';
 import { scaleStencil } from './stencils';
 import type { Sticker } from './stickers';
@@ -81,17 +82,18 @@ export interface TimeLapse {
   durationMs: number;
 }
 
-type Item = { kind: 'stroke'; stroke: RecordedStroke } | { kind: 'wet'; event: WetEvent } | { kind: 'paint'; event: NonNullable<PaintDocumentState['paintEvents']>[number] };
+/** One thing a replay repeats: a recorded stroke, a wet event or a paint event. */
+export type ReplayItem = { kind: 'stroke'; stroke: RecordedStroke } | { kind: 'wet'; event: WetEvent } | { kind: 'paint'; event: NonNullable<PaintDocumentState['paintEvents']>[number] };
 
 /** Strokes and events in the order they happened. */
-export function replayItems(doc: PaintDocumentState): Item[] {
-  const items: Array<Item & { at: number; order: number }> = [];
+export function replayItems(doc: PaintDocumentState): ReplayItem[] {
+  const items: Array<ReplayItem & { at: number; order: number }> = [];
   let order = 0;
   doc.strokes.forEach((stroke, i) => items.push({ kind: 'stroke', stroke, at: i + 0.5, order: order++ }));
   for (const event of doc.paintEvents ?? []) items.push({ kind: 'paint', event, at: event.at, order: order++ });
   for (const event of doc.wetEvents ?? []) items.push({ kind: 'wet', event, at: event.at ?? 0, order: order++ });
   items.sort((a, b) => a.at - b.at || a.order - b.order);
-  return items.map(({ at: _a, order: _o, ...item }) => item as Item);
+  return items.map(({ at: _a, order: _o, ...item }) => item as ReplayItem);
 }
 
 /** The layer tree with every pixel layer empty (what a replay paints into). */
@@ -99,6 +101,228 @@ function emptiedLayers(layers: readonly PaintLayer[]): PaintLayer[] {
   let out = [...layers] as PaintLayer[];
   for (const l of flattenLayers(layers)) if (l.type === 'pixel') out = mapLayer(out, l.id, () => ({ ...(l as PaintPixelLayer), surface: emptySurface(4), offset: { x: 0, y: 0 } }));
   return out;
+}
+
+/** How a replay paints: at what scale, and where it lets the host in while wet paint flows. */
+export interface ReplayItemOptions {
+  /** Paint at this many times the size (default 1). */
+  scale?: number;
+  /** Step the simulation at most this many steps at a time (default: all at once). */
+  wetChunk?: number;
+  /** Called after each chunk of wet steps (with `wetChunk`). */
+  onWetSteps?: (clock: number) => Promise<void> | void;
+  /** A wet stroke takes at most this many points at a time (default: all those applied at one clock). */
+  pointChunk?: number;
+  /** Called between two chunks of a wet stroke's points (with `pointChunk`). */
+  onPoints?: () => Promise<void> | void;
+}
+
+/**
+ * Steps `target`'s wet simulation up to `clock` (in chunks of `wetChunk`). Returns the steps run:
+ * fewer when there is no simulation to step yet (its clock can't move).
+ */
+export async function advanceReplayClock(target: PaintEditorController, clock: number, options: ReplayItemOptions = {}): Promise<number> {
+  const chunk = Math.max(1, options.wetChunk ?? 0) || Infinity;
+  const start = target.getState().wet.clock;
+  let left = clock - start;
+  while (left > 0) {
+    const n = Math.min(left, chunk);
+    const ran = (await target.advanceWet({ steps: n })).steps;
+    if (Number.isFinite(chunk)) await options.onWetSteps?.(target.getState().wet.clock);
+    if (ran <= 0) break;
+    left -= ran;
+  }
+  return target.getState().wet.clock - start;
+}
+
+/** What a recorded stroke replays with (`beginStroke` / `paintStroke` options without the points), at `scale`. */
+export function replayStrokeInit(st: RecordedStroke, scale = 1) {
+  return {
+    layerId: st.layerId,
+    color: st.color,
+    brush: st.brush,
+    seed: st.seed,
+    copies: (st.copies ?? []) as Affine[],
+    ...(st.load ? { load: st.load } : {}),
+    ...(st.paint ? { paint: st.paint } : {}),
+    ...(st.targets ? { targets: st.targets } : {}),
+    snapToPerspective: false,
+    stencils: false,
+    maskStencils: (st.stencils ?? []).map((x) => (scale === 1 ? x : scaleStencil(x, scale))),
+    ...(st.scrapeLayerIds ? { scrapeLayerIds: st.scrapeLayerIds } : {}),
+  };
+}
+
+/** Ends a replayed wet stroke and waits until the simulation has applied all of it. */
+export async function finishReplayStroke(target: PaintEditorController, session: PaintStrokeSession): Promise<void> {
+  await target.wetIdle();
+  session.end();
+  while (session.pendingEnd) {
+    await target.wetIdle();
+    session.completeWetEnd();
+    if (session.pendingEnd) await new Promise((r) => setTimeout(r, 0));
+  }
+}
+
+/**
+ * Repeats one recorded stroke or event (`replayItems`) on `target`: strokes paint exactly as
+ * recorded (wet ones point by point, each at its clock), events change what they changed. A
+ * stroke's effect paint must already be prepared (`prepareEffectPaints`), except a path-mapped
+ * one, which is prepared here.
+ */
+export async function replayItem(target: PaintEditorController, item: ReplayItem, options: ReplayItemOptions = {}): Promise<void> {
+  const s = options.scale ?? 1;
+  const scaleM: Affine = [s, 0, 0, s, 0, 0];
+  const advanceTo = (clock: number) => advanceReplayClock(target, clock, options);
+  const sr = (r: { x: number; y: number; width: number; height: number }) => ({ x: r.x * s, y: r.y * s, width: r.width * s, height: r.height * s });
+  if (item.kind === 'paint') {
+    const e = item.event;
+    if (e.kind === 'magnets') {
+      const d = e.data as { magnets?: PaintMagnet[]; advect?: boolean } | undefined;
+      const list = (d?.magnets ?? []).map((m) => (s === 1 ? m : { ...m, x: m.x * s, y: m.y * s, radius: Math.min(2000, Math.max(8, m.radius * s)) }));
+      target.replaceMagnets(list, Boolean(d?.advect));
+      return;
+    }
+    if (!target.getLayer(e.layerId)) return;
+    if (e.kind === 'fill') target.fillLayer({ layerId: e.layerId, ...(e.data as object) });
+    else if (e.kind === 'fill-region') {
+      const d = (e.data ?? {}) as {
+        points?: Array<{ x: number; y: number }>;
+        x?: number;
+        y?: number;
+        reference?: string;
+        color?: string;
+        opacity?: number;
+        blend?: BlendMode;
+        tolerance?: number;
+        closeGap?: number;
+        expand?: number;
+        antialias?: boolean;
+        grain?: number;
+        pressure?: number;
+        wet?: boolean;
+      };
+      if (d.wet) await target.wetIdle();
+      const pts = d.points ? d.points.map((p) => ({ x: p.x * s, y: p.y * s })) : d.x !== undefined && d.y !== undefined ? [{ x: d.x * s, y: d.y * s }] : [];
+      target.fillRegion({
+        ...d,
+        layerId: e.layerId,
+        points: pts,
+        ...(d.closeGap !== undefined ? { closeGap: Math.min(32, d.closeGap * s) } : {}),
+        ...(d.expand !== undefined ? { expand: Math.max(-16, Math.min(16, d.expand * s)) } : {}),
+      });
+    } else if (e.kind === 'clear') target.clearLayer(e.layerId);
+    else if (e.kind === 'cure-ferrofluid') target.cureFerrofluid(e.layerId);
+    else if (e.kind === 'culture-grow') target.replayCultureGrow(e.layerId, e.data as unknown as CultureGrowEventData, s);
+    else if (e.kind === 'live-strokes') {
+      const d = e.data as { strokes?: RecordedStroke[]; rasterized?: boolean } | undefined;
+      if (d?.rasterized) target.replaceLiveStrokes(e.layerId, null);
+      else {
+        const list = (d?.strokes ?? []).map((st) => (s === 1 ? st : { ...varyStroke(st, scaleM, { scale: s }), ...(st.stencils ? { stencils: st.stencils.map((x) => scaleStencil(x, s)) } : {}) }));
+        await target.prepareEffectPaints(list.flatMap((st) => (st.paint?.type === 'effect' ? [st.paint] : [])));
+        target.replaceLiveStrokes(e.layerId, list);
+      }
+    } else if (e.kind === 'stickers') {
+      const list = ((e.data as { stickers?: Sticker[] })?.stickers ?? []).map((x) => (s === 1 ? x : { ...x, x: x.x * s, y: x.y * s, size: x.size * s }));
+      target.replaceStickers(e.layerId, list);
+    } else target.flattenRelief(e.layerId);
+    return;
+  }
+  if (item.kind === 'wet') {
+    const e = item.event;
+    await target.wetIdle();
+    await advanceTo(e.clock);
+    try {
+      switch (e.kind) {
+        case 'dry': {
+          const rect = e.data as { x: number; y: number; width: number; height: number } | undefined;
+          const ids = e.layerId?.split(',').filter(Boolean);
+          if (ids?.length) for (const id of ids) target.dryPaint({ layerId: id, rect: rect ? sr(rect) : undefined });
+          else target.dryPaint({ rect: rect ? sr(rect) : undefined });
+          break;
+        }
+        case 'tilt':
+          target.setCanvasTilt(e.data as WetTilt);
+          break;
+        case 'params':
+          if (e.layerId && target.getLayer(e.layerId)) target.setWetParams(e.layerId, e.data as WetParams);
+          break;
+        case 'flow': {
+          const f = { ...(e.data as WetFlowSpec) };
+          if (f.center) f.center = { x: f.center.x * s, y: f.center.y * s };
+          if (f.scale) f.scale = Math.min(1024, f.scale * s);
+          if (e.layerId && target.getLayer(e.layerId)) target.setFlowMap(e.layerId, f);
+          break;
+        }
+        case 'wet-paper': {
+          const d = e.data as { rect: { x: number; y: number; width: number; height: number }; amount: number };
+          if (e.layerId && target.getLayer(e.layerId)) target.wetPaper({ layerId: e.layerId, rect: sr(d.rect), amount: d.amount });
+          break;
+        }
+        case 'live-patterns': {
+          const d = e.data as LivePatternsSettings | null;
+          if (e.layerId && target.getLayer(e.layerId)) {
+            target.setLivePatterns(e.layerId, d ? { ...d, scale: Math.min(4, d.scale * s), enabled: true } : { enabled: false });
+          }
+          break;
+        }
+        case 'seed-live-patterns': {
+          const d = e.data as {
+            points: Array<{ x: number; y: number; strength?: number }>;
+            radius: number;
+            seed: number;
+            settings?: LivePatternsInput;
+          };
+          if (e.layerId && target.getLayer(e.layerId) && Array.isArray(d.points)) {
+            target.seedLivePatterns({
+              layerId: e.layerId,
+              points: d.points.map((p) => ({ ...p, x: p.x * s, y: p.y * s })),
+              radius: Math.min(512, d.radius * s),
+              seed: d.seed,
+              ...(d.settings ? { ...d.settings, ...(d.settings.scale ? { scale: Math.min(4, d.settings.scale * s) } : {}) } : {}),
+            });
+          }
+          break;
+        }
+        case 'ghost-release': {
+          const d = e.data as { linger?: number } | undefined;
+          if (e.layerId && target.getLayer(e.layerId)) target.wet.releaseGhost(e.layerId, d?.linger);
+          break;
+        }
+        case 'ghost-keep': {
+          if (e.layerId && target.getLayer(e.layerId)) target.wet.keepGhost(e.layerId);
+          break;
+        }
+      }
+    } catch {
+      // An event that no longer applies (its layer went away) is skipped.
+    }
+    return;
+  }
+  const st = s === 1 ? item.stroke : varyStroke(item.stroke, scaleM, { scale: s });
+  if (!target.getLayer(st.layerId)) return;
+  if (st.paint?.type === 'effect' && st.paint.map?.by === 'path') await target.prepareEffectPaints([st.paint]);
+  const init = replayStrokeInit(st, s);
+  if (st.brush.engine === 'wet' && st.steps?.length === st.points.length) {
+    // Each point at the clock it was recorded at, the simulation stepped in between.
+    await target.wetIdle();
+    await advanceTo(st.steps[0]);
+    const session = target.beginStroke({ ...init, start: st.points[0] });
+    // Points applied at the same clock go in together (the same dabs as one by one, without a display update each).
+    for (let i = 0; i < st.points.length; ) {
+      let j = i + 1;
+      while (j < st.points.length && st.steps[j] === st.steps[i] && j - i < (options.pointChunk ?? Infinity)) j++;
+      await advanceTo(st.steps[i]);
+      await target.wetIdle();
+      session.push(st.points.slice(i, j) as PenPoint[]);
+      if (options.pointChunk && j < st.points.length) await options.onPoints?.();
+      i = j;
+    }
+    await finishReplayStroke(target, session);
+  } else {
+    await target.wetIdle();
+    target.paintStroke({ ...init, points: st.points });
+  }
 }
 
 /**
@@ -114,179 +338,22 @@ export async function replayPainting(
   const scaleM: Affine = [s, 0, 0, s, 0, 0];
   const items = replayItems(source);
   const maxStrokes = options.strokes ?? source.strokes.length;
-  const chunk = Math.max(1, options.wetChunk ?? 0) || Infinity;
-  let strokes = 0;
   // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be),
   // as the scaled strokes ask for it (scaling a stroke-mapped effect scales its map length).
-  // A path-mapped stroke has a canvas-sized render of its own: those are rendered one at a time below.
+  // A path-mapped stroke has a canvas-sized render of its own: those are rendered one at a time.
   const scaled = source.strokes.slice(0, maxStrokes).map((st) => (s === 1 ? st : varyStroke(st, scaleM, { scale: s })));
   await target.prepareEffectPaints(scaled.flatMap((st) => (st.paint?.type === 'effect' && st.paint.map?.by !== 'path' ? [st.paint] : [])));
-  const advanceTo = async (clock: number) => {
-    const now = target.getState().wet.clock;
-    let left = clock - now;
-    while (left > 0) {
-      const n = Math.min(left, chunk);
-      await target.advanceWet({ steps: n });
-      left -= n;
-      if (Number.isFinite(chunk)) await options.onWetSteps?.(target.getState().wet.clock);
-    }
-  };
-  const sr = (r: { x: number; y: number; width: number; height: number }) => ({ x: r.x * s, y: r.y * s, width: r.width * s, height: r.height * s });
+  const itemOptions: ReplayItemOptions = { scale: s, wetChunk: options.wetChunk, onWetSteps: options.onWetSteps };
+  let strokes = 0;
   for (const item of items) {
-    if (strokes >= maxStrokes && item.kind === 'stroke') break;
-    if (item.kind === 'paint') {
-      const e = item.event;
-      if (e.kind === 'magnets') {
-        const d = e.data as { magnets?: PaintMagnet[]; advect?: boolean } | undefined;
-        const list = (d?.magnets ?? []).map((m) => (s === 1 ? m : { ...m, x: m.x * s, y: m.y * s, radius: Math.min(2000, Math.max(8, m.radius * s)) }));
-        target.replaceMagnets(list, Boolean(d?.advect));
-        continue;
-      }
-      if (!target.getLayer(e.layerId)) continue;
-      if (e.kind === 'fill') target.fillLayer({ layerId: e.layerId, ...(e.data as object) });
-      else if (e.kind === 'fill-region') {
-        const d = (e.data ?? {}) as {
-          points?: Array<{ x: number; y: number }>;
-          x?: number;
-          y?: number;
-          reference?: string;
-          color?: string;
-          opacity?: number;
-          blend?: BlendMode;
-          tolerance?: number;
-          closeGap?: number;
-          expand?: number;
-          antialias?: boolean;
-          grain?: number;
-          pressure?: number;
-          wet?: boolean;
-        };
-        if (d.wet) await target.wetIdle();
-        const pts = d.points ? d.points.map((p) => ({ x: p.x * s, y: p.y * s })) : d.x !== undefined && d.y !== undefined ? [{ x: d.x * s, y: d.y * s }] : [];
-        target.fillRegion({
-          ...d,
-          layerId: e.layerId,
-          points: pts,
-          ...(d.closeGap !== undefined ? { closeGap: Math.min(32, d.closeGap * s) } : {}),
-          ...(d.expand !== undefined ? { expand: Math.max(-16, Math.min(16, d.expand * s)) } : {}),
-        });
-      } else if (e.kind === 'clear') target.clearLayer(e.layerId);
-      else if (e.kind === 'cure-ferrofluid') target.cureFerrofluid(e.layerId);
-      else if (e.kind === 'culture-grow') target.replayCultureGrow(e.layerId, e.data as unknown as CultureGrowEventData, s);
-      else if (e.kind === 'live-strokes') {
-        const d = e.data as { strokes?: RecordedStroke[]; rasterized?: boolean } | undefined;
-        if (d?.rasterized) target.replaceLiveStrokes(e.layerId, null);
-        else {
-          const list = (d?.strokes ?? []).map((st) => (s === 1 ? st : { ...varyStroke(st, scaleM, { scale: s }), ...(st.stencils ? { stencils: st.stencils.map((x) => scaleStencil(x, s)) } : {}) }));
-          await target.prepareEffectPaints(list.flatMap((st) => (st.paint?.type === 'effect' ? [st.paint] : [])));
-          target.replaceLiveStrokes(e.layerId, list);
-        }
-      } else if (e.kind === 'stickers') {
-        const list = ((e.data as { stickers?: Sticker[] })?.stickers ?? []).map((x) => (s === 1 ? x : { ...x, x: x.x * s, y: x.y * s, size: x.size * s }));
-        target.replaceStickers(e.layerId, list);
-      } else target.flattenRelief(e.layerId);
-      continue;
+    if (item.kind === 'stroke') {
+      if (strokes >= maxStrokes) break;
+      strokes++;
+      if (!target.getLayer(item.stroke.layerId)) continue;
     }
-    if (item.kind === 'wet') {
-      const e = item.event;
-      await target.wetIdle();
-      await advanceTo(e.clock);
-      try {
-        switch (e.kind) {
-          case 'dry': {
-            const rect = e.data as { x: number; y: number; width: number; height: number } | undefined;
-            const ids = e.layerId?.split(',').filter(Boolean);
-            if (ids?.length) for (const id of ids) target.dryPaint({ layerId: id, rect: rect ? sr(rect) : undefined });
-            else target.dryPaint({ rect: rect ? sr(rect) : undefined });
-            break;
-          }
-          case 'tilt':
-            target.setCanvasTilt(e.data as WetTilt);
-            break;
-          case 'params':
-            if (e.layerId && target.getLayer(e.layerId)) target.setWetParams(e.layerId, e.data as WetParams);
-            break;
-          case 'flow': {
-            const f = { ...(e.data as WetFlowSpec) };
-            if (f.center) f.center = { x: f.center.x * s, y: f.center.y * s };
-            if (f.scale) f.scale = Math.min(1024, f.scale * s);
-            if (e.layerId && target.getLayer(e.layerId)) target.setFlowMap(e.layerId, f);
-            break;
-          }
-          case 'wet-paper': {
-            const d = e.data as { rect: { x: number; y: number; width: number; height: number }; amount: number };
-            if (e.layerId && target.getLayer(e.layerId)) target.wetPaper({ layerId: e.layerId, rect: sr(d.rect), amount: d.amount });
-            break;
-          }
-          case 'live-patterns': {
-            const d = e.data as LivePatternsSettings | null;
-            if (e.layerId && target.getLayer(e.layerId)) {
-              target.setLivePatterns(e.layerId, d ? { ...d, scale: Math.min(4, d.scale * s), enabled: true } : { enabled: false });
-            }
-            break;
-          }
-          case 'seed-live-patterns': {
-            const d = e.data as {
-              points: Array<{ x: number; y: number; strength?: number }>;
-              radius: number;
-              seed: number;
-              settings?: LivePatternsInput;
-            };
-            if (e.layerId && target.getLayer(e.layerId) && Array.isArray(d.points)) {
-              target.seedLivePatterns({
-                layerId: e.layerId,
-                points: d.points.map((p) => ({ ...p, x: p.x * s, y: p.y * s })),
-                radius: Math.min(512, d.radius * s),
-                seed: d.seed,
-                ...(d.settings ? { ...d.settings, ...(d.settings.scale ? { scale: Math.min(4, d.settings.scale * s) } : {}) } : {}),
-              });
-            }
-            break;
-          }
-          case 'ghost-release': {
-            const d = e.data as { linger?: number } | undefined;
-            if (e.layerId && target.getLayer(e.layerId)) target.wet.releaseGhost(e.layerId, d?.linger);
-            break;
-          }
-          case 'ghost-keep': {
-            if (e.layerId && target.getLayer(e.layerId)) target.wet.keepGhost(e.layerId);
-            break;
-          }
-        }
-      } catch {
-        // An event that no longer applies (its layer went away) is skipped.
-      }
-      continue;
-    }
-    const st = s === 1 ? item.stroke : varyStroke(item.stroke, scaleM, { scale: s });
-    strokes++;
-    if (!target.getLayer(st.layerId)) continue;
-    if (st.paint?.type === 'effect' && st.paint.map?.by === 'path') await target.prepareEffectPaints([st.paint]);
-    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), ...(st.targets ? { targets: st.targets } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))), ...(st.scrapeLayerIds ? { scrapeLayerIds: st.scrapeLayerIds } : {}) };
-    if (st.brush.engine === 'wet' && st.steps?.length === st.points.length) {
-      // Each point at the clock it was recorded at, the simulation stepped in between.
-      await target.wetIdle();
-      await advanceTo(st.steps[0]);
-      const session = target.beginStroke({ ...init, start: st.points[0] });
-      for (let i = 0; i < st.points.length; i++) {
-        await advanceTo(st.steps[i]);
-        await target.wetIdle();
-        session.push([st.points[i] as PenPoint]);
-      }
-      await target.wetIdle();
-      session.end();
-      while (session.pendingEnd) {
-        await target.wetIdle();
-        session.completeWetEnd();
-        if (session.pendingEnd) await new Promise((r) => setTimeout(r, 0));
-      }
-    } else {
-      await target.wetIdle();
-      target.paintStroke({ ...init, points: st.points });
-    }
-    await options.onStroke?.(strokes);
+    await replayItem(target, item, itemOptions);
+    if (item.kind === 'stroke') await options.onStroke?.(strokes);
   }
-  void IDENTITY_AFFINE;
 }
 
 /** A frame of `target` at most `maxSide` pixels on its longest side. */

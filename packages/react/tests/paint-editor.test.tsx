@@ -346,6 +346,31 @@ describe('React paint editor', () => {
     expect(c.getState().color).toBe('#f3d23a');
   });
 
+  it('the layers panel marks layers whose light / dark paint keeps its colours or is being replayed for the scheme', async () => {
+    const c = new PaintEditorController({ width: 32, height: 32 });
+    const INK = { light: '#1e3a8a', dark: '#bfdbfe' };
+    const line = (y: number) => [{ x: 2, y, pressure: 0.8 }, { x: 30, y, pressure: 0.8 }];
+    const kept = c.getActiveLayer()!.id;
+    c.paintStroke({ points: line(6), brushId: 'ink-pen', color: INK, seed: 1 });
+    const top = c.addLayer({ name: 'Top' }).id;
+    c.paintStroke({ points: line(12), brushId: 'ink-pen', color: '#111111', seed: 2 });
+    c.mergeDown(top);
+    const replayed = c.addLayer({ name: 'Replayed' }).id;
+    c.paintStroke({ points: line(20), brushId: 'ink-pen', color: INK, seed: 3 });
+    render(<PaintLayersPanel controller={c} />);
+    expect(container.querySelector('[data-testid="paint-layer-scheme-kept"]')).toBeNull();
+    act(() => c.setColorScheme('dark'));
+    expect(container.querySelector('[data-testid="paint-layer-scheme-kept"]')?.getAttribute('title')).toMatch(/Merge down/);
+    expect(container.querySelector('[data-testid="paint-layer-scheme-building"]')).not.toBeNull();
+    await act(async () => void (await c.colorSchemeViewReady()));
+    expect(container.querySelector('[data-testid="paint-layer-scheme-building"]')).toBeNull();
+    expect(c.colorSchemeView().layers.map((l) => [l.layerId, l.view])).toEqual([
+      [replayed, 'replay'],
+      [kept, 'kept'],
+    ]);
+    c.dispose();
+  });
+
   it('the layers panel adds, renames, reorders and changes layers', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     render(<PaintLayersPanel controller={c} />);

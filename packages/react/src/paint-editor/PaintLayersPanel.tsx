@@ -26,6 +26,8 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
   const [error, attempt] = useAttempt();
   const [renaming, setRenaming] = useState<string | null>(null);
   const layers = controller.listLayers().filter((l) => !l.temporary);
+  // Layers whose light / dark paint the colour scheme can't (or can't yet) show in its side.
+  const scheme = new Map(controller.getState().colorSchemeView.layers.map((v) => [v.layerId, v]));
   const active = layers.find((l) => l.active) ?? null;
   const light = active?.type === 'pixel' ? controller.lightOf(active.id) : null;
   const move = (delta: number) => {
@@ -111,6 +113,15 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
                 {l.name}
               </span>
             )}
+            {scheme.get(l.id)?.view === 'kept' ? (
+              <span aria-label="Keeps its colours" data-testid="paint-layer-scheme-kept" title={scheme.get(l.id)!.reason}>
+                ◐
+              </span>
+            ) : scheme.get(l.id)?.state === 'building' ? (
+              <span aria-label="Updating for the colour scheme" data-testid="paint-layer-scheme-building" title="Repainting this layer's light / dark paint for the colour scheme">
+                ⟳
+              </span>
+            ) : null}
             {l.locks.pixels || l.locks.all ? <span title="Locked">🔒</span> : null}
           </li>
         ))}

@@ -15,6 +15,11 @@
     return untrack(() => controller.listLayers().filter((l) => !l.temporary));
   });
   const active = $derived(layers.find((l) => l.active) ?? null);
+  // Layers whose light / dark paint the colour scheme can't (or can't yet) show in its side.
+  const scheme = $derived.by(() => {
+    void editor.current;
+    return new Map(untrack(() => controller.getState().colorSchemeView.layers.map((v) => [v.layerId, v])));
+  });
   const light = $derived.by(() => {
     void editor.current;
     return active?.type === 'pixel' ? untrack(() => controller.lightOf(active.id)) : null;
@@ -83,6 +88,7 @@
         {:else}
           <span class="flex-1 truncate" role="presentation" ondblclick={() => (renaming = l.id)}>{l.type === 'group' ? '▸ ' : ''}{#if l.liveStrokes !== undefined}<span aria-label="Stroke layer" title={`Stroke layer: ${l.liveStrokes} editable strokes`}>✎ </span>{/if}{l.name}</span>
         {/if}
+        {#if scheme.get(l.id)?.view === 'kept'}<span aria-label="Keeps its colours" data-testid="paint-layer-scheme-kept" title={scheme.get(l.id)?.reason}>◐</span>{:else if scheme.get(l.id)?.state === 'building'}<span aria-label="Updating for the colour scheme" data-testid="paint-layer-scheme-building" title="Repainting this layer's light / dark paint for the colour scheme">⟳</span>{/if}
         {#if l.locks.pixels || l.locks.all}<span title="Locked">🔒</span>{/if}
       </li>
     {/each}

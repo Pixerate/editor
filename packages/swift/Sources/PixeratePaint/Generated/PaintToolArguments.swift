@@ -736,6 +736,17 @@ public struct SetColorArguments: Sendable {
     }
 }
 
+/// Arguments of `get_color_scheme_view`.
+public struct GetColorSchemeViewArguments: Sendable {
+    /// Wait until the replay has caught up before answering (a wet replay can take seconds on a large canvas).
+    public var wait: Bool?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        wait = try args.bool("wait")
+    }
+}
+
 /// Arguments of `set_paint`.
 public struct SetPaintArguments: Sendable {
     /// What to paint with: one colour, or gradient paint.
@@ -4038,6 +4049,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .getBrush: try GetBrushArguments(args)
     case .setBrush: try SetBrushArguments(args)
     case .setColor: try SetColorArguments(args)
+    case .getColorSchemeView: try GetColorSchemeViewArguments(args)
     case .setPaint: try SetPaintArguments(args)
     case .pickColor: try PickColorArguments(args)
     case .getMixerBrush: try GetMixerBrushArguments(args)

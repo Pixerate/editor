@@ -145,6 +145,7 @@ import {
 } from '../paint/live-patterns';
 import { wetSupport } from '../paint/wet/wasm';
 import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
+import { SchemeReplay, type SchemeReplayHost, type SchemeReplayState } from './scheme-replay';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
 import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } from '../effects/types.js';
 import {
@@ -425,6 +426,8 @@ export interface PaintEditorState {
   color: string;
   /** The colour scheme light / dark brush colours resolve for. */
   colorScheme: ColorScheme;
+  /** How layers with dual-colour paint show it in the colour scheme (`colorSchemeView()`). */
+  colorSchemeView: PaintColorSchemeView;
   /** Locked: choosing a brush with a default colour keeps the paint colour. */
   colorLocked: boolean;
   /** The second colour (swap with `swapColors`). */
@@ -1346,6 +1349,7 @@ export class PaintEditorController {
     this.version++;
     this.cached = null;
     for (const l of [...this.listeners]) l();
+    this.syncSchemeReplay();
   }
 
   /** A snapshot of the editor (the same object until something changes). */
@@ -1359,6 +1363,7 @@ export class PaintEditorController {
       brushes: (this.library ??= this.brushEntries.map((e) => e.brush)),
       color: this.color,
       colorScheme: this.colorScheme,
+      colorSchemeView: this.colorSchemeView(),
       colorLocked: this.colorLocked,
       secondaryColor: this.secondaryColor,
       paint: this.gradient ?? { type: 'color', color: this.color },
@@ -1512,7 +1517,9 @@ export class PaintEditorController {
   }
 
   private commit(label: string, nextIn: PaintDocumentState, beforeIn = this.doc): void {
-    const { next, before } = this.flushCultureInto(nextIn, beforeIn);
+    const flushed = this.flushCultureInto(nextIn, beforeIn);
+    const before = flushed.before;
+    const next = this.withUnlogged(label, flushed.next, this.doc);
     if (this.grouping) {
       // Inside `group`: the change joins the group's one step, and listeners hear it when the group ends.
       this.grouping.changed = true;
@@ -1542,18 +1549,79 @@ export class PaintEditorController {
    */
   private commitOrAmend(label: string, nextIn: PaintDocumentState, commitToHistory: boolean): void {
     // A flushed growth run becomes the last step, so the change below commits as its own step.
-    const { next } = this.flushCultureInto(nextIn, this.doc);
+    const { next: flushed } = this.flushCultureInto(nextIn, this.doc);
     const last = this.undoStack[this.undoStack.length - 1];
     if (commitToHistory || !last || last.label !== label || last.wet || this.wetOp || this.grouping) {
-      this.commit(label, next);
+      this.commit(label, flushed);
       return;
     }
+    const next = this.withUnlogged(label, flushed, this.doc);
     last.after = next;
     this.redoStack = [];
     this.doc = next;
     this.docRevision++;
     this.notifyCommit({ kind: 'merge', label, origin: last.origin });
     this.emit();
+  }
+
+  /** Wet events logged only to dry a layer before a change outside the log (`dryLayersFirst`): they don't put that change in the log. */
+  private preludeDry = new WeakSet<WetEvent>();
+
+  /**
+   * `next` with the pixel layers this change wrote without logging it (`PaintDocumentState.unlogged`):
+   * a layer whose pixels or offset changed, or a new layer with pixels, that none of the strokes and
+   * events this change logged names. A clear empties a layer, so it is replayable again.
+   */
+  private withUnlogged(label: string, next: PaintDocumentState, base: PaintDocumentState): PaintDocumentState {
+    if (next.layers === base.layers && next.unlogged === base.unlogged) return next;
+    const logged = new Set<string>();
+    let all = false;
+    const cleared = new Set<string>();
+    const oldStrokes = new Set(base.strokes);
+    for (const st of next.strokes) {
+      if (oldStrokes.has(st)) continue;
+      logged.add(st.layerId);
+      for (const id of st.scrapeLayerIds ?? []) logged.add(id);
+      for (const id of st.targets ?? []) logged.add(id);
+    }
+    const oldPaint = new Set(base.paintEvents ?? []);
+    for (const e of next.paintEvents ?? []) {
+      if (oldPaint.has(e)) continue;
+      logged.add(e.layerId);
+      if (e.kind === 'clear') cleared.add(e.layerId);
+    }
+    const oldWet = new Set(base.wetEvents ?? []);
+    for (const e of next.wetEvents ?? []) {
+      if (oldWet.has(e) || this.preludeDry.has(e)) continue;
+      if (!e.layerId) all = true;
+      else for (const id of e.layerId.split(',')) logged.add(id);
+    }
+    const was = new Map<string, PaintPixelLayer>();
+    for (const l of flattenLayers(base.layers)) if (isPixelLayer(l)) was.set(l.id, l);
+    let unlogged = next.unlogged;
+    const set = (id: string, reason: string | null) => {
+      if ((unlogged?.[id] ?? null) === reason) return;
+      const copy: Record<string, string> = { ...(unlogged ?? {}) };
+      if (reason === null) delete copy[id];
+      else copy[id] = reason;
+      unlogged = Object.keys(copy).length ? copy : undefined;
+    };
+    const present = new Set<string>();
+    for (const l of flattenLayers(next.layers)) {
+      if (!isPixelLayer(l)) continue;
+      present.add(l.id);
+      if (cleared.has(l.id)) {
+        set(l.id, null);
+        continue;
+      }
+      // Stroke and sticker layers are drawn from their own data.
+      if (next.liveStrokes?.[l.id] || next.stickers?.[l.id] || unlogged?.[l.id]) continue;
+      const b = was.get(l.id);
+      const changed = b ? b.surface !== l.surface || b.offset.x !== l.offset.x || b.offset.y !== l.offset.y : l.surface.tiles.size > 0;
+      if (changed && !all && !logged.has(l.id)) set(l.id, label);
+    }
+    for (const id of Object.keys(unlogged ?? {})) if (!present.has(id)) set(id, null);
+    return unlogged === next.unlogged ? next : { ...next, unlogged };
   }
 
   /** Keeps the wet snapshots in history within the wet undo memory, dropping the oldest. */
@@ -1596,6 +1664,7 @@ export class PaintEditorController {
       this.finishWetMutationsOnDry(id);
     }
     this.logWet({ kind: 'dry', layerId: wetIds.join(',') });
+    this.preludeDry.add(this.pendingWetEvents[this.pendingWetEvents.length - 1]);
     return wetIds;
   }
 
@@ -3766,18 +3835,196 @@ export class PaintEditorController {
     return surface;
   }
 
-  /** `layers` with each stroke layer that holds dual-colour strokes shown in the scheme. */
+  /**
+   * `layers` with each stroke layer that holds dual-colour strokes shown in the scheme, and each
+   * pixel layer whose dual-colour paint the scheme's replay shows (once it is ready).
+   */
   private schemeLayers(layers: PaintLayer[]): PaintLayer[] {
-    const live = this.doc.liveStrokes;
-    if (!live) return layers;
     let out = layers;
-    for (const [id, list] of Object.entries(live)) {
+    for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) {
       const l = findLayer(out, id)?.layer;
       if (!isPixelLayer(l)) continue;
       const surface = this.schemeSurface(l, list);
       if (surface) out = mapLayer(out, id, () => ({ ...l, surface }));
     }
+    const replay = this.shownSchemeReplay();
+    if (replay) {
+      for (const id of this.schemeNeeds().replay) {
+        const l = findLayer(out, id)?.layer;
+        if (!isPixelLayer(l)) continue;
+        const surface = replay.surface(id);
+        if (surface) out = mapLayer(out, id, () => ({ ...l, surface }));
+      }
+    }
     return out;
+  }
+
+  // --- Pixel layers in the colour scheme: replayed from the stroke log (#720) ------
+
+  /** The replay of the document in the colour scheme (`scheme-replay.ts`), while pixel layers need one. */
+  private schemeReplay: SchemeReplay | null = null;
+  /** Set on the headless editors replays paint into: they never replay themselves. */
+  private replayTarget = false;
+  /** The paper a scheme replay's editor was made with (a different paper means a fresh replay). */
+  private replayPaper: PaperSettings | null = null;
+  private schemeNeedsCache: { strokes: readonly RecordedStroke[]; unlogged: PaintDocumentState['unlogged']; live: PaintDocumentState['liveStrokes']; layers: PaintLayer[]; scheme: ColorScheme; value: SchemeNeeds } | null = null;
+
+  /**
+   * Which pixel layers hold dual-colour strokes painted in the other scheme's side: `replay` (the
+   * scheme's replay shows them) or `kept` (pixels the stroke log doesn't have, with the change that
+   * put them there). `dual`: every layer with a dual-colour stroke.
+   */
+  private schemeNeeds(): SchemeNeeds {
+    const d = this.doc;
+    const scheme = this.colorScheme;
+    const c = this.schemeNeedsCache;
+    if (c && c.strokes === d.strokes && c.unlogged === d.unlogged && c.live === d.liveStrokes && c.layers === d.layers && c.scheme === scheme) return c.value;
+    const other: ColorScheme = scheme === 'dark' ? 'light' : 'dark';
+    const value: SchemeNeeds = { replay: new Set(), kept: new Map(), dual: new Set() };
+    for (const st of d.strokes) {
+      const dual = st.dualColor;
+      if (!dual) continue;
+      value.dual.add(st.layerId);
+      // Stroke layers redraw from their strokes; a stroke in neither side (edited) follows no scheme.
+      if (d.liveStrokes?.[st.layerId] || st.color === dual[scheme] || st.color !== dual[other]) continue;
+      if (value.replay.has(st.layerId) || value.kept.has(st.layerId)) continue;
+      if (!isPixelLayer(findLayer(d.layers, st.layerId)?.layer)) continue;
+      const why = d.unlogged?.[st.layerId];
+      if (why !== undefined) value.kept.set(st.layerId, why);
+      else value.replay.add(st.layerId);
+    }
+    this.schemeNeedsCache = { strokes: d.strokes, unlogged: d.unlogged, live: d.liveStrokes, layers: d.layers, scheme, value };
+    return value;
+  }
+
+  /** The scheme's replay when it is ready to show, else `null` (the layers show their own pixels). */
+  private shownSchemeReplay(): SchemeReplay | null {
+    const r = this.schemeReplay;
+    return r && r.state === 'ready' && r.scheme === this.colorScheme && this.schemeNeeds().replay.size ? r : null;
+  }
+
+  /** Starts, follows or drops the scheme's replay after a change (`emit`). */
+  private syncSchemeReplay(): void {
+    if (this.replayTarget || this.previewing) return;
+    let r = this.schemeReplay;
+    if (r && r.scheme !== this.colorScheme) {
+      r.dispose();
+      this.schemeReplay = r = null;
+    }
+    // A replay that isn't needed now pauses (it catches up if dual-colour paint needs it again).
+    if (!this.schemeNeeds().replay.size) return;
+    if (!r) this.schemeReplay = r = new SchemeReplay(this.colorScheme, this.schemeReplayHost(this.colorScheme));
+    r.kick();
+  }
+
+  private schemeReplayHost(scheme: ColorScheme): SchemeReplayHost {
+    return {
+      document: () => this.doc,
+      clock: () => this.wet.world?.clock ?? 0,
+      liveStroke: () => this.liveStrokeRecord(),
+      inScheme: (st) => this.schemeStroke(st, scheme),
+      createTarget: () => {
+        const t = this.createReplayTarget(1);
+        t.doc = { ...t.doc, layers: replayableLayers(t.doc.layers) };
+        t.replayPaper = this.doc.paper;
+        return t;
+      },
+      addMissingLayers: (t) => {
+        const have = new Set(flattenLayers(t.doc.layers).map((l) => l.id));
+        const missing = flattenLayers(this.doc.layers).filter((l): l is PaintPixelLayer => isPixelLayer(l) && !have.has(l.id));
+        if (missing.length) t.doc = { ...t.doc, layers: [...t.doc.layers, ...replayableLayers(missing.map((l) => ({ ...l, surface: emptySurface(4), offset: { x: 0, y: 0 } })))] };
+      },
+      stale: (t) => t.doc.canvas.width !== this.doc.canvas.width || t.doc.canvas.height !== this.doc.canvas.height || t.replayPaper !== this.doc.paper,
+      changed: (rects) => this.emit(rects),
+      memory: () => this.wet.undoMemory,
+    };
+  }
+
+  /**
+   * The stroke being painted as recorded so far, for a scheme replay to follow: a wet stroke's
+   * points that the simulation has applied, with their clocks. `follow` is false for strokes that
+   * can't be followed point by point (antimatter, scrapers, stickers, path-mapped effects): those
+   * are repainted once they are logged.
+   */
+  private liveStrokeRecord(): { stroke: RecordedStroke; wet: boolean; follow: boolean } | null {
+    const s = this.session;
+    if (!s || !s.points.length) return null;
+    const init = s.init;
+    const follow = !init.antimatter && !init.scraper && !init.sticker && init.effect?.source.map?.by !== 'path';
+    return { stroke: this.recordOf(s, ''), wet: Boolean(init.wet), follow };
+  }
+
+  /**
+   * How each layer with dual-colour strokes shows them in the colour scheme: `strokes` (a stroke
+   * layer, redrawn from its strokes), `document` (its pixels are already in the scheme's side),
+   * `replay` (pixels rebuilt from the stroke log in the scheme's side; `state` building, ready or
+   * failed) or `kept` (it holds pixels the stroke log doesn't have, so it keeps the side it was
+   * painted in; `reason` says why). View only: nothing here is saved or undone.
+   */
+  colorSchemeView(): PaintColorSchemeView {
+    const needs = this.schemeNeeds();
+    const r = needs.replay.size && this.schemeReplay?.scheme === this.colorScheme ? this.schemeReplay : null;
+    const layers: PaintColorSchemeLayer[] = [];
+    for (const l of flattenLayers(this.doc.layers).reverse()) {
+      if (!isPixelLayer(l) || !needs.dual.has(l.id)) continue;
+      const base = { layerId: l.id, name: l.name };
+      if (this.doc.liveStrokes?.[l.id]) layers.push({ ...base, view: 'strokes' });
+      else if (needs.replay.has(l.id)) layers.push({ ...base, view: 'replay', state: r?.state ?? 'building', ...(r?.state === 'failed' ? { reason: `The replay failed: ${r.error}` } : {}) });
+      else if (needs.kept.has(l.id)) {
+        layers.push({
+          ...base,
+          view: 'kept',
+          reason: `It holds pixels the stroke log doesn't have (from "${needs.kept.get(l.id)}"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.`,
+        });
+      } else layers.push({ ...base, view: 'document' });
+    }
+    const replay = r ? { state: r.state, ...r.progress, error: r.error } : { state: 'none' as const, items: 0, total: 0, error: null };
+    return { scheme: this.colorScheme, replay, layers };
+  }
+
+  /** Resolves with `colorSchemeView()` once the scheme's replay has caught up (at once when there is none). */
+  async colorSchemeViewReady(): Promise<PaintColorSchemeView> {
+    for (;;) {
+      const r = this.schemeNeeds().replay.size ? this.schemeReplay : null;
+      if (!r) break;
+      await r.whenIdle();
+      if (r === this.schemeReplay && r.state !== 'building') break;
+      if (r === this.schemeReplay) r.kick();
+    }
+    return this.colorSchemeView();
+  }
+
+  /** @internal A replay editor's state after an item, for a scheme replay to come back to (undo). */
+  replayCheckpoint(): ReplayCheckpoint {
+    const settings = new Map<string, WetLayerSettings>();
+    for (const [id, v] of this.wet.settings) settings.set(id, cloneWetSettings(v));
+    return { doc: this.doc, wet: this.wet.snapshot(), tilt: { ...this.wet.tilt }, settings, clock: this.wet.world?.clock ?? 0 };
+  }
+
+  /** @internal Puts a `replayCheckpoint` back. `false` when it can't (mid-stroke, mid-step, or its clock can't be restored). */
+  restoreReplayCheckpoint(cp: ReplayCheckpoint): boolean {
+    if (this.session || this.wet.busy) return false;
+    this.doc = cp.doc;
+    this.wet.restore(cp.wet);
+    this.wet.setTilt(cp.tilt);
+    this.wet.settings.clear();
+    for (const [id, v] of cp.settings) this.wet.settings.set(id, cloneWetSettings(v));
+    const w = this.wet.world;
+    if (w && w.clock !== cp.clock && !w.laneIds().length) w.clock = cp.clock;
+    this.emit();
+    return (this.wet.world?.clock ?? 0) === cp.clock;
+  }
+
+  /** @internal Drops the undo history (a replay editor keeps checkpoints of its own instead). */
+  forgetHistory(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+
+  /** @internal A pixel layer's surface as the view shows it (with the live stroke), or `null`. */
+  viewLayerSurface(layerId: string): TiledSurface | null {
+    const l = findLayer(this.currentLayers(), layerId)?.layer;
+    return isPixelLayer(l) ? l.surface : null;
   }
 
   /** The paint colour's light / dark pair for a stroke with `brushId`, when the colour came from one (a brush's own or default colour, or `setColor`). */
@@ -4261,9 +4508,14 @@ export class PaintEditorController {
   }
 
   private record(session: PaintStrokeSession): RecordedStroke {
+    return this.recordOf(session, `s${this.strokeCounter++}`);
+  }
+
+  /** A stroke as `record` records it, under `id` (a live stroke: as far as it has got). */
+  private recordOf(session: PaintStrokeSession, id: string): RecordedStroke {
     const init = session.init;
     const stroke: RecordedStroke = {
-      id: `s${this.strokeCounter++}`,
+      id,
       layerId: session.layerId,
       brush: brushToJSON(init.brush) as PaintBrush,
       color: init.colorHex,
@@ -5503,7 +5755,7 @@ export class PaintEditorController {
         target.dispose();
       }
     }
-    const dried = this.driedLayers(this.currentLayers());
+    const dried = this.driedLayers(this.currentLayers(), true);
     const full = renderXrayPixels(
       this.doc.canvas.width,
       this.doc.canvas.height,
@@ -6049,6 +6301,7 @@ export class PaintEditorController {
     const h = Math.round(height * scale);
     if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
     const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions, authoredEffects: this.authoredPolicy, rawShaders: this.rawShaders, authoredEffectLimits: this.authoredLimits, authoredEffectsGPU: false });
+    target.replayTarget = true;
     target.brushEntries = this.brushEntries;
     target.brushSources.set(this.brushSources.all());
     const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
@@ -6116,6 +6369,8 @@ export class PaintEditorController {
 
   /** Stops the wet simulation's worker threads (call when the editor goes away). */
   dispose(): void {
+    this.schemeReplay?.dispose();
+    this.schemeReplay = null;
     this.unsubscribeLibrary();
     this.wet.destroy();
     this.effectsRenderer.dispose();
@@ -6521,6 +6776,8 @@ export class PaintEditorController {
     }
     const live = this.live;
     if (!live) return this.schemeLayers(this.animatedView(view));
+    // The scheme's replay follows the stroke on a layer it shows.
+    if (this.shownSchemeReplay() && this.schemeNeeds().replay.has(live.layerId)) return this.schemeLayers(this.doc.layers);
     if (this.liveLayers?.key === live.surface) return this.liveLayers.layers;
     const layers = mapLayer(this.schemeLayers(this.doc.layers), live.layerId, (l) => ({ ...(l as PaintPixelLayer), surface: live.surface }));
     this.liveLayers = { key: live.surface, layers };
@@ -6555,12 +6812,21 @@ export class PaintEditorController {
     return node;
   }
 
-  /** The layers with every wet layer dried where it is (what saving and exporting see). */
-  private driedLayers(layers: PaintLayer[] = this.currentLayers()): PaintLayer[] {
-    const ids = this.wet.wetLayerIds();
-    if (!ids.length) return layers;
-    this.requireWetIdle('exporting');
+  /**
+   * The layers with every wet layer dried where it is (what saving and exporting see). With
+   * `scheme` (`layers` came from the view), a layer the scheme's replay shows dries as the replay does.
+   */
+  private driedLayers(layers: PaintLayer[] = this.currentLayers(), scheme = false): PaintLayer[] {
+    const replay = scheme ? this.shownSchemeReplay() : null;
+    const replayed = replay ? this.schemeNeeds().replay : null;
     let out = layers;
+    for (const id of replayed ?? []) {
+      const baked = replay!.bakedSurface(id);
+      if (baked && findLayer(out, id)) out = mapLayer(out, id, (l) => ({ ...(l as PaintPixelLayer), surface: baked }));
+    }
+    const ids = this.wet.wetLayerIds().filter((id) => !replayed?.has(id));
+    if (!ids.length) return out;
+    this.requireWetIdle('exporting');
     for (const id of ids) {
       const baked = this.wet.bakedSurface(id);
       if (baked && findLayer(out, id)) out = mapLayer(out, id, (l) => ({ ...(l as PaintPixelLayer), surface: baked }));
@@ -6751,7 +7017,7 @@ export class PaintEditorController {
   }
 
   private renderLayers(options: RenderOptions, view = false, withBacklight = true): ViewLayer[] {
-    const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers(this.currentLayers(view)) : this.currentLayers(view);
+    const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers(this.currentLayers(view), true) : this.currentLayers(view);
     const useAge = (options.age ?? view) && isAgeActive(this.age);
     const paintedCount = useAge ? Math.max(1, paintedPixelLayers(base).length) : 1;
     let layers: PaintLayer[] = this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(base), useAge, paintedCount)));
@@ -6910,6 +7176,10 @@ export class PaintEditorController {
     for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) if (findLayer(this.doc.layers, id)) liveStrokes[id] = list.map(strokeToJSON) as unknown as RecordedStroke[];
     if (Object.keys(liveStrokes).length) ext.liveStrokes = liveStrokes;
     else delete ext.liveStrokes;
+    // Layers a replay can't rebuild, for documents whose dual-colour strokes follow the scheme.
+    const unlogged = Object.entries(this.doc.unlogged ?? {}).filter(([id]) => findLayer(state.layers, id));
+    if (unlogged.length && state.strokes.some((st) => st.dualColor)) ext.unlogged = Object.fromEntries(unlogged);
+    else delete ext.unlogged;
     // The image sources the strokes draw with, bytes included, so replays and repaints match anywhere.
     const strokes = [...this.doc.strokes, ...Object.values(this.doc.liveStrokes ?? {}).flat()];
     const sourceIds = [...new Set(strokes.flatMap((st) => engineBrushSourceIds(st.brush)))];
@@ -7183,6 +7453,8 @@ export class PaintEditorController {
     this.redoStack = [];
     this.resetMutations();
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
+    const unlogged = readUnlogged(loaded.extensions.unlogged, this.doc.layers);
+    if (unlogged) this.doc = { ...this.doc, unlogged };
     this.nextMagnetId = 1;
     for (const m of this.doc.magnets ?? []) {
       const n = Number(/^mag(\d+)$/.exec(m.id)?.[1] ?? 0);
@@ -7203,6 +7475,7 @@ export class PaintEditorController {
     delete this.extensions.lighting;
     delete this.extensions.stickers;
     delete this.extensions.liveStrokes;
+    delete this.extensions.unlogged;
     delete this.extensions.brushSources;
     delete this.extensions.effectLayers;
     delete this.extensions.paperEffect;
@@ -7281,7 +7554,7 @@ export class PaintEditorController {
    */
   exportPsd(): PsdExportResult {
     // Thick paint lit, light paint glowing, and each layer's spill as a Linear Dodge (Add) layer above it.
-    const driedBase = this.driedLayers(this.schemeLayers(this.doc.layers));
+    const driedBase = this.driedLayers(this.schemeLayers(this.doc.layers), true);
     const backlight = this.backlightLayer(driedBase);
     const dried = [...this.lightLayers(this.uvLayers(this.litLayers(this.thermoLayers(driedBase)))), ...(backlight ? [backlight] : [])];
     const { width, height, dpi } = this.doc.canvas;
@@ -9866,4 +10139,63 @@ function dualHex(value: unknown): DualColor | null {
   const light = brushColourHex(value.light, 'light');
   const dark = brushColourHex(value.dark, 'dark');
   return light && dark ? { light, dark } : null;
+}
+
+/** What `schemeNeeds` finds: layers the scheme's replay shows, layers kept with why, and every layer with dual-colour strokes. */
+interface SchemeNeeds {
+  replay: Set<string>;
+  kept: Map<string, string>;
+  dual: Set<string>;
+}
+
+/** One layer with dual-colour strokes in `PaintEditorController.colorSchemeView()`. */
+export interface PaintColorSchemeLayer {
+  layerId: string;
+  name: string;
+  /**
+   * `strokes`: a stroke layer, redrawn from its strokes in the scheme's side. `document`: its pixels
+   * are already in the scheme's side. `replay`: rebuilt from the stroke log in the scheme's side.
+   * `kept`: it holds pixels the stroke log doesn't have, so it keeps the side it was painted in.
+   */
+  view: 'strokes' | 'document' | 'replay' | 'kept';
+  /** `replay` only: building (the layer shows its own pixels until then), ready or failed. */
+  state?: SchemeReplayState;
+  /** `kept` and a failed `replay`: why. */
+  reason?: string;
+}
+
+/** How the document's dual-colour paint shows in the colour scheme (view only: never saved or undone). */
+export interface PaintColorSchemeView {
+  scheme: ColorScheme;
+  /** The replay of the stroke log in the scheme (`none` when no pixel layer needs one): its state, items repainted of the log's, and why it failed. */
+  replay: { state: SchemeReplayState | 'none'; items: number; total: number; error: string | null };
+  /** Each layer with dual-colour strokes, top first. */
+  layers: PaintColorSchemeLayer[];
+}
+
+/** A replay editor's state after an item (`replayCheckpoint`); `lost` when its wet snapshot was dropped for memory. */
+export interface ReplayCheckpoint {
+  doc: PaintDocumentState;
+  wet: WetSnapshot | null;
+  tilt: PaintWetLayers['tilt'];
+  settings: Map<string, WetLayerSettings>;
+  clock: number;
+  lost?: boolean;
+}
+
+function cloneWetSettings(v: WetLayerSettings): WetLayerSettings {
+  return { ...v, params: { ...v.params }, flow: { ...v.flow }, ...(v.ghost ? { ghost: { ...v.ghost } } : {}), ...(v.livePatterns ? { livePatterns: { ...v.livePatterns } } : {}) };
+}
+
+/** Layers a replay can paint into: visible and unlocked (what is shown is the document's own visibility). */
+function replayableLayers(layers: readonly PaintLayer[]): PaintLayer[] {
+  return layers.map((l) => (l.type === 'group' ? { ...l, visible: true, locks: undefined, children: replayableLayers(l.children) } : { ...l, visible: true, locks: undefined }) as PaintLayer);
+}
+
+/** The saved `unlogged` extension: layer id → the change, for layers that exist. */
+function readUnlogged(raw: unknown, layers: readonly PaintLayer[]): Record<string, string> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, string> = {};
+  for (const [id, why] of Object.entries(raw as Record<string, unknown>)) if (typeof why === 'string' && isPixelLayer(findLayer(layers, id)?.layer)) out[id] = why;
+  return Object.keys(out).length ? out : null;
 }
