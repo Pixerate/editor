@@ -197,6 +197,8 @@ public enum PaintToolName: String, CaseIterable, Sendable {
     case checkPaintStyle = "check_paint_style"
     case fixPaintStyle = "fix_paint_style"
     case checkBrushStyle = "check_brush_style"
+    case getPaintDocument = "get_paint_document"
+    case loadPaintDocument = "load_paint_document"
 
     /// The provider that offers the tool.
     public var provider: String {
@@ -208,6 +210,7 @@ public enum PaintToolName: String, CaseIterable, Sendable {
         case .proposePaint, .listPaintProposals, .acceptPaintProposal, .rejectPaintProposal: "paint-proposals"
         case .checkPaintStyle, .fixPaintStyle: "paint-style"
         case .checkBrushStyle: "brush-style"
+        case .getPaintDocument, .loadPaintDocument: "paint-document"
         }
     }
 }

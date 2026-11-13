@@ -141,6 +141,8 @@ public final class PaintEditorModel {
         // Effects written at run time (`open_effect_authoring`, `save_authored_effect`, the `effect_authoring_*` tools); the controller's `authoredEffects` policy decides what they may do.
         subscriptions.append(try r.register(createPaintEffectAuthoringToolProvider(c)))
         subscriptions.append(try r.register(createPaintBrushLibraryToolProvider(c)))
+        // get_paint_document / load_paint_document over a paint editor document (images as asset references).
+        subscriptions.append(try r.register(createPaintDocumentToolProvider(c)))
         gesture = PaintGesture(controller: c) { [unowned self] in self.viewport }
         gesture.onSelectStroke = { [unowned self] id in self.selectedStroke = id }
         subscriptions.append(c.subscribe { [weak self] in

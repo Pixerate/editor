@@ -4023,6 +4023,24 @@ public struct CheckBrushStyleArguments: Sendable {
     }
 }
 
+/// Arguments of `get_paint_document`.
+public struct GetPaintDocumentArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `load_paint_document`.
+public struct LoadPaintDocumentArguments: Sendable {
+    /// The paint document: the "document" value from get_paint_document, or a saved file ({ format, kind, formatVersion, document }).
+    public var document: JSONValue
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        document = try args.required(args.argument("document"), "document")
+    }
+}
+
 /// A tool's arguments read into its `…Arguments` struct.
 public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws -> any Sendable {
     switch name {
@@ -4220,5 +4238,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .checkPaintStyle: try CheckPaintStyleArguments(args)
     case .fixPaintStyle: try FixPaintStyleArguments(args)
     case .checkBrushStyle: try CheckBrushStyleArguments(args)
+    case .getPaintDocument: try GetPaintDocumentArguments(args)
+    case .loadPaintDocument: try LoadPaintDocumentArguments(args)
     }
 }

@@ -62,6 +62,8 @@ public final class PaintConformanceHost: ConformanceHost {
         }
         _ = try registry.register(createPaintStyleToolProvider(controller, styles.paint, readOnly: { readOnly }))
         _ = try registry.register(createBrushStyleToolProvider(controller.brushLibrary, styles.brushes))
+        // get_paint_document / load_paint_document over a paint editor document of its own.
+        _ = try registry.register(createPaintDocumentToolProvider(controller))
     }
 
     private static func limits(_ o: JSONObject?) -> AuthoredEffectLimits {
