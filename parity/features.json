@@ -2463,6 +2463,13 @@
           "react": "`useAgentToolProvider`",
           "svelte": "`useAgentToolProvider`",
           "swift": "Planned (#533)"
+        },
+        {
+          "feature": "Text Colour on a Fill (`contrast` for any colour the module reads, dual colours included; `ink` / `inkSide` pick the ink that reads on a fill by contrast or by a brightness threshold; the chart's label colour and the spreadsheet's conditional-format text use it; the house-style `min-contrast` check suggests the ink that passes; `pick_text_color` agent tool)",
+          "core": "`contrast`, `ink`, `inkSide` (`/color`), `pick_text_color`",
+          "react": "✅ (`pick_text_color` in the colour agent tools)",
+          "svelte": "✅ (`pick_text_color` in the colour agent tools)",
+          "swift": "Planned (#533)"
         }
       ]
     },

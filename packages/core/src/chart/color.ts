@@ -3,6 +3,7 @@
 // (`simulate_cvd`, Machado–Oliveira–Fernandes 2009 matrices) (MIT OR Apache-2.0, © ArtCraft Team and contributors).
 // See THIRD_PARTY_NOTICES.md.
 
+import { inkSide } from '../color/ink.js';
 import {
 	rgbToOklab as coreRgbToOklab,
 	deltaEOK,
@@ -109,11 +110,16 @@ export function chartContrastRatio(a: string, b: string): number | null {
  * read (a CSS variable).
  */
 export function chartTextOn(fill: string, fallback: string, dark = '#0f172a', light = '#ffffff'): string {
+	// The chart's own reading of the colours (alpha ignored), judged by the shared `inkSide`.
 	const rgb = parseChartColor(fill);
 	if (!rgb) return fallback;
-	const darkRatio = chartContrastRatio(fill, dark)!;
-	const lightRatio = chartContrastRatio(fill, light)!;
-	return darkRatio >= lightRatio ? dark : light;
+	const darkRgb = parseChartColor(dark);
+	const lightRgb = parseChartColor(light);
+	// As before: an unreadable ink loses to a readable one (both unreadable: dark).
+	if (!darkRgb) return lightRgb ? light : dark;
+	if (!lightRgb) return dark;
+	const opaque = (c: ChartRgb) => ({ r: c[0], g: c[1], b: c[2], a: 1 });
+	return inkSide(opaque(rgb), { dark: opaque(darkRgb), light: opaque(lightRgb) }) === 'dark' ? dark : light;
 }
 
 /** OKLab (Ottosson) from sRGB. */
