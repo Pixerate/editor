@@ -11,6 +11,7 @@
 
 import type { EffectProvider } from '../effects/types';
 import { BRUSH_OPTION_CONTROLS } from '../image-editor/layers/paint-ui';
+import { createDocumentToolProvider } from '../persistence/documentTools';
 import { EDITOR_DOCUMENT_FORMAT, toEditorDocumentFile } from '../persistence/editorDocument';
 import { defaultLayerEffect, LAYER_EFFECT_KINDS } from '../raster/effects/model';
 import { LAYER_EFFECT_MENU, layerEffectControls } from '../raster/effects/ui';
@@ -275,6 +276,7 @@ function uiTables() {
 export function paintContracts(options: { effects: EffectProvider }): Record<string, unknown> {
   const controller = new PaintEditorController({ width: 64, height: 64 });
   controller.setEffectsProvider(options.effects);
+  const document = createPaintEditorDocument(controller);
   const providers = [
     createPaintEditorToolProvider(controller),
     createPaintEffectsToolProvider(controller),
@@ -282,8 +284,8 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
     createPaintBrushLibraryToolProvider(controller),
     createPaintProposalToolProvider(createPaintProposals({ controller })),
     ...paintStyleProviders(controller, paintStyleResolver({})),
+    paintDocumentToolProvider(document),
   ].map(toolList);
-  const document = createPaintEditorDocument(controller);
   const files: Record<string, unknown> = {
     'document.schema.json': { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'document.schema.json', ...PAINT_DOCUMENT_JSON_SCHEMA },
     'tools.json': { providers },
@@ -298,6 +300,14 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
     files: Object.keys(files).sort(),
   };
   return files;
+}
+
+/**
+ * `get_paint_document` / `load_paint_document` over a paint editor document: bare names, and no
+ * `undo_paint` / `redo_paint` of its own (the editor provider has them).
+ */
+function paintDocumentToolProvider(document: ReturnType<typeof createPaintEditorDocument>): AgentToolProvider {
+  return createDocumentToolProvider(document, { namespace: '', history: false, skill: 'pixerate-paint-editor' });
 }
 
 /** A house-style check list: check ids, or `{ id, ...options }`. */
@@ -369,6 +379,7 @@ export function createPaintConformanceHost(raw: Omit<PaintEditorOptions, 'sticke
   registry.register(createPaintBrushLibraryToolProvider(controller));
   registry.register(createPaintProposalToolProvider(createPaintProposals({ controller })));
   for (const p of paintStyleProviders(controller, paintStyleResolver({ style, brushStyle, brand }), readOnly)) registry.register(p);
+  registry.register(paintDocumentToolProvider(createPaintEditorDocument(controller)));
   return {
     callTool: (name, args) => registry.callTool(name, args),
     document: () => toEditorDocumentFile(createPaintEditorDocument(controller)),

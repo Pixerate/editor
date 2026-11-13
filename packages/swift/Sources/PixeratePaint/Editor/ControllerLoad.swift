@@ -21,6 +21,29 @@ extension PaintEditorController {
         return adopt(loaded)
     }
 
+    /**
+     Opens a saved painting whose assets may be external references in `store` (`loadJSONAsync`,
+     e.g. what `toJSONExternal` wrote), clearing the history. Each reference is read through
+     `store.get`; one that fails (or any external one when there is no store) is reported and its
+     layer loads empty. Returns what could not be read.
+     */
+    @discardableResult
+    public func loadJSONAsync(_ raw: JSONValue, store: PaintAssetStore? = nil) async throws -> [String] {
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before opening a document.") }
+        var loaded: LoadedPaintDocument
+        do {
+            guard var r = raw.objectValue else { throw PaintEditorError("Not a paint document: expected a JSON object.") }
+            var problems: [String] = []
+            let assets = try await resolveExternalAssets(r["assets"]?.objectValue ?? JSONObject(), store, &problems)
+            r["assets"] = .object(assets)
+            loaded = try deserializePaintDocument(.object(r))
+            loaded.problems = problems + loaded.problems
+        } catch {
+            throw PaintEditorError(errorMessage(error))
+        }
+        return adopt(loaded)
+    }
+
     private func adopt(_ loaded: LoadedPaintDocument) -> [String] {
         var problems = loaded.problems
         culturePreview = nil
@@ -50,6 +73,7 @@ extension PaintEditorController {
             extensions[k] = nil
         }
         viewCompositor = createPaintCompositor()
+        documentRevision += 1
         setDocSilently(state)
         emit()
         // Provider stickers keep their saved pixels; their art loads now so they can be edited.

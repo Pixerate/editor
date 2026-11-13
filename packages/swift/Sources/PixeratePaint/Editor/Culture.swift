@@ -1912,6 +1912,7 @@ extension PaintEditorController {
 
     public func setCultureOptions(growWhileClosed: Bool) -> JSONObject {
         flushCulturePreview()
+        documentRevision += 1
         doc = doc.with { d in
             d.growWhileClosed = growWhileClosed ? true : nil
             if !growWhileClosed { d.lastGrownAt = nil }

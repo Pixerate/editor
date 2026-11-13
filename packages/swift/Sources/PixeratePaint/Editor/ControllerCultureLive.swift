@@ -149,6 +149,7 @@ extension PaintEditorController {
         undoStack.append(HistoryEntry(label: "Culture growth", before: pv.base, after: d))
         if undoStack.count > historyLimit { undoStack.removeFirst() }
         redoStack = []
+        documentRevision += 1
         doc = d
     }
 

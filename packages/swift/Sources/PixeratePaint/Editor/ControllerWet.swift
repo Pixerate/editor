@@ -715,6 +715,7 @@ extension PaintEditorController {
         let stats = advanceHeatField(field, steps: steps)
         let dried = try dryWetFromHeat(field)
         let next = doc.with { $0.heat = stats.max > 0 ? field : nil }
+        documentRevision += 1
         doc = withWetEvents(next)
         emit()
         var out = stats.json

@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint] The Paint Document's `revision` Counts Emits, and Swift's `doc` Emits on Every Assignment
+
+- **Issue / Symptom**: `get_paint_document` / `load_paint_document` return a `revision` that must match the TS recording. Bumping the Swift controller's `documentRevision` after `doc = next` (where the TS core writes `this.docRevision++`) leaves every change one revision late.
+- **Root Cause**: `createPaintEditorDocument` counts the controller's emits that come after a `documentRevision` change. In TS, `commit` bumps `docRevision` and emits at the end; in Swift, `doc` has a `didSet` that emits on the assignment itself, so the emit happens before a bump written after it. For the same reason a live culture growth flush followed by a commit in one call emits twice in Swift (two revisions) and once in TS (one).
+- **Solution / Workaround**: Bump `documentRevision` before assigning `doc` (commit, undo, redo, opening, heat, culture options, the culture flush). Scenarios that check revisions keep culture growth out of the steps between document reads.
+
+### [swift/paint] External Asset Stores Cache References Per Store Object, Twice
+
+- **Issue / Symptom**: `toJSONExternal` puts a PNG that is both a layer's pixels and an extension field's image into the store twice (under the layer id and under `ext-<fnv1a>-<length>`), then never again for that store.
+- **Root Cause**: The TS core keeps two `WeakMap`s keyed by the store (`externalRefs` for layer assets in the image editor's serializer, `storedPngs` for extension PNGs), each from data URL to the store's reference.
+- **Solution / Workaround**: The Swift port keeps the same two caches in `WeakObjectMap`s keyed by the store object (`PaintAssetStore` is `AnyObject`), so the number of `put` calls matches; keep one store object across saves to skip uploads.
+
 ### [swift/vector-ui] The Swift Vector Controller Has No Pointer State Machine, So Canvas Drags Replay From a History Mark
 
 - **Issue / Symptom**: The TS `VectorEditorController` handles `pointerDown` / `pointerMove` / `pointerUp` itself (live previews, one undo step per drag). The Swift port has no pointer input, and calling `translate` / `addShape` / `moveAnchor` on every pointer move would leave one undo step per move.

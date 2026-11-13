@@ -23335,6 +23335,55 @@
           }
         }
       ]
+    },
+    {
+      "id": "paint-document",
+      "title": "Paint document",
+      "skill": "pixerate-paint-editor",
+      "tools": [
+        {
+          "name": "get_paint_document",
+          "title": "Get the paint document",
+          "description": "Returns the whole paint as plain JSON: { kind, formatVersion, revision, document }. Use it to keep a copy, compare versions or pass the document to load_paint_document later. For reading or editing parts of the paint, prefer the editor's own read tools: this result can be large.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Get the paint document",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "load_paint_document",
+          "title": "Load a paint document",
+          "description": "Replaces the whole paint with a document from get_paint_document (its \"document\" value, or the whole result as a saved file). The document is checked first: when it does not fit, nothing changes and the error says why. Returns { revision, undoable, migratedFrom?, problems?, unknownKeys? }; undoable: true means undo_paint brings the previous paint back.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "document": {
+                "type": "object",
+                "description": "The paint document: the \"document\" value from get_paint_document, or a saved file ({ format, kind, formatVersion, document })."
+              }
+            },
+            "required": [
+              "document"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Load a paint document",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        }
+      ]
     }
   ]
 }
