@@ -21,6 +21,30 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/vector-ui] The Swift Vector Controller Has No Pointer State Machine, So Canvas Drags Replay From a History Mark
+
+- **Issue / Symptom**: The TS `VectorEditorController` handles `pointerDown` / `pointerMove` / `pointerUp` itself (live previews, one undo step per drag). The Swift port has no pointer input, and calling `translate` / `addShape` / `moveAnchor` on every pointer move would leave one undo step per move.
+- **Root Cause**: The controller port stops at the commands (#624); the TS drag state (`drag.before`, `restore`) is internal.
+- **Solution / Workaround**: `VectorCanvasGesture` takes `controller.history.mark()` when a drag starts and, on each move, calls `history.revertTo(mark)` and applies the whole edit again from the drag's start. The document shows the real result while dragging and the drag is one undo step; `cancel()` reverts to the mark. The pen path and slider drags (`beginLiveEdit`) work the same way. If an agent edits mid-drag the mark becomes invalid and `revertTo` does nothing; the pen then starts a new mark.
+
+### [swift/vector-ui] `getVectorSceneRenderData` Throws for the Whole Drawing When One Layer Can't Be Drawn Yet
+
+- **Issue / Symptom**: One line with an arrowhead (or an aligned / profiled stroke, a brushstroke, a lens, an opacity mask) made the Swift canvas blank.
+- **Root Cause**: The Swift render data throws `VectorNotPorted` (#624) instead of skipping the node, so the scene for the whole document fails.
+- **Solution / Workaround**: `VectorEditorModel.scene` falls back to rendering each top-level layer on its own, keeps those that render, and reports the rest in `scene.issue` (shown over the canvas). Remove the fallback once the render data draws every node.
+
+### [swift/vector-ui] The Vector Text Shaper Is Process-Wide: Tests Must Leave It as the Metric Shaper
+
+- **Issue / Symptom**: Vector conformance and layout tests can change results when another test sets `CoreTextVectorShaper` (real fonts give other line breaks and outlines).
+- **Root Cause**: `setVectorTextShaper` sets one shaper for the process (as `setTextShaper` does in the TS core); `VectorEditorModel` sets `CoreTextVectorShaper` by default, and every test target runs in one process.
+- **Solution / Workaround**: Tests build `VectorEditorModel(textShaper: nil)`, and a test that sets the CoreText shaper calls `setVectorTextShaper(nil)` in `tearDown`. `VectorConformanceHost` sets the metric shaper itself.
+
+### [swift/vector] The House-Style Tools Are Listed With Their Provider's Prefix in a Swift Vector Registry
+
+- **Issue / Symptom**: `check_vector_style` was not in `ToolRegistry.listTools()` of `VectorEditorModel`; the listed names are `vector-style__check_vector_style` and `vector-style__fix_vector_style`, although the scenarios call `check_vector_style`.
+- **Root Cause**: `createVectorStyleToolProvider` takes no namespace option, so the provider id prefixes its tools. `ToolRegistry.callTool` also accepts a bare name when exactly one tool has it (`lookup`), which is how the conformance host's scenarios call them.
+- **Solution / Workaround**: Look for the prefixed names in a tool list (the agent panel shows them); calls work by either name. Bare names would collide once two providers share a tool name, so don't rely on them in new code.
+
 ### [core|swift/paint] A Style Skill's Issues Name Every File It Holds, Whatever Domain Is Checked
 
 - **Issue / Symptom**: With an invalid `paint-editor.json` beside a valid `brushes.json`, `check_brush_style` still lists `paint-editor.json is left out: …` in its `issues` (and `check_paint_style` lists a broken `brushes.json`). A Swift port that loaded only the domain's own file and `brand.json` (as `HouseStyle` does) missed them.
@@ -110,6 +134,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Large sticker brushes (200 px) landed stickers ~140 px apart and up to ~120 px off the stroke, so they no longer traced the path.
 - **Root Cause**: The spray's spacing and scatter were fractions of the sticker's diameter, so both grew without limit with the size.
 - **Solution / Workaround**: Both scale with `min(diameter, STICKER_REACH)` (64 px), and `PenDabWalker.layEnd` lays a last sticker at the stroke's end. Keep any change to these in step in `paint-editor/stickers.ts` and `Stickers/Stickers.swift`: the conformance scenario `sticker-large-sizes` records the positions.
+
+### [swift/ui] Swift 6.3 Crashes Compiling a Stored `@MainActor @Sendable` Closure Passed to `Binding(set:)`
+
+- **Issue / Symptom**: CI (Swift 6.3.3) failed every Swift job with `fatal error encountered during compilation` / `SmallVector unable to grow` / `compile command failed due to signal 6`, in IR generation for `VectorPanels.swift`, while emitting a reabstraction thunk from an `@isolated(any) @Sendable (Double, Actor?) -> ()` closure. Swift 6.4 locally built and ran it fine.
+- **Root Cause**: `VectorStyleSlider` stored `let set: @MainActor @Sendable (Double) -> Void` and passed it straight to `Binding(get:set:)`. The conversion to the `@isolated(any)` closure type crashes 6.3's IRGen.
+- **Solution / Workaround**: Don't hand a stored global-actor-isolated `@Sendable` closure to SwiftUI API that takes a closure. Write the closure inline at the call (`Binding(get: { … }, set: { (v: Double) -> Void in … })`) and pass data (a key, a scale), not closures, into the view. A local build cannot catch this; CI's Swift version can (see the entry below on older CI compilers).
 
 ### [swift] CI Fails With "Unable to Type-Check This Expression in Reasonable Time" When Local Builds Pass
 
