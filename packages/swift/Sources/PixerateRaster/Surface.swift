@@ -313,10 +313,16 @@ public func readRegion(_ surface: TiledSurface, _ rect: RasterRect) -> [UInt8] {
         let span = (x1 - x0) * ch
         tile.data.withUnsafeBufferPointer { src in
             dst.withUnsafeMutableBufferPointer { d in
+                // Whole rows at a time (the tile and `dst` hold every row the loop reads and writes).
+                let rows = src.count >= TILE_PIXELS * ch && span > 0
                 for yy in y0..<y1 {
                     let s = ((yy - oy) * TILE + (x0 - ox)) * ch
                     let o = ((yy - rect.y) * w + (x0 - rect.x)) * ch
-                    for k in 0..<span { d[o + k] = src[s + k] }
+                    if rows {
+                        (d.baseAddress! + o).update(from: src.baseAddress! + s, count: span)
+                    } else {
+                        for k in 0..<span { d[o + k] = src[s + k] }
+                    }
                 }
             }
         }
@@ -472,10 +478,16 @@ public func writeRegion(_ surface: TiledSurface, _ rect: RasterRect, _ data: [UI
         let span = (x1 - x0) * ch
         data.withUnsafeBufferPointer { src in
             buf.data.withUnsafeMutableBufferPointer { tb in
+                // Whole rows at a time (`data` holds the rectangle, checked above, and the tile every row the loop writes).
+                let rows = tb.count >= TILE_PIXELS * ch && span > 0
                 for yy in y0..<y1 {
                     let s = ((yy - rect.y) * w + (x0 - rect.x)) * ch
                     let d = ((yy - oy) * TILE + (x0 - ox)) * ch
-                    for k in 0..<span { tb[d + k] = src[s + k] }
+                    if rows {
+                        (tb.baseAddress! + d).update(from: src.baseAddress! + s, count: span)
+                    } else {
+                        for k in 0..<span { tb[d + k] = src[s + k] }
+                    }
                 }
             }
         }
