@@ -4636,3 +4636,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The first 3-D chart drew its categories right to left (Q4 … Q1) with the value labels on the right.
 - **Root Cause**: The chart layout's z runs back into the picture (the back wall at the largest z), so the camera sat at negative z looking along +z. three.js is right-handed: looking along +z, +x points to the camera's left.
 - **Solution / Workaround**: `createChart3dScene` puts the chart in a group with `scale.z = -1` and looks along -z from the +z side; positions taken from the layout (camera fit, overlay labels) go through `world(x, y, z)`, which negates z. three.js flips the face winding of a negatively scaled object itself, so lighting is unaffected. `tests/chart-3d.test.ts` checks the categories run left to right.
+
+### [swift/paint] A Lit Layer Needs `LightCache`, or Every Frame Blurs Its Whole Spill Again
+
+- **Issue / Symptom**: With light paint on a layer (glow-wash, foxfire) a 2048 × 1536 canvas took 50–115 ms a frame while anything on screen changed, almost all of it in `compositeTiles` on the main thread.
+- **Root Cause**: `lightLayers` called `glowSurface` and `computeSpill` on every render. The TS keeps a `LightCache` per layer (`light.ts`); the Swift port had none, so each frame shaded every lit tile again and blurred the spill over the light's whole bounds on one thread, allocating an array for every pixel.
+- **Solution / Workaround**: `LightCache` (in `Thick.swift`) keeps glowed tiles by the identity of their colour, light, material and height tiles and the spill by the identity of the colour and light surfaces, and hands back the same surface when nothing changed, so the compositor sees no change either. While wet light flows the spill is still new every step, so `computeSpill` runs its passes with `paintParallel` (energy by row of reduced cells, blur by channel, picture by pixel row; none shares a result, so the bits are the serial ones) and skips pixels whose four reduced cells hold no energy. Anything that renders light must go through the layer's cache (`lightCaches`).
+
+### [swift/paint] `LivePatternField.step`: Swap the Fields, Write Only Wet Cells, Ask for Wetness a Tile at a Time
+
+- **Issue / Symptom**: Live patterns (turing-wash, coral-ink) cost about 25 ms a frame on top of the wet step for one long stroke.
+- **Root Cause**: The step ran on one thread, called a closure for each of a tile's 16 384 cells to ask whether it was wet, copied each wet tile's `U` and `V` arrays after every substep (assigning an array and then writing to it copies it), and looked up the neighbouring tile in a dictionary for every sample across a tile edge.
+- **Solution / Workaround**: The current and next fields are two buffers per tile that swap after each substep. A dry cell never changes, so both buffers hold its value from the start and a substep writes the wet cells only. `WetWorld` passes a `WetTileMask` that reads a whole tile's wetness from its slot, and the eight neighbours are found once per call. Within a substep a tile reads the fields as they were and writes only its own next fields, so tiles run on `threads` threads with one thread's bits. `SpecialtyPaintPerfTests` keeps the old serial step, spill and relief as references: change the maths in both.
+
+### [swift/paint] Pattern Relief Is Skipped by Identity, so the Field Must Know When `V` Changes
+
+- **Issue / Symptom**: Every display sync wrote every pattern tile of every layer with relief into its height map again, wet or long dry.
+- **Root Cause**: `applyReliefHeight` had no way to tell that a tile's ridges were already in the height map.
+- **Solution / Workaround**: A ridge only raises the height, so writing the same `V` into the height tile the last call left changes nothing. The field keeps the height tile it last left per pattern tile (`reliefSeen`) and the tiles whose `V` changed since (`reliefChanged`), and skips a tile while neither changed; a flattened or undone height map is a different tile object, so its ridges are written again. Code inside `LivePatternField` that changes a tile must go through `setTile(_:_:vChanged:)`; assigning `tiles` from outside makes every tile stale (`didSet`).
+
+### [swift/paint] `emit(nil)` Is Not a Full Redraw, and Wet Frames Shade at Most 24 Tiles
+
+- **Issue / Symptom**: `updateLights` and `updateHeights` emit `nil` ("anywhere") every tick, which looks like a whole-canvas redraw. A benchmark hash of the view after the last frame differed from the hash once the paint was fully shaded.
+- **Root Cause**: The view compositor compares each tile's inputs by identity (`sigs`) and recomposites only tiles whose inputs changed; with `nil` it checks every tile, which costs a signature per tile, not a composite. Rectangles only save more when they are smaller than a tile (a dab), and a wet tile's rectangle is the whole tile. Separately, `tick` shades at most `DISPLAY_TILES_PER_TICK` stale tiles a frame, so with more wet tiles than that the last frame shows some of them a few steps late.
+- **Solution / Workaround**: Leave those emits as they are (light spills past its tiles, and lit relief reads the heights around a tile). To find what a frame costs, measure it: `SPECIALTY_BENCH=1 swift test -c release -Xswiftc -enable-testing --filter SpecialtyPaintBenchTests` prints the tick and composite time per brush and two view hashes (last frame, and settled after `syncDisplays()`); a change that only makes the engine faster must leave both as they were.
