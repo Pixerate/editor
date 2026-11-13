@@ -3,15 +3,18 @@ import PixerateChartUI
 import PixerateCore
 import PixeratePaint
 import PixeratePaintUI
+import PixerateVector
+import PixerateVectorUI
 import SwiftUI
 #if canImport(AppKit)
 import AppKit
 #endif
 
 /**
- * The Swift demo: a Paint tab with `PaintEditorView` and an agent panel listing the editor's
- * tools, with a switch that connects them to `pixerate-mcp-bridge` (`ToolBridgeClient`), so an MCP
- * client can paint in this window.
+ * The Swift demo: Paint, Chart and Vector tabs (`PaintEditorView`, `ChartEditorView`,
+ * `VectorEditorView`), each with an agent panel listing the editor's tools and a switch that
+ * connects them to `pixerate-mcp-bridge` (`ToolBridgeClient`), so an MCP client can paint, chart
+ * or draw in this window.
  */
 @main
 struct PixerateSwiftDemoApp: App {
@@ -66,9 +69,29 @@ struct DemoRoot: View {
 
     @State private var chartModel: ChartEditorModel? = try? ChartEditorModel()
 
+    /// The tab shown first: `PIXERATE_DEMO_TAB` (`paint`, `chart` or `vector`), for snapshots.
+    @State private var tab: String = ProcessInfo.processInfo.environment["PIXERATE_DEMO_TAB"] ?? "paint"
+
+    @State private var vectorModel: VectorEditorModel? = {
+        do {
+            let m = try VectorEditorModel()
+            // A few shapes and a line of text so the drawing isn't empty on first launch.
+            let c = m.controller
+            _ = try c.addShape(VectorShapeInput(kind: "rect", x: 120, y: 140, width: 220, height: 160, cornerRadius: 18, style: ["fill": "#2563eb", "stroke": .null]))
+            _ = try c.addShape(VectorShapeInput(kind: "ellipse", x: 280, y: 220, width: 200, height: 200, style: ["fill": "#f59e0b", "stroke": "#78350f", "strokeWidth": 3]))
+            _ = try c.addShape(VectorShapeInput(kind: "star", x: 520, y: 150, width: 160, height: 160, style: ["fill": "#10b981", "stroke": .null]))
+            _ = try c.addText(VectorTextInput(text: "Pixerate vector", x: 120, y: 500, font: ["fontFamily": "sans-serif", "fontSize": 40, "fontWeight": 700]))
+            c.clearSelection()
+            c.history.clear()
+            return m
+        } catch {
+            return nil
+        }
+    }()
+
     var body: some View {
         if let model {
-            TabView {
+            TabView(selection: $tab) {
                 HStack(spacing: 0) {
                     PaintEditorView(model: model)
                     Divider()
@@ -76,6 +99,7 @@ struct DemoRoot: View {
                         .frame(width: 280)
                 }
                 .tabItem { Label("Paint", systemImage: "paintbrush") }
+                .tag("paint")
 
                 if let chartModel {
                     HStack(spacing: 0) {
@@ -85,6 +109,18 @@ struct DemoRoot: View {
                             .frame(width: 280)
                     }
                     .tabItem { Label("Chart", systemImage: "chart.bar.xaxis") }
+                    .tag("chart")
+                }
+
+                if let vectorModel {
+                    HStack(spacing: 0) {
+                        VectorEditorView(model: vectorModel)
+                        Divider()
+                        AgentPanel(registry: vectorModel.registry, name: "Vector — Swift demo", kind: "vector")
+                            .frame(width: 280)
+                    }
+                    .tabItem { Label("Vector", systemImage: "pencil.and.outline") }
+                    .tag("vector")
                 }
             }
         } else {

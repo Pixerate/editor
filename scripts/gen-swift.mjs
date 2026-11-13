@@ -161,6 +161,9 @@ function argumentsStruct(tool) {
 
 // MARK: UI tables (types inferred from the JSON)
 
+/** Tables read as `[String: …]` lookups although their keys are identifiers (keyed by tool id). */
+const DICTIONARY_TYPES = new Set(["VectorUIToolsGlyphs", "VectorUIToolsShortcuts", "VectorUILabelsLayerKinds"]);
+
 /** Swift type for a JSON value, declaring structs into `decls`. */
 function inferType(values, name, decls) {
   const present = values.filter((v) => v !== undefined);
@@ -181,7 +184,7 @@ function inferType(values, name, decls) {
   }
   // Objects: a struct when the keys are identifiers shared by design, a dictionary of one type otherwise.
   const keys = [...new Set(nonNull.flatMap((o) => Object.keys(o)))];
-  const struct = keys.every((k) => /^[A-Za-z][A-Za-z0-9]*$/.test(k));
+  const struct = !DICTIONARY_TYPES.has(name) && keys.every((k) => /^[A-Za-z][A-Za-z0-9]*$/.test(k));
   if (!struct) {
     const element = inferType(nonNull.flatMap((o) => Object.values(o)), `${name}Value`, decls);
     if (element.optional) return { type: opt("JSONObject"), read: (e) => `${e}?.objectValue`, optional };
@@ -257,7 +260,23 @@ function paint() {
   return { target: "PixeratePaint", files };
 }
 
-const TARGETS = [paint()];
+// MARK: vector domain
+
+function vector() {
+  const ui = read("vector", "ui.json");
+  const decls = [];
+  const uiFields = Object.keys(ui).map((k) => ({ key: k, ...inferType([ui[k]], `VectorUI${pascal(k)}`, decls) }));
+  let code = HEADER("domains/vector/ui.json") + "import PixerateCore\n\n";
+  code += decls.join("\n") + "\n";
+  code += "/// The tables React, Svelte and the Swift panels render (`ui.json`).\npublic struct VectorUITables: Equatable, Sendable {\n";
+  for (const f of uiFields) code += `    public var ${camel(f.key)}: ${f.type}\n`;
+  code += `\n    public init(json: JSONValue) throws {\n        let o = try ContractTable.object(json, "VectorUITables")\n`;
+  for (const f of uiFields) code += `        ${camel(f.key)} = try ContractTable.field(${f.read(`o[${str(f.key)}]`)}, ${str(f.key)}, "VectorUITables")\n`;
+  code += "    }\n}\n";
+  return { target: "PixerateVector", files: { "VectorUITables.swift": code } };
+}
+
+const TARGETS = [paint(), vector()];
 
 let stale = 0;
 for (const { target, files } of TARGETS) {

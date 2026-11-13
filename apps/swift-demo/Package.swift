@@ -18,6 +18,8 @@ let package = Package(
                 .product(name: "PixeratePaint", package: "Pixerate"),
                 .product(name: "PixerateChartUI", package: "Pixerate"),
                 .product(name: "PixerateChart", package: "Pixerate"),
+                .product(name: "PixerateVectorUI", package: "Pixerate"),
+                .product(name: "PixerateVector", package: "Pixerate"),
                 .product(name: "PixerateCore", package: "Pixerate"),
             ],
             path: "Sources/PixerateSwiftDemo",

@@ -27,6 +27,12 @@ public enum VectorContracts {
     public static func documentSchema() throws -> JSONValue {
         try json("document.schema.json")
     }
+
+    /// The tables the panels render (`ui.json`): the tool groups, glyphs and shortcuts, the menus,
+    /// the effect and filter specs, labels and the overlay theme.
+    public static func uiTables() throws -> VectorUITables {
+        try VectorUITables(json: json("ui.json"))
+    }
 }
 
 /// One command of `commands.json`.

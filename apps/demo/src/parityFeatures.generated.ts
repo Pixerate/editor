@@ -955,14 +955,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`VectorDocument` & geometry helpers (`/vector`)",
         "react": "`<VectorCanvas>`",
         "svelte": "`<VectorCanvas>`",
-        "swift": "Planned (#533)"
+        "swift": "✅ (`VectorDocument`, `VectorEditorController`; drawn by `VectorCanvasView`)"
       },
       {
         "feature": "Vector Tools (select, direct select, pen, pencil with lazy-mouse smoothing and shape recognition, rectangle, ellipse, polygon, star, line, scissors, knife, eraser, width, Shape Builder, paint bucket, blend, gradient; keyboard shortcuts; pan / zoom; grid snapping)",
         "core": "`VectorEditorController`",
         "react": "`useVectorEditor`, `useVectorEditorController` & `useVectorEditorState`",
         "svelte": "`createVectorEditor`",
-        "swift": "Planned (#533)"
+        "swift": "Select (click, Shift toggle, move, resize handles, marquee), Direct Selection (anchor drags), Pen, Pencil (curve fitting), Rectangle, Ellipse, Polygon, Star, Line, Frame, Scissors, Knife, Eraser, Shape Builder, Paint Bucket, Blend, Type and the distortion brush ✅ on the canvas (`VectorEditorModel`, `VectorCanvasGesture`, `VectorCanvasView`: mouse, trackpad, Apple Pencil and touch; tool letters, Delete, arrows, ⌘Z and the commands' shortcuts; pan and zoom); Width, Gradient, Envelope, Type on a Path and Connector tools, pencil smoothing and shape recognition, and snapping at the pointer: Planned (#533)"
       },
       {
         "feature": "Vector Rendering Performance (render data reused per node object, so an edit rebuilds only the nodes it changed and the canvases skip the rest; with the canvas size, top-level nodes off screen are left out through the spatial index and groups, text and instances under 2 screen pixels draw as one rectangle; exports stay exact)",
@@ -990,14 +990,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`transform`, `setRotation`, `align`, `distribute`, `arrange`, `group`",
         "react": "`<VectorToolbar>`",
         "svelte": "`<VectorToolbar>`",
-        "swift": "✅ headless (`VectorEditorController`: move, scale, rotate, set rotation, align, distribute, arrange, group / ungroup, layer moves; `createVectorCommands`); flip, duplicate, copy / paste, the selection box and the views: Planned (#533)"
+        "swift": "✅ headless (`VectorEditorController`: move, scale, rotate, set rotation, align, distribute, arrange, group / ungroup, layer moves; `createVectorCommands`); on the canvas: move, the selection box's resize handles, arrange, group / ungroup (`VectorToolbarView`, `VectorLayersPanel`); rotate handles, flip, duplicate and copy / paste: Planned (#533)"
       },
       {
         "feature": "Vector Path Editing (move points and handles, add / delete points, convert corner ↔ smooth, close / open, reverse) and Boolean Operations",
         "core": "`insertAnchorAt`, `convertAnchors`, `booleanOp`",
         "react": "`<VectorCanvas>` & `<VectorToolbar>`",
         "svelte": "`<VectorCanvas>` & `<VectorToolbar>`",
-        "swift": "Point moves, segment bending, point deletion and booleans ✅ headless (`VectorEditorController`; `vector.moveAnchor`, `vector.bendSegment`, `vector.deleteAnchors`, `vector.boolean`); handles, adding and converting points, close / open, reverse and the canvas: Planned (#533)"
+        "swift": "Point moves, segment bending, point deletion and booleans ✅ headless (`VectorEditorController`; `vector.moveAnchor`, `vector.bendSegment`, `vector.deleteAnchors`, `vector.boolean`); anchor drags and deletion, booleans (live or not) and Pathfinder on the canvas (`VectorCanvasGesture`, `VectorToolbarView`); handles, adding and converting points, close / open and reverse: Planned (#533)"
       },
       {
         "feature": "Vector Path Clean-Up & Cutting (shape-keeping point deletion, segment bending, Curvature point moves, Join, Average, Remove Redundant Points, Smooth, Scissors, gap-free Knife, Eraser; all in each node's own space)",
@@ -1109,7 +1109,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`addText`, `setText`, `setTextStyle`, `styleTexts`, `setTextFrame`, `setTextOrientation`, `typeOnPath`, `createOutlines`, `editText`, `textInput`, `layoutVectorText`, `setVectorTextShaper`, `parseOpenTypeFont`, `getVectorTextPanel` & `getVectorOverlayRenderData().text`",
         "react": "`<VectorTextPanel>` (in `<VectorStylePanel>`, with Horizontal / Vertical and Upright Latin), `<VectorTextElement>` & `<VectorCanvas>` hidden textarea, caret and selection",
         "svelte": "`<VectorTextPanel>` (with Horizontal / Vertical and Upright Latin) (in `<VectorStylePanel>`), `<VectorTextElement>` & `<VectorCanvas>` hidden textarea, caret and selection",
-        "swift": "Text ✅ headless (`VectorEditorController`: `addText`, `setText`, `setTextStyle`, `styleTexts`, `setParagraphStyle`, `setTextFrame`, `setTextOrientation`, `typeOnPath`, `createOutlines`, `textPanel`; `layoutVectorText` over the shared layout engine with point, area, path and vertical text, a `VectorTextShaper` protocol with the `MetricTextShaper` default; text in bounds, transforms, blends, render data and the SVG round trip, foreign `<text>` imported); a CoreText shaper, the OpenType reader, the Type tools and on-canvas editing: Planned (#533)"
+        "swift": "Text ✅ headless (`VectorEditorController`: `addText`, `setText`, `setTextStyle`, `styleTexts`, `setParagraphStyle`, `setTextFrame`, `setTextOrientation`, `typeOnPath`, `createOutlines`, `textPanel`; `layoutVectorText` over the shared layout engine with point, area, path and vertical text, a `VectorTextShaper` protocol with the `MetricTextShaper` default; text in bounds, transforms, blends, render data and the SVG round trip, foreign `<text>` imported); `CoreTextVectorShaper` (real fonts, glyph outlines) and the Type tool's click-to-add with text edited in `VectorAppearancePanel` ✅; the OpenType reader, Type on a Path and on-canvas text editing: Planned (#533)"
       },
       {
         "feature": "Vector Symbols & Instances (a document's reusable symbols drawn by `instance` nodes through a transform that may scale and skew, strokes scaling with them unless switched off; Make Symbol (F8) with the registration point at the objects' centre, Place, Replace, Break Link (Detach), Rename and Delete; per-instance fill / stroke tints and hidden art nodes; Edit Symbol in isolation (double-click an instance) with the rest of the document dimmed and lined up behind the art, every instance following, undo stepping in and out; nested symbols with cycle checks; SVG export as `<symbol>` / `<use>` (or drawn art where `<use>` cannot draw an instance exactly) with a lossless round-trip, and import of foreign `<use>`; agent commands `vector.listSymbols`, `vector.makeSymbol`, `vector.placeSymbol`, `vector.setInstanceOptions`, `vector.replaceSymbol`, `vector.detachInstance`, `vector.renameSymbol`, `vector.deleteSymbol`, `vector.editSymbol`, `vector.exitSymbolEdit`)",
@@ -1228,14 +1228,14 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`getVectorSelectionStyle`, `setStyle` & `setCornerRadius`",
         "react": "`<VectorStylePanel>`",
         "svelte": "`<VectorStylePanel>`",
-        "swift": "Planned (#533)"
+        "swift": "Fill and stroke colours, stroke width, opacity, blend mode, path actions, effects, filters and the editing toggles ✅ (`VectorAppearancePanel`, from `VectorUITables`); the gradient editor and the other panels: Planned (#533)"
       },
       {
         "feature": "Vector SVG Import / Export & Agent Commands",
         "core": "`parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands`",
         "react": "`useVectorCommands`",
         "svelte": "`useVectorCommands`",
-        "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata, enablement and Swift run), SVG export and import ✅ headless (`vectorDocumentToSvg`, `parseVectorSvg`); the views: Planned (#533)"
+        "swift": "Agent commands ✅ (`createVectorCommands`: every command with its contract metadata, enablement and Swift run), SVG export and import ✅ headless (`vectorDocumentToSvg`, `parseVectorSvg`); the editor's tools in a `ToolRegistry` agents and the user share, servable over the MCP bridge ✅ (`VectorEditorModel`); SVG import / export in the views: Planned (#533)"
       },
       {
         "feature": "Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools)",

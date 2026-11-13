@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "PixerateMarkdown", targets: ["PixerateMarkdown"]),
         .library(name: "PixerateGeometry", targets: ["PixerateGeometry"]),
         .library(name: "PixerateVector", targets: ["PixerateVector"]),
+        .library(name: "PixerateVectorUI", targets: ["PixerateVectorUI"]),
         .library(name: "PixerateChart", targets: ["PixerateChart"]),
         .library(name: "PixerateChartUI", targets: ["PixerateChartUI"]),
     ],
@@ -62,6 +63,11 @@ let package = Package(
         // edits, shape builders), the controller, its commands (metadata from the contracts) and the
         // conformance host. Foundation only.
         .target(name: "PixerateVector", dependencies: ["PixerateCore", "PixerateContracts", "PixerateGeometry", "PixerateRaster", "PixerateConformance", "PixeratePaint"], path: "packages/swift/Sources/PixerateVector", swiftSettings: settings),
+        // The vector editor's SwiftUI views (`VectorEditorView`, the canvas, toolbar and panels), the
+        // CoreGraphics scene renderer, the canvas input (`VectorCanvasGesture`), the CoreText text
+        // shaper and `VectorEditorModel`. The only vector target that imports SwiftUI (AppKit / UIKit
+        // for pointer, trackpad and Pencil input, behind `#if canImport`).
+        .target(name: "PixerateVectorUI", dependencies: ["PixerateVector", "PixerateGeometry", "PixerateCore", "PixeratePaint"], path: "packages/swift/Sources/PixerateVectorUI", swiftSettings: settings),
         // The chart editor (`chart/` and `chart-maps/` in the TS core): the chart spec, number formats,
         // scales, statistics, trendlines, error bars, presets, recommendations, summaries, trees,
         // Sankey links and maps. Foundation only.
@@ -109,6 +115,12 @@ let package = Package(
             dependencies: ["PixerateVector", "PixerateGeometry", "PixerateCore", "PixerateRaster", "PixerateContracts", "PixerateConformance", "PixeratePaint"],
             path: "packages/swift/Tests/PixerateVectorTests",
             resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateVectorUITests",
+            dependencies: ["PixerateVectorUI", "PixerateVector", "PixerateGeometry", "PixerateCore"],
+            path: "packages/swift/Tests/PixerateVectorUITests",
             swiftSettings: settings
         ),
         .testTarget(
