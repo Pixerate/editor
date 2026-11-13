@@ -28,6 +28,9 @@ import { createPaintEffectsToolProvider } from './effect-tools';
 import { createPaintEffectAuthoringToolProvider } from './effect-authoring-tools';
 import { PAINT_FORMAT, PAINT_SCHEMA_VERSION } from './serialize';
 import { createPaintEditorToolProvider } from './tools';
+import { createPaintStyleToolProvider, paintStyleDomain, type PaintStyleProfile } from './style';
+import { brushStyleDomain, createBrushStyleToolProvider, type BrushStyleProfile } from '../brushes/style';
+import { createStyleResolver, memoryStyleStore } from '../tools/style';
 import { combineStickerProviders } from '../stickers/combine';
 import { editorStickers } from '../stickers/editor';
 import { createFakeStickerProvider } from '../stickers/fake';
@@ -278,6 +281,7 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
     createPaintEffectAuthoringToolProvider(controller),
     createPaintBrushLibraryToolProvider(controller),
     createPaintProposalToolProvider(createPaintProposals({ controller })),
+    ...paintStyleProviders(controller, paintStyleResolver({})),
   ].map(toolList);
   const document = createPaintEditorDocument(controller);
   const files: Record<string, unknown> = {
@@ -296,6 +300,43 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
   return files;
 }
 
+/** A house-style check list: check ids, or `{ id, ...options }`. */
+type StyleChecks = { checks?: ReadonlyArray<string | Record<string, unknown>> };
+
+/**
+ * The house-style setup of a paint scenario (#791): one `house` skill in an `org` layer, made
+ * whenever any of these is given (all are optional).
+ */
+export interface PaintStyleSetup {
+  /** The skill's `paint-editor.json`, for `check_paint_style` / `fix_paint_style`. */
+  style?: PaintStyleProfile & StyleChecks;
+  /** The skill's `brushes.json`, for `check_brush_style`. */
+  brushStyle?: BrushStyleProfile & StyleChecks;
+  /** The skill's `brand.json`: both profiles are derived from it (its palette) and its checks run too. */
+  brand?: Record<string, unknown>;
+  /** The painting is read-only for the house-style tools: `fix_paint_style` is not listed (a string is the reason). */
+  readOnly?: boolean | string;
+}
+
+/** The style resolver of a paint host: the paint and brush domains over one `org` layer. */
+function paintStyleResolver(setup: PaintStyleSetup) {
+  const files: Record<string, string> =
+    setup.style || setup.brushStyle || setup.brand
+      ? {
+          'house/SKILL.md': '---\nname: house\ndescription: House painting style.\n---\nFollow the house painting style.',
+          ...(setup.style ? { 'house/paint-editor.json': JSON.stringify(setup.style) } : {}),
+          ...(setup.brushStyle ? { 'house/brushes.json': JSON.stringify(setup.brushStyle) } : {}),
+          ...(setup.brand ? { 'house/brand.json': JSON.stringify(setup.brand) } : {}),
+        }
+      : {};
+  return createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore(files) }], domains: [paintStyleDomain, brushStyleDomain] });
+}
+
+/** `check_paint_style` / `fix_paint_style` and `check_brush_style` (on the controller's brush library). */
+function paintStyleProviders(controller: PaintEditorController, styles: ReturnType<typeof paintStyleResolver>, readOnly?: boolean | string): AgentToolProvider[] {
+  return [createPaintStyleToolProvider(controller, styles, { readOnly }), createBrushStyleToolProvider(controller.brushLibrary, styles)];
+}
+
 /**
  * Ids this core makes from the clock, which another implementation makes its own way: layers
  * (`pl…`), layer styles (`fx_…_…`) and image editor layers (`<prefix>_…_…`). Ids from counters
@@ -312,9 +353,10 @@ const GENERATED_ID = /^(pl[0-9a-z]{9,}|[a-z]+_[0-9a-z]{8,}_[0-9a-z]+)$/;
  * the effect provider the effect tools use. `effectPaintHints: true` in a scenario's setup means the
  * caller passes the fake provider with paint hints (`createFakeEffectProvider({ paintHints: true })`).
  */
-export function createPaintConformanceHost(raw: Omit<PaintEditorOptions, 'stickers'> & { stickers?: StickerProvider | 'fake'; effectPaintHints?: boolean }, options: { effects: EffectProvider }): ConformanceHost {
-  // effectPaintHints asks the caller for the fake provider with paint hints; the editor doesn't take it.
-  const { effectPaintHints: _hints, ...setup } = raw;
+export function createPaintConformanceHost(raw: Omit<PaintEditorOptions, 'stickers'> & PaintStyleSetup & { stickers?: StickerProvider | 'fake'; effectPaintHints?: boolean }, options: { effects: EffectProvider }): ConformanceHost {
+  // effectPaintHints asks the caller for the fake provider with paint hints; the house style and
+  // readOnly are the host's. The editor takes none of them.
+  const { effectPaintHints: _hints, style, brushStyle, brand, readOnly, ...setup } = raw;
   const stickers = setup.stickers === 'fake' ? combineStickerProviders([editorStickers(), createFakeStickerProvider()]) : setup.stickers;
   // The TypeScript wet kernel on one thread is the reference; WebAssembly and the GPU load late.
   const controller = new PaintEditorController({ ...setup, stickers, wet: { kernel: 'typescript', threads: 0, gpu: 'off', ...setup.wet } });
@@ -325,6 +367,7 @@ export function createPaintConformanceHost(raw: Omit<PaintEditorOptions, 'sticke
   registry.register(createPaintEffectAuthoringToolProvider(controller));
   registry.register(createPaintBrushLibraryToolProvider(controller));
   registry.register(createPaintProposalToolProvider(createPaintProposals({ controller })));
+  for (const p of paintStyleProviders(controller, paintStyleResolver({ style, brushStyle, brand }), readOnly)) registry.register(p);
   return {
     callTool: (name, args) => registry.callTool(name, args),
     document: () => toEditorDocumentFile(createPaintEditorDocument(controller)),

@@ -19,6 +19,7 @@ import { createMetricTextShaper } from '../text/shapers.js';
 import type { ConformanceHost } from '../tools/conformance.js';
 import { ToolRegistry, type AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
+import { createStyleResolver, memoryStyleStore, type StyleResolver } from '../tools/style.js';
 import { VECTOR_EFFECT_DEFAULTS, VECTOR_EFFECT_LABELS, VECTOR_EFFECT_PARAM_SPECS } from './appearance.js';
 import { createVectorCommands } from './commands.js';
 import { VECTOR_CONNECTOR_ROUTE_LABELS, VECTOR_CONNECTOR_SIDE_LABELS } from './connectors.js';
@@ -52,6 +53,7 @@ import {
 	VECTOR_STROKE_GRADIENT_MODE_LABELS,
 	getVectorSceneRenderData
 } from './render.js';
+import { createVectorStyleToolProvider, vectorStyleDomain, type VectorStyleProfile } from './style.js';
 import { VECTOR_STYLIZE_LABELS } from './stylize.js';
 import { VECTOR_SYMMETRY_MODE_LABELS } from './symmetry.js';
 import { getVectorTextShaper, setVectorTextShaper } from './text.js';
@@ -188,8 +190,24 @@ export const fakeVectorArtGenerator: VectorArtGenerator = (request) => {
 	return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="${r}" fill="${hue}"/></svg>` };
 };
 
+/**
+ * The house style the vector tools check against (#791): one `org` layer holding a `house` skill
+ * with `vector.json` (`style`) and `brand.json` (`brand`) when either is given, else no skill.
+ */
+function vectorStyles(setup: VectorConformanceSetup = {}): StyleResolver {
+	const files: Record<string, string> =
+		setup.style || setup.brand
+			? {
+					'house/SKILL.md': '---\nname: house\ndescription: House vector style.\n---\nFollow the house vector style.',
+					...(setup.style ? { 'house/vector.json': JSON.stringify(setup.style) } : {}),
+					...(setup.brand ? { 'house/brand.json': JSON.stringify(setup.brand) } : {})
+				}
+			: {};
+	return createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore(files) }], domains: [vectorStyleDomain] });
+}
+
 /** Every vector agent tool provider on `controller`, the commands' own registry included. */
-function vectorProviders(controller: VectorEditorController): { commands: CommandRegistry; providers: AgentToolProvider[] } {
+function vectorProviders(controller: VectorEditorController, styles: StyleResolver = vectorStyles()): { commands: CommandRegistry; providers: AgentToolProvider[] } {
 	const commands = new CommandRegistry({ context: controller, history: controller.history });
 	commands.register(createVectorCommands(controller));
 	return {
@@ -197,7 +215,8 @@ function vectorProviders(controller: VectorEditorController): { commands: Comman
 		providers: [
 			createCommandToolProvider(commands, { id: 'vector-commands', namespace: '' }),
 			createVectorEffectsToolProvider(controller, { id: 'vector-effects' }),
-			createVectorGenerationToolProvider(controller, { models: FAKE_VECTOR_ART_MODELS, generate: fakeVectorArtGenerator })
+			createVectorGenerationToolProvider(controller, { models: FAKE_VECTOR_ART_MODELS, generate: fakeVectorArtGenerator }),
+			createVectorStyleToolProvider(controller, styles, { id: 'vector-style' })
 		]
 	};
 }
@@ -245,23 +264,42 @@ export function vectorContracts(options: { effects: EffectProvider }): Record<st
 	return files;
 }
 
+/** A vector conformance scenario's `setup`. */
+export interface VectorConformanceSetup {
+	/** Artboard width in document units (default the editor's, 800). */
+	width?: number;
+	/** Artboard height in document units (default the editor's, 600). */
+	height?: number;
+	/** Artboard colour (default transparent), e.g. for the house style's min-contrast on text. */
+	background?: string;
+	/** Optional house-style `vector.json` for `check_vector_style` / `fix_vector_style` (#791). */
+	style?: VectorStyleProfile & { checks?: ReadonlyArray<string | Record<string, unknown>> };
+	/** Optional `brand.json` beside it: the vector profile is derived from it and its checks run too. */
+	brand?: Record<string, unknown>;
+}
+
 /**
  * A fresh vector editor for replaying a conformance scenario (`domains/vector/fixtures`): every
  * vector tool provider in one registry that validates arguments, and the saved document. Node ids
  * come from a counter (`n1`, `n2`, …), so they are part of the contract; text uses the metric
  * shaper, the one every implementation can match. `render` is the scene the canvases draw
  * (`getVectorSceneRenderData` with its defaults). `setup` is the scenario's artboard size
- * (`{ width, height }`, default the editor's); `effects` is the effect provider the effect tools use.
+ * (`{ width, height }`, default the editor's) and `background`, and its house style (`style`, the
+ * `vector.json` profile, and `brand`, the `brand.json` beside it, in one `org` layer; see
+ * `VectorConformanceSetup`); `effects` is the effect provider the effect tools use.
  */
-export function createVectorConformanceHost(setup: { width?: number; height?: number }, options: { effects: EffectProvider }): ConformanceHost {
+export function createVectorConformanceHost(setup: VectorConformanceSetup, options: { effects: EffectProvider }): ConformanceHost {
 	const shaper = getVectorTextShaper();
 	setVectorTextShaper(createMetricTextShaper());
 	let next = 0;
-	const sized: Pick<VectorEditorOptions, 'document'> = setup.width || setup.height ? { document: { width: setup.width ?? 800, height: setup.height ?? 600, nodes: [] } } : {};
+	const sized: Pick<VectorEditorOptions, 'document'> =
+		setup.width || setup.height || setup.background
+			? { document: { width: setup.width ?? 800, height: setup.height ?? 600, ...(setup.background ? { background: setup.background } : {}), nodes: [] } }
+			: {};
 	const controller = new VectorEditorController({ ...sized, createId: () => `n${++next}` });
 	controller.setEffectsProvider(options.effects);
 	const registry = new ToolRegistry({ validateArguments: true });
-	for (const p of vectorProviders(controller).providers) registry.register(p);
+	for (const p of vectorProviders(controller, vectorStyles(setup)).providers) registry.register(p);
 	const document = createVectorEditorDocument(controller);
 	return {
 		callTool: (name, args) => registry.callTool(name, args),

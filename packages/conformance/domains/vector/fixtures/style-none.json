@@ -1,0 +1,115 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-none",
+  "description": "With no house style, check_vector_style runs nothing and says no house style applies, and fix_vector_style has nothing to snap.",
+  "setup": {
+    "width": 300,
+    "height": 200
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 60,
+          "height": 40,
+          "cornerRadius": 6,
+          "stroke": "#111111",
+          "strokeWidth": 3
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "note": "No house style applies to vector drawings.",
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_vector_style",
+      "arguments": {},
+      "document": true,
+      "expect": {
+        "result": {
+          "corners": [],
+          "left": [],
+          "strokeWidths": {}
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#d4d4d8",
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#111111",
+                "strokeWidth": 3,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "corner": {
+                          "radius": 6
+                        },
+                        "x": 10,
+                        "y": 10
+                      },
+                      {
+                        "corner": {
+                          "radius": 6
+                        },
+                        "x": 70,
+                        "y": 10
+                      },
+                      {
+                        "corner": {
+                          "radius": 6
+                        },
+                        "x": 70,
+                        "y": 50
+                      },
+                      {
+                        "corner": {
+                          "radius": 6
+                        },
+                        "x": 10,
+                        "y": 50
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    }
+  ]
+}

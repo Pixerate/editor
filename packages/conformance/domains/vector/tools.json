@@ -687,6 +687,47 @@
           }
         }
       ]
+    },
+    {
+      "id": "vector-style",
+      "title": "Vector house style",
+      "skill": "pixerate-vector",
+      "tools": [
+        {
+          "name": "check_vector_style",
+          "title": "Check vector house style",
+          "description": "Checks the drawing against the house style (see get_style with domain \"vector\"): stroke-widths, corner-radii, and the brand's palette-only, min-contrast and fonts-allowed on solid fills, strokes, text and the artboard. Returns findings with a severity, a sentence saying how to fix it, a target ({ node, property: \"strokeWidth\", value } or { node, property: \"corner\", subpath, anchor, value } with the house value; { node, property: \"fill\" | \"stroke\" | \"fontFamily\" }; or { background: true }) and the layer that asked; the checks that ran and those skipped. fix_vector_style applies the certain fixes at once; recolour with vector.setStyle.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Check vector house style",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "fix_vector_style",
+          "title": "Fix vector house style",
+          "description": "Snaps every stroke width and live corner radius the house style names to its house value, as one undo step; colours and fonts are left for you (vector.setStyle, vector.setTextStyle). Returns { strokeWidths: { nodeId: width }, corners: [{ node, subpath, anchor, value }], left: findings it did not fix }. Run check_vector_style after.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Fix vector house style",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        }
+      ]
     }
   ]
 }

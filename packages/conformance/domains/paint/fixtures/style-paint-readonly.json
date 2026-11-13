@@ -1,0 +1,85 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-paint-readonly",
+  "description": "A read-only painting (#791) still checks its house style, but fix_paint_style is not listed and calling it fails.",
+  "setup": {
+    "width": 32,
+    "height": 24,
+    "readOnly": true,
+    "style": {
+      "papers": [
+        "hot-pressed"
+      ],
+      "checks": [
+        "paper"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "paper",
+              "layer": "org",
+              "message": "The painting is on \"cold-pressed\" paper; the house papers are \"hot-pressed\". Switch to \"hot-pressed\" with set_paper.",
+              "severity": "warning",
+              "target": {
+                "paper": "hot-pressed"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "paper"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "error": {
+            "code": "unknown_tool",
+            "message": "Unknown tool \"fix_paint_style\". List the tools again; the editor that had it may have closed or become read-only."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "get_paper",
+      "expect": {
+        "result": {
+          "absorption": 0.7,
+          "color": "#f7f3ea",
+          "depth": 0.5,
+          "dry": {
+            "contrast": 1,
+            "invert": false
+          },
+          "family": "watercolor",
+          "name": "Cold pressed watercolour",
+          "pattern": "cold-pressed",
+          "permeability": 0.5,
+          "preset": "cold-pressed",
+          "roughness": 0.6,
+          "scale": 1,
+          "seed": 1,
+          "shading": 0.5,
+          "tiling": "mirror",
+          "wet": {
+            "contrast": 1,
+            "invert": false
+          }
+        }
+      }
+    }
+  ]
+}

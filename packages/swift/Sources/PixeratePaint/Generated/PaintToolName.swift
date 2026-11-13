@@ -193,6 +193,9 @@ public enum PaintToolName: String, CaseIterable, Sendable {
     case listPaintProposals = "list_paint_proposals"
     case acceptPaintProposal = "accept_paint_proposal"
     case rejectPaintProposal = "reject_paint_proposal"
+    case checkPaintStyle = "check_paint_style"
+    case fixPaintStyle = "fix_paint_style"
+    case checkBrushStyle = "check_brush_style"
 
     /// The provider that offers the tool.
     public var provider: String {
@@ -202,6 +205,8 @@ public enum PaintToolName: String, CaseIterable, Sendable {
         case .openEffectAuthoring, .saveAuthoredEffect, .listAuthoredEffects, .removeAuthoredEffect, .closeEffectAuthoring, .effectAuthoringDescribe, .effectAuthoringGetSource, .effectAuthoringSetSource, .effectAuthoringSetValues, .effectAuthoringResetValues, .effectAuthoringApplyPreset, .effectAuthoringSavePreset, .effectAuthoringSetKeyframe, .effectAuthoringRemoveKeyframe, .effectAuthoringClearTrack, .effectAuthoringSetTiming, .effectAuthoringSetPaintHint, .effectAuthoringSeek, .effectAuthoringUndo, .effectAuthoringRedo, .effectAuthoringView: "paint-effect-authoring"
         case .listBrushPresets, .describeBrush, .checkBrush, .exportBrushes, .listBrushSources, .previewBrush, .createBrush, .updateBrush, .addBrushSource, .duplicateBrush, .removeBrush, .importBrushes, .importBrushPack: "brushes"
         case .proposePaint, .listPaintProposals, .acceptPaintProposal, .rejectPaintProposal: "paint-proposals"
+        case .checkPaintStyle, .fixPaintStyle: "paint-style"
+        case .checkBrushStyle: "brush-style"
         }
     }
 }

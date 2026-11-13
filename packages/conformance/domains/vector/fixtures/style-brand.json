@@ -1,0 +1,572 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-brand",
+  "description": "A brand.json beside vector.json (#791): the vector palette and fonts are derived from the brand (themeFromBrand), min-contrast suggests the brand's text or background ink, the brand's checks run after the profile's own (a profile check with the same id wins), a check that cannot run is skipped with the reason, and an unknown check names every vector check.",
+  "setup": {
+    "width": 300,
+    "height": 200,
+    "background": "#1a1a1a",
+    "brand": {
+      "name": "Acme",
+      "colors": {
+        "primary": "#0b5fff",
+        "secondary": "#ff6a00",
+        "text": "#1a1a1a",
+        "background": "#ffffff"
+      },
+      "fonts": {
+        "heading": "Inter",
+        "body": "Source Serif"
+      },
+      "checks": [
+        "palette-only",
+        "fonts-allowed",
+        {
+          "id": "min-contrast",
+          "ratio": 7
+        },
+        "stroke-widths"
+      ]
+    },
+    "style": {
+      "strokeWidths": [
+        2
+      ],
+      "checks": [
+        {
+          "id": "palette-only",
+          "tolerance": 5
+        },
+        "corner-radii",
+        "no-such-check"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 60,
+          "height": 40,
+          "fill": "#ff6a00",
+          "stroke": "#2060ff",
+          "strokeWidth": 3
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "star",
+          "x": 90,
+          "y": 10,
+          "width": 40,
+          "height": 40,
+          "fill": "#aa00aa",
+          "stroke": "none"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Dim",
+          "x": 10,
+          "y": 100,
+          "fill": "#555555",
+          "font": {
+            "fontFamily": "Source Serif",
+            "fontSize": 14
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 14,
+              "width": 25.06,
+              "x": 10,
+              "y": 88.8
+            },
+            "fill": "#555555",
+            "font": {
+              "fontFamily": "Source Serif",
+              "fontSize": 14,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 10,
+              "y": 100
+            },
+            "id": "n3",
+            "lines": [
+              {
+                "end": 3,
+                "start": 0,
+                "text": "Dim"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Dim"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Mono",
+          "x": 10,
+          "y": 150,
+          "fill": "#0b5fff",
+          "font": {
+            "fontFamily": "Menlo, monospace",
+            "fontSize": 14
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 14,
+              "width": 34.58,
+              "x": 10,
+              "y": 138.8
+            },
+            "fill": "#0b5fff",
+            "font": {
+              "fontFamily": "Menlo, monospace",
+              "fontSize": 14,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 10,
+              "y": 150
+            },
+            "id": "n4",
+            "lines": [
+              {
+                "end": 4,
+                "start": 0,
+                "text": "Mono"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Mono"
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Node n2 (\"Star\") uses #aa00aa, which is not a house colour; the nearest is #0b5fff. Change it to #0b5fff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "node": "n2",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "fonts-allowed",
+              "layer": "org",
+              "message": "Text n4 (\"Mono\") uses the font \"Menlo, monospace\"; the house fonts are \"Inter\", \"Source Serif\". Change it to one of those.",
+              "severity": "error",
+              "target": {
+                "node": "n4",
+                "property": "fontFamily"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n3 (\"Dim\"): #555555 on #1a1a1a has a contrast ratio of 2.33; it needs 7. Use #ffffff (contrast 17.40), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#ffffff",
+                "ratio": 17.4
+              },
+              "target": {
+                "node": "n3",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n4 (\"Mono\"): #0b5fff on #1a1a1a has a contrast ratio of 3.39; it needs 7. Use #ffffff (contrast 17.40), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#ffffff",
+                "ratio": 17.4
+              },
+              "target": {
+                "node": "n4",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "stroke-widths",
+              "layer": "org",
+              "message": "Node n1 (\"Rectangle\") has a 3 stroke; the house widths are 2. Use 2.",
+              "severity": "warning",
+              "target": {
+                "node": "n1",
+                "property": "strokeWidth",
+                "value": 2
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "palette-only",
+            "fonts-allowed",
+            "min-contrast",
+            "stroke-widths"
+          ],
+          "skipped": [
+            {
+              "check": "corner-radii",
+              "reason": "The check could not run: the profile has no \"cornerRadii\"."
+            },
+            {
+              "check": "no-such-check",
+              "reason": "There is no \"no-such-check\" check for vector; it has \"stroke-widths\", \"corner-radii\", \"palette-only\", \"min-contrast\", \"distinguishable\", \"fonts-allowed\"."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "fix_vector_style",
+      "arguments": {},
+      "document": true,
+      "expect": {
+        "result": {
+          "corners": [],
+          "left": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Node n2 (\"Star\") uses #aa00aa, which is not a house colour; the nearest is #0b5fff. Change it to #0b5fff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "node": "n2",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "fonts-allowed",
+              "layer": "org",
+              "message": "Text n4 (\"Mono\") uses the font \"Menlo, monospace\"; the house fonts are \"Inter\", \"Source Serif\". Change it to one of those.",
+              "severity": "error",
+              "target": {
+                "node": "n4",
+                "property": "fontFamily"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n3 (\"Dim\"): #555555 on #1a1a1a has a contrast ratio of 2.33; it needs 7. Use #ffffff (contrast 17.40), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#ffffff",
+                "ratio": 17.4
+              },
+              "target": {
+                "node": "n3",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n4 (\"Mono\"): #0b5fff on #1a1a1a has a contrast ratio of 3.39; it needs 7. Use #ffffff (contrast 17.40), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#ffffff",
+                "ratio": 17.4
+              },
+              "target": {
+                "node": "n4",
+                "property": "fill"
+              }
+            }
+          ],
+          "strokeWidths": {
+            "n1": 2
+          }
+        },
+        "document": {
+          "document": {
+            "background": "#1a1a1a",
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#ff6a00",
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#2060ff",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 10,
+                        "y": 10
+                      },
+                      {
+                        "x": 70,
+                        "y": 10
+                      },
+                      {
+                        "x": 70,
+                        "y": 50
+                      },
+                      {
+                        "x": 10,
+                        "y": 50
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#aa00aa",
+                "id": "n2",
+                "name": "Star",
+                "stroke": "none",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "x": 110,
+                        "y": 10
+                      },
+                      {
+                        "x": 115.87785252292473,
+                        "y": 21.909830056250527
+                      },
+                      {
+                        "x": 129.02113032590307,
+                        "y": 23.81966011250105
+                      },
+                      {
+                        "x": 119.51056516295154,
+                        "y": 33.09016994374947
+                      },
+                      {
+                        "x": 121.75570504584947,
+                        "y": 46.180339887498945
+                      },
+                      {
+                        "x": 110,
+                        "y": 40
+                      },
+                      {
+                        "x": 98.24429495415055,
+                        "y": 46.180339887498945
+                      },
+                      {
+                        "x": 100.48943483704846,
+                        "y": 33.09016994374947
+                      },
+                      {
+                        "x": 90.97886967409693,
+                        "y": 23.819660112501055
+                      },
+                      {
+                        "x": 104.12214747707527,
+                        "y": 21.909830056250527
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#555555",
+                "font": {
+                  "fontFamily": "Source Serif",
+                  "fontSize": 14,
+                  "fontWeight": 400
+                },
+                "frame": {
+                  "kind": "point",
+                  "x": 10,
+                  "y": 100
+                },
+                "id": "n3",
+                "name": "Dim",
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "Dim",
+                "type": "text"
+              },
+              {
+                "fill": "#0b5fff",
+                "font": {
+                  "fontFamily": "Menlo, monospace",
+                  "fontSize": 14,
+                  "fontWeight": 400
+                },
+                "frame": {
+                  "kind": "point",
+                  "x": 10,
+                  "y": 150
+                },
+                "id": "n4",
+                "name": "Mono",
+                "stroke": null,
+                "strokeWidth": 2,
+                "text": "Mono",
+                "type": "text"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Node n2 (\"Star\") uses #aa00aa, which is not a house colour; the nearest is #0b5fff. Change it to #0b5fff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "node": "n2",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "fonts-allowed",
+              "layer": "org",
+              "message": "Text n4 (\"Mono\") uses the font \"Menlo, monospace\"; the house fonts are \"Inter\", \"Source Serif\". Change it to one of those.",
+              "severity": "error",
+              "target": {
+                "node": "n4",
+                "property": "fontFamily"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n3 (\"Dim\"): #555555 on #1a1a1a has a contrast ratio of 2.33; it needs 7. Use #ffffff (contrast 17.40), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#ffffff",
+                "ratio": 17.4
+              },
+              "target": {
+                "node": "n3",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n4 (\"Mono\"): #0b5fff on #1a1a1a has a contrast ratio of 3.39; it needs 7. Use #ffffff (contrast 17.40), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#ffffff",
+                "ratio": 17.4
+              },
+              "target": {
+                "node": "n4",
+                "property": "fill"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "palette-only",
+            "fonts-allowed",
+            "min-contrast",
+            "stroke-widths"
+          ],
+          "skipped": [
+            {
+              "check": "corner-radii",
+              "reason": "The check could not run: the profile has no \"cornerRadii\"."
+            },
+            {
+              "check": "no-such-check",
+              "reason": "There is no \"no-such-check\" check for vector; it has \"stroke-widths\", \"corner-radii\", \"palette-only\", \"min-contrast\", \"distinguishable\", \"fonts-allowed\"."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

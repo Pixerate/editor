@@ -1,0 +1,771 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-checks",
+  "description": "The vector house style's own checks (#791): stroke-widths and corner-radii find strokes and live corners off the house values (inside groups and on text too, the nearest value as the fix, the first on a tie), and fix_vector_style snaps them all as one step, keeps the selection and leaves nothing for a second run.",
+  "setup": {
+    "width": 300,
+    "height": 200,
+    "style": {
+      "strokeWidths": [
+        1,
+        2,
+        4
+      ],
+      "cornerRadii": [
+        4,
+        8
+      ],
+      "checks": [
+        "stroke-widths",
+        "corner-radii"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 60,
+          "height": 40,
+          "cornerRadius": 6,
+          "stroke": "#111111",
+          "strokeWidth": 3
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M100 20 L160 60",
+          "stroke": "#111111",
+          "strokeWidth": 5,
+          "name": "Line"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addPath",
+        "params": {
+          "d": "M100 80 L160 120",
+          "stroke": "#111111",
+          "strokeWidth": 2
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addPath",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 80,
+          "width": 60,
+          "height": 40,
+          "cornerRadius": 11,
+          "stroke": "none"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n4"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.group",
+        "params": {
+          "ids": [
+            "n2",
+            "n3"
+          ],
+          "name": "Lines"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.group",
+          "ok": true,
+          "result": {
+            "id": "n5"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Outlined",
+          "x": 20,
+          "y": 170,
+          "stroke": "#111111",
+          "strokeWidth": 0.5
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 24,
+              "width": 89.76,
+              "x": 20,
+              "y": 150.8
+            },
+            "fill": "#000000",
+            "font": {
+              "fontFamily": "sans-serif",
+              "fontSize": 24,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 20,
+              "y": 170
+            },
+            "id": "n6",
+            "lines": [
+              {
+                "end": 8,
+                "start": 0,
+                "text": "Outlined"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": "#111111",
+            "text": "Outlined"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.select",
+        "params": {
+          "ids": [
+            "n1",
+            "n2"
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.select",
+          "ok": true,
+          "result": {
+            "selection": [
+              "n1",
+              "n2"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "stroke-widths",
+              "layer": "org",
+              "message": "Node n1 (\"Rectangle\") has a 3 stroke; the house widths are 1, 2, 4. Use 2.",
+              "severity": "warning",
+              "target": {
+                "node": "n1",
+                "property": "strokeWidth",
+                "value": 2
+              }
+            },
+            {
+              "check": "stroke-widths",
+              "layer": "org",
+              "message": "Node n2 (\"Line\") has a 5 stroke; the house widths are 1, 2, 4. Use 4.",
+              "severity": "warning",
+              "target": {
+                "node": "n2",
+                "property": "strokeWidth",
+                "value": 4
+              }
+            },
+            {
+              "check": "stroke-widths",
+              "layer": "org",
+              "message": "Text n6 (\"Outlined\") has a 0.5 stroke; the house widths are 1, 2, 4. Use 1.",
+              "severity": "warning",
+              "target": {
+                "node": "n6",
+                "property": "strokeWidth",
+                "value": 1
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n1 (\"Rectangle\") has a corner of radius 6 (subpath 0, anchor 0); the house radii are 4, 8. Use 4.",
+              "severity": "warning",
+              "target": {
+                "anchor": 0,
+                "node": "n1",
+                "property": "corner",
+                "subpath": 0,
+                "value": 4
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n1 (\"Rectangle\") has a corner of radius 6 (subpath 0, anchor 1); the house radii are 4, 8. Use 4.",
+              "severity": "warning",
+              "target": {
+                "anchor": 1,
+                "node": "n1",
+                "property": "corner",
+                "subpath": 0,
+                "value": 4
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n1 (\"Rectangle\") has a corner of radius 6 (subpath 0, anchor 2); the house radii are 4, 8. Use 4.",
+              "severity": "warning",
+              "target": {
+                "anchor": 2,
+                "node": "n1",
+                "property": "corner",
+                "subpath": 0,
+                "value": 4
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n1 (\"Rectangle\") has a corner of radius 6 (subpath 0, anchor 3); the house radii are 4, 8. Use 4.",
+              "severity": "warning",
+              "target": {
+                "anchor": 3,
+                "node": "n1",
+                "property": "corner",
+                "subpath": 0,
+                "value": 4
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n4 (\"Rectangle\") has a corner of radius 11 (subpath 0, anchor 0); the house radii are 4, 8. Use 8.",
+              "severity": "warning",
+              "target": {
+                "anchor": 0,
+                "node": "n4",
+                "property": "corner",
+                "subpath": 0,
+                "value": 8
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n4 (\"Rectangle\") has a corner of radius 11 (subpath 0, anchor 1); the house radii are 4, 8. Use 8.",
+              "severity": "warning",
+              "target": {
+                "anchor": 1,
+                "node": "n4",
+                "property": "corner",
+                "subpath": 0,
+                "value": 8
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n4 (\"Rectangle\") has a corner of radius 11 (subpath 0, anchor 2); the house radii are 4, 8. Use 8.",
+              "severity": "warning",
+              "target": {
+                "anchor": 2,
+                "node": "n4",
+                "property": "corner",
+                "subpath": 0,
+                "value": 8
+              }
+            },
+            {
+              "check": "corner-radii",
+              "layer": "org",
+              "message": "Node n4 (\"Rectangle\") has a corner of radius 11 (subpath 0, anchor 3); the house radii are 4, 8. Use 8.",
+              "severity": "warning",
+              "target": {
+                "anchor": 3,
+                "node": "n4",
+                "property": "corner",
+                "subpath": 0,
+                "value": 8
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "stroke-widths",
+            "corner-radii"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_vector_style",
+      "arguments": {},
+      "document": true,
+      "expect": {
+        "result": {
+          "corners": [
+            {
+              "anchor": 0,
+              "node": "n1",
+              "subpath": 0,
+              "value": 4
+            },
+            {
+              "anchor": 1,
+              "node": "n1",
+              "subpath": 0,
+              "value": 4
+            },
+            {
+              "anchor": 2,
+              "node": "n1",
+              "subpath": 0,
+              "value": 4
+            },
+            {
+              "anchor": 3,
+              "node": "n1",
+              "subpath": 0,
+              "value": 4
+            },
+            {
+              "anchor": 0,
+              "node": "n4",
+              "subpath": 0,
+              "value": 8
+            },
+            {
+              "anchor": 1,
+              "node": "n4",
+              "subpath": 0,
+              "value": 8
+            },
+            {
+              "anchor": 2,
+              "node": "n4",
+              "subpath": 0,
+              "value": 8
+            },
+            {
+              "anchor": 3,
+              "node": "n4",
+              "subpath": 0,
+              "value": 8
+            }
+          ],
+          "left": [],
+          "strokeWidths": {
+            "n1": 2,
+            "n2": 4,
+            "n6": 1
+          }
+        },
+        "document": {
+          "document": {
+            "height": 200,
+            "nodes": [
+              {
+                "fill": "#d4d4d8",
+                "id": "n1",
+                "name": "Rectangle",
+                "stroke": "#111111",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "corner": {
+                          "radius": 4
+                        },
+                        "x": 10,
+                        "y": 10
+                      },
+                      {
+                        "corner": {
+                          "radius": 4
+                        },
+                        "x": 70,
+                        "y": 10
+                      },
+                      {
+                        "corner": {
+                          "radius": 4
+                        },
+                        "x": 70,
+                        "y": 50
+                      },
+                      {
+                        "corner": {
+                          "radius": 4
+                        },
+                        "x": 10,
+                        "y": 50
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "children": [
+                  {
+                    "fill": "#d4d4d8",
+                    "id": "n2",
+                    "name": "Line",
+                    "stroke": "#111111",
+                    "strokeWidth": 4,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 100,
+                            "y": 20
+                          },
+                          {
+                            "x": 160,
+                            "y": 60
+                          }
+                        ],
+                        "closed": false
+                      }
+                    ],
+                    "type": "path"
+                  },
+                  {
+                    "fill": "#d4d4d8",
+                    "id": "n3",
+                    "name": "Path",
+                    "stroke": "#111111",
+                    "strokeWidth": 2,
+                    "subpaths": [
+                      {
+                        "anchors": [
+                          {
+                            "x": 100,
+                            "y": 80
+                          },
+                          {
+                            "x": 160,
+                            "y": 120
+                          }
+                        ],
+                        "closed": false
+                      }
+                    ],
+                    "type": "path"
+                  }
+                ],
+                "id": "n5",
+                "name": "Lines",
+                "type": "group"
+              },
+              {
+                "fill": "#d4d4d8",
+                "id": "n4",
+                "name": "Rectangle",
+                "stroke": "none",
+                "strokeWidth": 2,
+                "subpaths": [
+                  {
+                    "anchors": [
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 10,
+                        "y": 80
+                      },
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 70,
+                        "y": 80
+                      },
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 70,
+                        "y": 120
+                      },
+                      {
+                        "corner": {
+                          "radius": 8
+                        },
+                        "x": 10,
+                        "y": 120
+                      }
+                    ],
+                    "closed": true
+                  }
+                ],
+                "type": "path"
+              },
+              {
+                "fill": "#000000",
+                "font": {
+                  "fontFamily": "sans-serif",
+                  "fontSize": 24,
+                  "fontWeight": 400
+                },
+                "frame": {
+                  "kind": "point",
+                  "x": 20,
+                  "y": 170
+                },
+                "id": "n6",
+                "name": "Outlined",
+                "stroke": "#111111",
+                "strokeWidth": 1,
+                "text": "Outlined",
+                "type": "text"
+              }
+            ],
+            "width": 300
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.list"
+      },
+      "expect": {
+        "result": {
+          "id": "vector.list",
+          "ok": true,
+          "result": {
+            "height": 200,
+            "nodes": [
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 60,
+                  "x": 10,
+                  "y": 10
+                },
+                "d": "M14 10L66 10C68.21 10 70 11.79 70 14L70 46C70 48.21 68.21 50 66 50L14 50C11.79 50 10 48.21 10 46L10 14C10 11.79 11.79 10 14 10Z",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n1",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#111111",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 100,
+                  "width": 60,
+                  "x": 100,
+                  "y": 20
+                },
+                "children": 2,
+                "depth": 0,
+                "id": "n5",
+                "locked": false,
+                "name": "Lines",
+                "rotation": 0,
+                "selected": false,
+                "type": "group",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 60,
+                  "x": 100,
+                  "y": 20
+                },
+                "d": "M100 20L160 60",
+                "depth": 1,
+                "fill": "#d4d4d8",
+                "id": "n2",
+                "locked": false,
+                "name": "Line",
+                "rotation": 0,
+                "selected": true,
+                "stroke": "#111111",
+                "strokeWidth": 4,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 60,
+                  "x": 100,
+                  "y": 80
+                },
+                "d": "M100 80L160 120",
+                "depth": 1,
+                "fill": "#d4d4d8",
+                "id": "n3",
+                "locked": false,
+                "name": "Path",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#111111",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 40,
+                  "width": 60,
+                  "x": 10,
+                  "y": 80
+                },
+                "d": "M18 80L62 80C66.42 80 70 83.58 70 88L70 112C70 116.42 66.42 120 62 120L18 120C13.58 120 10 116.42 10 112L10 88C10 83.58 13.58 80 18 80Z",
+                "depth": 0,
+                "fill": "#d4d4d8",
+                "id": "n4",
+                "locked": false,
+                "name": "Rectangle",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "none",
+                "strokeWidth": 2,
+                "type": "path",
+                "visible": true
+              },
+              {
+                "bounds": {
+                  "height": 24,
+                  "width": 89.76,
+                  "x": 20,
+                  "y": 150.8
+                },
+                "depth": 0,
+                "fill": "#000000",
+                "frame": "point",
+                "id": "n6",
+                "locked": false,
+                "name": "Outlined",
+                "rotation": 0,
+                "selected": false,
+                "stroke": "#111111",
+                "strokeWidth": 1,
+                "text": "Outlined",
+                "type": "text",
+                "visible": true
+              }
+            ],
+            "selection": [
+              "n1",
+              "n2"
+            ],
+            "tool": "select",
+            "width": 300
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "ok": true,
+          "ran": [
+            "stroke-widths",
+            "corner-radii"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "corners": [],
+          "left": [],
+          "strokeWidths": {}
+        }
+      }
+    }
+  ]
+}

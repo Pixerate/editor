@@ -11,7 +11,7 @@ import XCTest
 final class VectorConformanceTests: XCTestCase {
     func testVectorScenarios() async throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
-        XCTAssertEqual(scenarios.count, 17)
+        XCTAssertEqual(scenarios.count, 23)
         var passed: [String] = []
         var skipped: [(String, String)] = []
         var failures: [ConformanceMismatch] = []
@@ -46,7 +46,7 @@ final class VectorConformanceTests: XCTestCase {
     func testNoVectorScenarioIsSkipped() throws {
         let scenarios = try ConformanceScenario.load(domain: "vector")
         for scenario in scenarios { XCTAssertNil(scenario.skip["swift"], "\(scenario.id) is skipped for Swift; the vector domain is fully ported (#624).") }
-        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text", "import-export", "effects-and-generation"] {
+        for id in ["shapes-and-paths", "arrange-and-transform", "booleans-and-pathfinder", "path-editing", "svg-round-trip", "paint-and-appearance", "strokes-and-corners", "gradients-and-shading", "blends-and-envelopes", "symbols", "constraints", "frames-pages-connectors", "text", "import-export", "effects-and-generation", "callouts", "isometric", "style-checks", "style-surface", "style-brand", "style-invalid-profile", "style-brand-invalid", "style-none"] {
             XCTAssertNotNil(scenarios.first { $0.id == id }, id)
         }
     }

@@ -1,0 +1,98 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-invalid-profile",
+  "description": "A house-style vector.json that breaks the vector profile schema or a check's options schema (a zero stroke width, an empty radius list, a token reference with no token source, an unknown field, options on a check that takes none) is left out with an issue saying why, so check_vector_style runs no checks and fix_vector_style changes nothing.",
+  "setup": {
+    "width": 300,
+    "height": 200,
+    "style": {
+      "strokeWidths": [
+        0,
+        2
+      ],
+      "cornerRadii": [],
+      "palette": [
+        "#0b5fff",
+        {
+          "$token": "brand/primary"
+        }
+      ],
+      "fonts": [
+        ""
+      ],
+      "extra": true,
+      "checks": [
+        "stroke-widths",
+        {
+          "id": "corner-radii",
+          "snap": true
+        },
+        {
+          "id": "palette-only",
+          "tolerance": 30
+        },
+        {
+          "id": "no-such-check",
+          "x": 1
+        },
+        7
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 60,
+          "height": 40,
+          "stroke": "#111111",
+          "strokeWidth": 3
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "issues": [
+            {
+              "layer": "org",
+              "message": "vector.json is left out: palette[1]: \"brand/primary\" is a token reference, but this host has no design tokens to resolve it. /strokeWidths/0: Must be > 0. /cornerRadii: Must have at least 1 items. /palette/1: Expected string, got undefined. /fonts/0: Must be at least 1 characters. /extra: Unknown property \"extra\". Allowed: strokeWidths, cornerRadii, palette, fonts. checks[1] (corner-radii)/snap: Unknown property \"snap\". checks[2] (palette-only)/tolerance: Must be <= 20. checks[4]: expected a check id or { \"id\": ..., options }.",
+              "skill": "house"
+            }
+          ],
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "corners": [],
+          "left": [],
+          "strokeWidths": {}
+        }
+      }
+    }
+  ]
+}

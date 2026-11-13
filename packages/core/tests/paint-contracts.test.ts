@@ -44,10 +44,10 @@ describe('the paint contracts in @pixerate/conformance', () => {
 
   it('lists every paint tool with a strict schema, a title and all four annotations', () => {
     const { providers } = committed('tools.json') as { providers: Array<{ id: string; tools: Array<{ name: string; title: string; description: string; inputSchema: JsonSchema; annotations: object }> }> };
-    expect(providers.map((p) => p.id)).toEqual(['paint-editor', 'paint-effects', 'paint-effect-authoring', 'brushes', 'paint-proposals']);
+    expect(providers.map((p) => p.id)).toEqual(['paint-editor', 'paint-effects', 'paint-effect-authoring', 'brushes', 'paint-proposals', 'paint-style', 'brush-style']);
     const names = providers.flatMap((p) => p.tools.map((t) => t.name));
     expect(new Set(names).size).toBe(names.length);
-    expect(names).toEqual(expect.arrayContaining(['paint_stroke', 'set_brush', 'undo_paint', 'apply_effect', 'open_effect_authoring', 'save_authored_effect', 'effect_authoring_set_source', 'create_brush', 'advance_wet_paint']));
+    expect(names).toEqual(expect.arrayContaining(['paint_stroke', 'set_brush', 'undo_paint', 'apply_effect', 'open_effect_authoring', 'save_authored_effect', 'effect_authoring_set_source', 'create_brush', 'advance_wet_paint', 'check_paint_style', 'fix_paint_style', 'check_brush_style']));
     for (const t of providers.flatMap((p) => p.tools)) {
       expect(t.title, t.name).toBeTruthy();
       expect(t.description, t.name).toBeTruthy();

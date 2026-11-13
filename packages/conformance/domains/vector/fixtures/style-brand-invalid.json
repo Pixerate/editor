@@ -1,0 +1,89 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-brand-invalid",
+  "description": "A brand.json that breaks the brand schema (an unknown field, an empty colour, a check option out of range) is left out with an issue, so nothing is derived from it; vector.json still applies, and its palette-only check cannot run without a palette.",
+  "setup": {
+    "width": 300,
+    "height": 200,
+    "brand": {
+      "name": "Acme",
+      "colors": {
+        "primary": ""
+      },
+      "tagline": "Make it so",
+      "checks": [
+        {
+          "id": "min-contrast",
+          "ratio": 40
+        }
+      ]
+    },
+    "style": {
+      "strokeWidths": [
+        1
+      ],
+      "checks": [
+        "stroke-widths",
+        "palette-only",
+        "fonts-allowed"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 60,
+          "height": 40,
+          "fill": "#22aa22",
+          "stroke": "#111111",
+          "strokeWidth": 1
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "issues": [
+            {
+              "layer": "org",
+              "message": "brand.json is left out: /colors/primary: Must be at least 1 characters. /tagline: Unknown property \"tagline\". Allowed: name, colors, palette, fonts, logo. checks[0] (min-contrast)/ratio: Must be <= 21.",
+              "skill": "house"
+            }
+          ],
+          "ok": true,
+          "ran": [
+            "stroke-widths"
+          ],
+          "skipped": [
+            {
+              "check": "palette-only",
+              "reason": "The check could not run: neither the profile nor the brand has a palette."
+            },
+            {
+              "check": "fonts-allowed",
+              "reason": "The check could not run: neither the check, the profile nor the brand names any fonts."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

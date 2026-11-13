@@ -137,6 +137,53 @@ private func oklabToOklch(_ lab: (l: Double, a: Double, b: Double)) -> (l: Doubl
     return (lab.l, c, h)
 }
 
+/// `rgbToOklab` (`color/convert.ts`): (l, a, b) of sRGB channels, unclamped.
+public func cssRgbToOklab(_ c: CssRgba) -> (l: Double, a: Double, b: Double) { rgbToOklab(c) }
+
+/// `oklabToOklch` (`color/convert.ts`): (l, c, h) with h in degrees.
+public func cssOklabToOklch(_ lab: (l: Double, a: Double, b: Double)) -> (l: Double, c: Double, h: Double) { oklabToOklch(lab) }
+
+/// `relativeLuminance` (`color/contrast.ts`): WCAG 2 relative luminance, 0 for black, 1 for white.
+public func cssRelativeLuminance(_ c: CssRgba) -> Double {
+    0.2126 * cssSrgbToLinear(c.r) + 0.7152 * cssSrgbToLinear(c.g) + 0.0722 * cssSrgbToLinear(c.b)
+}
+
+private func cssComposite(_ fg: CssRgba, _ bg: CssRgba) -> CssRgba {
+    let a = fg.a + bg.a * (1 - fg.a)
+    if a == 0 { return CssRgba(r: 0, g: 0, b: 0, a: 0) }
+    return CssRgba(
+        r: (fg.r * fg.a + bg.r * bg.a * (1 - fg.a)) / a,
+        g: (fg.g * fg.a + bg.g * bg.a * (1 - fg.a)) / a,
+        b: (fg.b * fg.a + bg.b * bg.a * (1 - fg.a)) / a,
+        a: a
+    )
+}
+
+/// `contrastRatio` (`color/contrast.ts`): the WCAG 2 ratio, 1 to 21. A translucent background is
+/// judged over white, a translucent foreground over the background.
+public func cssContrastRatio(_ foreground: CssRgba, _ background: CssRgba) -> Double {
+    var bg = background
+    if bg.a < 1 { bg = cssComposite(bg, CssRgba(r: 1, g: 1, b: 1, a: 1)) }
+    var fg = foreground
+    if fg.a < 1 { fg = cssComposite(fg, bg) }
+    let l1 = cssRelativeLuminance(fg)
+    let l2 = cssRelativeLuminance(bg)
+    return (JS.max(l1, l2) + 0.05) / (JS.min(l1, l2) + 0.05)
+}
+
+/// `contrast` (`color/ink.ts`) for CSS text: the ratio, or `nil` when either cannot be read.
+public func cssContrast(_ a: String, _ b: String) -> Double? {
+    guard let fg = parseCssColor(a), let bg = parseCssColor(b) else { return nil }
+    return cssContrastRatio(fg, bg)
+}
+
+/// `inkSide` (`color/ink.ts`) by contrast: `dark` when `dark` contrasts at least as much with
+/// `fill` as `light` does, else `light`; `nil` when a colour cannot be read.
+public func cssInkSide(_ fill: String, dark: String = "#111111", light: String = "#ffffff") -> String? {
+    guard let f = parseCssColor(fill), let d = parseCssColor(dark), let l = parseCssColor(light) else { return nil }
+    return cssContrastRatio(d, f) >= cssContrastRatio(l, f) ? "dark" : "light"
+}
+
 /// `oklchToOklab` then `oklabToRgb`.
 private func oklchToRgb(_ l: Double, _ c: Double, _ h: Double, _ alpha: Double) -> CssRgba {
     let rad = (h * Double.pi) / 180

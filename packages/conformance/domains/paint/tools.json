@@ -23236,6 +23236,83 @@
           }
         }
       ]
+    },
+    {
+      "id": "paint-style",
+      "title": "Painting house style",
+      "skill": "pixerate-paint-editor",
+      "tools": [
+        {
+          "name": "check_paint_style",
+          "title": "Check painting house style",
+          "description": "Checks the painting against the house style (see get_style with domain \"paint-editor\"): paper, brushes, max-layers, and the brand's palette-only on stroke colours, the current colour and swatches. Returns findings with a severity, a sentence saying how to fix it, a target ({ paper } or { brush } with the house value, { stroke: id }, { color: \"current\" }, { swatch: index } or { painting: true }) and the layer that asked; the checks that ran and those skipped. fix_paint_style switches to the house paper and brush.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Check painting house style",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "fix_paint_style",
+          "title": "Fix painting house style",
+          "description": "Switches the painting to the house paper and the current brush to the house brush. Strokes already painted, colours and layers are left for you (repaint or recolour them deliberately). Returns what it changed and the findings left. Run check_paint_style after.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Fix painting house style",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "brush-style",
+      "title": "Brush house style",
+      "skill": "pixerate-brushes",
+      "tools": [
+        {
+          "name": "check_brush_style",
+          "title": "Check brushes against the house style",
+          "description": "Checks brushes against the house style (see get_style with domain \"brushes\"): brushes (ids allowed), media, source-licences (image sources a brush uses), and the brand's palette-only on the colours brushes suggest. By default it checks the user's saved brushes; pass ids to check any brushes, built-ins included, before painting with them. Returns findings with a severity, a sentence saying how to fix it, a target ({ brush, colour? } or { source }) and the layer that asked; the checks that ran and those skipped; and checked: the brush ids it read. An unknown id is refused with the closest ids. Changes nothing; fix a saved brush with update_brush.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A brush id from list_brush_presets."
+                },
+                "description": "Brushes to check, built-ins included (default: the user's saved brushes)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Check brushes against the house style",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        }
+      ]
     }
   ]
 }
