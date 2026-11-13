@@ -13,17 +13,24 @@ import SwiftUI
  */
 public struct PaintProviderEffectsPanel: View {
     let model: PaintEditorModel
+    let showsHeading: Bool
     @State private var browse: PaintEffectPlace?
 
-    public init(model: PaintEditorModel) { self.model = model }
+    /// `showsHeading: false` leaves out the "Effects" heading, for hosts that title the panel themselves.
+    public init(model: PaintEditorModel, showsHeading: Bool = true) {
+        self.model = model
+        self.showsHeading = showsHeading
+    }
 
     public var body: some View {
         let pixel = model.activeLayer?.type == "pixel"
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                PanelHeading("Effects")
-                Spacer()
-                if model.effectsBusy { ProgressView().controlSize(.mini).accessibilityLabel("Rendering the effect") }
+            if showsHeading || model.effectsBusy {
+                HStack {
+                    if showsHeading { PanelHeading("Effects") }
+                    Spacer()
+                    if model.effectsBusy { ProgressView().controlSize(.mini).accessibilityLabel("Rendering the effect") }
+                }
             }
             if model.effectsProvider == nil {
                 Text(model.canAuthorEffects ? "No effects provider is registered: write an effect below." : "No effects provider is registered. Effects in the painting are kept.").font(.caption).foregroundStyle(.secondary)
@@ -133,10 +140,10 @@ struct EffectValuesView: View {
     private func control(_ d: EffectDescription, _ name: String) -> some View {
         let schema = d.controls["properties"]?.objectValue?[name]?.objectValue ?? [:]
         let value = values[name] ?? d.defaults[name]
-        let label = name.prefix(1).uppercased() + name.dropFirst()
+        let label = effectControlLabel(name, schema)
         if let options = schema["enum"]?.arrayValue?.compactMap(\.stringValue), !options.isEmpty {
-            Picker(label, selection: Binding(get: { value?.stringValue ?? options[0] }, set: { apply([name: .string($0)]) })) {
-                ForEach(options, id: \.self) { Text($0).tag($0) }
+            PaintPickerRow(label: label, selection: Binding(get: { value?.stringValue ?? options[0] }, set: { apply([name: .string($0)]) })) {
+                ForEach(options, id: \.self) { Text(humanizeParameterId($0)).tag($0) }
             }
         } else if schema["type"]?.stringValue == "number" || schema["type"]?.stringValue == "integer", let min = schema["minimum"]?.numberValue, let max = schema["maximum"]?.numberValue, max > min {
             let step = schema["type"]?.stringValue == "integer" ? 1 : (max - min) / 100
@@ -164,8 +171,8 @@ private struct PaperEffectSection: View {
                     .accessibilityLabel("Remove the effect paper")
             }
             PaintSliderRow(label: "Opacity", value: paper.opacity, range: 0...1, step: 0.01, displayScale: 100, unit: "%", onCommit: { o in Task { await model.updatePaperEffect(opacity: o) } })
-            Picker("Blend", selection: Binding(get: { paper.blend }, set: { b in Task { await model.updatePaperEffect(blend: b) } })) {
-                ForEach(PAPER_EFFECT_BLENDS, id: \.self) { Text($0).tag($0) }
+            PaintPickerRow(label: "Blend", selection: Binding(get: { paper.blend }, set: { b in Task { await model.updatePaperEffect(blend: b) } })) {
+                ForEach(PAPER_EFFECT_BLENDS, id: \.self) { Text(humanizeParameterId($0)).tag($0) }
             }
             .font(.caption)
             EffectValuesView(model: model, effect: paper.source.effect, values: paper.source.values) { v in Task { await model.updatePaperEffect(values: v) } }
@@ -173,62 +180,70 @@ private struct PaperEffectSection: View {
     }
 }
 
-/// The effect paint: stop, placement (canvas, along the stroke, the effect's own path), live, and its controls.
+/// The effect paint: stop, where it follows (the canvas, each stroke, the effect's own path), live, and its controls.
 private struct EffectPaintSection: View {
     let model: PaintEditorModel
     let paint: PaintEffectPaint
+    @State private var name: String?
     @State private var hasPathControl = false
     @State private var length = ""
 
     var body: some View {
         EffectPart {
             HStack {
-                Text("Paint: \(paint.effect)\(model.effectPaintRendering ? " (rendering…)" : "")").lineLimit(1)
+                Text("Paint: \(name ?? paint.effect)").lineLimit(1)
+                if model.effectPaintRendering { ProgressView().controlSize(.mini).accessibilityLabel("Rendering the effect paint") }
                 Spacer()
                 Button { model.stopEffectPaint() } label: { Image(systemName: "xmark.circle") }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Stop painting with the effect")
             }
-            Toggle("Along the stroke", isOn: Binding(get: { paint.map?.by == "stroke" }, set: { on in
-                Task { await model.repaintEffect(map: on ? PaintEffectStrokeMap().json : .string("canvas")) }
-            }))
-            .help("Lay the effect along each stroke instead of fixing it to the canvas")
-            if hasPathControl {
-                Toggle("Along the stroke (native)", isOn: Binding(get: { paint.map?.by == "path" }, set: { on in
-                    Task { await model.repaintEffect(map: on ? PaintEffectStrokeMap(by: "path").json : .string("canvas")) }
-                }))
-                .help("Pass each stroke's centreline to the effect's own path control")
+            HStack(spacing: 8) {
+                Text("Follows").foregroundStyle(.secondary).fixedSize()
+                Picker("Follows", selection: Binding(get: { paint.map?.by ?? "canvas" }, set: { by in
+                    let map: JSONValue = by == "stroke" ? PaintEffectStrokeMap().json : by == "path" ? PaintEffectStrokeMap(by: "path").json : .string("canvas")
+                    Task { await model.repaintEffect(map: map) }
+                })) {
+                    Text("Canvas").tag("canvas")
+                    Text("Stroke").tag("stroke")
+                    if hasPathControl || paint.map?.by == "path" { Text("Path").tag("path") }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .help("Fix the effect to the canvas, lay it along each stroke, or pass each stroke to the effect's own path control")
             }
-            Toggle("Live", isOn: Binding(get: { paint.live }, set: { on in Task { await model.repaintEffect(live: on) } }))
-                .help("Strokes on a stroke layer keep playing the effect")
             if let map = paint.map, map.by == "stroke" {
-                HStack {
-                    Text("Length").foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text("Length").foregroundStyle(.secondary).fixedSize()
+                    Spacer(minLength: 0)
                     TextField("Length", text: $length)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 60)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 64)
                         .accessibilityLabel("Effect length along the stroke")
                         .onSubmit {
                             if let n = Int(length), n != map.length { Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: n, repeatMode: map.repeatMode, width: map.width).json) } }
                         }
-                    Picker("Repeat", selection: Binding(get: { map.repeatMode }, set: { r in
-                        Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: map.length, repeatMode: r, width: map.width).json) }
-                    })) {
-                        Text("Repeat").tag("repeat")
-                        Text("Mirror").tag("mirror")
-                        Text("Clamp").tag("clamp")
-                    }
-                    .labelsHidden()
-                    .accessibilityLabel("Effect repeat")
                 }
                 .onAppear { length = String(map.length) }
                 .onChange(of: map.length) { _, n in length = String(n) }
+                PaintPickerRow(label: "At the end", selection: Binding(get: { map.repeatMode }, set: { r in
+                    Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: map.length, repeatMode: r, width: map.width).json) }
+                })) {
+                    Text("Repeat").tag("repeat")
+                    Text("Mirror").tag("mirror")
+                    Text("Clamp").tag("clamp")
+                }
             }
+            Toggle("Live", isOn: Binding(get: { paint.live }, set: { on in Task { await model.repaintEffect(live: on) } }))
+                .help("Strokes on a stroke layer keep playing the effect")
             EffectValuesView(model: model, effect: paint.effect, values: paint.values) { v in Task { await model.repaintEffect(values: v) } }
         }
         .font(.caption)
         .task(id: paint.effect) {
-            hasPathControl = await model.describeProviderEffect(paint.effect).map { !pathControlsOf($0).isEmpty } ?? false
+            let description = await model.describeProviderEffect(paint.effect)
+            name = description?.name
+            hasPathControl = description.map { !pathControlsOf($0).isEmpty } ?? false
         }
     }
 }
